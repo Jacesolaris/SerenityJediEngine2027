@@ -220,7 +220,7 @@ R_BindAnimatedImage
 // de-static'd because tr_quicksprite wants it
 void R_BindAnimatedImage(const textureBundle_t* bundle)
 {
-	int		index;
+	int		index = 0;
 
 	if (bundle->isVideoMap) {
 		ri.CIN_RunCinematic(bundle->videoMapHandle);
@@ -434,7 +434,7 @@ Perform dynamic lighting with another rendering pass
 */
 static void ProjectDlightTexture2(void)
 {
-	int		i, l;
+	int		i = 0, l = 0;
 	vec3_t	origin;
 	static byte clipBits[SHADER_MAX_VERTEXES]; // off the stack (C6262)
 	memset(clipBits, 0, sizeof(clipBits)); // cleared each time, as the {} on the stack was
@@ -448,10 +448,10 @@ static void ProjectDlightTexture2(void)
 	memset(colorArray, 0, sizeof(colorArray)); // cleared each time, as the {} on the stack was
 	static glIndex_t hitIndexes[SHADER_MAX_INDEXES]; // off the stack (C6262)
 	memset(hitIndexes, 0, sizeof(hitIndexes)); // cleared each time, as the {} on the stack was
-	int		numIndexes;
-	float	radius;
-	int		fogging;
-	shaderStage_t* dStage;
+	int		numIndexes = 0;
+	float	radius = 0.0f;
+	int		fogging = 0;
+	shaderStage_t* dStage = nullptr;
 	vec3_t	posa;
 	vec3_t	posb;
 	vec3_t	posc;
@@ -459,7 +459,7 @@ static void ProjectDlightTexture2(void)
 	vec3_t	e1;
 	vec3_t	e2;
 	vec3_t	normal;
-	float	fac, modulate;
+	float	fac = 0.0f, modulate = 0.0f;
 	vec3_t	floatColor{};
 	byte colorTemp[4]{};
 
@@ -472,7 +472,7 @@ static void ProjectDlightTexture2(void)
 
 	for (l = 0; l < backEnd.refdef.num_dlights; l++)
 	{
-		dlight_t* dl;
+		dlight_t* dl = nullptr;
 
 		if (!(tess.dlightBits & (1 << l))) {
 			continue;	// this surface definately doesn't have any of this light
@@ -485,7 +485,7 @@ static void ProjectDlightTexture2(void)
 		int		clipall = 63;
 		for (i = 0; i < tess.numVertexes; i++)
 		{
-			int		clip;
+			int		clip = 0;
 			VectorSubtract(origin, tess.xyz[i], dist);
 
 			clip = 0;
@@ -529,7 +529,7 @@ static void ProjectDlightTexture2(void)
 		numIndexes = 0;
 		for (i = 0; i < tess.numIndexes; i += 3)
 		{
-			int		a, b, c;
+			int		a = 0, b = 0, c = 0;
 
 			a = tess.indexes[i];
 			b = tess.indexes[i + 1];
@@ -750,10 +750,10 @@ static void ProjectDlightTexture2(void)
 
 static void ProjectDlightTexture(void)
 {
-	int		i, l;
+	int		i = 0, l = 0;
 	vec3_t	origin;
-	float* texCoords;
-	byte* colors;
+	float* texCoords = nullptr;
+	byte* colors = nullptr;
 	static byte clipBits[SHADER_MAX_VERTEXES]; // off the stack (C6262)
 	memset(clipBits, 0, sizeof(clipBits)); // cleared each time, as the {} on the stack was
 	static float texCoordsArray[SHADER_MAX_VERTEXES][2]; // off the stack (C6262)
@@ -762,19 +762,19 @@ static void ProjectDlightTexture(void)
 	memset(colorArray, 0, sizeof(colorArray)); // cleared each time, as the {} on the stack was
 	static glIndex_t hitIndexes[SHADER_MAX_INDEXES]; // off the stack (C6262)
 	memset(hitIndexes, 0, sizeof(hitIndexes)); // cleared each time, as the {} on the stack was
-	int		numIndexes;
-	float	scale;
-	float	radius;
-	int		fogging;
+	int		numIndexes = 0;
+	float	scale = 0.0f;
+	float	radius = 0.0f;
+	int		fogging = 0;
 	vec3_t	floatColor{};
-	shaderStage_t* dStage;
+	shaderStage_t* dStage = nullptr;
 
 	if (!backEnd.refdef.num_dlights) {
 		return;
 	}
 
 	for (l = 0; l < backEnd.refdef.num_dlights; l++) {
-		dlight_t* dl;
+		dlight_t* dl = nullptr;
 
 		if (!(tess.dlightBits & (1 << l))) {
 			continue;	// this surface definately doesn't have any of this light
@@ -794,8 +794,8 @@ static void ProjectDlightTexture(void)
 
 		for (i = 0; i < tess.numVertexes; i++, texCoords += 2, colors += 4) {
 			vec3_t	dist;
-			int		clip;
-			float	modulate;
+			int		clip = 0;
+			float	modulate = 0.0f;
 
 			backEnd.pc.c_dlightVertexes++;
 
@@ -974,7 +974,7 @@ static void ProjectDlightTexture(void)
 		// build a list of triangles that need light
 		numIndexes = 0;
 		for (i = 0; i < tess.numIndexes; i += 3) {
-			int		a, b, c;
+			int		a = 0, b = 0, c = 0;
 
 			a = tess.indexes[i];
 			b = tess.indexes[i + 1];
@@ -1132,7 +1132,7 @@ ComputeColors
 
 static void ComputeColors(shaderStage_t* pStage, int forceRGBGen)
 {
-	int			i;
+	int			i = 0;
 	color4ub_t* colors = tess.svars.colors;
 	qboolean killGen = qfalse;
 	alphaGen_t forceAlphaGen = pStage->alphaGen;//set this up so we can override below
@@ -1157,10 +1157,10 @@ static void ComputeColors(shaderStage_t* pStage, int forceRGBGen)
 
 	if (backEnd.currentEntity->e.renderfx & RF_VOLUMETRIC) // does not work for rotated models, technically, this should also be a CGEN type, but that would entail adding new shader commands....which is too much work for one thing
 	{
-		int			i;
-		float* normal, dot;
-		unsigned char* color;
-		int			numVertexes;
+		int			i = 0;
+		float* normal = nullptr, dot = 0.0f;
+		unsigned char* color = nullptr;
+		int			numVertexes = 0;
 
 		normal = tess.normal[0];
 		color = tess.svars.colors[0];
@@ -1261,7 +1261,7 @@ static void ComputeColors(shaderStage_t* pStage, int forceRGBGen)
 		break;
 	case CGEN_FOG:
 	{
-		fog_t* fog;
+		fog_t* fog = nullptr;
 
 		fog = tr.world->fogs + tess.fogNum;
 
@@ -1346,11 +1346,11 @@ static void ComputeColors(shaderStage_t* pStage, int forceRGBGen)
 		break;
 	case AGEN_PORTAL:
 	{
-		unsigned char alpha;
+		unsigned char alpha = 0;
 
 		for (i = 0; i < tess.numVertexes; i++)
 		{
-			float len;
+			float len = 0.0f;
 			vec3_t v;
 
 			VectorSubtract(tess.xyz[i], backEnd.viewParms.ori.origin, v);
@@ -1417,12 +1417,12 @@ ComputeTexCoords
 */
 static void ComputeTexCoords(shaderStage_t* pStage)
 {
-	int		i;
-	int		b;
-	float* texcoords;
+	int		i = 0;
+	int		b = 0;
+	float* texcoords = nullptr;
 
 	for (b = 0; b < NUM_TEXTURE_BUNDLES; b++) {
-		int tm;
+		int tm = 0;
 
 		texcoords = (float*)tess.svars.texcoords[b];
 		//
@@ -1562,7 +1562,7 @@ extern bool tr_stencilled; //tr_backend.cpp
 
 static void RB_IterateStagesGeneric(const shaderCommands_t* input)
 {
-	int stage;
+	int stage = 0;
 	bool	UseGLFog = false;
 	bool	FogColorChange = false;
 	fog_t* fog = NULL;
@@ -1929,7 +1929,7 @@ void RB_StageIteratorGeneric(void)
 ** RB_EndSurface
 */
 void RB_EndSurface(void) {
-	shaderCommands_t* input;
+	shaderCommands_t* input = nullptr;
 
 	input = &tess;
 

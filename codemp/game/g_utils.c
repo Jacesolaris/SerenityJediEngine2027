@@ -106,7 +106,7 @@ G_FindConfigstringIndex
 */
 int G_FindConfigstringIndex(const char* name, const int start, const int max, const qboolean create)
 {
-	int i;
+	int i = 0;
 	int firstFree = 0;
 
 	if (!VALIDSTRING(name))
@@ -1205,7 +1205,7 @@ angles and bad trails.
 
 static gentity_t* find_remove_able_gent(void)
 {
-	int i;
+	int i = 0;
 	gentity_t* e = &g_entities[MAX_CLIENTS];
 
 	// 1. Remove harmless items first
@@ -1743,7 +1743,7 @@ Adds an event+parm and twiddles the event counter
 
 void G_AddEvent(gentity_t* ent, const int event, const int event_parm)
 {
-	int bits;
+	int bits = 0;
 
 	if (!event)
 	{
@@ -2843,7 +2843,7 @@ void TextWrapCenterPrint(char orgtext[CENTERPRINT_MAXSTRING], char output[CENTER
 	//this function auto text wraps a centersay message so that it will display correctly on clients that aren't
 	//running sje.  Clients running sje do this text wrapping on the client side.
 	//scan thru print text and add new lines where needed.
-	int orgIndex, outputIndex, charCounter;
+	int orgIndex = 0, outputIndex = 0, charCounter = 0;
 
 	for (orgIndex = 0, outputIndex = 0, charCounter = 0;
 		orgIndex < CENTERPRINT_MAXSTRING && outputIndex < CENTERPRINT_MAXSTRING;

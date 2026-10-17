@@ -261,9 +261,9 @@ void QDECL G_LogWeaponItem(const int client, const int itemid)
 void G_LogWeaponOutput(void)
 {
 #ifdef LOGGING_WEAPONS
-	int i, j, curwp;
-	float pershot;
-	fileHandle_t weaponfile;
+	int i = 0, j = 0, curwp = 0;
+	float pershot = 0.0f;
+	fileHandle_t weaponfile = 0;
 	char string[1024];
 
 	int totalpickups[WP_NUM_WEAPONS];
@@ -277,7 +277,7 @@ void G_LogWeaponOutput(void)
 	int percharacter[WP_NUM_WEAPONS];
 	char info[1024];
 	char mapname[128];
-	char* nameptr, * unknownname = "<Unknown>";
+	char* nameptr = NULL, * unknownname = "<Unknown>";
 
 	if (!g_statLog.integer)
 	{
@@ -950,7 +950,7 @@ qboolean CalculateUntouchable(const gentity_t* ent)
 qboolean CalculateLogistics(const gentity_t* ent, int* stuffUsed)
 {
 #ifdef LOGGING_WEAPONS
-	int j, nBestPlayer = -1, nMostStuffUsed = 0,
+	int j = 0, nBestPlayer = -1, nMostStuffUsed = 0,
 		nMostDifferent = 0;
 
 	for (int i = 0; i < sv_maxclients.integer; i++)
@@ -1004,7 +1004,7 @@ qboolean CalculateTactician(const gentity_t* ent, int* kills)
 {
 #ifdef LOGGING_WEAPONS
 	int nBestPlayer = -1, nMostKills = 0;
-	int person, weapon;
+	int person = 0, weapon = 0;
 	int wasPickedUpBySomeone[WP_NUM_WEAPONS];
 	int killsWithWeapon[WP_NUM_WEAPONS];
 	const int playTime = (level.time - ent->client->pers.enterTime) / 60000;
@@ -1664,7 +1664,7 @@ int GetFavoriteWeaponForClient(int nClient)
 // kef -- if a client leaves the game, clear out all counters he may have set
 void QDECL G_ClearClientLog(const int client)
 {
-	int i;
+	int i = 0;
 
 	for (i = 0; i < WP_NUM_WEAPONS; i++)
 	{

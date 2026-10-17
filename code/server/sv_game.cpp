@@ -146,7 +146,7 @@ sets mins and maxs for inline bmodels
 */
 void SV_SetBrushModel(gentity_t* ent, const char* name)
 {
-	clipHandle_t h;
+	clipHandle_t h = 0;
 	vec3_t mins, maxs;
 
 	if (!name)
@@ -364,7 +364,7 @@ void SV_GetServerinfo(char* buffer, const int buffer_size)
 
 qboolean SV_GetEntityToken(char* buffer, const int buffer_size)
 {
-	char* s;
+	char* s = nullptr;
 
 	if (sv.mLocalSubBSPIndex == -1)
 	{
@@ -918,7 +918,7 @@ Init the game subsystem for a new map
 void SV_InitGameProgs()
 {
 	game_import_t import{};
-	int i;
+	int i = 0;
 
 	// unload anything we have now
 	if (ge)
@@ -1082,7 +1082,7 @@ import.WE_SetTempGlobalFogColor = SV_WE_SetTempGlobalFogColor;
 
 	auto gamename = "SerenityJediEngine2027-game";
 
-	GetGameAPIProc* GetGameAPI;
+	GetGameAPIProc* GetGameAPI = nullptr;
 	gameLibrary = Sys_LoadSPGameDll(gamename, &GetGameAPI);
 	if (!gameLibrary)
 		Com_Error(ERR_DROP, "Failed to load %s library", gamename);

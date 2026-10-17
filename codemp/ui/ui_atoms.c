@@ -129,10 +129,10 @@ qboolean UI_ConsoleCommand(int realTime) {
 }
 
 void UI_DrawHandlePic(float x, float y, float w, float h, qhandle_t hShader) {
-	float	s0;
-	float	s1;
-	float	t0;
-	float	t1;
+	float	s0 = 0.0f;
+	float	s1 = 0.0f;
+	float	t0 = 0.0f;
+	float	t1 = 0.0f;
 
 	if (w < 0) {	// flip about vertical
 		w = -w;

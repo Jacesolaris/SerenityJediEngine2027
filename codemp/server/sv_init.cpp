@@ -48,7 +48,7 @@ static void SV_SendConfigstring(client_t* client, const int index)
 	{
 		int sent = 0;
 		int remaining = len;
-		char* cmd;
+		char* cmd = nullptr;
 
 		while (remaining > 0)
 		{
@@ -142,8 +142,8 @@ void SV_SetConfigstring(const int index, const char* val)
 	// spawning a new server
 	if (sv.state == SS_GAME || sv.restarting)
 	{
-		client_t* client;
-		int i;
+		client_t* client = nullptr;
+		int i = 0;
 		// send the data to all relevent clients
 		for (i = 0, client = svs.clients; i < sv_maxclients->integer; i++, client++)
 		{
@@ -344,7 +344,7 @@ SV_ChangeMaxClients
 */
 void SV_ChangeMaxClients(void)
 {
-	int i;
+	int i = 0;
 
 	// get the highest client number in use
 	int count = 0;
@@ -438,7 +438,7 @@ SV_TouchCGame
 */
 static void SV_TouchCGame(void)
 {
-	fileHandle_t f;
+	fileHandle_t f = 0;
 	char filename[MAX_QPATH];
 
 	Com_sprintf(filename, sizeof filename, "cgamex86.dll");
@@ -483,10 +483,10 @@ static char sv_systemInfoBuffer[16384];
 
 void SV_SpawnServer(char* server, const qboolean killBots, const ForceReload_e eForceReload)
 {
-	int         i;
-	int         checksum;
+	int         i = 0;
+	int         checksum = 0;
 	qboolean    isBot;
-	const char* p;
+	const char* p = nullptr;
 
 	SV_StopAutoRecordDemos();
 
@@ -1064,8 +1064,8 @@ to totally exit after returning from this function.
 */
 void SV_FinalMessage(char* message)
 {
-	int i;
-	client_t* cl;
+	int i = 0;
+	client_t* cl = nullptr;
 
 	// send it twice, ignoring rate
 	for (int j = 0; j < 2; j++)

@@ -339,10 +339,10 @@ static void ProcessMoveCommands(Vehicle_t* p_veh)
 	/*	BEGIN	Here is where we move the vehicle (forward or back or whatever). BEGIN	*/
 	/************************************************************************************/
 	//Client sets ucmds and such for speed alterations
-	float speedInc, speedIdleDec, speedIdle, /*speedIdleAccel, */speedMin, speedMax;
-	playerState_t* parent_ps;
+	float speedInc = 0.0f, speedIdleDec = 0.0f, speedIdle = 0.0f, /*speedIdleAccel, */speedMin = 0.0f, speedMax = 0.0f;
+	playerState_t* parent_ps = nullptr;
 	//playerState_t *pilotPS = NULL;
-	int curTime;
+	int curTime = 0;
 
 #ifdef _JK2MP
 	parent_ps = p_veh->m_pParentEntity->playerState;
@@ -591,7 +591,7 @@ static void ProcessOrientCommands(Vehicle_t* p_veh)
 	/********************************************************************************/
 	/*	BEGIN	Here is where make sure the vehicle is properly oriented.	BEGIN	*/
 	/********************************************************************************/
-	playerState_t* rider_ps;
+	playerState_t* rider_ps = nullptr;
 
 #ifdef _JK2MP
 	playerState_t* parent_ps;
@@ -716,11 +716,11 @@ extern void G_StartMatrixEffect(const gentity_t* ent, int me_flags = 0, int leng
 static void AnimateRiders(Vehicle_t* p_veh)
 {
 	animNumber_t Anim = BOTH_VS_IDLE;
-	int i_flags;
+	int i_flags = 0;
 	int i_blend = 300;
-	playerState_t* pilotPS;
+	playerState_t* pilotPS = nullptr;
 	//playerState_t *parent_ps;
-	int curTime;
+	int curTime = 0;
 
 	// Boarding animation.
 	if (p_veh->m_iBoarding != 0)
@@ -728,7 +728,7 @@ static void AnimateRiders(Vehicle_t* p_veh)
 		// We've just started moarding, set the amount of time it will take to finish moarding.
 		if (p_veh->m_iBoarding < 0)
 		{
-			int iAnimLen;
+			int iAnimLen = 0;
 
 			// Boarding from left...
 			if (p_veh->m_iBoarding == -1)

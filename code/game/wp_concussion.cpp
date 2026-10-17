@@ -44,7 +44,7 @@ static void WP_FireConcussionAlt(gentity_t* ent)
 	vec3_t start;
 	vec3_t muzzle2, spot, dir;
 	trace_t tr;
-	gentity_t* tent;
+	gentity_t* tent = nullptr;
 	qboolean hitDodged = qfalse;
 
 	if (ent->s.number >= MAX_CLIENTS)

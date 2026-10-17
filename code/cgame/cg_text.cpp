@@ -84,7 +84,7 @@ const char* CG_DisplayBoxedText(const int iBoxX, const int iBoxY, const int iBox
 			// read letter...
 			//
 			qboolean bIsTrailingPunctuation;
-			int iAdvanceCount;
+			int iAdvanceCount = 0;
 			const unsigned int uiLetter = cgi_AnyLanguage_ReadCharFromString(
 				psCurrentTextReadPos, &iAdvanceCount, &bIsTrailingPunctuation);
 			psCurrentTextReadPos += iAdvanceCount;
@@ -314,7 +314,7 @@ void CG_CaptionText(const char* str, const int sound)
 		// read letter...
 		//
 		qboolean bIsTrailingPunctuation;
-		int iAdvanceCount;
+		int iAdvanceCount = 0;
 		const unsigned int uiLetter = cgi_AnyLanguage_ReadCharFromString(s, &iAdvanceCount, &bIsTrailingPunctuation);
 		s += iAdvanceCount;
 
@@ -553,7 +553,7 @@ void CG_ScrollText(const char* str, const int iPixelWidth)
 		// read letter...
 		//
 		qboolean bIsTrailingPunctuation;
-		int iAdvanceCount;
+		int iAdvanceCount = 0;
 		const unsigned int uiLetter = cgi_AnyLanguage_ReadCharFromString(s, &iAdvanceCount, &bIsTrailingPunctuation);
 		s += iAdvanceCount;
 
@@ -765,7 +765,7 @@ void CG_DrawCenterString()
 		int iOutIndex = 0;
 		for (unsigned int l = 0; l < sizeof linebuffer - 1; l++)
 		{
-			int iAdvanceCount;
+			int iAdvanceCount = 0;
 			const unsigned int uiLetter = cgi_AnyLanguage_ReadCharFromString(psString, &iAdvanceCount);
 			psString += iAdvanceCount;
 			if (!uiLetter || uiLetter == '\n')

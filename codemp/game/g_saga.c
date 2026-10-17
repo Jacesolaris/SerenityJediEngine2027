@@ -149,10 +149,10 @@ void InitSiegeMode(void)
 	char teams[2048];
 	static char objective[MAX_SIEGE_INFO_SIZE];
 	char objec_str[8192];
-	int i;
+	int i = 0;
 	int objective_num_team1 = 0;
 	int objective_num_team2 = 0;
-	fileHandle_t f;
+	fileHandle_t f = 0;
 
 	objective[0] = '\0';
 
@@ -524,7 +524,7 @@ static qboolean G_SiegeGetCompletionStatus(const int team, const int objective)
 static void UseSiegeTarget(gentity_t* other, gentity_t* en, const char* target)
 {
 	//actually use the player which triggered the object which triggered the siege objective to trigger the target
-	gentity_t* ent;
+	gentity_t* ent = NULL;
 
 	if (!en || !en->client)
 	{
@@ -1002,7 +1002,7 @@ void SiegeCheckTimers(void)
 
 	if (!gSiegeRoundBegun)
 	{
-		gentity_t* ent;
+		gentity_t* ent = NULL;
 		//check if anyone is active on this team - if not, keep the timer set up.
 		i = 0;
 
@@ -1097,7 +1097,7 @@ void SiegeCheckTimers(void)
 
 static void SiegeObjectiveCompleted(const int team, const int objective, const int final, const int client)
 {
-	int goals_completed, goals_required;
+	int goals_completed = 0, goals_required = 0;
 
 	if (gSiegeRoundEnded)
 	{
@@ -1234,7 +1234,7 @@ STARTOFFRADAR - start not displaying on radar, don't display until used.
 */
 void SP_info_siege_objective(gentity_t* ent)
 {
-	char* s;
+	char* s = NULL;
 
 	if (!siege_valid || !G_SiegeMissionRules()) // SJE (2026-10-16): also siege missions in Team FFA
 	{
@@ -1301,8 +1301,8 @@ to toggle on and off.
 */
 void SP_info_siege_radaricon(gentity_t* ent)
 {
-	char* s;
-	int i;
+	char* s = NULL;
+	int i = 0;
 
 	if (!siege_valid || !G_SiegeMissionRules()) // SJE (2026-10-16): also siege missions in Team FFA
 	{
@@ -1895,9 +1895,9 @@ health charge things only work with showhealth 1 on siege items that take damage
 */
 void SP_misc_siege_item(gentity_t* ent)
 {
-	int canpickup;
-	int noradar;
-	char* s;
+	int canpickup = 0;
+	int noradar = 0;
+	char* s = NULL;
 
 	if (!siege_valid || !G_SiegeMissionRules()) // SJE (2026-10-16): also siege missions in Team FFA
 	{
@@ -1998,7 +1998,7 @@ void SP_misc_siege_item(gentity_t* ent)
 	if (ent->health > 0)
 	{
 		//If it has health, it can be killed.
-		int t;
+		int t = 0;
 
 		ent->pain = SiegeItemPain;
 		ent->die = SiegeItemDie;

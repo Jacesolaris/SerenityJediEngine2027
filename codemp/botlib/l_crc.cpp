@@ -126,7 +126,7 @@ unsigned short CRC_Value(const unsigned short crcvalue)
 //===========================================================================
 unsigned short CRC_ProcessString(unsigned char* data, const int length)
 {
-	unsigned short crcvalue;
+	unsigned short crcvalue = 0;
 
 	CRC_Init(&crcvalue);
 

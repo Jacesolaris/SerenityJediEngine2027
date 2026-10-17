@@ -138,19 +138,19 @@ A "connect" OOB command has been received
 void SV_DirectConnect(netadr_t from)
 {
 	char userinfo[MAX_INFO_STRING];
-	int i;
-	client_t* cl, * newcl;
+	int i = 0;
+	client_t* cl = nullptr, * newcl = nullptr;
 	static client_t temp; // ~500 KB, off the stack (C6262): Com_Memset below clears it before use
-	sharedEntity_t* ent;
-	int clientNum;
-	int version;
-	int qport;
-	int challenge;
-	char* password;
-	int startIndex;
-	char* denied;
-	int count;
-	char* ip;
+	sharedEntity_t* ent = nullptr;
+	int clientNum = 0;
+	int version = 0;
+	int qport = 0;
+	int challenge = 0;
+	char* password = nullptr;
+	int startIndex = 0;
+	char* denied = nullptr;
+	int count = 0;
+	char* ip = nullptr;
 
 	Com_DPrintf("SVC_DirectConnect ()\n");
 
@@ -398,7 +398,7 @@ or crashing -- SV_FinalMessage() will handle that
 */
 void SV_DropClient(client_t* drop, const char* reason)
 {
-	int i;
+	int i = 0;
 	const bool isBot = drop->netchan.remoteAddress.type == NA_BOT;
 
 	if (drop->state == CS_ZOMBIE)
@@ -462,7 +462,7 @@ void SV_DropClient(client_t* drop, const char* reason)
 
 void SV_CreateClientGameStateMessage(client_t* client, msg_t* msg)
 {
-	int start;
+	int start = 0;
 	entityState_t nullstate;
 
 	// NOTE, MRE: all server->client messages now acknowledge
@@ -800,8 +800,8 @@ Fill up msg with data
 */
 void SV_WriteDownloadToClient(client_t* cl, msg_t* msg)
 {
-	int curindex;
-	int blockspersnap;
+	int curindex = 0;
+	int blockspersnap = 0;
 
 	if (!*cl->downloadName)
 		return; // Nothing being downloaded
@@ -1074,7 +1074,7 @@ This routine would be a bit simpler with a goto but i abstained
 */
 static void SV_VerifyPaks_f(client_t* cl)
 {
-	int nChkSum1, nChkSum2;
+	int nChkSum1 = 0, nChkSum2 = 0;
 
 	// if we are pure, we "expect" the client to load certain things from
 	// certain pk3 files, namely we want the client to have loaded the
@@ -1084,8 +1084,8 @@ static void SV_VerifyPaks_f(client_t* cl)
 	{
 		int nServerChkSum[1024]{};
 		int nClientChkSum[1024]{};
-		int j;
-		int i;
+		int j = 0;
+		int i = 0;
 		nChkSum1 = nChkSum2 = 0;
 		// we run the game, so determine which cgame and ui the client "should" be running
 		//dlls are valid too now -rww
@@ -1247,8 +1247,8 @@ into a more C friendly form.
 */
 void SV_UserinfoChanged(client_t* cl)
 {
-	const char* val, * ip;
-	int i, len;
+	const char* val = nullptr, * ip = nullptr;
+	int i = 0, len = 0;
 
 	// name for C code
 	Q_strncpyz(cl->name, Info_ValueForKey(cl->userinfo, "name"), sizeof cl->name);
@@ -1407,7 +1407,7 @@ Also called by bot code
 */
 void SV_ExecuteClientCommand(client_t* cl, const char* s, const qboolean clientOK)
 {
-	ucmd_t* u;
+	ucmd_t* u = nullptr;
 	qboolean bProcessed = qfalse;
 
 	Cmd_TokenizeString(s);
@@ -1537,7 +1537,7 @@ each of the backup packets.
 */
 static void SV_UserMove(client_t* cl, msg_t* msg, const qboolean delta)
 {
-	int i;
+	int i = 0;
 	usercmd_t nullcmd;
 	usercmd_t cmds[MAX_PACKET_USERCMDS]{};
 
@@ -1671,7 +1671,7 @@ Parse a client packet
 */
 void SV_ExecuteClientMessage(client_t* cl, msg_t* msg)
 {
-	int c;
+	int c = 0;
 
 	MSG_Bitstream(msg);
 

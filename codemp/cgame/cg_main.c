@@ -483,8 +483,8 @@ The server says this item is used on this level
 static void CG_RegisterItemSounds(const int itemNum)
 {
 	char data[MAX_QPATH];
-	char* start;
-	int len;
+	char* start = NULL;
+	int len = 0;
 
 	const gitem_t* item = &bg_itemlist[itemNum];
 
@@ -559,7 +559,7 @@ static void CG_RegisterItemSounds(const int itemNum)
 
 static void CG_AS_Register(void)
 {
-	const char* soundName;
+	const char* soundName = NULL;
 
 	//	CG_LoadingString( "ambient sound sets" );
 
@@ -740,9 +740,9 @@ extern int cg_siegeWinTeam;
 
 static void CG_RegisterSounds(void)
 {
-	int i;
+	int i = 0;
 	char items[MAX_ITEMS + 1];
-	const char* soundName;
+	const char* soundName = NULL;
 
 	CG_AS_Register();
 
@@ -1402,7 +1402,7 @@ This function may execute for a couple of minutes with a slow disk.
 */
 static void CG_RegisterGraphics(void)
 {
-	int i;
+	int i = 0;
 	char items[MAX_ITEMS + 1];
 
 	static char* sb_nums[11] = {
@@ -1854,7 +1854,7 @@ static void CG_RegisterGraphics(void)
 	for (i = 1; i < MAX_SUB_BSP; i++)
 	{
 		vec3_t mins, maxs;
-		int j;
+		int j = 0;
 
 		const char* bspName = CG_ConfigString(CS_BSP_MODELS + i);
 		if (!bspName[0])
@@ -1963,7 +1963,7 @@ CG_BuildSpectatorString
 */
 void CG_BuildSpectatorString(void)
 {
-	int i;
+	int i = 0;
 	cg.spectatorList[0] = 0;
 
 	// Count up the number of players per team and per class
@@ -2065,7 +2065,7 @@ CG_StartMusic
 */
 void CG_StartMusic(const qboolean bForceStart)
 {
-	char* s;
+	char* s = NULL;
 	char parm1[MAX_QPATH], parm2[MAX_QPATH];
 
 	// start the background music
@@ -2086,7 +2086,7 @@ void CG_StartMusic(const qboolean bForceStart)
 
 static char* CG_GetMenuBuffer(const char* filename)
 {
-	fileHandle_t f;
+	fileHandle_t f = 0;
 	static char buf[MAX_MENUFILE];
 
 	const int len = trap->FS_Open(filename, &f, FS_READ);
@@ -2138,7 +2138,7 @@ static qboolean CG_Asset_Parse(const int handle)
 		// font
 		if (Q_stricmp(token.string, "font") == 0)
 		{
-			int pointSize;
+			int pointSize = 0;
 			if (!trap->PC_ReadToken(handle, &token) || !PC_Int_Parse(handle, &pointSize))
 			{
 				return qfalse;
@@ -2152,7 +2152,7 @@ static qboolean CG_Asset_Parse(const int handle)
 		// smallFont
 		if (Q_stricmp(token.string, "smallFont") == 0)
 		{
-			int pointSize;
+			int pointSize = 0;
 			if (!trap->PC_ReadToken(handle, &token) || !PC_Int_Parse(handle, &pointSize))
 			{
 				return qfalse;
@@ -2165,7 +2165,7 @@ static qboolean CG_Asset_Parse(const int handle)
 		// smallFont
 		if (Q_stricmp(token.string, "small2Font") == 0)
 		{
-			int pointSize;
+			int pointSize = 0;
 			if (!trap->PC_ReadToken(handle, &token) || !PC_Int_Parse(handle, &pointSize))
 			{
 				return qfalse;
@@ -2178,7 +2178,7 @@ static qboolean CG_Asset_Parse(const int handle)
 		// font
 		if (Q_stricmp(token.string, "bigfont") == 0)
 		{
-			int pointSize;
+			int pointSize = 0;
 			if (!trap->PC_ReadToken(handle, &token) || !PC_Int_Parse(handle, &pointSize))
 			{
 				return qfalse;
@@ -2383,7 +2383,7 @@ static qboolean CG_OwnerDrawHandleKey(int ownerDraw, int flags, float* special, 
 
 static int CG_FeederCount(const float feederID)
 {
-	int i;
+	int i = 0;
 	int count = 0;
 	if (feederID == FEEDER_REDTEAM_LIST)
 	{
@@ -2416,7 +2416,7 @@ void CG_SetScoreSelection(void* p)
 {
 	menuDef_t* menu = p;
 	const playerState_t* ps = &cg.snap->ps;
-	int i, blue;
+	int i = 0, blue = 0;
 	int red = blue = 0;
 	for (i = 0; i < cg.numScores; i++)
 	{
@@ -2502,7 +2502,7 @@ static const char* CG_FeederItemText(const float feederID, const int index, cons
 
 	if (info && info->infoValid)
 	{
-		gitem_t* item;
+		gitem_t* item = NULL;
 		switch (column)
 		{
 		case 0:

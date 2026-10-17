@@ -296,7 +296,7 @@ static void FreeConsoleMessage(bot_consolemessage_t* message)
 //===========================================================================
 void BotRemoveConsoleMessage(const int chatstate, const int handle)
 {
-	bot_consolemessage_t* nextm;
+	bot_consolemessage_t* nextm = nullptr;
 
 	bot_chatstate_t* cs = BotChatStateFromHandle(chatstate);
 	if (!cs) return;
@@ -363,7 +363,7 @@ void BotQueueConsoleMessage(const int chatstate, const int type, char* message)
 //===========================================================================
 int BotNextConsoleMessage(const int chatstate, bot_consolemessage_t* cm)
 {
-	bot_consolemessage_t* firstmsg;
+	bot_consolemessage_t* firstmsg = nullptr;
 
 	const bot_chatstate_t* cs = BotChatStateFromHandle(chatstate);
 	if (!cs) return 0;
@@ -444,7 +444,7 @@ static void BotRemoveTildes(char* message)
 //===========================================================================
 void UnifyWhiteSpaces(char* string)
 {
-	char* oldptr;
+	char* oldptr = nullptr;
 
 	for (char* ptr = oldptr = string; *ptr; oldptr = ptr)
 	{
@@ -468,7 +468,7 @@ void UnifyWhiteSpaces(char* string)
 //===========================================================================
 int StringContains(char* str1, char* str2, const int casesensitive)
 {
-	int j;
+	int j = 0;
 
 	if (str1 == nullptr || str2 == nullptr) return -1;
 
@@ -499,7 +499,7 @@ int StringContains(char* str1, char* str2, const int casesensitive)
 //===========================================================================
 static char* StringContainsWord(char* str1, char* str2, const int casesensitive)
 {
-	int j;
+	int j = 0;
 
 	const int len = strlen(str1) - strlen(str2);
 	for (int i = 0; i <= len; i++, str1++)
@@ -774,7 +774,7 @@ void BotReplaceSynonyms(char* string, const unsigned long int context)
 //===========================================================================
 static void BotReplaceWeightedSynonyms(char* string, const unsigned long int context)
 {
-	bot_synonym_t* replacement;
+	bot_synonym_t* replacement = nullptr;
 
 	for (const bot_synonymlist_t* syn = synonyms; syn; syn = syn->next)
 	{
@@ -805,7 +805,7 @@ static void BotReplaceWeightedSynonyms(char* string, const unsigned long int con
 //===========================================================================
 static void BotReplaceReplySynonyms(char* string, const unsigned long int context)
 {
-	bot_synonym_t* synonym;
+	bot_synonym_t* synonym = nullptr;
 
 	for (char* str1 = string; *str1; )
 	{
@@ -929,12 +929,12 @@ static void BotDumpRandomStringList(bot_randomlist_t* randomlist)
 //===========================================================================
 static bot_randomlist_t* BotLoadRandomStrings(char* filename)
 {
-	int size;
+	int size = 0;
 	char* ptr = nullptr;
-	source_t* source;
+	source_t* source = nullptr;
 	token_t token;
-	bot_randomlist_t* randomlist, * lastrandom, * random;
-	bot_randomstring_t* randomstring;
+	bot_randomlist_t* randomlist = nullptr, * lastrandom = nullptr, * random = nullptr;
+	bot_randomstring_t* randomstring = nullptr;
 
 #ifdef DEBUG
 	int starttime = Sys_MilliSeconds();
@@ -1036,7 +1036,7 @@ static bot_randomlist_t* BotLoadRandomStrings(char* filename)
 //===========================================================================
 static char* RandomString(const char* name)
 {
-	bot_randomstring_t* rs;
+	bot_randomstring_t* rs = nullptr;
 
 	for (const bot_randomlist_t* random = randomstrings; random; random = random->next)
 	{
@@ -1095,8 +1095,8 @@ static void BotDumpMatchTemplates(bot_matchtemplate_t* matches)
 //===========================================================================
 static void BotFreeMatchPieces(bot_matchpiece_t* matchpieces)
 {
-	bot_matchpiece_t* nextmp;
-	bot_matchstring_t* nextms;
+	bot_matchpiece_t* nextmp = nullptr;
+	bot_matchstring_t* nextms = nullptr;
 
 	for (bot_matchpiece_t* mp = matchpieces; mp; mp = nextmp)
 	{
@@ -1121,7 +1121,7 @@ static void BotFreeMatchPieces(bot_matchpiece_t* matchpieces)
 static bot_matchpiece_t* BotLoadMatchPieces(source_t* source, char* endtoken)
 {
 	token_t token;
-	bot_matchpiece_t* matchpiece;
+	bot_matchpiece_t* matchpiece = nullptr;
 
 	bot_matchpiece_t* firstpiece = nullptr;
 	bot_matchpiece_t* lastpiece = nullptr;
@@ -1397,8 +1397,8 @@ static bot_matchtemplate_t* BotLoadMatchTemplates(char* matchfile)
 //===========================================================================
 int StringsMatch(bot_matchpiece_t* pieces, bot_match_t* match)
 {
-	bot_matchpiece_t* mp;
-	bot_matchstring_t* ms;
+	bot_matchpiece_t* mp = nullptr;
+	bot_matchstring_t* ms = nullptr;
 
 	//no last variable
 	int lastvariable = -1;
@@ -1546,7 +1546,7 @@ bot_stringlist_t* BotFindStringInList(bot_stringlist_t* list, char* string)
 //===========================================================================
 bot_stringlist_t* BotCheckChatMessageIntegrety(char* message, bot_stringlist_t* stringlist)
 {
-	int i;
+	int i = 0;
 	char temp[MAX_MESSAGE_SIZE];
 
 	char* msgptr = message;
@@ -1615,7 +1615,7 @@ bot_stringlist_t* BotCheckChatMessageIntegrety(char* message, bot_stringlist_t* 
 //===========================================================================
 void BotCheckInitialChatIntegrety(bot_chat_t* chat)
 {
-	bot_stringlist_t* nexts;
+	bot_stringlist_t* nexts = nullptr;
 
 	bot_stringlist_t* stringlist = nullptr;
 	for (const bot_chattype_t* t = chat->types; t; t = t->next)
@@ -1639,7 +1639,7 @@ void BotCheckInitialChatIntegrety(bot_chat_t* chat)
 //===========================================================================
 void BotCheckReplyChatIntegrety(bot_replychat_t* replychat)
 {
-	bot_stringlist_t* nexts;
+	bot_stringlist_t* nexts = nullptr;
 
 	bot_stringlist_t* stringlist = nullptr;
 	for (const bot_replychat_t* rp = replychat; rp; rp = rp->next)
@@ -1712,9 +1712,9 @@ void BotDumpReplyChat(bot_replychat_t* replychat)
 //===========================================================================
 void BotFreeReplyChat(bot_replychat_t* replychat)
 {
-	bot_replychat_t* nextrp;
-	bot_replychatkey_t* nextkey;
-	bot_chatmessage_t* nextcm;
+	bot_replychat_t* nextrp = nullptr;
+	bot_replychatkey_t* nextkey = nullptr;
+	bot_chatmessage_t* nextcm = nullptr;
 
 	for (bot_replychat_t* rp = replychat; rp; rp = nextrp)
 	{
@@ -1742,10 +1742,10 @@ void BotFreeReplyChat(bot_replychat_t* replychat)
 //===========================================================================
 void BotCheckValidReplyChatKeySet(source_t* source, bot_replychatkey_t* keys)
 {
-	int hasstringkey;
-	bot_matchpiece_t* m;
-	bot_matchstring_t* ms;
-	bot_replychatkey_t* key2;
+	int hasstringkey = 0;
+	bot_matchpiece_t* m = nullptr;
+	bot_matchstring_t* ms = nullptr;
+	bot_replychatkey_t* key2 = nullptr;
 
 	//
 	int allprefixed = qtrue;
@@ -2028,9 +2028,9 @@ void BotDumpInitialChat(bot_chat_t* chat)
 //===========================================================================
 bot_chat_t* BotLoadInitialChat(char* chatfile, char* chatname)
 {
-	int foundchat, indent, size;
+	int foundchat = 0, indent = 0, size = 0;
 	char* ptr = nullptr;
-	source_t* source;
+	source_t* source = nullptr;
 	token_t token;
 	bot_chat_t* chat = nullptr;
 	bot_chattype_t* chattype = nullptr;
@@ -2273,8 +2273,8 @@ int BotLoadChatFile(const int chatstate, char* chatfile, char* chatname)
 static int BotExpandChatMessage(char* outmessage, char* message, const unsigned long mcontext,
 	bot_match_t* match, const unsigned long vcontext, const int reply)
 {
-	int i;
-	char* ptr;
+	int i = 0;
+	char* ptr = nullptr;
 	char temp[MAX_MESSAGE_SIZE] = { 0 };
 
 	int expansion = qfalse;
@@ -2425,7 +2425,7 @@ static int BotExpandChatMessage(char* outmessage, char* message, const unsigned 
 void BotConstructChatMessage(bot_chatstate_t* chatstate, char* message, const unsigned long mcontext,
 	bot_match_t* match, const unsigned long vcontext, const int reply)
 {
-	int i;
+	int i = 0;
 	char srcmessage[MAX_MESSAGE_SIZE];
 
 	strcpy(srcmessage, message);
@@ -2452,7 +2452,7 @@ void BotConstructChatMessage(bot_chatstate_t* chatstate, char* message, const un
 //===========================================================================
 char* BotChooseInitialChatMessage(bot_chatstate_t* cs, char* type)
 {
-	bot_chatmessage_t* m;
+	bot_chatmessage_t* m = nullptr;
 
 	const bot_chat_t* chat = cs->chat;
 	for (const bot_chattype_t* t = chat->types; t; t = t->next)
@@ -2646,7 +2646,7 @@ void BotPrintReplyChatKeys(bot_replychat_t* replychat)
 //===========================================================================
 int BotReplyChat(const int chatstate, char* message, const int mcontext, const int vcontext, char* var0, char* var1, char* var2, char* var3, char* var4, char* var5, char* var6, char* var7)
 {
-	bot_chatmessage_t* m;
+	bot_chatmessage_t* m = nullptr;
 	bot_match_t match, bestmatch;
 
 	bot_chatstate_t* cs = BotChatStateFromHandle(chatstate);
@@ -2961,7 +2961,7 @@ void BotFreeChatState(const int handle)
 //===========================================================================
 int BotSetupChatAI(void)
 {
-	char* file;
+	char* file = nullptr;
 
 #ifdef DEBUG
 	int starttime = Sys_MilliSeconds();
@@ -2995,7 +2995,7 @@ int BotSetupChatAI(void)
 //===========================================================================
 void BotShutdownChatAI(void)
 {
-	int i;
+	int i = 0;
 
 	//free all remaining chat states
 	for (i = 0; i < MAX_CLIENTS; i++)

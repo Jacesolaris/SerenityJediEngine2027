@@ -164,7 +164,7 @@ qboolean coplanar_tri_tri(vec3_t N, vec3_t V0, vec3_t V1, vec3_t V2,
 	vec3_t U0, vec3_t U1, vec3_t U2)
 {
 	vec3_t A;
-	short i0, i1;
+	short i0 = 0, i1 = 0;
 	/* first project onto an axis-aligned plane, that maximizes the area */
 	/* of the triangles, compute indices: i0,i1. */
 	A[0] = fabs(N[0]);
@@ -214,15 +214,15 @@ qboolean tri_tri_intersect(vec3_t V0, vec3_t V1, vec3_t V2,
 {
 	vec3_t E1, E2;
 	vec3_t N1, N2;
-	float d2;
-	float dv0, dv1, dv2;
+	float d2 = 0.0f;
+	float dv0 = 0.0f, dv1 = 0.0f, dv2 = 0.0f;
 	vec3_t D;
 	float isect1[2], isect2[2];
-	float du0du1, du0du2, dv0dv1, dv0dv2;
-	short index;
-	float vp0, vp1, vp2;
-	float up0, up1, up2;
-	float b, c, max;
+	float du0du1 = 0.0f, du0du2 = 0.0f, dv0dv1 = 0.0f, dv0dv2 = 0.0f;
+	short index = 0;
+	float vp0 = 0.0f, vp1 = 0.0f, vp2 = 0.0f;
+	float up0 = 0.0f, up1 = 0.0f, up2 = 0.0f;
+	float b = 0.0f, c = 0.0f, max = 0.0f;
 
 	/* compute plane equation of triangle(V0,V1,V2) */
 	SUB(E1, V1, V0);

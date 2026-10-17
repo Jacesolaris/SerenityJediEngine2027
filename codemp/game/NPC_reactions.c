@@ -111,7 +111,7 @@ static void NPC_CheckAttacker(gentity_t* other, const int mod)
 	if (other == &g_entities[0])
 	{
 		//Account for the skill level to skew the results
-		float luckThreshold;
+		float luckThreshold = 0.0f;
 
 		switch (g_npcspskill.integer)
 		{

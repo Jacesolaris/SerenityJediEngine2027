@@ -1445,7 +1445,7 @@ extern int navTime;
 #endif//	AI_TIMERS
 qboolean NPC_MoveToGoal(const qboolean tryStraight)
 {
-	float distance;
+	float distance = 0.0f;
 	vec3_t dir;
 
 #if	AI_TIMERS

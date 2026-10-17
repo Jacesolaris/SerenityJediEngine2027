@@ -132,7 +132,7 @@ static long generateHashValue(const char* fname, const int size)
 void R_RemapShader(const char* shaderName, const char* newShaderName, const char* timeOffset)
 {
 	char stripped_name[MAX_QPATH];
-	qhandle_t h;
+	qhandle_t h = 0;
 
 	shader_t* sh = R_FindShaderByName(shaderName);
 	if (sh == nullptr || sh == tr.defaultShader)
@@ -670,7 +670,7 @@ ParseSurfaceSprites
 static void ParseSurfaceSprites(const char* _text, shaderStage_t* stage)
 {
 	const char** text = &_text;
-	int sstype;
+	int sstype = 0;
 
 	//
 	// spritetype
@@ -826,9 +826,9 @@ ParseSurfaceSpritesOptional
 //
 static void ParseSurfaceSpritesOptional(const char* param, const char* _text, shaderStage_t* stage)
 {
-	const char* token;
+	const char* token = nullptr;
 	const char** text = &_text;
-	float value;
+	float value = 0.0f;
 
 	if (!stage->ss)
 	{
@@ -2412,7 +2412,7 @@ Sets shader->sortedIndex
 */
 static void SortNewShader(void)
 {
-	int i;
+	int i = 0;
 
 	shader_t* newShader = tr.shaders[tr.numShaders - 1];
 	const float sort = newShader->sort;
@@ -2632,7 +2632,7 @@ from the current global working shader
 */
 static shader_t* FinishShader(void)
 {
-	int stage, lm_stage; //rwwRMG - stageIndex for AGEN_BLEND
+	int stage = 0, lm_stage = 0; //rwwRMG - stageIndex for AGEN_BLEND
 
 	qboolean has_lightmap_stage = qfalse;
 
@@ -2683,8 +2683,8 @@ static shader_t* FinishShader(void)
 
 	if (lm_stage < MAX_SHADER_STAGES) // && !r_fullbright->value)
 	{
-		int numStyles;
-		int i;
+		int numStyles = 0;
+		int i = 0;
 
 		for (numStyles = 0; numStyles < MAXLIGHTMAPS; numStyles++)
 		{
@@ -2757,7 +2757,7 @@ static shader_t* FinishShader(void)
 		//
 		if (pStage->isDetail && !r_detailTextures->integer)
 		{
-			int index;
+			int index = 0;
 
 			for (index = stage + 1; index < MAX_SHADER_STAGES; index++)
 			{
@@ -3018,8 +3018,8 @@ If found, it will return a valid shader
 */
 static const char* FindShaderInShaderText(const char* shadername)
 {
-	char* token;
-	const char* p;
+	char* token = nullptr;
+	const char* p = nullptr;
 
 	const int hash = generateHashValue(shadername, MAX_SHADERTEXT_HASH);
 
@@ -3158,8 +3158,8 @@ shader_t* R_FindShader(const char* name, const int* lightmapIndexes, const byte*
 {
 	char stripped_name[MAX_QPATH];
 	char fileName[MAX_QPATH];
-	const char* shader_text;
-	shader_t* sh;
+	const char* shader_text = nullptr;
+	shader_t* sh = nullptr;
 
 	if (name[0] == 0)
 	{
@@ -3268,7 +3268,7 @@ shader_t* R_FindServerShader(const char* name, const int* lightmapIndexes, const
 
 qhandle_t RE_RegisterShaderFromImage(const char* name, const int* lightmapIndexes, const byte* styles, image_t* image)
 {
-	shader_t* sh;
+	shader_t* sh = nullptr;
 
 	const int hash = generateHashValue(name, FILE_HASH_SIZE);
 

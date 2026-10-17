@@ -56,7 +56,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
  //===========================================================================
 int GeneticSelection(const int numranks, float* rankings)
 {
-	int i;
+	int i = 0;
 
 	float sum = 0;
 	for (i = 0; i < numranks; i++)
@@ -93,8 +93,8 @@ int GeneticSelection(const int numranks, float* rankings)
 //===========================================================================
 int GeneticParentsAndChildSelection(const int numranks, float* ranks, int* parent1, int* parent2, int* child)
 {
-	float rankings[256], max;
-	int i;
+	float rankings[256], max = 0.0f;
+	int i = 0;
 
 	if (numranks > 256)
 	{

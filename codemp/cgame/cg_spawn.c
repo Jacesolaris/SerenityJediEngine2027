@@ -106,7 +106,7 @@ qboolean CG_SpawnString(const char* key, const char* default_string, char** out)
 
 qboolean CG_SpawnFloat(const char* key, const char* default_string, float* out)
 {
-	char* s;
+	char* s = NULL;
 
 	const qboolean present = CG_SpawnString(key, default_string, &s);
 	*out = atof(s);
@@ -115,7 +115,7 @@ qboolean CG_SpawnFloat(const char* key, const char* default_string, float* out)
 
 qboolean CG_SpawnInt(const char* key, const char* default_string, int* out)
 {
-	char* s;
+	char* s = NULL;
 
 	const qboolean present = CG_SpawnString(key, default_string, &s);
 	*out = atoi(s);
@@ -124,7 +124,7 @@ qboolean CG_SpawnInt(const char* key, const char* default_string, int* out)
 
 qboolean CG_SpawnBoolean(const char* key, const char* default_string, qboolean* out)
 {
-	char* s;
+	char* s = NULL;
 
 	const qboolean present = CG_SpawnString(key, default_string, &s);
 	if (!Q_stricmp(s, "qfalse") || !Q_stricmp(s, "false") || !Q_stricmp(s, "no") || !Q_stricmp(s, "0"))
@@ -145,7 +145,7 @@ qboolean CG_SpawnBoolean(const char* key, const char* default_string, qboolean* 
 
 qboolean CG_SpawnVector(const char* key, const char* default_string, float* out)
 {
-	char* s;
+	char* s = NULL;
 
 	const qboolean present = CG_SpawnString(key, default_string, &s);
 	if (sscanf(s, "%f %f %f", &out[0], &out[1], &out[2]) != 3)
@@ -181,13 +181,13 @@ char* vtos(const vec3_t v)
 
 void SP_misc_model_static(void)
 {
-	char* model;
-	float angle;
+	char* model = NULL;
+	float angle = 0.0f;
 	vec3_t angles;
-	float scale;
+	float scale = 0.0f;
 	vec3_t v_scale;
 	vec3_t org;
-	float zoffset;
+	float zoffset = 0.0f;
 
 	if (cgs.numMiscStaticModels >= MAX_STATIC_MODELS)
 	{
@@ -283,7 +283,7 @@ void SP_misc_skyportal_orient(void)
 
 void SP_misc_weather_zone(void)
 {
-	char* model;
+	char* model = NULL;
 	vec3_t mins, maxs;
 
 	CG_SpawnString("model", "", &model);
@@ -327,9 +327,9 @@ static int spawncmp(const void* a, const void* b)
 
 void CG_ParseEntityFromSpawnVars(void)
 {
-	int i;
-	char* classname;
-	char* value;
+	int i = 0;
+	char* classname = NULL;
+	char* value = NULL;
 	static char* gametypeNames[] =
 	{
 		"ffa",
@@ -487,7 +487,7 @@ extern float cg_linearFogOverride; // cg_view.c
 extern float cg_radarRange; // cg_draw.c
 void SP_worldspawn(void)
 {
-	char* s;
+	char* s = NULL;
 
 	CG_SpawnString("classname", "", &s);
 	if (Q_stricmp(s, "worldspawn"))

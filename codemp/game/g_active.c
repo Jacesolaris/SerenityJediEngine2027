@@ -641,7 +641,7 @@ void G_GetMassAndVelocityForEnt(const gentity_t* ent, float* mass, vec3_t veloci
 
 void DoImpact(gentity_t* self, gentity_t* other, const qboolean damageSelf)
 {
-	float my_mass;
+	float my_mass = 0.0f;
 	vec3_t velocity;
 
 	G_GetMassAndVelocityForEnt(self, &my_mass, velocity);
@@ -847,7 +847,7 @@ void DoImpact(gentity_t* self, gentity_t* other, const qboolean damageSelf)
 
 static void DoImpactPlayer(gentity_t* self, gentity_t* other, const qboolean damageSelf) //mp
 {
-	float my_mass;
+	float my_mass = 0.0f;
 	vec3_t velocity;
 	qboolean easyBreakBrush = qtrue;
 
@@ -1084,7 +1084,7 @@ ClientImpacts
 */
 static void ClientImpacts(gentity_t* ent, const pmove_t* pmove)
 {
-	int j;
+	int j = 0;
 	trace_t trace = { 0 };
 
 	for (int i = 0; i < pmove->numtouch; i++)
@@ -2260,8 +2260,8 @@ static const float maxForceSightFOV = 100.0f;
 
 static void G_UpdateClientBroadcasts(gentity_t* self)
 {
-	int i;
-	gentity_t* other;
+	int i = 0;
+	gentity_t* other = NULL;
 
 	// we are always sent to ourselves
 	// we are always sent to other clients if we are in their PVS
@@ -2896,7 +2896,7 @@ NPC_GetWalkSpeed
 
 static int NPC_GetWalkSpeed(const gentity_t* ent)
 {
-	int walk_speed;
+	int walk_speed = 0;
 
 	if (ent->client == NULL || ent->NPC == NULL)
 		return 0;
@@ -2919,7 +2919,7 @@ NPC_GetRunSpeed
 */
 static int NPC_GetRunSpeed(const gentity_t* ent)
 {
-	int run_speed;
+	int run_speed = 0;
 
 	if (ent->client == NULL || ent->NPC == NULL)
 		return 0;
@@ -4931,11 +4931,11 @@ static void ClientThink_real(gentity_t* ent)
 		return;
 	}
 
-	gclient_t* client;
+	gclient_t* client = NULL;
 	pmove_t pmove;
-	int old_event_sequence;
-	int msec;
-	usercmd_t* ucmd;
+	int old_event_sequence = 0;
+	int msec = 0;
+	usercmd_t* ucmd = NULL;
 	qboolean isNPC = qfalse;
 	qboolean controlledByPlayer = qfalse;
 	qboolean killJetFlags = qtrue;
@@ -5426,7 +5426,7 @@ static void ClientThink_real(gentity_t* ent)
 			mdxaBone_t rhMat;
 			vec3_t rhOrg, tAng;
 			vec3_t bodyDir;
-			float bodyDist;
+			float bodyDist = 0.0f;
 
 			ent->client->ps.forceHandExtend = HANDEXTEND_DRAGGING;
 

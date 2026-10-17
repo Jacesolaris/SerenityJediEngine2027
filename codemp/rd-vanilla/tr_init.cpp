@@ -293,7 +293,7 @@ void RE_GetBModelVerts(const int bmodelIndex, vec3_t* verts, vec3_t normal);
 
 static void R_Splash()
 {
-	image_t* pImage;
+	image_t* pImage = nullptr;
 	const int splash_pick = rand() % 5;
 
 	switch (splash_pick)
@@ -334,10 +334,10 @@ static void R_Splash()
 
 		constexpr int width = 640;
 		constexpr int height = 480;
-		constexpr float x1 = 320 - width / 2;
-		constexpr float x2 = 320 + width / 2;
-		constexpr float y1 = 240 - height / 2;
-		constexpr float y2 = 240 + height / 2;
+		constexpr float x1 = 320 - width / 2.0f;
+		constexpr float x2 = 320 + width / 2.0f;
+		constexpr float y1 = 240 - height / 2.0f;
+		constexpr float y2 = 240 + height / 2.0f;
 
 		qglBegin(GL_TRIANGLE_STRIP);
 		qglTexCoord2f(0, 0);
@@ -607,7 +607,7 @@ static void GLimp_InitExtensions()
 		Com_Printf("...GL_EXT_compiled_vertex_array not found\n");
 	}
 
-	bool b_nv_register_combiners;
+	bool b_nv_register_combiners = false;
 	// Register Combiners.
 	if (ri.GL_ExtensionSupported("GL_NV_register_combiners"))
 	{
@@ -661,7 +661,7 @@ static void GLimp_InitExtensions()
 	// function pointers. ARB rocks!
 
 	// Vertex Programs.
-	bool b_arb_vertex_program;
+	bool b_arb_vertex_program = false;
 	if (ri.GL_ExtensionSupported("GL_ARB_vertex_program"))
 	{
 		b_arb_vertex_program = true;
@@ -673,7 +673,7 @@ static void GLimp_InitExtensions()
 	}
 
 	// Fragment Programs.
-	bool b_arb_fragment_program;
+	bool b_arb_fragment_program = false;
 	if (ri.GL_ExtensionSupported("GL_ARB_fragment_program"))
 	{
 		b_arb_fragment_program = true;
@@ -786,7 +786,7 @@ static void GLimp_InitExtensions()
 static const char* TruncateGLExtensionsString(const char* extensions_string, const int max_extensions)
 {
 	const char* p = extensions_string;
-	const char* q;
+	const char* q = nullptr;
 	int num_extensions = 0;
 	size_t extensions_len = strlen(extensions_string);
 
@@ -944,7 +944,7 @@ Return value must be freed with Hunk_FreeTempMemory()
 
 byte* RB_ReadPixels(const int x, const int y, const int width, const int height, size_t* offset, int* padlen)
 {
-	GLint packAlign;
+	GLint packAlign = 0;
 
 	qglGetIntegerv(GL_PACK_ALIGNMENT, &packAlign);
 
@@ -969,9 +969,9 @@ R_TakeScreenshot
 ==================
 */
 static void R_TakeScreenshot(const int x, const int y, const int width, const int height, const char* fileName) {
-	byte* destptr;
+	byte* destptr = nullptr;
 
-	int padlen;
+	int padlen = 0;
 	size_t offset = 18;
 
 	byte* allbuf = RB_ReadPixels(x, y, width, height, &offset, &padlen);
@@ -1041,7 +1041,7 @@ R_TakeScreenshotJPEG
 */
 static void R_TakeScreenshotJPEG(const int x, const int y, const int width, const int height, const char* fileName) {
 	size_t offset = 0;
-	int padlen;
+	int padlen = 0;
 
 	byte* buffer = RB_ReadPixels(x, y, width, height, &offset, &padlen);
 	const size_t memcount = (static_cast<size_t>(width) * 3 + padlen) * height;
@@ -1060,7 +1060,7 @@ R_ScreenshotFilename
 ==================
 */
 static void R_ScreenshotFilename(char* buf, const int buf_size, const char* ext) {
-	time_t rawtime;
+	time_t rawtime = 0;
 	char time_str[32] = { 0 }; // should really only reach ~19 chars
 
 	time(&rawtime);
@@ -1082,8 +1082,8 @@ static void R_LevelShot()
 {
 	char		checkname[MAX_OSPATH];
 	size_t		offset = 0;
-	int			padlen;
-	int g, b;
+	int			padlen = 0;
+	int g = 0, b = 0;
 
 	Com_sprintf(checkname, sizeof checkname, "levelshots/%s.tga", tr.world->baseName);
 
@@ -1259,7 +1259,7 @@ RB_TakeVideoFrameCmd
 */
 const void* RB_TakeVideoFrameCmd(const void* data)
 {
-	GLint pack_align;
+	GLint pack_align = 0;
 
 	const auto cmd = static_cast<const videoFrameCommand_t*>(data);
 
@@ -1761,8 +1761,8 @@ extern void R_InitWorldEffects();
 
 void R_Init(void)
 {
-	int i;
-	byte* ptr;
+	int i = 0;
+	byte* ptr = nullptr;
 
 	ri.Printf(PRINT_ALL, "-----Loading MP Performance Mode-----\n");
 
@@ -1790,7 +1790,7 @@ void R_Init(void)
 		{
 			if (i < FUNCTABLE_SIZE / 4)
 			{
-				tr.triangleTable[i] = static_cast<float>(i) / (FUNCTABLE_SIZE / 4);
+				tr.triangleTable[i] = static_cast<float>(i) / (FUNCTABLE_SIZE / 4.0f);
 			}
 			else
 			{

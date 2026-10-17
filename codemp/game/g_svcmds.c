@@ -213,7 +213,7 @@ AddIP
 */
 static void AddIP(char* str)
 {
-	int i;
+	int i = 0;
 
 	for (i = 0; i < numIPFilters; i++)
 	{
@@ -243,7 +243,7 @@ G_ProcessIPBans
 */
 void G_ProcessIPBans(void)
 {
-	char* s, str[MAX_CVAR_VALUE_STRING] = { 0 };
+	char* s = NULL, str[MAX_CVAR_VALUE_STRING] = { 0 };
 
 	Q_strncpyz(str, g_banIPs.string, sizeof str);
 
@@ -341,7 +341,7 @@ static int G_WeatherAddString(const char* command, const int after)
 {
 	char str[MAX_QPATH];
 	char s[MAX_STRING_CHARS];
-	int i;
+	int i = 0;
 
 	Com_sprintf(str, sizeof str, "*%s", command);
 
@@ -392,7 +392,7 @@ static void G_SetWeather(const char* const* commands, const int numCommands, con
 {
 	char s[MAX_STRING_CHARS];
 	int last = 0;
-	int i;
+	int i = 0;
 
 	// the strings of the last change go
 	for (i = 0; i < gWeatherNumOwned; i++)
@@ -887,8 +887,8 @@ ClientForString
 */
 static gclient_t* ClientForString(const char* s)
 {
-	gclient_t* cl;
-	int idnum;
+	gclient_t* cl = NULL;
+	int idnum = 0;
 	char cleanInput[MAX_STRING_CHARS];
 
 	// numeric values could be slot numbers

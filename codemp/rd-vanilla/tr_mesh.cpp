@@ -93,7 +93,7 @@ static int R_CullModel(md3Header_t* header, const trRefEntity_t* ent)
 		}
 		else
 		{
-			int sphere_cull_b;
+			int sphere_cull_b = 0;
 
 			const int sphereCull = R_CullLocalPointAndRadius(newFrame->localOrigin, newFrame->radius);
 			if (newFrame == old_frame) {
@@ -172,7 +172,7 @@ R_ComputeLOD
 =================
 */
 int R_ComputeLOD(trRefEntity_t* ent) {
-	int lod;
+	int lod = 0;
 
 	if (tr.currentModel->numLods < 2)
 	{
@@ -181,8 +181,8 @@ int R_ComputeLOD(trRefEntity_t* ent) {
 	}
 	else
 	{
-		float projectedRadius;
-		float flod;
+		float projectedRadius = 0.0f;
+		float flod = 0.0f;
 		// multiple LODs exist, so compute projected bounding sphere
 		// and use that as a criteria for selecting LOD
 
@@ -241,7 +241,7 @@ R_ComputeFogNum
 =================
 */
 int R_ComputeFogNum(md3Header_t* header, const trRefEntity_t* ent) {
-	int j;
+	int j = 0;
 	vec3_t			localOrigin;
 
 	if (tr.refdef.rdflags & RDF_NOWORLDMODEL) {
@@ -277,7 +277,7 @@ R_AddMD3Surfaces
 */
 void R_AddMD3Surfaces(trRefEntity_t* ent)
 {
-	const shader_t* shader;
+	const shader_t* shader = nullptr;
 
 	// don't add third_person objects if not in a portal
 	const auto personalModel = static_cast<qboolean>(ent->e.renderfx & RF_THIRD_PERSON && !tr.viewParms.isPortal);

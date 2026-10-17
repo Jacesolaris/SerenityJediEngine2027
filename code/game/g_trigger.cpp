@@ -474,7 +474,7 @@ so, the basic time between firing is a random time between
 */
 void SP_trigger_multiple(gentity_t* ent)
 {
-	char* s;
+	char* s = nullptr;
 	if (G_SpawnString("noise", "*NOSOUND*", &s))
 	{
 		char buffer[MAX_QPATH];
@@ -545,7 +545,7 @@ so, the basic time between firing is a random time between
 */
 void SP_trigger_once(gentity_t* ent)
 {
-	char* s;
+	char* s = nullptr;
 	if (G_SpawnString("noise", "*NOSOUND*", &s))
 	{
 		char buffer[MAX_QPATH];
@@ -1209,7 +1209,7 @@ extern qboolean G_FxRunnerIsFire(const gentity_t* ent);
 
 void hurt_touch(gentity_t* self, gentity_t* other, trace_t* trace)
 {
-	int dflags;
+	int dflags = 0;
 	int actual_dmg = self->damage;
 
 	// SAFETY: other may be NULL in edge cases (bad maps, script errors)
@@ -1293,7 +1293,7 @@ void hurt_touch(gentity_t* self, gentity_t* other, trace_t* trace)
 	{
 		if (self->attackDebounceTime < self->delay)
 		{
-			actual_dmg = floor(static_cast<float>(self->damage * self->attackDebounceTime / self->delay));
+			actual_dmg = floor(static_cast<float>(self->damage * self->attackDebounceTime) / self->delay);
 		}
 
 		self->attackDebounceTime += FRAMETIME;
@@ -1379,7 +1379,7 @@ void hurt_touch(gentity_t* self, gentity_t* other, trace_t* trace)
 
 void SP_trigger_hurt(gentity_t* self)
 {
-	char* s;
+	char* s = nullptr;
 
 	init_trigger(self);
 
@@ -1618,7 +1618,7 @@ void SP_trigger_shipboundary(gentity_t* self)
 
 void hyperspace_touch(const gentity_t* self, gentity_t* other, trace_t* trace)
 {
-	gentity_t* ent;
+	gentity_t* ent = nullptr;
 
 	if (!other || !other->inuse || !other->client ||
 		other->s.number < MAX_CLIENTS ||
@@ -2090,7 +2090,7 @@ void trigger_entdist_use(gentity_t* self, gentity_t* other, gentity_t* activator
 	vec3_t diff;
 	gentity_t* found = nullptr;
 	const gentity_t* owner = nullptr;
-	const char* hold_string;
+	const char* hold_string = nullptr;
 
 	if (self->svFlags & SVF_INACTIVE) // Don't use INACTIVE
 		return;

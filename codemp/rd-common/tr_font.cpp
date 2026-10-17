@@ -589,7 +589,7 @@ static int Thai_ValidTISCode(const byte* psString, int& iThaiBytes)
 
 		// thai codes can be up to 3 bytes long, so see how high we can get...
 		//
-		int i;
+		int i = 0;
 		for (i = 0; i < 3; i++)
 		{
 			CodeToTry.sChars[i] = psString[i];
@@ -658,7 +658,7 @@ static int Thai_InitFields(int& iGlyphTPs, const char*& psLang)
 unsigned int AnyLanguage_ReadCharFromString(const char* psText, int* piAdvanceCount, qboolean* pbIsTrailingPunctuation /* = NULL */)
 {
 	const auto psString = (const byte*)psText;	// avoid sign-promote bug
-	unsigned int uiLetter;
+	unsigned int uiLetter = 0;
 
 	switch (GetLanguageEnum())
 	{
@@ -741,7 +741,7 @@ unsigned int AnyLanguage_ReadCharFromString(const char* psText, int* piAdvanceCo
 
 	case eThai:
 	{
-		int iThaiBytes;
+		int iThaiBytes = 0;
 		uiLetter = Thai_ValidTISCode(psString, iThaiBytes);
 		if (uiLetter)
 		{
@@ -824,7 +824,7 @@ qboolean Language_UsesSpaces(void)
 //
 CFontInfo::CFontInfo(const char* _fontName)
 {
-	void* buff;
+	void* buff = nullptr;
 
 	// remove any special hack name insertions...
 	//
@@ -910,7 +910,7 @@ CFontInfo::CFontInfo(const char* _fontName)
 
 			// SBCS override languages...
 			//
-			fileHandle_t f;
+			fileHandle_t f = 0;
 			for (int i = 0; g_SBCSOverrideLanguages[i].m_psName; i++)
 			{
 				char sTemp[MAX_QPATH];
@@ -1343,7 +1343,7 @@ float RE_Font_StrLenPixelsNew(const char* psText, const int iFontHandle, const f
 	float maxLineWidth = 0.0f;
 	float thisLineWidth = 0.0f;
 	while (*psText) {
-		int iAdvanceCount;
+		int iAdvanceCount = 0;
 		unsigned int uiLetter = AnyLanguage_ReadCharFromString(psText, &iAdvanceCount, nullptr);
 		psText += iAdvanceCount;
 
@@ -1400,7 +1400,7 @@ int RE_Font_StrLenChars(const char* psText)
 	{
 		// in other words, colour codes and CR/LF don't count as chars, all else does...
 		//
-		int iAdvanceCount;
+		int iAdvanceCount = 0;
 		const unsigned int uiLetter = AnyLanguage_ReadCharFromString(psText, &iAdvanceCount, nullptr);
 		psText += iAdvanceCount;
 
@@ -1443,8 +1443,8 @@ int RE_Font_HeightPixels(const int iFontHandle, const float fScale)
 void RE_Font_DrawString(const int ox, const int oy, const char* psText, const float* rgba, const int iFontHandle, const int iMaxPixelWidth, const float fScale)
 {
 	static qboolean gbInShadow = qfalse;	// MUST default to this
-	const glyphInfo_t* pLetter;
-	qhandle_t			hShader;
+	const glyphInfo_t* pLetter = nullptr;
+	qhandle_t			hShader = 0;
 
 	assert(psText);
 
@@ -1539,7 +1539,7 @@ void RE_Font_DrawString(const int ox, const int oy, const char* psText, const fl
 	qboolean bNextTextWouldOverflow = qfalse;
 	while (*psText && !bNextTextWouldOverflow)
 	{
-		int iAdvanceCount;
+		int iAdvanceCount = 0;
 		const unsigned int uiLetter = AnyLanguage_ReadCharFromString(psText, &iAdvanceCount, nullptr);
 		psText += iAdvanceCount;
 
@@ -1716,7 +1716,7 @@ void R_ReloadFonts_f()
 	//
 	std::vector <sstring_t> vstr_fonts;
 
-	int iFontToFind;
+	int iFontToFind = 0;
 	for (iFontToFind = 1; iFontToFind < g_iCurrentFontIndex; iFontToFind++)
 	{
 		FontIndexMap_t::iterator it;

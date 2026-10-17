@@ -49,7 +49,7 @@ static qboolean CG_IsFemale(const char* infostring)
 const char* CG_PlaceString(int rank)
 {
 	static char str[64];
-	char* s, * t;
+	char* s = nullptr, * t = nullptr;
 
 	if (rank & RANK_TIED_FLAG)
 	{
@@ -188,7 +188,7 @@ Also called by playerstate transition
 */
 void CG_PainEvent(centity_t* cent, const int health)
 {
-	char* snd;
+	char* snd = nullptr;
 
 	// don't do more than two pain sounds a second
 	if (cg.time - cent->pe.painTime < 1500)
@@ -378,7 +378,7 @@ An entity has an event value
 extern void cancel_firing(gentity_t* ent);
 void CG_EntityEvent(centity_t* cent, vec3_t position)
 {
-	const char* s;
+	const char* s = nullptr;
 	vec3_t dir;
 
 	entityState_t* es = &cent->currentState;
@@ -517,7 +517,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 	case EV_STEP_16: // smooth out step up transitions
 		DEBUGNAME("EV_STEP");
 		{
-			float old_step;
+			float old_step = 0.0f;
 
 			if (clientNum != cg.predictedPlayerState.clientNum)
 			{
@@ -910,10 +910,10 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 		DEBUGNAME("EV_DISINTEGRATION");
 		qboolean make_not_solid;
 		const int disint_pw = es->eventParm;
-		int disint_effect;
-		int disint_length;
-		qhandle_t disint_sound1;
-		qhandle_t disint_sound2;
+		int disint_effect = 0;
+		int disint_length = 0;
+		qhandle_t disint_sound1 = 0;
+		qhandle_t disint_sound2 = 0;
 
 		switch (disint_pw)
 		{
@@ -1165,7 +1165,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 
 			if (s && s[0])
 			{
-				const char* s2;
+				const char* s2 = nullptr;
 				if (cent->gent->delay)
 				{
 					s2 = CG_ConfigString(CS_EFFECTS + cent->gent->delay);

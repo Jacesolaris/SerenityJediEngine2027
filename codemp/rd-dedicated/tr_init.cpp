@@ -520,7 +520,7 @@ void R_Init(void)
 		{
 			if (i < FUNCTABLE_SIZE / 4)
 			{
-				tr.triangleTable[i] = static_cast<float>(i) / (FUNCTABLE_SIZE / 4);
+				tr.triangleTable[i] = static_cast<float>(i) / (FUNCTABLE_SIZE / 4.0f);
 			}
 			else
 			{

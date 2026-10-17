@@ -2156,7 +2156,7 @@ AGGRESSION
 */
 static void Jedi_Aggression(const gentity_t* self, const int change)
 {
-	int upper_threshold, lower_threshold;
+	int upper_threshold = 0, lower_threshold = 0;
 
 	self->NPC->stats.aggression += change;
 
@@ -2218,8 +2218,8 @@ static void Jedi_AggressionErosion(const int amt)
 
 void NPC_Jedi_RateNewEnemy(const gentity_t* self, const gentity_t* enemy)
 {
-	float health_aggression;
-	float weapon_aggression;
+	float health_aggression = 0.0f;
+	float weapon_aggression = 0.0f;
 
 	switch (enemy->s.weapon)
 	{
@@ -2360,7 +2360,7 @@ static qboolean Jedi_ClearPathToSpot(vec3_t dest, const int impactEntNum)
 {
 	trace_t trace;
 	vec3_t mins, end, dir;
-	float drop;
+	float drop = 0.0f;
 
 	//Offset the step height
 	VectorSet(mins, NPCS.NPC->r.mins[0], NPCS.NPC->r.mins[1], NPCS.NPC->r.mins[2] + STEPSIZE);
@@ -3778,7 +3778,7 @@ static void Jedi_CombatDistance(const int enemy_dist)
 		&& !Q_stricmp("PAS", NPCS.NPC->enemy->classname)
 		&& NPCS.NPC->enemy->s.apos.trType == TR_STATIONARY)
 	{
-		int testlevel;
+		int testlevel = 0;
 		if (enemy_dist > forcePushPullRadius[FORCE_LEVEL_1] - 16)
 		{
 			Jedi_Advance();
@@ -4517,8 +4517,8 @@ static evasionType_t Jedi_CheckFlipEvasions(gentity_t* self, const float rightdo
 	{
 		vec3_t fwd, right, traceto, mins, maxs, fwdAngles;
 		trace_t trace;
-		int anim;
-		float speed, checkDist;
+		int anim = 0;
+		float speed = 0.0f, checkDist = 0.0f;
 		qboolean allowCartWheels = qtrue;
 		qboolean allowWallFlips = qtrue;
 
@@ -4853,7 +4853,7 @@ int Jedi_ReCalcParryTime(const gentity_t* self, const evasionType_t evasion_type
 	}
 	else if (self->NPC)
 	{
-		int base_time;
+		int base_time = 0;
 		if (evasion_type == EVASION_DODGE)
 		{
 			base_time = self->client->ps.torsoTimer;
@@ -5590,7 +5590,7 @@ evasionType_t jedi_saber_block_go(gentity_t* self, usercmd_t* cmd, vec3_t p_hitl
 								&& !PM_SaberInSpecialAttack(self->client->ps.torsoAnim))
 							{
 								//do the butterfly!
-								int butterflyAnim;
+								int butterflyAnim = 0;
 								if (self->client->NPC_class == CLASS_ALORA && !Q_irand(0, 2))
 								{
 									butterflyAnim = BOTH_ALORA_SPIN;
@@ -6028,7 +6028,7 @@ static qboolean Jedi_SaberBlock(void)
 {
 	vec3_t hitloc, saberTipOld, saberTip, top, bottom, axisPoint, saberPoint, dir; //saberBase,
 	vec3_t pointDir, baseDir, tipDir, saberMins, saberMaxs;
-	float baseDirPerc, dist;
+	float baseDirPerc = 0.0f, dist = 0.0f;
 	float bestDist = Q3_INFINITE;
 	int closestsaber_num = 0, closestblade_num = 0;
 	trace_t tr;
@@ -6507,7 +6507,7 @@ static void Jedi_EvasionSaber(vec3_t enemy_movedir, const float enemy_dist, vec3
 	if (Q_irand(0, 100) < evasionChance)
 	{
 		//check to see if he's coming at me
-		float facingAmt;
+		float facingAmt = 0.0f;
 		if (VectorCompare(enemy_movedir, vec3_origin) || shooting_lightning || throwing_saber)
 		{
 			//he's not moving (or he's using a ranged attack), see if he's facing me
@@ -7039,7 +7039,7 @@ void NPC_EvasionSaber(void)
 	{
 		//see if we need to avoid their saber
 		vec3_t enemy_dir, enemy_movedir, enemy_dest;
-		float enemy_dist, enemy_movespeed;
+		float enemy_dist = 0.0f, enemy_movespeed = 0.0f;
 		//set enemy
 		jedi_set_enemy_info(enemy_dest, enemy_dir, &enemy_dist, enemy_movedir, &enemy_movespeed, 300);
 		Jedi_EvasionSaber(enemy_movedir, enemy_dist, enemy_dir);
@@ -8221,7 +8221,7 @@ static qboolean Jedi_TryJump(const gentity_t* goal)
 							{
 								{
 									//FIXME: make this a function call
-									int jumpAnim;
+									int jumpAnim = 0;
 									//FIXME: this should be more intelligent, like the normal force jump anim logic
 									if (NPCS.NPC->client->NPC_class == CLASS_BOBAFETT
 										|| NPCS.NPC->client->pers.botclass == BCLASS_BOBAFETT
@@ -8709,7 +8709,7 @@ void RT_CheckJump(void)
 static void Jedi_Combat(void)
 {
 	vec3_t enemy_dir, enemy_movedir, enemy_dest;
-	float enemy_dist, enemy_movespeed;
+	float enemy_dist = 0.0f, enemy_movespeed = 0.0f;
 
 	//See where enemy will be 300 ms from now
 	jedi_set_enemy_info(enemy_dest, enemy_dir, &enemy_dist, enemy_movedir, &enemy_movespeed, 300);
@@ -9108,7 +9108,7 @@ qboolean Jedi_CheckDanger(void)
 
 qboolean Jedi_CheckAmbushPlayer(void)
 {
-	float target_dist;
+	float target_dist = 0.0f;
 
 	for (int i = 0; i < MAX_CLIENTS; i++)
 	{
@@ -9639,7 +9639,7 @@ static void Jedi_Attack(void)
 		//based on my skill, hit attack button every other to every several frames in order to push enemy back
 		else
 		{
-			float chance;
+			float chance = 0.0f;
 
 			if (NPCS.NPC->client->NPC_class == CLASS_DESANN
 				|| !Q_stricmp("T_Yoda", NPCS.NPC->NPC_type)
@@ -9723,7 +9723,7 @@ static void Jedi_Attack(void)
 						{
 							//be sure to continue evasion
 							vec3_t enemy_dir, enemy_movedir, enemy_dest;
-							float enemy_dist, enemy_movespeed;
+							float enemy_dist = 0.0f, enemy_movespeed = 0.0f;
 							jedi_set_enemy_info(enemy_dest, enemy_dir, &enemy_dist, enemy_movedir, &enemy_movespeed,
 								300);
 							Jedi_EvasionSaber(enemy_movedir, enemy_dist, enemy_dir);
@@ -9739,7 +9739,7 @@ static void Jedi_Attack(void)
 						{
 							//be sure to continue evasion
 							vec3_t enemy_dir, enemy_movedir, enemy_dest;
-							float enemy_dist, enemy_movespeed;
+							float enemy_dist = 0.0f, enemy_movespeed = 0.0f;
 							jedi_set_enemy_info(enemy_dest, enemy_dir, &enemy_dist, enemy_movedir, &enemy_movespeed,
 								300);
 							Jedi_EvasionSaber(enemy_movedir, enemy_dist, enemy_dir);
@@ -9753,7 +9753,7 @@ static void Jedi_Attack(void)
 				{
 					//be sure to continue evasion
 					vec3_t enemy_dir, enemy_movedir, enemy_dest;
-					float enemy_dist, enemy_movespeed;
+					float enemy_dist = 0.0f, enemy_movespeed = 0.0f;
 					jedi_set_enemy_info(enemy_dest, enemy_dir, &enemy_dist, enemy_movedir, &enemy_movespeed, 300);
 					Jedi_EvasionSaber(enemy_movedir, enemy_dist, enemy_dir);
 				}

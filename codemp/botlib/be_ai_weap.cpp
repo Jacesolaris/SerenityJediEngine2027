@@ -204,7 +204,7 @@ weaponconfig_t* LoadWeaponConfig(char* filename)
 {
 	token_t token;
 	char path[MAX_PATH];
-	int j;
+	int j = 0;
 	weaponinfo_t weaponinfo;
 
 	int max_weaponinfo = static_cast<int>(LibVarValue("max_weaponinfo", "32"));

@@ -1806,7 +1806,7 @@ static qboolean NPC_SafeSpawn(const gentity_t* ent, const float safeRadius)
 {
 	int radius_ents[MAX_SAFESPAWN_ENTS];
 	vec3_t safeMins = { 0 }, safeMaxs = { 0 };
-	int i;
+	int i = 0;
 	const float safeRadiusSquared = safeRadius * safeRadius;
 
 	if (!ent)
@@ -2437,7 +2437,7 @@ extern void Precashe_Key(void);
 
 void SP_NPC_spawner(gentity_t* self)
 {
-	int t;
+	int t = 0;
 
 	if (level.gametype == GT_SINGLE_PLAYER && !g_allowNPC.integer) //singleplayer npcs turned off
 	{
@@ -2792,8 +2792,8 @@ void NPC_VehicleSpawnUse(gentity_t* self, gentity_t* other, gentity_t* activator
 
 void SP_NPC_Vehicle(gentity_t* self)
 {
-	float dropTime;
-	int t;
+	float dropTime = 0.0f;
+	int t = 0;
 	if (!self->NPC_type)
 	{
 		self->NPC_type = "swoop";
@@ -4963,7 +4963,7 @@ extern stringID_table_t TeamTable[];
 
 static void NPC_Kill_f(void)
 {
-	int n;
+	int n = 0;
 	char name[1024];
 	npcteam_t killTeam = NPCTEAM_FREE;
 	qboolean killNonSF = qfalse;
@@ -5135,7 +5135,7 @@ void Cmd_NPC_f(gentity_t* ent)
 	else if (Q_stricmp(cmd, "score") == 0)
 	{
 		char cmd2[1024];
-		const gentity_t* thisent;
+		const gentity_t* thisent = NULL;
 
 		trap->Argv(2, cmd2, sizeof cmd2);
 

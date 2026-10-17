@@ -215,8 +215,8 @@ void CG_DrawStringExt(const int x, const int y, const char* string, const float*
 	}
 
 	vec4_t color = { 0,0,0,0 };
-	const char* s;
-	int xx;
+	const char* s = nullptr;
+	int xx = 0;
 
 	// draw the drop shadow
 	if (shadow == qtrue)
@@ -412,8 +412,8 @@ void CG_DrawNumField(int x, const int y, int width, int value, const int charWid
 	const int style, const qboolean zeroFill)
 {
 	char num[16];
-	int frame;
-	int xWidth;
+	int frame = 0;
+	int xWidth = 0;
 
 	if (width < 1)
 	{

@@ -272,8 +272,8 @@ EvaluateTrajectory
 */
 void EvaluateTrajectory(const trajectory_t* tr, int atTime, vec3_t result)
 {
-	float deltaTime;
-	float phase;
+	float deltaTime = 0.0f;
+	float phase = 0.0f;
 
 	switch (tr->trType)
 	{
@@ -341,8 +341,8 @@ Returns current speed at given time
 */
 void EvaluateTrajectoryDelta(const trajectory_t* tr, const int atTime, vec3_t result)
 {
-	float deltaTime;
-	float phase;
+	float deltaTime = 0.0f;
+	float phase = 0.0f;
 
 	switch (tr->trType)
 	{
@@ -612,7 +612,7 @@ int BG_EmplacedView(vec3_t base_angles, vec3_t angles, float* new_yaw, const flo
 	if (dif > constraint ||
 		dif < -constraint)
 	{
-		float amt;
+		float amt = 0.0f;
 
 		if (dif > constraint)
 		{

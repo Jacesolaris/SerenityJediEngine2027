@@ -133,7 +133,7 @@ static void Sentry_Fire(void)
 	vec3_t muzzle;
 	static vec3_t forward, vright, up;
 	mdxaBone_t boltMatrix;
-	int bolt;
+	int bolt = 0;
 
 	NPCS.NPC->flags &= ~FL_SHIELDED;
 
@@ -225,7 +225,7 @@ Sentry_MaintainHeight
 */
 static void Sentry_MaintainHeight(void)
 {
-	float dif;
+	float dif = 0.0f;
 
 	NPCS.NPC->s.loopSound = G_SoundIndex("sound/chars/sentry/misc/sentry_hover_1_lp");
 
@@ -251,7 +251,7 @@ static void Sentry_MaintainHeight(void)
 	}
 	else
 	{
-		const gentity_t* goal;
+		const gentity_t* goal = NULL;
 
 		if (NPCS.NPCInfo->goalEntity) // Is there a goal?
 		{
@@ -392,7 +392,7 @@ Sentry_Hunt
 */
 static void Sentry_Hunt(const qboolean visible, const qboolean advance)
 {
-	float distance;
+	float distance = 0.0f;
 	vec3_t forward;
 
 	//If we're not supposed to stand still, pursue the player

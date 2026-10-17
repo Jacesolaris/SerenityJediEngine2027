@@ -56,10 +56,10 @@ static void user_flush_data(png_structp png_ptr)
 }
 
 int RE_SavePNG(const char* filename, const byte* buf, const size_t width, const size_t height, const int byte_depth) {
-	fileHandle_t fp;
-	png_structp png_ptr;
-	png_infop info_ptr;
-	unsigned int y;
+	fileHandle_t fp = 0;
+	png_structp png_ptr = nullptr;
+	png_infop info_ptr = nullptr;
+	unsigned int y = 0;
 	/* "status" contains the return value of this function. At first
 	it is set to a value which means 'failure'. When the routine
 	has finished its work, it is set to a value which means
@@ -221,10 +221,10 @@ struct PNGFileReader
 		png_set_sig_bytes(png_ptr, signature_len);
 		png_read_info(png_ptr, info_ptr);
 
-		png_uint_32 width32;
-		png_uint_32 height32;
-		int depth;
-		int colortype;
+		png_uint_32 width32 = 0;
+		png_uint_32 height32 = 0;
+		int depth = 0;
+		int colortype = 0;
 
 		png_get_IHDR(png_ptr, info_ptr, &width32, &height32, &depth, &colortype, nullptr, nullptr, nullptr);
 

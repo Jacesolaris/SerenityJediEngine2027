@@ -185,7 +185,7 @@ PopCommand
 
 CBlock* CSequence::PopCommand(const int type)
 {
-	CBlock* command;
+	CBlock* command = nullptr;
 
 	//Make sure everything is ok
 	assert(type == POP_FRONT || type == POP_BACK);
@@ -331,8 +331,8 @@ SaveCommand
 
 int CSequence::SaveCommand(const CBlock* block) const
 {
-	unsigned char flags;
-	int numMembers, bID, size;
+	unsigned char flags = 0;
+	int numMembers = 0, bID = 0, size = 0;
 
 	//Save out the block ID
 	bID = block->GetBlockID();

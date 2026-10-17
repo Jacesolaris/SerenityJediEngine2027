@@ -213,8 +213,8 @@ SV_LinkEntity
 void SV_LinkEntity(sharedEntity_t* g_ent)
 {
 	int leafs[MAX_TOTAL_ENT_LEAFS];
-	int i;
-	int lastLeaf;
+	int i = 0;
+	int lastLeaf = 0;
 
 	svEntity_t* ent = SV_SvEntityForGentity(g_ent);
 
@@ -558,7 +558,7 @@ static float VectorDistance(vec3_t p1, vec3_t p2)
 static void SV_ClipMoveToEntities(moveclip_t* clip)
 {
 	static int touchlist[MAX_GENTITIES];
-	int passOwnerNum;
+	int passOwnerNum = 0;
 	trace_t trace, oldTrace = { 0 };
 	int thisOwnerShared = 1;
 

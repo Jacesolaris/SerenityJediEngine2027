@@ -529,7 +529,7 @@ public:
 		}
 
 		CVec3 CurPos{};
-		int x;
+		int x = 0;
 
 		// Record The Extents Of The World Incase No Other Weather Zones Exist
 		//---------------------------------------------------------------------
@@ -621,7 +621,7 @@ public:
 			SWeatherZone wz = mWeatherZones[zone];
 			if (wz.mExtents.In(pos))
 			{
-				int bit, x, y, z;
+				int bit = 0, x = 0, y = 0, z = 0;
 				wz.ConvertToCell(pos, x, y, z, bit);
 				return wz.CellOutside(x, y, z, bit);
 			}
@@ -639,7 +639,7 @@ public:
 			SWeatherZone wz = mWeatherZones[zone];
 			if (wz.mExtents.In(pos))
 			{
-				int bit, x, y, z;
+				int bit = 0, x = 0, y = 0, z = 0;
 				wz.ConvertToCell(pos, x, y, z, bit);
 				if (width < POINTCACHE_CELL_SIZE || height < POINTCACHE_CELL_SIZE)
 				{
@@ -1413,7 +1413,7 @@ void RE_WorldEffectCommand(const char* command)
 
 	COM_BeginParseSession("RE_WorldEffectCommand");
 
-	const char* token; //, *origCommand;
+	const char* token = nullptr; //, *origCommand;
 
 	token = COM_ParseExt(&command, qfalse);
 

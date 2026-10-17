@@ -239,7 +239,7 @@ static long RllDecodeMonoToStereo(const unsigned char* from, short* to, const un
 	const char signedOutput,
 	const unsigned short flag)
 {
-	int prev;
+	int prev = 0;
 
 	if (signedOutput)
 		prev = flag - 0x8000;
@@ -272,7 +272,7 @@ static long RllDecodeStereoToStereo(unsigned char* from, short* to, const unsign
 	const unsigned short flag)
 {
 	unsigned char* zz = from;
-	int prevL, prevR;
+	int prevL = 0, prevR = 0;
 
 	if (signedOutput)
 	{
@@ -427,7 +427,7 @@ static void blit2_32(const byte* src, byte* dst, const int spl)
 
 static void blitVQQuad32fs(byte** status, unsigned char* data)
 {
-	unsigned int i;
+	unsigned int i = 0;
 
 	unsigned short newd = 0;
 	unsigned short celdata = 0;
@@ -651,10 +651,10 @@ static unsigned int yuv_to_rgb24(const long y, const long u, const long v)
 
 static void decodeCodeBook(byte* input, unsigned short roq_flags)
 {
-	long i, j, two, four;
-	unsigned short* aptr, * bptr, * cptr, * dptr;
-	long y0, y2, cr, cb;
-	byte* bbptr, * baptr, * bcptr, * bdptr;
+	long i = 0, j = 0, two = 0, four = 0;
+	unsigned short* aptr = nullptr, * bptr = nullptr, * cptr = nullptr, * dptr = nullptr;
+	long y0 = 0, y2 = 0, cr = 0, cb = 0;
+	byte* bbptr = nullptr, * baptr = nullptr, * bcptr = nullptr, * bdptr = nullptr;
 	union
 	{
 		unsigned int* i;
@@ -678,8 +678,8 @@ static void decodeCodeBook(byte* input, unsigned short roq_flags)
 
 	if (!cinTable[currentHandle].half)
 	{
-		long y3;
-		long y1;
+		long y3 = 0;
+		long y1 = 0;
 		if (!cinTable[currentHandle].smootheddouble)
 		{
 			//
@@ -978,7 +978,7 @@ static void decodeCodeBook(byte* input, unsigned short roq_flags)
 
 static void recurseQuad(const long startX, const long startY, long quadSize, const long xOff, const long yOff)
 {
-	long lowy;
+	long lowy = 0;
 
 	const long offset = cinTable[currentHandle].screenDelta;
 
@@ -1908,7 +1908,7 @@ Resample cinematic to 256x256 and store in buf2
 */
 static void CIN_ResampleCinematic(const int handle, int* buf2)
 {
-	int ix, iy;
+	int ix = 0, iy = 0;
 
 	byte* buf = cinTable[handle].buf;
 

@@ -106,7 +106,7 @@ The server says this item is used on this level
 */
 void CG_RegisterWeapon(const int weapon_num)
 {
-	gitem_t* item, * ammo;
+	gitem_t* item = NULL, * ammo = NULL;
 	char path[MAX_QPATH];
 	vec3_t mins, maxs;
 

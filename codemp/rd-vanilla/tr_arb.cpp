@@ -209,7 +209,7 @@ void ARB_InitGPUShaders() {
 	qglBindProgramARB(GL_VERTEX_PROGRAM_ARB, tr.gammaCorrectVtxShader);
 	qglProgramStringARB(GL_VERTEX_PROGRAM_ARB, GL_PROGRAM_FORMAT_ASCII_ARB, strlen(gammaCorrectVtxShader), gammaCorrectVtxShader);
 
-	int error_char;
+	int error_char = 0;
 	qglGetIntegerv(GL_PROGRAM_ERROR_POSITION_ARB, &error_char);
 	if (error_char != -1)
 	{

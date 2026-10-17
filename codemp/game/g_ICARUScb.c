@@ -1265,8 +1265,8 @@ void G_DebugPrint(int level, const char* format, ...)
 
 	case WL_DEBUG:
 	{
-		int		entNum;
-		char* buffer;
+		int		entNum = 0;
+		char* buffer = NULL;
 
 		entNum = atoi(text);
 
@@ -1931,7 +1931,7 @@ Q3_Kill
 void Q3_Kill(const int entID, const char* name)
 {
 	gentity_t* ent = &g_entities[entID];
-	gentity_t* victim;
+	gentity_t* victim = NULL;
 
 	if (!Q_stricmp(name, "self"))
 	{
@@ -2029,7 +2029,7 @@ Q3_Remove
 void Q3_Remove(const int entID, const char* name)
 {
 	gentity_t* ent = &g_entities[entID];
-	gentity_t* victim;
+	gentity_t* victim = NULL;
 
 	if (!Q_stricmp("self", name))
 	{
@@ -3390,7 +3390,7 @@ static void Q3_SetEnemy(const int entID, const char* name)
 
 		if (!Q_stricmp(name, "player") || !Q_stricmp(name, "kyle")) //old school JKO script target for "the player"
 		{
-			int i;
+			int i = 0;
 			qboolean cFound = qfalse;
 
 			for (i = 0; i < MAX_CLIENTS; i++)
@@ -4918,7 +4918,7 @@ Q3_GameSideCheckStringCounterIncrement
 */
 static float Q3_GameSideCheckStringCounterIncrement(const char* string)
 {
-	char* numString;
+	char* numString = NULL;
 	float val = 0.0f;
 
 	if (string[0] == '+')
@@ -4955,7 +4955,7 @@ Q3_SetCount
 static void Q3_SetCount(const int entID, const char* data)
 {
 	gentity_t* self = &g_entities[entID];
-	float val;
+	float val = 0.0f;
 
 	if (!self)
 	{
@@ -5231,7 +5231,7 @@ Q3_SetParm
 void Q3_SetParm(const int entID, const int parmNum, const char* parmValue)
 {
 	gentity_t* ent = &g_entities[entID];
-	float val;
+	float val = 0.0f;
 
 	if (!ent)
 	{
@@ -7824,12 +7824,12 @@ void UpdatePlayerCameraOrigin(const gentity_t* ent, vec3_t newPos);
 qboolean Q3_Set(const int taskID, const int entID, const char* type_name, const char* data)
 {
 	gentity_t* ent = &g_entities[entID];
-	float float_data;
-	int int_data;
+	float float_data = 0.0f;
+	int int_data = 0;
 	vec3_t vector_data = { 0 };
 	vec3_t vector2_data = { 0 };
 	vec4_t color = { 0 }, color2 = { 0 };
-	float float2_data;
+	float float2_data = 0.0f;
 	char char_data[1000];
 
 	//Set this for callbacks
@@ -9501,7 +9501,7 @@ static void ProcessTag(const int entID, char* startpoint)
 //replaces any tags with their related data
 void ParseTags(const int entID, const char* data)
 {
-	char* tagstart;
+	char* tagstart = NULL;
 	while ((tagstart = strchr(data, '$')) != NULL)
 	{
 		ProcessTag(entID, tagstart);

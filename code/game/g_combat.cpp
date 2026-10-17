@@ -162,7 +162,7 @@ extern cvar_t* g_WeaponRemovalTime;
 
 static int WeaponRemovalTime()
 {
-	int time;
+	int time = 0;
 
 	if (g_WeaponRemovalTime->integer <= 0)
 	{
@@ -367,7 +367,7 @@ gentity_t* TossClientItems(gentity_t* self)
 static void G_DropKey(gentity_t* self)
 {
 	//drop whatever security key I was holding
-	gitem_t* item;
+	gitem_t* item = nullptr;
 	if (!Q_stricmp("goodie", self->message))
 	{
 		item = FindItemForInventory(INV_GOODIE_KEY);
@@ -551,7 +551,7 @@ void G_AlertTeam(const gentity_t* victim, gentity_t* attacker, const float radiu
 {
 	gentity_t* radius_ents[128];
 	vec3_t mins{}, maxs{};
-	int i;
+	int i = 0;
 	const float snd_dist_sq = sound_dist * sound_dist;
 
 	if (attacker == nullptr || attacker->client == nullptr)
@@ -1654,7 +1654,7 @@ int G_GetHitLocation(const gentity_t* target, const vec3_t ppoint)
 	vec3_t point, point_dir;
 	vec3_t forward, right, up;
 	vec3_t tangles, tcenter;
-	int vertical, Forward, lateral;
+	int vertical = 0, Forward = 0, lateral = 0;
 
 	// get target forward, right and up
 	if (target->client)
@@ -2190,7 +2190,7 @@ extern qboolean G_GetRootSurfNameWithVariant(gentity_t* ent, const char* rootSur
 
 static void G_RemoveWeaponsWithLimbs(gentity_t* ent, gentity_t* limb, const int limb_anim)
 {
-	int check_anim;
+	int check_anim = 0;
 
 	for (int weapon_model_num = 0; weapon_model_num < MAX_INHAND_WEAPONS; weapon_model_num++)
 	{
@@ -2529,7 +2529,7 @@ static qboolean G_Dismemberable(const gentity_t* self, const int hit_loc)
 	if (g_dismemberProbabilities->value > 0.0f)
 	{
 		//use the ent-specific dismemberProbabilities
-		float dismember_prob;
+		float dismember_prob = 0.0f;
 		// check which part of the body it is. Then check the npc's probability
 		// of that body part coming off, if it doesn't pass, return out.
 		switch (hit_loc)
@@ -4699,7 +4699,7 @@ player_die
 */
 void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, const int damage, const int means_of_death, const int dflags, const int hit_loc)
 {
-	int anim;
+	int anim = 0;
 	qboolean death_script = qfalse;
 	qboolean last_in_group = qfalse;
 	qboolean special_anim = qfalse;
@@ -4935,7 +4935,7 @@ void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 			// dumb, just get the NPC out of the chair
 			extern void RunEmplacedWeapon(gentity_t * ent, usercmd_t * *ucmd);
 
-			usercmd_t cmd = {}, * ad_cmd;
+			usercmd_t cmd = {}, * ad_cmd = nullptr;
 
 			if (self->owner)
 			{
@@ -6067,7 +6067,7 @@ void PlayerPain(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 					&& !PM_InKnockDown(&self->client->ps))
 				{
 					//strong attacks and spins cannot be interrupted by pain, no pain when in knockdown
-					int parts;
+					int parts = 0;
 					if (self->client->ps.groundEntityNum != ENTITYNUM_NONE &&
 						!PM_SpinningSaberAnim(self->client->ps.legsAnim) &&
 						!PM_FlippingAnim(self->client->ps.legsAnim) &&
@@ -6123,7 +6123,7 @@ CheckArmor
 */
 static int CheckArmor(const gentity_t* ent, const int damage, const int dflags, const int mod)
 {
-	int save;
+	int save = 0;
 
 	if (!damage)
 		return 0;
@@ -6389,7 +6389,7 @@ void G_Knockdown(gentity_t* self, gentity_t* attacker, const vec3_t push_dir, fl
 		if (!PM_RollingAnim(self->client->ps.legsAnim)
 			&& !PM_InKnockDown(&self->client->ps))
 		{
-			int knock_anim;
+			int knock_anim = 0;
 			if (!self->s.number && strength < 300)
 			{
 				//player only knocked down if pushed *hard*
@@ -6535,7 +6535,7 @@ void G_KnockOver(gentity_t* self, gentity_t* attacker, const vec3_t push_dir, fl
 		if (!PM_RollingAnim(self->client->ps.legsAnim)
 			&& !PM_InKnockDown(&self->client->ps))
 		{
-			int knock_anim;
+			int knock_anim = 0;
 
 			if (PM_CrouchAnim(self->client->ps.legsAnim))
 			{
@@ -7324,10 +7324,10 @@ extern void G_SetOnFire(gentity_t* self, gentity_t* attacker); // wp_saber.cpp (
 
 void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const vec3_t dir, const vec3_t point, int damage, int dflags, int mod, int hit_loc)
 {
-	gclient_t* client;
-	int take;
+	gclient_t* client = nullptr;
+	int take = 0;
 	int asave = 0;
-	int knockback;
+	int knockback = 0;
 	vec3_t new_dir;
 	qboolean already_dead = qfalse;
 	float shield_absorbed = 0;
@@ -8459,10 +8459,10 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const 
 			|| inflictor->s.weapon == WP_DROIDEKA
 			|| inflictor->s.weapon == WP_JAWA)
 		{
-			float targ_maxs2;
-			int height;
-			float z_rel;
-			float z_ratio;
+			float targ_maxs2 = 0.0f;
+			int height = 0;
+			float z_rel = 0.0f;
+			float z_ratio = 0.0f;
 
 			targ_maxs2 = targ->maxs[2];
 
@@ -8514,7 +8514,7 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const 
 		|| mod == MOD_ENERGY
 		|| mod == MOD_ENERGY_SPLASH) && shield_absorbed)
 	{
-		gentity_t* ev_ent;
+		gentity_t* ev_ent = nullptr;
 		vec3_t vec3;
 		// Send off an event to show a shield shell on the player, pointing in the right direction.
 		ev_ent = G_TempEntity(targ->currentOrigin, EV_SHIELD_HIT);
@@ -8574,7 +8574,7 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const 
 	{
 		if (!already_dead)
 		{
-			int add;
+			int add = 0;
 			if (take > targ->health)
 			{
 				add = targ->health;
@@ -9140,7 +9140,7 @@ G_RadiusDamage
 				: ent;
 
 			vec3_t veh_move_direction;
-			float mass;
+			float mass = 0.0f;
 
 			G_GetMassAndVelocityForEnt(bike, &mass, veh_move_direction);
 

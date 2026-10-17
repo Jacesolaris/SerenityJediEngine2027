@@ -51,7 +51,7 @@ void G_WriteClientSessionData(const gclient_t* client)
 {
 	char s[MAX_CVAR_VALUE_STRING] = { 0 },
 		siegeClass[64] = { 0 }, IP[NET_ADDRSTRMAXLEN] = { 0 };
-	int i;
+	int i = 0;
 
 	// for the strings, replace ' ' with 1
 
@@ -102,7 +102,7 @@ Called on a reconnect
 void G_ReadSessionData(gclient_t* client)
 {
 	char s[MAX_CVAR_VALUE_STRING] = { 0 };
-	int i;
+	int i = 0;
 	int tempSessionTeam = 0;
 	int tempSpectatorState = 0;
 	int tempTeamLeader = 0;
@@ -184,7 +184,7 @@ Called on a first-time connect
 */
 void G_InitSessionData(gclient_t* client, const char* userinfo, const qboolean isBot)
 {
-	const char* value;
+	const char* value = NULL;
 
 	clientSession_t* sess = &client->sess;
 

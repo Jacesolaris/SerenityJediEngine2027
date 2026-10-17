@@ -159,9 +159,9 @@ static void ProcessMoveCommands(Vehicle_t* p_veh)
 	/************************************************************************************/
 
 	//Client sets ucmds and such for speed alterations
-	float speedInc, speedIdleDec, speedIdle, /*speedIdleAccel, */speedMin, speedMax;
-	float fWalkSpeedMax;
-	int curTime;
+	float speedInc = 0.0f, speedIdleDec = 0.0f, speedIdle = 0.0f, /*speedIdleAccel, */speedMin = 0.0f, speedMax = 0.0f;
+	float fWalkSpeedMax = 0.0f;
+	int curTime = 0;
 	bgEntity_t* parent = p_veh->m_pParentEntity;
 #ifdef _JK2MP
 	playerState_t* parent_ps = parent->playerState;
@@ -326,7 +326,7 @@ static void ProcessOrientCommands(Vehicle_t* p_veh)
 	/*	BEGIN	Here is where make sure the vehicle is properly oriented.	BEGIN	*/
 	/********************************************************************************/
 	bgEntity_t* parent = p_veh->m_pParentEntity;
-	playerState_t /**parent_ps, */* rider_ps;
+	playerState_t /**parent_ps, */* rider_ps = nullptr;
 
 #ifdef _JK2MP
 	bgEntity_t* rider = nullptr;
@@ -454,7 +454,7 @@ static void AnimateVehicle(Vehicle_t* p_veh)
 	int iFlags = SETANIM_FLAG_NORMAL, i_blend = 300;
 	auto pilot = p_veh->m_pPilot;
 	auto parent = p_veh->m_pParentEntity;
-	float fSpeedPercToMax;
+	float fSpeedPercToMax = 0.0f;
 
 #ifdef _JK2MP
 	pilotPS = (pilot) ? (pilot->playerState) : (0);
@@ -506,7 +506,7 @@ static void AnimateVehicle(Vehicle_t* p_veh)
 		// We've just started boarding, set the amount of time it will take to finish boarding.
 		if (p_veh->m_iBoarding < 0)
 		{
-			int iAnimLen;
+			int iAnimLen = 0;
 
 			// Boarding from left...
 			if (p_veh->m_iBoarding == -1)
@@ -592,12 +592,12 @@ static void AnimateVehicle(Vehicle_t* p_veh)
 static void AnimateRiders(Vehicle_t* p_veh)
 {
 	animNumber_t Anim = BOTH_VT_IDLE;
-	int iFlags, i_blend;
+	int iFlags = 0, i_blend = 0;
 	const auto pilot = p_veh->m_pPilot;
 	const gentity_t* parent = p_veh->m_pParentEntity;
-	playerState_t* pilotPS;
+	playerState_t* pilotPS = nullptr;
 	//playerState_t *parent_ps;
-	float fSpeedPercToMax;
+	float fSpeedPercToMax = 0.0f;
 
 #ifdef _JK2MP
 	pilotPS = p_veh->m_pPilot->playerState;

@@ -287,7 +287,7 @@ AllocateSequences
 
 int ICARUS_Instance::AllocateSequences(const int numSequences, const int* idTable)
 {
-	CSequence* sequence;
+	CSequence* sequence = nullptr;
 
 	for (int i = 0; i < numSequences; i++)
 	{
@@ -474,14 +474,14 @@ LoadSignals
 
 int ICARUS_Instance::LoadSignals(void)
 {
-	int numSignals;
+	int numSignals = 0;
 
 	m_interface->I_ReadSaveData(INT_ID('I', 'S', 'I', 'G'), &numSignals, sizeof numSignals);
 
 	for (int i = 0; i < numSignals; i++)
 	{
 		char buffer[1024];
-		int length;
+		int length = 0;
 
 		//Get the size of the string
 		m_interface->I_ReadSaveData(INT_ID('S', 'I', 'G', '#'), &length, sizeof length);
@@ -526,8 +526,8 @@ LoadSequence
 
 int ICARUS_Instance::LoadSequences(void)
 {
-	CSequence* sequence;
-	int numSequences;
+	CSequence* sequence = nullptr;
+	int numSequences = 0;
 
 	//Get the number of sequences to read in
 	m_interface->I_ReadSaveData(INT_ID('#', 'S', 'E', 'Q'), &numSequences, sizeof numSequences);
@@ -570,8 +570,8 @@ LoadSequencers
 
 int ICARUS_Instance::LoadSequencers(void)
 {
-	CSequencer* sequencer;
-	int numSequencers;
+	CSequencer* sequencer = nullptr;
+	int numSequencers = 0;
 
 	//Get the number of sequencers to load
 	m_interface->I_ReadSaveData(INT_ID('#', 'S', 'Q', 'R'), &numSequencers, sizeof numSequencers);
@@ -602,7 +602,7 @@ int ICARUS_Instance::Load(void)
 	Free();
 
 	//Check to make sure we're at the ICARUS save block
-	double version;
+	double version = 0.0f;
 	m_interface->I_ReadSaveData(INT_ID('I', 'C', 'A', 'R'), &version, sizeof version);
 
 	//Versions must match!

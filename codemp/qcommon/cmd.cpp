@@ -179,7 +179,7 @@ Cbuf_Execute
 */
 void Cbuf_Execute(void)
 {
-	int i;
+	int i = 0;
 	char line[MAX_CMD_LINE];
 
 	// This will keep // style comments all on one line by not breaking on
@@ -523,8 +523,8 @@ will point into this temporary buffer.
 //#define TKN_DBG
 static void Cmd_TokenizeString2(const char* text_in, const qboolean ignoreQuotes)
 {
-	const char* text;
-	char* textOut;
+	const char* text = nullptr;
+	char* textOut = nullptr;
 
 #ifdef TKN_DBG
 	// FIXME TTimo blunt hook to try to find the tokenization of userinfo
@@ -934,8 +934,8 @@ Cmd_List_f
 */
 static void Cmd_List_f(void)
 {
-	const cmd_function_t* cmd;
-	int i, j;
+	const cmd_function_t* cmd = nullptr;
+	int i = 0, j = 0;
 	char* match = nullptr;
 	CmdFuncVector cmds;
 

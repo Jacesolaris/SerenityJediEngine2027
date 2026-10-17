@@ -705,7 +705,7 @@ ParseSurfaceSprites
 static void ParseSurfaceSprites(const char* _text, shaderStage_t* stage)
 {
 	const char** text = &_text;
-	int sstype;
+	int sstype = 0;
 
 	//
 	// spritetype
@@ -861,9 +861,9 @@ ParseSurfaceSpritesOptional
 //
 static void ParseSurfaceSpritesOptional(const char* param, const char* _text, shaderStage_t* stage)
 {
-	const char* token;
+	const char* token = nullptr;
 	const char** text = &_text;
-	float	value;
+	float	value = 0.0f;
 
 	if (!stage->ss)
 	{
@@ -2502,7 +2502,7 @@ FIXME: I think modulated add + modulated add collapses incorrectly
 =================
 */
 static qboolean CollapseMultitexture() {
-	int i;
+	int i = 0;
 
 	if (!qglActiveTextureARB) {
 		return qfalse;
@@ -2715,7 +2715,7 @@ Sets shader->sortedIndex
 ==============
 */
 static void SortNewShader(void) {
-	int		i;
+	int		i = 0;
 
 	shader_t* newShader = tr.shaders[tr.numShaders - 1];
 	const float sort = newShader->sort;
@@ -2812,7 +2812,7 @@ what it is supposed to look like.
 =================
 */
 static int VertexLightingCollapse(void) {
-	int		stage, nextopenstage;
+	int		stage = 0, nextopenstage = 0;
 	int		finalstagenum = 1;
 
 	// if we aren't opaque, just use the first pass
@@ -2921,7 +2921,7 @@ from the current global working shader
 */
 static shader_t* FinishShader(void)
 {
-	int				stage, lm_stage;
+	int				stage = 0, lm_stage = 0;
 
 	qboolean has_lightmap_stage = qfalse;
 
@@ -2968,8 +2968,8 @@ static shader_t* FinishShader(void)
 
 	if (lm_stage < MAX_SHADER_STAGES)// && !r_fullbright->value)
 	{
-		int	num_styles;
-		int	i;
+		int	num_styles = 0;
+		int	i = 0;
 
 		for (num_styles = 0; num_styles < MAXLIGHTMAPS; num_styles++)
 		{
@@ -3037,7 +3037,7 @@ static shader_t* FinishShader(void)
 		// ditch this stage if it's detail and detail textures are disabled
 		//
 		if (p_stage->isDetail && !r_detailTextures->integer) {
-			int index;
+			int index = 0;
 
 			for (index = stage + 1; index < MAX_SHADER_STAGES; index++) {
 				if (!stages[index].active)
@@ -3377,8 +3377,8 @@ most world construction surfaces.
 shader_t* R_FindShader(const char* name, const int* lightmapIndexes, const byte* styles, const qboolean mipRawImage)
 {
 	char		stripped_name[MAX_QPATH];
-	const char* shader_text;
-	shader_t* sh;
+	const char* shader_text = nullptr;
+	shader_t* sh = nullptr;
 
 	if (strlen(name) >= MAX_QPATH) {
 		Com_Printf(S_COLOR_RED"Shader name exceeds MAX_QPATH! %s\n", name);
@@ -3592,7 +3592,7 @@ A second parameter will cause it to print in sorted order
 */
 void R_ShaderList_f(void)
 {
-	shader_t* shader;
+	shader_t* shader = nullptr;
 
 	ri.Printf(PRINT_ALL, "-----------------------\n");
 

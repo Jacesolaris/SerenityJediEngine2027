@@ -562,8 +562,8 @@ void WPN_FuncSkip(const char** hold_buf)
 
 void WPN_WeaponType(const char** hold_buf)
 {
-	int weapon_num;
-	const char* token_str;
+	int weapon_num = 0;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -649,7 +649,7 @@ void WPN_WeaponType(const char** hold_buf)
 //--------------------------------------------
 void WPN_WeaponClass(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -670,7 +670,7 @@ void WPN_WeaponClass(const char** hold_buf)
 //--------------------------------------------
 void WPN_WeaponModel(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -691,7 +691,7 @@ void WPN_WeaponModel(const char** hold_buf)
 //--------------------------------------------
 void WPN_WeaponIcon(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -712,7 +712,7 @@ void WPN_WeaponIcon(const char** hold_buf)
 //--------------------------------------------
 void WPN_AmmoType(const char** hold_buf)
 {
-	int tokenInt;
+	int tokenInt = 0;
 
 	if (COM_ParseInt(hold_buf, &tokenInt))
 	{
@@ -732,7 +732,7 @@ void WPN_AmmoType(const char** hold_buf)
 //--------------------------------------------
 void WPN_AmmoLowCnt(const char** hold_buf)
 {
-	int tokenInt;
+	int tokenInt = 0;
 
 	if (COM_ParseInt(hold_buf, &tokenInt))
 	{
@@ -752,7 +752,7 @@ void WPN_AmmoLowCnt(const char** hold_buf)
 //--------------------------------------------
 void WPN_FiringSnd(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -773,7 +773,7 @@ void WPN_FiringSnd(const char** hold_buf)
 //--------------------------------------------
 void WPN_AltFiringSnd(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -794,7 +794,7 @@ void WPN_AltFiringSnd(const char** hold_buf)
 //--------------------------------------------
 void WPN_StopSnd(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -815,7 +815,7 @@ void WPN_StopSnd(const char** hold_buf)
 //--------------------------------------------
 void WPN_ChargeSnd(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -836,7 +836,7 @@ void WPN_ChargeSnd(const char** hold_buf)
 //--------------------------------------------
 void WPN_AltChargeSnd(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -857,7 +857,7 @@ void WPN_AltChargeSnd(const char** hold_buf)
 //--------------------------------------------
 void WPN_SelectSnd(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -879,7 +879,7 @@ void WPN_SelectSnd(const char** hold_buf)
 //--------------------------------------------
 void WPN_FireTime(const char** hold_buf)
 {
-	int tokenInt;
+	int tokenInt = 0;
 
 	if (COM_ParseInt(hold_buf, &tokenInt))
 	{
@@ -898,7 +898,7 @@ void WPN_FireTime(const char** hold_buf)
 //--------------------------------------------
 void WPN_Range(const char** hold_buf)
 {
-	int tokenInt;
+	int tokenInt = 0;
 
 	if (COM_ParseInt(hold_buf, &tokenInt))
 	{
@@ -918,7 +918,7 @@ void WPN_Range(const char** hold_buf)
 //--------------------------------------------
 void WPN_EnergyPerShot(const char** hold_buf)
 {
-	int tokenInt;
+	int tokenInt = 0;
 
 	if (COM_ParseInt(hold_buf, &tokenInt))
 	{
@@ -937,7 +937,7 @@ void WPN_EnergyPerShot(const char** hold_buf)
 //--------------------------------------------
 void WPN_AltFireTime(const char** hold_buf)
 {
-	int tokenInt;
+	int tokenInt = 0;
 
 	if (COM_ParseInt(hold_buf, &tokenInt))
 	{
@@ -956,7 +956,7 @@ void WPN_AltFireTime(const char** hold_buf)
 //--------------------------------------------
 void WPN_AltRange(const char** hold_buf)
 {
-	int tokenInt;
+	int tokenInt = 0;
 
 	if (COM_ParseInt(hold_buf, &tokenInt))
 	{
@@ -976,7 +976,7 @@ void WPN_AltRange(const char** hold_buf)
 //--------------------------------------------
 void WPN_AltEnergyPerShot(const char** hold_buf)
 {
-	int tokenInt;
+	int tokenInt = 0;
 
 	if (COM_ParseInt(hold_buf, &tokenInt))
 	{
@@ -995,7 +995,7 @@ void WPN_AltEnergyPerShot(const char** hold_buf)
 //--------------------------------------------
 void WPN_Ammo(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -1032,7 +1032,7 @@ void WPN_Ammo(const char** hold_buf)
 //--------------------------------------------
 void WPN_AmmoIcon(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -1053,7 +1053,7 @@ void WPN_AmmoIcon(const char** hold_buf)
 //--------------------------------------------
 void WPN_AmmoMax(const char** hold_buf)
 {
-	int tokenInt;
+	int tokenInt = 0;
 
 	if (COM_ParseInt(hold_buf, &tokenInt))
 	{
@@ -1072,7 +1072,7 @@ void WPN_AmmoMax(const char** hold_buf)
 //--------------------------------------------
 void WPN_BarrelCount(const char** hold_buf)
 {
-	int tokenInt;
+	int tokenInt = 0;
 
 	if (COM_ParseInt(hold_buf, &tokenInt))
 	{
@@ -1092,7 +1092,7 @@ void WPN_BarrelCount(const char** hold_buf)
 //--------------------------------------------
 static void WP_ParseWeaponParms(const char** hold_buf)
 {
-	size_t i;
+	size_t i = 0;
 
 	while (hold_buf)
 	{
@@ -1122,7 +1122,7 @@ static void WP_ParseWeaponParms(const char** hold_buf)
 //--------------------------------------------
 void WPN_MissileName(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -1143,7 +1143,7 @@ void WPN_MissileName(const char** hold_buf)
 //--------------------------------------------
 void WPN_AltMissileName(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -1164,7 +1164,7 @@ void WPN_AltMissileName(const char** hold_buf)
 //--------------------------------------------
 void WPN_Missilehit_sound(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -1185,7 +1185,7 @@ void WPN_Missilehit_sound(const char** hold_buf)
 //--------------------------------------------
 void WPN_AltMissilehit_sound(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -1206,7 +1206,7 @@ void WPN_AltMissilehit_sound(const char** hold_buf)
 //--------------------------------------------
 void WPN_MissileSound(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -1227,7 +1227,7 @@ void WPN_MissileSound(const char** hold_buf)
 //--------------------------------------------
 void WPN_AltMissileSound(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -1248,7 +1248,7 @@ void WPN_AltMissileSound(const char** hold_buf)
 //--------------------------------------------
 void WPN_MissileLightColor(const char** hold_buf)
 {
-	float tokenFlt;
+	float tokenFlt = 0.0f;
 
 	for (int i = 0; i < 3; ++i)
 	{
@@ -1270,7 +1270,7 @@ void WPN_MissileLightColor(const char** hold_buf)
 //--------------------------------------------
 void WPN_AltMissileLightColor(const char** hold_buf)
 {
-	float tokenFlt;
+	float tokenFlt = 0.0f;
 
 	for (int i = 0; i < 3; ++i)
 	{
@@ -1292,7 +1292,7 @@ void WPN_AltMissileLightColor(const char** hold_buf)
 //--------------------------------------------
 void WPN_MissileLight(const char** hold_buf)
 {
-	float tokenFlt;
+	float tokenFlt = 0.0f;
 
 	if (COM_ParseFloat(hold_buf, &tokenFlt))
 	{
@@ -1309,7 +1309,7 @@ void WPN_MissileLight(const char** hold_buf)
 //--------------------------------------------
 void WPN_AltMissileLight(const char** hold_buf)
 {
-	float tokenFlt;
+	float tokenFlt = 0.0f;
 
 	if (COM_ParseFloat(hold_buf, &tokenFlt))
 	{
@@ -1326,7 +1326,7 @@ void WPN_AltMissileLight(const char** hold_buf)
 //--------------------------------------------
 void WPN_FuncName(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -1356,7 +1356,7 @@ void WPN_FuncName(const char** hold_buf)
 //--------------------------------------------
 void WPN_AltFuncName(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -1386,7 +1386,7 @@ void WPN_AltFuncName(const char** hold_buf)
 //--------------------------------------------
 void WPN_MuzzleEffect(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -1408,7 +1408,7 @@ void WPN_MuzzleEffect(const char** hold_buf)
 //--------------------------------------------
 void WPN_AltMuzzleEffect(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -1430,7 +1430,7 @@ void WPN_AltMuzzleEffect(const char** hold_buf)
 //--------------------------------------------
 void WPN_overloadmuzzleEffect(const char** hold_buf)
 {
-	const char* token_str;
+	const char* token_str = nullptr;
 
 	if (COM_ParseString(hold_buf, &token_str))
 	{
@@ -1453,7 +1453,7 @@ void WPN_overloadmuzzleEffect(const char** hold_buf)
 
 void WPN_Damage(const char** hold_buf)
 {
-	int tokenInt;
+	int tokenInt = 0;
 
 	if (COM_ParseInt(hold_buf, &tokenInt))
 	{
@@ -1468,7 +1468,7 @@ void WPN_Damage(const char** hold_buf)
 
 void WPN_AltDamage(const char** hold_buf)
 {
-	int tokenInt;
+	int tokenInt = 0;
 
 	if (COM_ParseInt(hold_buf, &tokenInt))
 	{
@@ -1483,7 +1483,7 @@ void WPN_AltDamage(const char** hold_buf)
 
 void WPN_SplashDamage(const char** hold_buf)
 {
-	int tokenInt;
+	int tokenInt = 0;
 
 	if (COM_ParseInt(hold_buf, &tokenInt))
 	{
@@ -1498,7 +1498,7 @@ void WPN_SplashDamage(const char** hold_buf)
 
 void WPN_SplashRadius(const char** hold_buf)
 {
-	float tokenFlt;
+	float tokenFlt = 0.0f;
 
 	if (COM_ParseFloat(hold_buf, &tokenFlt))
 	{
@@ -1513,7 +1513,7 @@ void WPN_SplashRadius(const char** hold_buf)
 
 void WPN_AltSplashDamage(const char** hold_buf)
 {
-	int tokenInt;
+	int tokenInt = 0;
 
 	if (COM_ParseInt(hold_buf, &tokenInt))
 	{
@@ -1528,7 +1528,7 @@ void WPN_AltSplashDamage(const char** hold_buf)
 
 void WPN_AltSplashRadius(const char** hold_buf)
 {
-	float tokenFlt;
+	float tokenFlt = 0.0f;
 
 	if (COM_ParseFloat(hold_buf, &tokenFlt))
 	{
@@ -1542,7 +1542,7 @@ void WPN_AltSplashRadius(const char** hold_buf)
 //--------------------------------------------
 void WP_ParseParms(const char* buffer)
 {
-	const char* hold_buf;
+	const char* hold_buf = nullptr;
 
 	hold_buf = buffer;
 	COM_BeginParseSession();

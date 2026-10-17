@@ -337,7 +337,7 @@ static qboolean SJE_HasA1Skins(const char* folder)
 // ---------------------------------------------------------------------------------------------------------------
 static void SJE_LoadOverrides(void)
 {
-	const char* p;
+	const char* p = NULL;
 
 	sjeNumOverrides = 0;
 	sjeNumVarLabels = 0;
@@ -782,7 +782,7 @@ static void SJE_AddNpc(const sjeNpc_t* n)
 
 static void SJE_ParseNpcFile(const char* path)
 {
-	const char* p;
+	const char* p = NULL;
 
 	if (SJE_ReadFile(path, sjeFileBuf, sizeof sjeFileBuf) <= 0)
 	{
@@ -1881,7 +1881,7 @@ qboolean UI_SJEChars_Script(const char* name, char** args)
 	}
 	else if (!Q_stricmp(name, "sje_char_select"))
 	{// console/testing: sje_charmenu sje_char_select <folder> [variant]
-		const char* folder;
+		const char* folder = NULL;
 		if (String_Parse(args, &folder))
 		{
 			char f[48];
@@ -1985,7 +1985,7 @@ qboolean UI_SJEChars_ConsoleCommand(const char* cmd)
 			trap->Cmd_Argv(i, arg, sizeof arg);
 			Q_strcat(line, sizeof line, va("%s ", arg));
 		}
-		const char* name;
+		const char* name = NULL;
 		if (String_Parse(&p, &name))
 		{
 			char script[64];

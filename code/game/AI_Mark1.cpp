@@ -232,7 +232,7 @@ void Mark1_dying(gentity_t* self)
 	{
 		if (TIMER_Done(self, "dyingExplosion"))
 		{
-			int new_bolt;
+			int new_bolt = 0;
 			int num = Q_irand(1, 3);
 
 			// Find place to generate explosion
@@ -290,7 +290,7 @@ void NPC_Mark1_Pain(gentity_t* self, gentity_t* inflictor, gentity_t* other, con
 	const int mod,
 	const int hit_loc)
 {
-	int new_bolt;
+	int new_bolt = 0;
 
 	NPC_Pain(self, inflictor, other, point, damage, mod);
 
@@ -395,7 +395,7 @@ void Mark1_FireBlaster()
 	vec3_t muzzle1;
 	static vec3_t forward, vright, up;
 	mdxaBone_t boltMatrix;
-	int bolt;
+	int bolt = 0;
 
 	// Which muzzle to fire from?
 	if (NPCInfo->localState <= LSTATE_FIRED0 || NPCInfo->localState == LSTATE_FIRED4)

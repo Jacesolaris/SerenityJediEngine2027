@@ -29,7 +29,7 @@ void RT_Precache(void)
 
 static void RT_RunStormtrooperAI(void)
 {
-	int b_state;
+	int b_state = 0;
 	//Execute our b_state
 	if (NPCS.NPCInfo->tempBehavior)
 	{
@@ -562,7 +562,7 @@ static void RT_Flying_MaintainHeight(void)
 	}
 	else
 	{
-		const gentity_t* goal;
+		const gentity_t* goal = NULL;
 
 		if (NPCS.NPCInfo->goalEntity) // Is there a goal?
 		{
@@ -606,7 +606,7 @@ static void RT_Flying_MaintainHeight(void)
 
 static void RT_Flying_Strafe(void)
 {
-	int side;
+	int side = 0;
 	vec3_t end, right;
 	trace_t tr;
 

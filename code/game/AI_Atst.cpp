@@ -85,7 +85,7 @@ Called by NPC's and player in an ATST
 
 void g_atst_check_pain(gentity_t* self, gentity_t* other, const vec3_t point, int damage, int mod, const int hit_loc)
 {
-	int newBolt;
+	int newBolt = 0;
 
 	if (rand() & 1)
 	{
@@ -194,7 +194,7 @@ ATST_Attack
 static void ATST_Attack()
 {
 	qboolean altAttack = qfalse;
-	int blasterTest, chargerTest;
+	int blasterTest = 0, chargerTest = 0;
 
 	if (NPC_CheckEnemyExt() == qfalse) //!NPC->enemy )//
 	{

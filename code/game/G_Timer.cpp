@@ -95,7 +95,7 @@ TIMER_Clear
 
 void TIMER_Clear()
 {
-	int i;
+	int i = 0;
 	for (i = 0; i < MAX_GENTITIES; i++)
 	{
 		g_timers[i] = nullptr;
@@ -149,8 +149,8 @@ TIMER_Save
 
 void TIMER_Save()
 {
-	int j;
-	gentity_t* ent;
+	int j = 0;
+	gentity_t* ent = nullptr;
 
 	ojk::SavedGameHelper saved_game(
 		gi.saved_game);
@@ -207,8 +207,8 @@ TIMER_Load
 
 void TIMER_Load()
 {
-	int j;
-	gentity_t* ent;
+	int j = 0;
+	gentity_t* ent = nullptr;
 
 	ojk::SavedGameHelper saved_game(
 		gi.saved_game);

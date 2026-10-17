@@ -118,7 +118,7 @@ static bool BG_FighterUpdate(Vehicle_t* p_veh, vec3_t tr_mins, vec3_t tr_maxs,
 		const vec3_t end, int passEntityNum, int content_mask))
 {
 	vec3_t bottom;
-	playerState_t* parent_ps;
+	playerState_t* parent_ps = nullptr;
 #ifdef QAGAME //don't do this on client
 	// Make sure the riders are not visible.
 	p_veh->m_pVehicleInfo->Ghost(p_veh, p_veh->m_pPilot);
@@ -463,7 +463,7 @@ static void ProcessMoveCommands(Vehicle_t* p_veh)
 	/************************************************************************************/
 
 	//Client sets ucmds and such for speed alterations
-	float speed_inc, speed_idle_dec, speed_idle, speed_idle_accel, speed_min, speed_max;
+	float speed_inc = 0.0f, speed_idle_dec = 0.0f, speed_idle = 0.0f, speed_idle_accel = 0.0f, speed_min = 0.0f, speed_max = 0.0f;
 	bgEntity_t* parent = p_veh->m_pParentEntity;
 	qboolean is_landing_or_launching;
 #ifndef _JK2MP//SP
@@ -1339,12 +1339,12 @@ static void ProcessOrientCommands(Vehicle_t* p_veh)
 	/********************************************************************************/
 
 	bgEntity_t* parent = p_veh->m_pParentEntity;
-	playerState_t* parent_ps, * rider_ps;
-	float angle_time_mod;
+	playerState_t* parent_ps = nullptr, * rider_ps = nullptr;
+	float angle_time_mod = 0.0f;
 #ifdef QAGAME
 	constexpr float ground_fraction = 0.1f;
 #endif
-	float cur_roll;
+	float cur_roll = 0.0f;
 	qboolean is_dead;
 	qboolean is_landing_or_landed;
 	const qboolean arcade = FighterArcade(p_veh); // (2026-10-13)
@@ -1564,7 +1564,7 @@ static void ProcessOrientCommands(Vehicle_t* p_veh)
 				|| parent_ps->speed > MIN_LANDING_SPEED)
 				//if ( ( p_veh->m_LandTrace.fraction >= 1.0f || p_veh->m_ucmd.forwardmove != 0 ) && p_veh->m_LandTrace.fraction >= 0.0f )
 			{
-				float f_yaw_delta;
+				float f_yaw_delta = 0.0f;
 
 #ifdef _JK2MP
 				FighterPitchAdjust(p_veh, rider_ps, parent_ps);

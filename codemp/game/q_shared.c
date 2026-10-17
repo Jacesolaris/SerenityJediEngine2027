@@ -79,7 +79,7 @@ COM_SkipPath
 */
 char *COM_SkipPath (char *pathname)
 {
-	char	*last;
+	char	*last = NULL;
 	
 	last = pathname;
 	while (*pathname)
@@ -111,7 +111,7 @@ COM_DefaultExtension
 */
 void COM_DefaultExtension (char *path, int maxSize, const char *extension ) {
 	char	oldPath[MAX_QPATH];
-	char    *src;
+	char    *src = NULL;
 
 //
 // if path doesn't have a .EXT, append extension
@@ -161,7 +161,7 @@ float	LittleFloat (const float *l) {return _LittleFloat(l);}
 
 short   ShortSwap (short l)
 {
-	byte    b1,b2;
+	byte    b1 = 0,b2 = 0;
 
 	b1 = l&255;
 	b2 = (l>>8)&255;
@@ -176,7 +176,7 @@ short	ShortNoSwap (short l)
 
 int    LongSwap (int l)
 {
-	byte    b1,b2,b3,b4;
+	byte    b1 = 0,b2 = 0,b3 = 0,b4 = 0;
 
 	b1 = l&255;
 	b2 = (l>>8)&255;
@@ -218,7 +218,7 @@ typedef union {
 } _FloatByteUnion;
 
 float FloatSwap (const float *f) {
-	const _FloatByteUnion *in;
+	const _FloatByteUnion *in = NULL;
 	_FloatByteUnion out;
 
 	in = (_FloatByteUnion *)f;
@@ -334,7 +334,7 @@ a newline.
 ==============
 */
 const char *SkipWhitespace( const char *data, qboolean *hasNewLines ) {
-	int c;
+	int c = 0;
 
 	while( (c = *data) <= ' ') {
 		if( !c ) {
@@ -351,8 +351,8 @@ const char *SkipWhitespace( const char *data, qboolean *hasNewLines ) {
 }
 
 int COM_Compress( char *data_p ) {
-	char *in, *out;
-	int c;
+	char *in = NULL, *out = NULL;
+	int c = 0;
 	qboolean newline = qfalse, whitespace = qfalse;
 	
 	in = out = data_p;
@@ -420,9 +420,9 @@ int COM_Compress( char *data_p ) {
 
 char *COM_ParseExt( const char **data_p, qboolean allowLineBreaks )
 {
-	int c = 0, len;
+	int c = 0, len = 0;
 	qboolean hasNewLines = qfalse;
-	const char *data;
+	const char *data = NULL;
 
 	data = *data_p;
 	len = 0;
@@ -604,7 +604,7 @@ COM_ParseInt
 */
 qboolean COM_ParseInt( const char **data, int *i ) 
 {
-	const char	*token;
+	const char	*token = NULL;
 
 	token = COM_ParseExt( data, qfalse );
 	if ( token[0] == 0 ) 
@@ -624,7 +624,7 @@ COM_ParseFloat
 */
 qboolean COM_ParseFloat( const char **data, float *f ) 
 {
-	const char	*token;
+	const char	*token = NULL;
 
 	token = COM_ParseExt( data, qfalse );
 	if ( token[0] == 0 ) 
@@ -644,8 +644,8 @@ COM_ParseVec4
 */
 qboolean COM_ParseVec4( const char **buffer, vec4_t *c) 
 {
-	int i;
-	float f;
+	int i = 0;
+	float f = 0.0f;
 
 	for (i = 0; i < 4; i++) 
 	{
@@ -664,7 +664,7 @@ COM_MatchToken
 ==================
 */
 void COM_MatchToken( const char **buf_p, char *match ) {
-	char	*token;
+	char	*token = NULL;
 
 	token = COM_Parse( buf_p );
 	if ( strcmp( token, match ) ) {
@@ -683,8 +683,8 @@ Internal brace depths are properly skipped.
 =================
 */
 void SkipBracedSection (const char **program) {
-	char			*token;
-	int				depth;
+	char			*token = NULL;
+	int				depth = 0;
 
 	depth = 0;
 	do {
@@ -706,8 +706,8 @@ SkipRestOfLine
 =================
 */
 void SkipRestOfLine ( const char **data ) {
-	const char	*p;
-	int		c;
+	const char	*p = NULL;
+	int		c = 0;
 
 	p = *data;
 	while ( (c = *p++) != 0 ) {
@@ -722,8 +722,8 @@ void SkipRestOfLine ( const char **data ) {
 
 
 void Parse1DMatrix (const char **buf_p, int x, float *m) {
-	char	*token;
-	int		i;
+	char	*token = NULL;
+	int		i = 0;
 
 	COM_MatchToken( buf_p, "(" );
 
@@ -736,7 +736,7 @@ void Parse1DMatrix (const char **buf_p, int x, float *m) {
 }
 
 void Parse2DMatrix (const char **buf_p, int y, int x, float *m) {
-	int		i;
+	int		i = 0;
 
 	COM_MatchToken( buf_p, "(" );
 
@@ -748,7 +748,7 @@ void Parse2DMatrix (const char **buf_p, int y, int x, float *m) {
 }
 
 void Parse3DMatrix (const char **buf_p, int z, int y, int x, float *m) {
-	int		i;
+	int		i = 0;
 
 	COM_MatchToken( buf_p, "(" );
 
@@ -799,7 +799,7 @@ int Q_isalpha( int c )
 char* Q_strrchr( const char* string, int c )
 {
 	char cc = c;
-	char *s;
+	char *s = NULL;
 	char *sp=(char *)0;
 
 	s = (char*)string;
@@ -840,7 +840,7 @@ void Q_strncpyz( char *dest, const char *src, int destsize ) {
 }
                  
 int Q_stricmpn (const char *s1, const char *s2, int n) {
-	int		c1, c2;
+	int		c1 = 0, c2 = 0;
 
 	// bk001129 - moved in 1.17 fix not in id codebase
         if ( s1 == NULL ) {
@@ -880,7 +880,7 @@ int Q_stricmpn (const char *s1, const char *s2, int n) {
 }
 
 int Q_strncmp (const char *s1, const char *s2, int n) {
-	int		c1, c2;
+	int		c1 = 0, c2 = 0;
 	
 	do {
 		c1 = *s1++;
@@ -910,8 +910,8 @@ int Q_stricmp (const char *s1, const char *s2) {
 // ensiform - like strstr but ignores case
 char *Q_stristr( const char *s, const char *find)
 {
-	char c, sc;
-	size_t len;
+	char c = 0, sc = 0;
+	size_t len = 0;
 
 	if ((c = *find++) != 0)
 	{
@@ -942,7 +942,7 @@ char *Q_StrReplace(char *haystack, char *needle, char *newp)
 	static char final[MAX_STRING_CHARS] = {""};
 	char dest[MAX_STRING_CHARS] = {""};
 	char new[MAX_STRING_CHARS] = {""};
-	char *destp;
+	char *destp = NULL;
 	int needle_len = 0;
 	int new_len = 0;
 
@@ -989,7 +989,7 @@ COM_BitCheck
 ==================
 */
 qboolean COM_BitCheck( const int array[], int bitNum ) {
-	int i;
+	int i = 0;
 
 	i = 0;
 	while (bitNum > 31) {
@@ -1014,7 +1014,7 @@ COM_BitSet
 ==================
 */
 void COM_BitSet( int array[], int bitNum ) {
-	int i;
+	int i = 0;
 
 	i = 0;
 	while (bitNum > 31) {
@@ -1039,7 +1039,7 @@ COM_BitClear
 ==================
 */
 void COM_BitClear( int array[], int bitNum ) {
-	int i;
+	int i = 0;
 
 	i = 0;
 	while (bitNum > 31) {
@@ -1058,7 +1058,7 @@ void COM_BitClear( int array[], int bitNum ) {
 //============================================================================
 
 char *Q_strlwr( char *s1 ) {
-    char	*s;
+    char	*s = NULL;
 
     s = s1;
 	while ( *s ) {
@@ -1069,7 +1069,7 @@ char *Q_strlwr( char *s1 ) {
 }
 
 char *Q_strupr( char *s1 ) {
-    char	*s;
+    char	*s = NULL;
 
     s = s1;
 	while ( *s ) {
@@ -1082,7 +1082,7 @@ char *Q_strupr( char *s1 ) {
 
 // never goes past bounds or leaves without a terminating 0
 void Q_strcat( char *dest, int size, const char *src ) {
-	int		l1;
+	int		l1 = 0;
 
 	l1 = strlen( dest );
 	if ( l1 >= size ) {
@@ -1093,8 +1093,8 @@ void Q_strcat( char *dest, int size, const char *src ) {
 
 
 int Q_PrintStrlen( const char *string ) {
-	int			len;
-	const char	*p;
+	int			len = 0;
+	const char	*p = NULL;
 
 	if( !string ) {
 		return 0;
@@ -1117,9 +1117,9 @@ int Q_PrintStrlen( const char *string ) {
 
 //RACC - removes all the colorstring information and such from a string
 char *Q_CleanStr( char *string ) {
-	char*	d;
-	char*	s;
-	int		c;
+	char*	d = NULL;
+	char*	s = NULL;
+	int		c = 0;
 
 	s = string;
 	d = string;
@@ -1158,7 +1158,7 @@ or returns -1 on failure or if the buffer would be overflowed.
 ============
 */
 int Q_vsnprintf( char *dest, int size, const char *fmt, va_list argptr ) {
-	int ret;
+	int ret = 0;
 
 #ifdef _WIN32
 	ret = _vsnprintf( dest, size-1, fmt, argptr );
@@ -1176,7 +1176,7 @@ int Q_vsnprintf( char *dest, int size, const char *fmt, va_list argptr ) {
 
 //Ensiform provided this version of Com_sprintf, which is supposed to be overflow protected and less hacky.
 void QDECL Com_sprintf( char *dest, int size, const char *fmt, ...) {
-	int		ret;
+	int		ret = 0;
 	va_list		argptr;
 
 	va_start (argptr,fmt);
@@ -1231,8 +1231,8 @@ char	* QDECL va( char *format, ... ) {
 	static char		temp_buffer[MAX_VA_STRING];
 	static char		string[MAX_VA_STRING];	// in case va is called by nested functions
 	static int		index = 0;
-	char	*buf;
-	int len;
+	char	*buf = NULL;
+	int len = 0;
 
 
 	va_start (argptr, format);
@@ -1297,7 +1297,7 @@ char *Info_ValueForKey( const char *s, const char *key ) {
 	static	char value[2][BIG_INFO_VALUE];	// use two buffers so compares
 											// work without stomping on each other
 	static	int	valueindex = 0;
-	char	*o;
+	char	*o = NULL;
 	
 	if ( !s || !key ) {
 		return "";
@@ -1350,8 +1350,8 @@ Used to itterate through all the key/value pairs in an info string
 ===================
 */
 void Info_NextPair( const char **head, char *key, char *value ) {
-	char	*o;
-	const char	*s;
+	char	*o = NULL;
+	const char	*s = NULL;
 
 	s = *head;
 
@@ -1389,10 +1389,10 @@ Info_RemoveKey
 ===================
 */
 void Info_RemoveKey( char *s, const char *key ) {
-	char	*start;
+	char	*start = NULL;
 	char	pkey[MAX_INFO_KEY];
 	char	value[MAX_INFO_VALUE];
-	char	*o;
+	char	*o = NULL;
 
 	if ( strlen( s ) >= MAX_INFO_STRING ) {
 		Com_Error( ERR_DROP, "Info_RemoveKey: oversize infostring" );
@@ -1444,10 +1444,10 @@ Info_RemoveKey_Big
 ===================
 */
 void Info_RemoveKey_Big( char *s, const char *key ) {
-	char	*start;
+	char	*start = NULL;
 	char	pkey[BIG_INFO_KEY];
 	char	value[BIG_INFO_VALUE];
-	char	*o;
+	char	*o = NULL;
 
 	if ( strlen( s ) >= BIG_INFO_STRING ) {
 		Com_Error( ERR_DROP, "Info_RemoveKey_Big: oversize infostring" );

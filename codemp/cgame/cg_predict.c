@@ -71,9 +71,9 @@ efficient collision detection
 */
 void CG_BuildSolidList(void)
 {
-	int i;
-	centity_t* cent;
-	snapshot_t* snap;
+	int i = 0;
+	centity_t* cent = NULL;
+	snapshot_t* snap = NULL;
 
 	cg_numSolidEntities = 0;
 	cg_numTriggerEntities = 0;
@@ -201,7 +201,7 @@ static QINLINE qboolean CG_VehicleClipCheck(const centity_t* ignored, const trac
 		if (otherguy->currentState.m_iVehicleNum)
 		{
 			//alright, both of these are either a vehicle or a player who is on a vehicle
-			int index;
+			int index = 0;
 
 			if (ignored->currentState.eType == ET_PLAYER
 				|| ignored->currentState.eType == ET_NPC && ignored->currentState.NPC_class != CLASS_VEHICLE)
@@ -254,12 +254,12 @@ extern void bg_vehicle_adjust_b_box_for_orientation(const Vehicle_t* veh, vec3_t
 static void CG_ClipMoveToEntities(const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end,
 	int skip_number, int mask, trace_t* tr, qboolean g2_check)
 {
-	int i, x, zd, zu;
+	int i = 0, x = 0, zd = 0, zu = 0;
 	trace_t trace, old_trace = { 0 };
-	entityState_t* ent;
-	clipHandle_t cmodel;
+	entityState_t* ent = NULL;
+	clipHandle_t cmodel = 0;
 	vec3_t bmins, bmaxs;
-	centity_t* cent;
+	centity_t* cent = NULL;
 	centity_t* ignored = NULL;
 
 	if (skip_number != -1 && skip_number != ENTITYNUM_NONE)
@@ -933,7 +933,7 @@ qboolean cg_vehPmoveSet = qfalse;
 
 void CG_PredictPlayerState(void)
 {
-	int i;
+	int i = 0;
 	playerState_t old_player_state;
 	playerState_t old_vehicle_state = { 0 };
 	usercmd_t oldest_cmd;

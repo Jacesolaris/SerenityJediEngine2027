@@ -124,9 +124,9 @@ RB_CalcDeformVertexes
 */
 static void RB_CalcDeformVertexes(const deformStage_t* ds)
 {
-	int i;
+	int i = 0;
 	vec3_t	offset;
-	float	scale;
+	float	scale = 0.0f;
 	auto* xyz = reinterpret_cast<float*>(tess.xyz);
 	auto* normal = reinterpret_cast<float*>(tess.normal);
 
@@ -205,7 +205,7 @@ RB_CalcBulgeVertexes
 */
 static void RB_CalcBulgeVertexes(const deformStage_t* ds)
 {
-	int		i;
+	int		i = 0;
 	auto* xyz = reinterpret_cast<float*>(tess.xyz);
 	auto* normal = reinterpret_cast<float*>(tess.normal);
 
@@ -274,7 +274,7 @@ Change a polygon into a bunch of text polygons
 =============
 */
 static void DeformText(const char* text) {
-	int		i;
+	int		i = 0;
 	vec3_t	origin, width, height{};
 	byte	color[4]{};
 	vec3_t	mid;
@@ -422,8 +422,8 @@ static constexpr glIndex_t edgeVerts[6][2] = {
 
 static void Autosprite2Deform(void)
 {
-	int		i, j, k;
-	int		indexes;
+	int		i = 0, j = 0, k = 0;
+	int		indexes = 0;
 	vec3_t	forward;
 
 	if (tess.numVertexes & 3) {
@@ -448,7 +448,7 @@ static void Autosprite2Deform(void)
 		int		nums[2]{};
 		vec3_t	mid[2]{};
 		vec3_t	major, minor;
-		float* v1, * v2;
+		float* v1 = nullptr, * v2 = nullptr;
 
 		// find the midpoint
 		float* xyz = tess.xyz[i];
@@ -658,7 +658,7 @@ void RB_CalcAlphaFromOneMinusEntity(unsigned char* dst_colors)
 */
 void RB_CalcWaveColor(const waveForm_t* wf, unsigned char* dst_colors)
 {
-	float glow;
+	float glow = 0.0f;
 	auto* colors = reinterpret_cast<int*>(dst_colors);
 	byte	color[4]{};
 
@@ -781,9 +781,9 @@ doesn't fit our shader data.
 
 void RB_CalcFogTexCoords(float* dstTexCoords)
 {
-	int			i;
-	float* v;
-	float		eye_t;
+	int			i = 0;
+	float* v = nullptr;
+	float		eye_t = 0.0f;
 	qboolean	eye_outside;
 	vec3_t		local_vec;
 	vec4_t		fog_distance_vector{}, fogDepthVector{};
@@ -868,8 +868,8 @@ void RB_CalcFogTexCoords(float* dstTexCoords)
 */
 void RB_CalcEnvironmentTexCoords(float* dstTexCoords)
 {
-	int			i;
-	float		d;
+	int			i = 0;
+	float		d = 0.0f;
 
 	float* v = tess.xyz[0];
 	float* normal = tess.normal[0];
@@ -995,7 +995,7 @@ vec3_t lightOrigin = { -960, 1980, 96 };		// FIXME: track dynamically
 void RB_CalcSpecularAlpha(unsigned char* alphas)
 {
 	vec3_t reflected{};
-	int			b;
+	int			b = 0;
 
 	float* v = tess.xyz[0];
 	float* normal = tess.normal[0];
@@ -1165,8 +1165,8 @@ void RB_CalcDiffuseEntityColor(unsigned char* colors)
 //---------------------------------------------------------
 void RB_CalcDisintegrateColors(unsigned char* colors, const colorGen_t rgbGen)
 {
-	int			i;
-	float		dis;
+	int			i = 0;
+	float		dis = 0.0f;
 	vec3_t		temp;
 
 	const refEntity_t* ent = &backEnd.currentEntity->e;

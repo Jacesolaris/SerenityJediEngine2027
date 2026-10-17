@@ -80,7 +80,7 @@ int MP3_GetUnpackedSize(const char* psLocalFilename, void* pvData, const int iDa
 int MP3_UnpackRawPCM(const char* psLocalFilename, void* pvData, const int iDataLen, byte* pbUnpackBuffer,
 	const qboolean bStereoDesired /* = qfalse */)
 {
-	int iUnpackedSize;
+	int iUnpackedSize = 0;
 	char* psError = C_MP3_UnpackRawPCM(pvData, iDataLen, &iUnpackedSize, pbUnpackBuffer, bStereoDesired);
 
 	if (psError)
@@ -99,7 +99,7 @@ qboolean MP3Stream_InitPlayingTimeFields(const LP_MP3STREAM lpMP3Stream, const c
 {
 	qboolean bRetval = qfalse;
 
-	int iRate, iWidth, iChannels;
+	int iRate = 0, iWidth = 0, iChannels = 0;
 
 	char* psError = C_MP3_GetHeaderData(pvData, iDataLen, &iRate, &iWidth, &iChannels, bStereoDesired);
 	if (psError)
@@ -138,11 +138,13 @@ float MP3Stream_GetPlayingTimeInSeconds(const LP_MP3STREAM lpMP3Stream)
 float MP3Stream_GetRemainingTimeInSeconds(const LP_MP3STREAM lpMP3Stream)
 {
 	if (lpMP3Stream->iTimeQuery_UnpackedLength) // fields initialised?
-		return static_cast<float>(static_cast<double>(lpMP3Stream->iTimeQuery_UnpackedLength - lpMP3Stream->
-			iBytesDecodedTotal * (lpMP3Stream->
-				iTimeQuery_SampleRate / dma.speed)) / static_cast<double>(lpMP3Stream->iTimeQuery_SampleRate) /
-			static_cast<double>(lpMP3Stream->
-				iTimeQuery_Channels) / static_cast<double>(lpMP3Stream->iTimeQuery_Width));
+	{
+		const int iRateRatio = lpMP3Stream->iTimeQuery_SampleRate / dma.speed; // whole-number rate ratio, as before
+			return static_cast<float>(static_cast<double>(lpMP3Stream->iTimeQuery_UnpackedLength - lpMP3Stream->
+				iBytesDecodedTotal * iRateRatio) / static_cast<double>(lpMP3Stream->iTimeQuery_SampleRate) /
+				static_cast<double>(lpMP3Stream->
+					iTimeQuery_Channels) / static_cast<double>(lpMP3Stream->iTimeQuery_Width));
+	}
 
 	return 0.0f;
 }

@@ -42,7 +42,7 @@ static void CG_MissionFailed()
 {
 	if (!cg.missionFailedScreen)
 	{
-		char* text;
+		char* text = nullptr;
 		if (cg_com_outcast.integer == 0)
 		{
 			cgi_UI_SetActive_Menu("missionfailed_menu"); //academy version

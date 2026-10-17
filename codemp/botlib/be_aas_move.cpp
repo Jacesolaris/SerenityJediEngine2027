@@ -404,8 +404,8 @@ void AAS_ApplyFriction(vec3_t vel, const float friction, const float stopspeed,
 //===========================================================================
 int AAS_ClipToBBox(aas_trace_t* trace, vec3_t start, vec3_t end, const int presencetype, vec3_t mins, vec3_t maxs)
 {
-	int i;
-	float planedist;
+	int i = 0;
+	float planedist = 0.0f;
 	vec3_t bboxmins, bboxmaxs, absmins, absmaxs, dir, mid;
 
 	AAS_PresenceTypeBoundingBox(presencetype, bboxmins, bboxmaxs);
@@ -490,20 +490,20 @@ int AAS_ClientMovementPrediction(aas_clientmove_s* move,
 	int stopevent, int stopareanum,
 	vec3_t mins, vec3_t maxs, int visualize)
 {
-	float phys_friction, phys_stopspeed, phys_gravity, phys_waterfriction;
-	float phys_watergravity;
-	float phys_walkaccelerate, phys_airaccelerate, phys_swimaccelerate;
-	float phys_maxwalkvelocity, phys_maxcrouchvelocity, phys_maxswimvelocity;
-	float phys_maxstep, phys_maxsteepness, phys_jumpvel, friction;
-	float gravity, delta, maxvel, wishspeed, accelerate;
+	float phys_friction = 0.0f, phys_stopspeed = 0.0f, phys_gravity = 0.0f, phys_waterfriction = 0.0f;
+	float phys_watergravity = 0.0f;
+	float phys_walkaccelerate = 0.0f, phys_airaccelerate = 0.0f, phys_swimaccelerate = 0.0f;
+	float phys_maxwalkvelocity = 0.0f, phys_maxcrouchvelocity = 0.0f, phys_maxswimvelocity = 0.0f;
+	float phys_maxstep = 0.0f, phys_maxsteepness = 0.0f, phys_jumpvel = 0.0f, friction = 0.0f;
+	float gravity = 0.0f, delta = 0.0f, maxvel = 0.0f, wishspeed = 0.0f, accelerate = 0.0f;
 	//float velchange, newvel;
 	//int ax;
-	int n, i, j, pc, step, swimming, crouch, event, jump_frame, areanum;
-	int numareas;
+	int n = 0, i = 0, j = 0, pc = 0, step = 0, swimming = 0, crouch = 0, event = 0, jump_frame = 0, areanum = 0;
+	int numareas = 0;
 	vec3_t org, end, feet, start, wishdir;
 	vec3_t frame_test_vel, left_test_vel;
 	vec3_t up = { 0, 0, 1 };
-	aas_plane_t* plane, * plane2;
+	aas_plane_t* plane = nullptr, * plane2 = nullptr;
 	aas_trace_t trace, steptrace;
 
 	if (frametime <= 0) frametime = 0.1f;

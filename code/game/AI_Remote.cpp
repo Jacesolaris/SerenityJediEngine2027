@@ -68,7 +68,7 @@ Remote_MaintainHeight
 */
 static void Remote_MaintainHeight()
 {
-	float dif;
+	float dif = 0.0f;
 
 	// Update our angles regardless
 	NPC_UpdateAngles(qtrue, qtrue);
@@ -108,7 +108,7 @@ static void Remote_MaintainHeight()
 	}
 	else
 	{
-		const gentity_t* goal;
+		const gentity_t* goal = nullptr;
 
 		if (NPCInfo->goalEntity) // Is there a goal?
 		{

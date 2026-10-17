@@ -704,7 +704,7 @@ void NPC_BSFollowLeader(void)
 void NPC_BSJump(void)
 {
 	vec3_t dir, p1, p2, apex;
-	float time, height, forward, z, xy, dist, apexHeight;
+	float time = 0.0f, height = 0.0f, forward = 0.0f, z = 0.0f, xy = 0.0f, dist = 0.0f, apexHeight = 0.0f;
 
 	if (!NPCS.NPCInfo->goalEntity)
 	{

@@ -15,7 +15,7 @@ vec3_t cameraang;
 
 void GCam_Update(void)
 {
-	int i;
+	int i = 0;
 	qboolean checkFollow = qfalse;
 
 	// Apply new roff data to the camera as needed
@@ -135,7 +135,7 @@ void GCam_FollowUpdate(void)
 {
 	vec3_t center, dir, cameraAngles, vec, focus[MAX_CAMERA_GROUP_SUBJECTS]; //No more than 16 subjects in a cameraGroup
 	//centity_t	*fromCent = NULL;
-	int num_subjects = 0, i;
+	int num_subjects = 0, i = 0;
 
 	if (client_camera.cameraGroup[0] == -1)
 	{
@@ -352,7 +352,7 @@ void GCam_Enable(void)
 	client_camera.bar_alpha_dest = 1.0f;
 
 	client_camera.bar_height_source = 0.0f;
-	client_camera.bar_height_dest = 480 / 10;
+	client_camera.bar_height_dest = 480.0f / 10.0f;
 	client_camera.bar_height = 0.0f;
 
 	client_camera.info_state |= CAMERA_BAR_FADING;
@@ -376,7 +376,7 @@ void GCam_Disable(void)
 	client_camera.bar_alpha_source = 1.0f;
 	client_camera.bar_alpha_dest = 0.0f;
 
-	client_camera.bar_height_source = 480 / 10;
+	client_camera.bar_height_source = 480.0f / 10.0f;
 	client_camera.bar_height_dest = 0.0f;
 
 	client_camera.info_state |= CAMERA_BAR_FADING;
@@ -392,7 +392,7 @@ void GCam_SetAngles(vec3_t ang)
 
 void GCam_Pan(vec3_t dest, vec3_t panDirection, const float duration)
 {
-	float delta2;
+	float delta2 = 0.0f;
 
 	GCam_FollowDisable();
 	GCam_DistanceDisable();

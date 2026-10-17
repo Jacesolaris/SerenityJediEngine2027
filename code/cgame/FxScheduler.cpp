@@ -201,7 +201,7 @@ CFxScheduler::CFxScheduler()
 int CFxScheduler::ScheduleLoopedEffect(const int id, const int boltInfo, const bool isPortal, const int iLoopTime,
 	const bool isRelative)
 {
-	int i;
+	int i = 0;
 
 	assert(id);
 	assert(boltInfo != -1);
@@ -456,7 +456,7 @@ int CFxScheduler::RegisterEffect(const char* path, const bool bHasCorrectPath /*
 		return (*itr).second;
 	}
 
-	const char* pfile;
+	const char* pfile = nullptr;
 	// Must outlive the if/else: pfile may point into it and is used below.
 	char correctFilenameBuffer[MAX_QPATH];
 	if (bHasCorrectPath)
@@ -500,7 +500,7 @@ int CFxScheduler::RegisterEffect(const char* path, const bool bHasCorrectPath /*
 
 int CFxScheduler::ParseEffect(const char* file, const CGPGroup& base)
 {
-	int handle;
+	int handle = 0;
 	SEffectTemplate* effect = GetNewEffectTemplate(&handle, file);
 
 	if (!handle || !effect)
@@ -836,7 +836,7 @@ void CFxScheduler::PlayEffect(const char* file, const int client_id, const bool 
 	}
 #endif
 
-	int delay;
+	int delay = 0;
 	float factor = 0.0f;
 
 	if (id < 1 || id >= FX_MAX_EFFECTS || !mEffectTemplates[id].mInUse)
@@ -943,7 +943,7 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate* fx, const int client_id) con
 	vec3_t sRGB, eRGB;
 	vec3_t vel, accel;
 	vec3_t org, org2;
-	int flags;
+	int flags = 0;
 
 	// Origin calculations -- completely ignores most things
 	//-------------------------------------
@@ -1106,7 +1106,7 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate* fx, const int client_id) con
 void CFxScheduler::PlayEffect(const int id, vec3_t origin, vec3_t axis[3], const int boltInfo, const int entNum,
 	const bool isPortal, const int iLoopTime, const bool isRelative)
 {
-	int delay;
+	int delay = 0;
 	float factor = 0.0f;
 	bool forceScheduling = false;
 
@@ -1511,7 +1511,7 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate* fx, const vec3_t origin, vec
 		ang, angDelta,
 		ax[3];
 	trace_t tr;
-	int emitterModel;
+	int emitterModel = 0;
 
 	// We may modify the axis, so make a work copy
 	AxisCopy(axis, ax);
@@ -1864,7 +1864,7 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate* fx, const vec3_t origin, vec
 					if (!(ent->s.eFlags & EF_NODRAW))
 					{
 						constexpr float firstModel = 0;
-						float entYaw;
+						float entYaw = 0.0f;
 						vec3_t entOrg;
 						//not drawn, no marks
 						if (ent->client)

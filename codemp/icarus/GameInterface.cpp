@@ -85,8 +85,8 @@ Runs the script by the given name
 */
 int ICARUS_RunScript(const sharedEntity_t* ent, const char* name)
 {
-	char* buf;
-	int len;
+	char* buf = nullptr;
+	int len = 0;
 
 	//Make sure the caller is valid
 	if (gSequencers[ent->s.number] == nullptr)
@@ -338,10 +338,10 @@ Loads and caches a script
 
 bool ICARUS_RegisterScript(const char* name, qboolean bCalledDuringInterrogate /* = false */)
 {
-	pscript_t* pscript;
+	pscript_t* pscript = nullptr;
 	char newname[MAX_FILENAME_LENGTH];
 	char* buffer = nullptr; // lose compiler warning about uninitialised vars
-	long length;
+	long length = 0;
 
 	//Make sure this isn't already cached
 	const auto ei = ICARUS_BufferList.find(name);
@@ -435,7 +435,7 @@ ICARUS_InterrogateScript
 void ICARUS_InterrogateScript(const char* filename)
 {
 	CBlockStream stream;
-	CBlockMember* blockMember;
+	CBlockMember* blockMember = nullptr;
 	CBlock block;
 
 	if (!Q_stricmp(filename, "NULL") || !Q_stricmp(filename, "default"))
@@ -463,8 +463,8 @@ void ICARUS_InterrogateScript(const char* filename)
 	if (ICARUS_RegisterScript(sFilename, qtrue) == false) // true = bCalledDuringInterrogate
 		return;
 
-	char* buf;
-	long len;
+	char* buf = nullptr;
+	long len = 0;
 
 	//Attempt to retrieve the new script data
 	if ((len = ICARUS_GetScript(sFilename, &buf)) == 0)
@@ -474,7 +474,7 @@ void ICARUS_InterrogateScript(const char* filename)
 	if (stream.Open(buf, len) == qfalse)
 		return;
 
-	const char* sVal1;
+	const char* sVal1 = nullptr;
 	char temp[1024];
 
 	//Now iterate through all blocks of the script, searching for keywords

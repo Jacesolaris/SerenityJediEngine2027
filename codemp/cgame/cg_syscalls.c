@@ -1244,7 +1244,7 @@ void CGSyscall_R_AddPolysToScene(const qhandle_t hShader, const int numVerts, co
 
 float CGSyscall_R_GetDistanceCull(void)
 {
-	float tmp;
+	float tmp = 0.0f;
 	trap_R_GetDistanceCull(&tmp);
 	return tmp;
 }
@@ -1281,7 +1281,7 @@ void QDECL CG_Printf(const char* msg, ...)
 {
 	va_list argptr;
 	char text[4096] = { 0 };
-	int ret;
+	int ret = 0;
 
 	va_start(argptr, msg);
 	ret = Q_vsnprintf(text, sizeof(text), msg, argptr);

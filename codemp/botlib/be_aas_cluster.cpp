@@ -116,7 +116,7 @@ static void AAS_RemovePortalsClusterReference(const int clusternum)
 //===========================================================================
 static int AAS_UpdatePortal(const int areanum, const int clusternum)
 {
-	int portalnum;
+	int portalnum = 0;
 
 	//find the portal of the area
 	for (portalnum = 1; portalnum < aasworld.numportals; portalnum++)
@@ -173,7 +173,7 @@ static int AAS_UpdatePortal(const int areanum, const int clusternum)
 //===========================================================================
 static int AAS_FloodClusterAreas_r(const int areanum, const int clusternum)
 {
-	int i;
+	int i = 0;
 
 	//
 	if (areanum <= 0 || areanum >= aasworld.numareas)
@@ -303,8 +303,8 @@ static void AAS_NumberClusterPortals(const int clusternum)
 //===========================================================================
 static void AAS_NumberClusterAreas(const int clusternum)
 {
-	int i, portalnum;
-	aas_portal_t* portal;
+	int i = 0, portalnum = 0;
+	aas_portal_t* portal = nullptr;
 
 	aasworld.clusters[clusternum].numareas = 0;
 	aasworld.clusters[clusternum].numreachabilityareas = 0;
@@ -667,7 +667,7 @@ qboolean AAS_CanMergeFaces(int *facenums, int numfaces, int planenum)
 //===========================================================================
 static void AAS_ConnectedAreas_r(int* areanums, const int numareas, int* connectedareas, const int curarea)
 {
-	int j, otherareanum;
+	int j = 0, otherareanum = 0;
 
 	connectedareas[curarea] = qtrue;
 	const aas_area_t* area = &aasworld.areas[areanums[curarea]];
@@ -722,7 +722,7 @@ static qboolean AAS_ConnectedAreas(int* areanums, const int numareas)
 //===========================================================================
 static int AAS_GetAdjacentAreasWithLessPresenceTypes_r(int* areanums, int numareas, const int curareanum)
 {
-	int j, otherareanum;
+	int j = 0, otherareanum = 0;
 
 	areanums[numareas++] = curareanum;
 	const aas_area_t* area = &aasworld.areas[curareanum];
@@ -857,7 +857,7 @@ static int AAS_CheckAreaForPossiblePortals(const int areanum)
 			if ((face->faceflags & FACE_SOLID) != 0)
 				continue;
 
-			int k;
+			int k = 0;
 			for (k = 0; k < numareas; k++)
 			{
 				if (k == i)
@@ -942,18 +942,18 @@ static int AAS_CheckAreaForPossiblePortals(const int areanum)
 	for (int i = 0; i < numfrontfaces; i++)
 	{
 		const aas_face_t* frontface = &aasworld.faces[frontfacenums[i]];
-		int fen;
+		int fen = 0;
 
 		for (fen = 0; fen < frontface->numedges; fen++)
 		{
 			const int frontedgenum = abs(aasworld.edgeindex[frontface->firstedge + fen]);
 
-			int j;
+			int j = 0;
 			for (j = 0; j < numbackfaces; j++)
 			{
 				const aas_face_t* backface = &aasworld.faces[backfacenums[j]];
 
-				int ben;
+				int ben = 0;
 				for (ben = 0; ben < backface->numedges; ben++)
 				{
 					const int backedgenum = abs(aasworld.edgeindex[backface->firstedge + ben]);
@@ -1520,7 +1520,7 @@ void AAS_SetViewPortalsAsClusterPortals()
 //===========================================================================
 void AAS_InitClustering()
 {
-	int i;
+	int i = 0;
 
 	if (!aasworld.loaded) return;
 	//if there are clusters

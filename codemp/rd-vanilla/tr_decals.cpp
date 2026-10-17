@@ -160,8 +160,8 @@ void RE_AddDecalToScene(const qhandle_t decalShader, const vec3_t origin, const 
 	matrix3_t		axis{};
 	vec3_t			original_points[4]{};
 	byte			colors[4]{};
-	int				i, j;
-	markFragment_t	markFragments[MAX_DECAL_FRAGMENTS], * mf;
+	int				i = 0, j = 0;
+	markFragment_t	markFragments[MAX_DECAL_FRAGMENTS], * mf = nullptr;
 	vec3_t			markPoints[MAX_DECAL_POINTS]{};
 	vec3_t			projection;
 
@@ -203,7 +203,7 @@ void RE_AddDecalToScene(const qhandle_t decalShader, const vec3_t origin, const 
 
 	for (i = 0, mf = markFragments; i < numFragments; i++, mf++)
 	{
-		polyVert_t* v;
+		polyVert_t* v = nullptr;
 		polyVert_t	verts[MAX_VERTS_ON_DECAL_POLY]{};
 
 		// we have an upper limit on the complexity of polygons

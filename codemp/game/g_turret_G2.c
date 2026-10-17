@@ -1098,8 +1098,8 @@ Turret that hangs from the ceiling, will aim and shoot at enemies
 void SP_misc_turretG2(gentity_t* base)
 //-----------------------------------------------------
 {
-	int customscaleVal;
-	char* s;
+	int customscaleVal = 0;
+	char* s = NULL;
 
 	turretG2_set_models(base, qfalse);
 
@@ -1153,7 +1153,7 @@ void SP_misc_turretG2(gentity_t* base)
 void finish_spawning_turretG2(gentity_t* base)
 {
 	vec3_t fwd;
-	int t;
+	int t = 0;
 
 	if (base->spawnflags & 2)
 	{

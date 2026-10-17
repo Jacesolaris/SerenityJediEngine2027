@@ -77,7 +77,7 @@ int numaaslinks;
 //===========================================================================
 void AAS_PresenceTypeBoundingBox(const int presencetype, vec3_t mins, vec3_t maxs)
 {
-	int index;
+	int index = 0;
 	//bounding box size for each presence type
 	constexpr vec3_t boxmins[3] = { { 0, 0, 0 },{ -15, -15, -24 },{ -15, -15, -24 } };
 	constexpr vec3_t boxmaxs[3] = { { 0, 0, 0 },{ 15,  15,  32 },{ 15,  15,   8 } };
@@ -213,9 +213,9 @@ void AAS_FreeAASLinkedEntities(void)
 //===========================================================================
 int AAS_PointAreaNum(vec3_t point)
 {
-	float	dist;
-	aas_node_t* node;
-	aas_plane_t* plane;
+	float	dist = 0.0f;
+	aas_node_t* node = nullptr;
+	aas_plane_t* plane = nullptr;
 
 	if (!aasworld.loaded)
 	{
@@ -265,7 +265,7 @@ int AAS_PointAreaNum(vec3_t point)
 //===========================================================================
 int AAS_PointReachabilityAreaIndex(vec3_t origin)
 {
-	int i, index;
+	int i = 0, index = 0;
 
 	if (!aasworld.initialized)
 		return 0;
@@ -364,7 +364,7 @@ int AAS_PointPresenceType(vec3_t point)
 float AAS_BoxOriginDistanceFromPlane(vec3_t normal, vec3_t mins, vec3_t maxs, const int side)
 {
 	vec3_t v1, v2;
-	int i;
+	int i = 0;
 
 	//swap maxs and mins when on the other side of the plane
 	if (side)
@@ -445,12 +445,12 @@ qboolean AAS_AreaEntityCollision(const int areanum, vec3_t start, vec3_t end,
 aas_trace_t AAS_TraceClientBBox(vec3_t start, vec3_t end, const int presencetype,
 	const int passent)
 {
-	int side, tmpplanenum;
-	float front, back, frac;
+	int side = 0, tmpplanenum = 0;
+	float front = 0.0f, back = 0.0f, frac = 0.0f;
 	vec3_t cur_mid;
 	aas_tracestack_t tracestack[127];
-	aas_node_t* aasnode;
-	aas_plane_t* plane;
+	aas_node_t* aasnode = nullptr;
+	aas_plane_t* plane = nullptr;
 	aas_trace_t trace;
 
 	//clear the trace structure
@@ -722,12 +722,12 @@ aas_trace_t AAS_TraceClientBBox(vec3_t start, vec3_t end, const int presencetype
 //===========================================================================
 int AAS_TraceAreas(vec3_t start, vec3_t end, int* areas, vec3_t* points, const int maxareas)
 {
-	int side, tmpplanenum;
-	float front, back, frac;
+	int side = 0, tmpplanenum = 0;
+	float front = 0.0f, back = 0.0f, frac = 0.0f;
 	vec3_t cur_mid;
 	aas_tracestack_t tracestack[127];
-	aas_node_t* aasnode;
-	aas_plane_t* plane;
+	aas_node_t* aasnode = nullptr;
+	aas_plane_t* plane = nullptr;
 
 	int numareas = 0;
 	areas[0] = 0;
@@ -922,8 +922,8 @@ int AAS_TraceAreas(vec3_t start, vec3_t end, int* areas, vec3_t* points, const i
 //===========================================================================
 qboolean AAS_InsideFace(aas_face_t* face, vec3_t pnormal, vec3_t point, const float epsilon)
 {
-	int firstvertex, edgenum;
-	aas_edge_t* edge;
+	int firstvertex = 0, edgenum = 0;
+	aas_edge_t* edge = nullptr;
 #ifdef AAS_SAMPLE_DEBUG
 	int lastvertex = 0;
 #endif //AAS_SAMPLE_DEBUG
@@ -1177,7 +1177,7 @@ int AAS_BoxOnPlaneSide2(vec3_t absmins, vec3_t absmaxs, aas_plane_t* p)
 //===========================================================================
 void AAS_UnlinkFromAreas(aas_link_t* areas)
 {
-	aas_link_t* nextlink;
+	aas_link_t* nextlink = nullptr;
 
 	for (aas_link_t* link = areas; link; link = nextlink)
 	{
@@ -1208,7 +1208,7 @@ using aas_linkstack_t = struct aas_linkstack_s {
 aas_link_t* AAS_AASLinkEntity(vec3_t absmins, vec3_t absmaxs, const int entnum)
 {
 	aas_linkstack_t linkstack[128];
-	aas_link_t* link;
+	aas_link_t* link = nullptr;
 
 	if (!aasworld.loaded)
 	{

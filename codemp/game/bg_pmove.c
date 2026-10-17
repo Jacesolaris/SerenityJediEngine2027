@@ -1884,7 +1884,7 @@ int PM_ReadyPoseForSaberAnimLevelBOT(void)
 
 int PM_ReadyPoseForsaber_anim_levelDucked(void)
 {
-	int anim;
+	int anim = 0;
 
 	const saberInfo_t* saber1 = BG_MySaber(pm->ps->clientNum, 0);
 	const saberInfo_t* saber2 = BG_MySaber(pm->ps->clientNum, 1);
@@ -2713,7 +2713,7 @@ static void PM_SetVehicleAngles(vec3_t normal)
 {
 	const bgEntity_t* pEnt = pm_entSelf;
 	vec3_t vAngles;
-	float pitchBias;
+	float pitchBias = 0.0f;
 
 	if (!pEnt || pEnt->s.NPC_class != CLASS_VEHICLE)
 	{
@@ -3227,7 +3227,7 @@ Handles both ground friction and water friction
 static void PM_Friction(void)
 {
 	vec3_t vec;
-	float control;
+	float control = 0.0f;
 	float friction = pm_friction;
 	const bgEntity_t* pEnt = NULL;
 
@@ -3396,7 +3396,7 @@ static void PM_Accelerate(vec3_t wishdir, const float wishspeed, const float acc
 		|| pm->ps->clientNum >= MAX_CLIENTS
 		|| pm->ps->pm_type != PM_NORMAL)
 	{
-		float accelspeed;
+		float accelspeed = 0.0f;
 
 		const float currentspeed = DotProduct(pm->ps->velocity, wishdir);
 		const float addspeed = wishspeed - currentspeed;
@@ -3646,7 +3646,7 @@ static qboolean PM_ForceJumpingUp(void)
 
 static void PM_JumpForDir(void)
 {
-	int anim;
+	int anim = 0;
 	if (pm->cmd.forwardmove > 0)
 	{
 		if (pm->ps->weapon == WP_SABER && !pm->ps->saberHolstered) //saber out
@@ -3730,7 +3730,7 @@ static qboolean PM_AdjustAngleForWallRunold(playerState_t* ps, usercmd_t* ucmd, 
 		const vec3_t maxs = { ps->maxs[0], ps->maxs[1], 24 };
 		const vec3_t mins = { ps->mins[0], ps->mins[1], 0 };
 		trace_t trace;
-		float dist, yaw_adjust;
+		float dist = 0.0f, yaw_adjust = 0.0f;
 
 		AngleVectors(fwd_angles, fwd, rt, NULL);
 
@@ -3876,7 +3876,7 @@ static qboolean PM_AdjustAngleForWallRun(playerState_t* ps, usercmd_t* ucmd, con
 		const vec3_t maxs = { ps->maxs[0], ps->maxs[1], 24 };
 		const vec3_t mins = { ps->mins[0], ps->mins[1], 0 };
 		trace_t trace;
-		float dist, yaw_adjust;
+		float dist = 0.0f, yaw_adjust = 0.0f;
 
 		AngleVectors(fwdAngles, fwd, rt, NULL);
 
@@ -4220,7 +4220,7 @@ static qboolean PM_AdjustAngleForWallJump(playerState_t* ps, usercmd_t* ucmd, co
 		vec3_t checkDir, traceTo, mins, maxs, fwdAngles;
 		trace_t trace;
 		const float dist = 128.0f;
-		float yaw_adjust;
+		float yaw_adjust = 0.0f;
 
 		VectorSet(mins, pm->mins[0], pm->mins[1], 0);
 		VectorSet(maxs, pm->maxs[0], pm->maxs[1], 24);
@@ -4386,7 +4386,7 @@ static qboolean PM_AdjustAngleForWallJump(playerState_t* ps, usercmd_t* ucmd, co
 
 static float PM_LedgeModelScale(void)
 {
-	float scale;
+	float scale = 0.0f;
 
 	if (pm->ps->iModelScale <= 0 || pm->ps->iModelScale == 100)
 	{
@@ -4422,7 +4422,7 @@ static float PM_LedgeScaledHeight(const float height)
 static float PM_LedgeScaledHorOffset(void)
 {
 	const float scale = PM_LedgeModelScale();
-	float min_offset, offset;
+	float min_offset = 0.0f, offset = 0.0f;
 
 	if (scale == 1.0f)
 	{
@@ -4909,7 +4909,7 @@ qboolean PM_CheckGrabWall(const trace_t* trace)
 
 	//grab it!
 	//Pick the proper anim
-	int anim;
+	int anim = 0;
 	vec3_t facingAngles, wallDir = { 0 }, fwdDir, rtDir;
 	wallDir[2] = 0;
 	VectorNormalize(wallDir);
@@ -5291,7 +5291,7 @@ static qboolean PM_CheckJump(void)
 					|| pm->ps->legsAnim == BOTH_FORCELONGLEAP_ATTACK2)
 					&& pm->ps->legsTimer > 0)
 				{
-					float oldZVel;
+					float oldZVel = 0.0f;
 					//in the air
 					vec3_t jFwdAngs, jFwdVec;
 					VectorSet(jFwdAngs, 0, pm->ps->viewangles[YAW], 0);
@@ -5458,7 +5458,7 @@ static qboolean PM_CheckJump(void)
 							{
 								vec3_t facingFwd, facingRight, facingAngles;
 								int anim = -1;
-								float dotR, dotF;
+								float dotR = 0.0f, dotF = 0.0f;
 
 								VectorSet(facingAngles, 0, pm->ps->viewangles[YAW], 0);
 
@@ -5813,7 +5813,7 @@ static qboolean PM_CheckJump(void)
 						|| wallNormal[2] >= 0.0f && wallNormal[2] <= 0.4f/*MAX_WALL_RUN_Z_NORMAL*/)
 					{
 						//wall-runs can only run on perfectly flat walls, sorry.
-						int parts;
+						int parts = 0;
 						//move me to side
 						if (anim == BOTH_WALL_FLIP_LEFT)
 						{
@@ -5969,7 +5969,7 @@ static qboolean PM_CheckJump(void)
 				vec3_t fwd, traceto, mins, maxs, fwdAngles;
 				trace_t trace;
 				int anim = -1;
-				float anim_len;
+				float anim_len = 0.0f;
 
 				VectorSet(mins, pm->mins[0], pm->mins[0], 0.0f);
 				VectorSet(maxs, pm->maxs[0], pm->maxs[0], 24.0f);
@@ -6095,7 +6095,7 @@ static qboolean PM_CheckJump(void)
 						vec3_t forward, trace_to, minimum_mins, maximum_maxs, angles;
 						trace_t trace_s;
 						vec3_t ideal_normal;
-						bgEntity_t* traceEnt;
+						bgEntity_t* traceEnt = NULL;
 
 						VectorSet(minimum_mins, pm->mins[0], pm->mins[1], 0.0f);
 						VectorSet(maximum_maxs, pm->maxs[0], pm->maxs[1], 24.0f);
@@ -6201,7 +6201,7 @@ static qboolean PM_CheckJump(void)
 						vec3_t idealNormal;
 						vec3_t traceto;
 						//trace in the dir we're pushing in and see if there's a vertical wall there
-						bgEntity_t* traceEnt;
+						bgEntity_t* traceEnt = NULL;
 
 						VectorMA(pm->ps->origin, 8, checkDir, traceto);
 						pm->trace(&trace, pm->ps->origin, mins, maxs, traceto, pm->ps->clientNum, CONTENTS_SOLID);
@@ -6663,9 +6663,9 @@ PM_WaterMove
 static void PM_WaterMove(void)
 {
 	vec3_t wishvel = { 0 };
-	float wishspeed;
+	float wishspeed = 0.0f;
 	vec3_t wishdir = { 0 };
-	float scale;
+	float scale = 0.0f;
 
 	if (PM_CheckWaterJump())
 	{
@@ -6772,9 +6772,9 @@ static void PM_WaterMove(void)
 static void PM_LadderMove(void)
 {
 	vec3_t wishvel = { 0 };
-	float wishspeed;
+	float wishspeed = 0.0f;
 	vec3_t wishdir = { 0 };
-	float scale;
+	float scale = 0.0f;
 
 	if (PM_CheckWaterJump())
 	{
@@ -6887,7 +6887,7 @@ PM_FlyVehicleMove
 static void PM_FlyVehicleMove(void)
 {
 	vec3_t wishvel;
-	float wishspeed;
+	float wishspeed = 0.0f;
 	vec3_t wishdir;
 
 	// We don't use these here because we pre-calculate the movedir in the vehicle update anyways, and if
@@ -7564,10 +7564,10 @@ static void PM_CheckAirDashFlip(void)
 
 static void PM_AirMove(void)
 {
-	int i;
+	int i = 0;
 	vec3_t wishvel;
 	vec3_t wishdir;
-	float wishspeed;
+	float wishspeed = 0.0f;
 	usercmd_t cmd;
 	Vehicle_t* p_veh = NULL;
 
@@ -7583,7 +7583,7 @@ static void PM_AirMove(void)
 		}
 	}
 
-	float jumpMultiplier;
+	float jumpMultiplier = 0.0f;
 	if (pm->ps->weapon == WP_MELEE)
 	{
 		jumpMultiplier = 5.0;
@@ -8091,12 +8091,12 @@ PM_WalkMove
 */
 static void PM_WalkMove(void)
 {
-	int i;
+	int i = 0;
 	vec3_t wishvel = { 0 };
 	vec3_t wishdir = { 0 };
 	float wishspeed = 0.0f;
 	usercmd_t cmd;
-	float accelerate;
+	float accelerate = 0.0f;
 	qboolean npcMovement = qfalse;
 
 	if (pm->waterlevel > 2 && DotProduct(pml.forward, pml.groundTrace.plane.normal) > 0)
@@ -8261,7 +8261,7 @@ static void PM_WalkMove(void)
 				&& !PM_RollingAnim(pm->ps->legsAnim)
 				&& !PM_InKnockDown(pm->ps))
 			{
-				int knock_anim; //default knockdown
+				int knock_anim = 0; //default knockdown
 				if (Q_irand(0, 3) > 2)
 				{
 					knock_anim = BOTH_KNOCKDOWN1;
@@ -8807,11 +8807,11 @@ Check for hard landings that generate sound events
 */
 static void PM_CrashLand(void)
 {
-	float    delta;
-	float    dist;
-	float    vel, acc;
-	float    t;
-	float    a, b, c, den;
+	float    delta = 0.0f;
+	float    dist = 0.0f;
+	float    vel = 0.0f, acc = 0.0f;
+	float    t = 0.0f;
+	float    a = 0.0f, b = 0.0f, c = 0.0f, den = 0.0f;
 	qboolean didRoll = qfalse;
 	// The long leap / jump dash pose always lands in its landing anim (BOTH_FORCELONGLEAP_LAND / BOTH_FORCEJUMPDASH_LAND)
 	// and its slide, crouched or not - no roll (as SP)
@@ -8952,7 +8952,7 @@ static void PM_CrashLand(void)
 		pm->ps->legsAnim == BOTH_FORCEJUMP1 ||
 		pm->ps->legsAnim == BOTH_FORCEJUMP2)
 	{
-		int fjAnim;
+		int fjAnim = 0;
 
 		switch (pm->ps->legsAnim)
 		{
@@ -8988,7 +8988,7 @@ static void PM_CrashLand(void)
 		// Only play a land anim if we transitioned into an in‑air anim
 		if (PM_SaberInSpecial(pm->ps->saberMove) == qfalse)
 		{
-			int landingAnim;
+			int landingAnim = 0;
 
 			if ((pm->ps->pm_flags & PMF_BACKWARDS_JUMP) != 0)
 			{
@@ -9519,7 +9519,7 @@ static void PM_GroundTraceMissed(void)
 											if (trace.entityNum == ENTITYNUM_WORLD)
 											{
 												//hit architecture, find impact force
-												float dmg;
+												float dmg = 0.0f;
 
 												VectorCopy(pm->ps->velocity, vel);
 												time = Distance(trace.endpos, pm->ps->origin) / VectorLength(vel);
@@ -9528,7 +9528,7 @@ static void PM_GroundTraceMissed(void)
 												if (trace.plane.normal[2] > 0.5)
 												{
 													//use falling damage
-													int waterlevel, junk;
+													int waterlevel = 0, junk = 0;
 													PM_SetWaterLevelAtPoint(trace.endpos, &waterlevel, &junk);
 													dmg = PM_CrashLandDelta(vel, waterlevel);
 													if (dmg >= 30)
@@ -10345,8 +10345,8 @@ static void PM_CheckDuck(void)
 	// ps.standheight / ps.crouchheight). From ps.botclass, so server and client prediction agree.
 	if (pm->ps->clientNum < MAX_CLIENTS && pm->gametype != GT_SIEGE)
 	{
-		float halfWidth;
-		int standheight, crouchheight;
+		float halfWidth = 0.0f;
+		int standheight = 0, crouchheight = 0;
 
 		if (BG_ClassCreatureSize(pm->ps->botclass, &halfWidth, &standheight, &crouchheight))
 		{
@@ -10775,9 +10775,9 @@ qboolean PM_InSlopeAnim(const int anim)
 
 static qboolean PM_AdjustStandAnimForSlope(void)
 {
-	float diff;
-	float interval;
-	int destAnim;
+	float diff = 0.0f;
+	float interval = 0.0f;
+	int destAnim = 0;
 	const bgEntity_t* pEnt = pm_entSelf;
 #define SLOPERECALCVAR pm->ps->slopeRecalcTime //this is purely convenience
 
@@ -11517,8 +11517,8 @@ static qboolean PM_IsCreatureOf(const int npcClass, const int botclass)
 
 static void PM_Footsteps(void)
 {
-	float bobmove;
-	int old;
+	float bobmove = 0.0f;
+	int old = 0;
 	int setAnimFlags = 0;
 
 	// Safety: ensure pm and pm->ps exist before accessing them
@@ -13247,7 +13247,7 @@ int BG_VehTraceFromCamPos(trace_t* cam_trace, const bgEntity_t* bg_ent, const ve
 {
 	//NOTE: this MUST stay up to date with the method used in CG_ScanForCrosshairEntity (where it checks the doExtraVehTraceFromViewPos bool)
 	vec3_t viewDir2End, extraEnd, camPos;
-	float minAutoAimDist;
+	float minAutoAimDist = 0.0f;
 
 #ifdef _GAME
 	WP_GetVehicleCamPos((gentity_t*)bg_ent, (gentity_t*)bg_ent->m_pVehicle->m_pPilot, camPos);
@@ -14342,8 +14342,8 @@ static qboolean PM_InWallRunAnim(const int anim)
 
 static void PM_Weapon(void)
 {
-	int addTime;
-	int amount;
+	int addTime = 0;
+	int amount = 0;
 	int killAfterItem = 0;
 	bgEntity_t* veh = NULL;
 	qboolean vehicleRocketLock = qfalse;
@@ -16391,8 +16391,8 @@ extern qboolean in_camera;
 
 void PM_UpdateViewAngles(int saberAnimLevel, playerState_t* ps, const usercmd_t* cmd)
 {
-	short temp;
-	int i;
+	short temp = 0;
+	int i = 0;
 	vec3_t start, end, tmins, tmaxs, right;
 	trace_t trace;
 
@@ -16416,7 +16416,7 @@ void PM_UpdateViewAngles(int saberAnimLevel, playerState_t* ps, const usercmd_t*
 
 	if (ps->userInt1)
 	{
-		short angle;
+		short angle = 0;
 		//have some sort of lock in place
 		if (ps->userInt1 & LOCK_UP)
 		{
@@ -17102,7 +17102,7 @@ void PM_UpdateViewAngles(int saberAnimLevel, playerState_t* ps, const usercmd_t*
 static void PM_AdjustAttackStates(pmove_t* pmove)
 //-------------------------------------------
 {
-	int amount;
+	int amount = 0;
 
 	if (pm_entSelf->s.NPC_class != CLASS_VEHICLE
 		&& pmove->ps->m_iVehicleNum)
@@ -17440,7 +17440,7 @@ qboolean PM_SaberInTransition(int move);
 
 static void BG_AdjustClientSpeed(playerState_t* ps, const usercmd_t* cmd, const int svTime)
 {
-	saberInfo_t* saber;
+	saberInfo_t* saber = NULL;
 	const qboolean is_holding_block_button = ((pm->ps->ManualBlockingFlags & (1 << MBF_HOLDINGBLOCK)) != 0) ? qtrue : qfalse;
 
 	if (ps->clientNum >= MAX_CLIENTS)
@@ -17918,8 +17918,8 @@ void BG_IK_MoveArm(void* ghoul2, const int lHandBolt, const int time, const enti
 	else if (*ikInProgress)
 	{
 		//kill it
-		float cFrame, animSpeed;
-		int sFrame, eFrame, flags;
+		float cFrame = 0.0f, animSpeed = 0.0f;
+		int sFrame = 0, eFrame = 0, flags = 0;
 
 		trap->G2API_SetBoneIKState(ghoul2, time, "lhumerus", IKS_NONE, NULL);
 		trap->G2API_SetBoneIKState(ghoul2, time, "lradius", IKS_NONE, NULL);
@@ -18242,7 +18242,7 @@ static void BG_G2ClientNeckAngles(void* ghoul2, const int time, const vec3_t loo
 
 	if (BG_ClassHasBadBones(skelClass))
 	{
-		int oUp, oRt, oFwd;
+		int oUp = 0, oRt = 0, oFwd = 0;
 		if (skelClass != CLASS_RANCOR)
 		{
 			//Rancor doesn't use cranium and cervical
@@ -18474,8 +18474,8 @@ CG_SwingAngles
 static float BG_SwingAngles(const float destination, const float swingTolerance, const float clampTolerance,
 	const float speed, float* angle, qboolean* swinging, const int frametime)
 {
-	float swing;
-	float move;
+	float swing = 0.0f;
+	float move = 0.0f;
 
 	if (!*swinging)
 	{
@@ -18751,9 +18751,9 @@ void BG_G2PlayerAngles(void* ghoul2, const int motionBolt, entityState_t* cent, 
 
 	if (!VectorCompare(velAng, vec3_origin))
 	{
-		float degrees_positive;
-		float degrees_negative;
-		int adddir;
+		float degrees_positive = 0.0f;
+		float degrees_negative = 0.0f;
+		int adddir = 0;
 		vectoangles(velAng, velAng);
 
 		if (velAng[YAW] <= legsAngles[YAW])
@@ -18968,7 +18968,7 @@ void BG_G2PlayerAngles(void* ghoul2, const int motionBolt, entityState_t* cent, 
 
 	if (BG_ClassHasBadBones(skelClass))
 	{
-		int oUp, oRt, oFwd;
+		int oUp = 0, oRt = 0, oFwd = 0;
 		if (skelClass == CLASS_RANCOR)
 		{
 			llAngles[YAW] = llAngles[ROLL] = 0.0f;
@@ -19233,7 +19233,7 @@ static void PM_VehicleViewAngles(playerState_t* ps, const bgEntity_t* veh, const
 	qboolean setAngles = qfalse;
 	vec3_t clampMin = { 0 };
 	vec3_t clampMax = { 0 };
-	int i;
+	int i = 0;
 
 	if (veh->m_pVehicle->m_pPilot
 		&& veh->m_pVehicle->m_pPilot->s.number == ps->clientNum)

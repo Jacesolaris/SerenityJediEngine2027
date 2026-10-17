@@ -599,7 +599,7 @@ Parses an affect command
 int CSequencer::ParseAffect(CBlock* block, bstream_t* bstream)
 {
 	CSequencer* stream_sequencer = nullptr;
-	int ret;
+	int ret = 0;
 
 	const auto entname = static_cast<char*>(block->GetMemberData(0));
 	const sharedEntity_t* ent = m_ie->I_GetEntityByName(entname);
@@ -774,7 +774,7 @@ Properly handles and routes commands to the sequencer
 
 int CSequencer::Route(CSequence* sequence, bstream_t* bstream)
 {
-	CBlock* block;
+	CBlock* block = nullptr;
 
 	//Take the stream as the current stream
 	m_curStream = bstream;
@@ -1029,12 +1029,12 @@ EvaluateConditional
 
 int CSequencer::EvaluateConditional(CBlock* block) const
 {
-	CBlockMember* bm;
+	CBlockMember* bm = nullptr;
 	char tempString1[128], tempString2[128];
 	vector_t vec{};
-	int id, i, oper, memberNum = 0;
+	int id = 0, i = 0, oper = 0, memberNum = 0;
 	char* p1 = nullptr, * p2 = nullptr;
-	int t1, t2;
+	int t1 = 0, t2 = 0;
 
 	//
 	//	Get the first parameter
@@ -1076,8 +1076,8 @@ int CSequencer::EvaluateConditional(CBlock* block) const
 
 	case ID_GET:
 	{
-		int type;
-		char* name;
+		int type = 0;
+		char* name = nullptr;
 
 		//get( TYPE, NAME )
 		type = static_cast<int>(*static_cast<float*>(block->GetMemberData(memberNum++)));
@@ -1090,7 +1090,7 @@ int CSequencer::EvaluateConditional(CBlock* block) const
 		{
 		case TK_FLOAT:
 		{
-			float fVal;
+			float fVal = 0.0f;
 
 			if (m_ie->I_GetFloat(m_ownerID, type, name, &fVal) == false)
 				return false;
@@ -1103,7 +1103,7 @@ int CSequencer::EvaluateConditional(CBlock* block) const
 
 		case TK_INT:
 		{
-			float fVal;
+			float fVal = 0.0f;
 
 			if (m_ie->I_GetFloat(m_ownerID, type, name, &fVal) == false)
 				return false;
@@ -1140,7 +1140,7 @@ int CSequencer::EvaluateConditional(CBlock* block) const
 
 	case ID_RANDOM:
 	{
-		float min, max;
+		float min = 0.0f, max = 0.0f;
 		//FIXME: This will not account for nested Q_flrand(0.0f, 1.0f) statements
 
 		min = *static_cast<float*>(block->GetMemberData(memberNum++));
@@ -1157,8 +1157,8 @@ int CSequencer::EvaluateConditional(CBlock* block) const
 
 	case ID_TAG:
 	{
-		char* name;
-		float type;
+		char* name = nullptr;
+		float type = 0.0f;
 
 		name = static_cast<char*>(block->GetMemberData(memberNum++));
 		type = *static_cast<float*>(block->GetMemberData(memberNum++));
@@ -1245,8 +1245,8 @@ int CSequencer::EvaluateConditional(CBlock* block) const
 
 	case ID_GET:
 	{
-		int type;
-		char* name;
+		int type = 0;
+		char* name = nullptr;
 
 		//get( TYPE, NAME )
 		type = static_cast<int>(*static_cast<float*>(block->GetMemberData(memberNum++)));
@@ -1259,7 +1259,7 @@ int CSequencer::EvaluateConditional(CBlock* block) const
 		{
 		case TK_FLOAT:
 		{
-			float fVal;
+			float fVal = 0.0f;
 
 			if (m_ie->I_GetFloat(m_ownerID, type, name, &fVal) == false)
 				return false;
@@ -1272,7 +1272,7 @@ int CSequencer::EvaluateConditional(CBlock* block) const
 
 		case TK_INT:
 		{
-			float fVal;
+			float fVal = 0.0f;
 
 			if (m_ie->I_GetFloat(m_ownerID, type, name, &fVal) == false)
 				return false;
@@ -1310,7 +1310,7 @@ int CSequencer::EvaluateConditional(CBlock* block) const
 	case ID_RANDOM:
 
 	{
-		float min, max;
+		float min = 0.0f, max = 0.0f;
 		//FIXME: This will not account for nested Q_flrand(0.0f, 1.0f) statements
 
 		min = *static_cast<float*>(block->GetMemberData(memberNum++));
@@ -1328,8 +1328,8 @@ int CSequencer::EvaluateConditional(CBlock* block) const
 	case ID_TAG:
 
 	{
-		char* name;
-		float type;
+		char* name = nullptr;
+		float type = 0.0f;
 
 		name = static_cast<char*>(block->GetMemberData(memberNum++));
 		type = *static_cast<float*>(block->GetMemberData(memberNum++));
@@ -1379,7 +1379,7 @@ void CSequencer::CheckIf(CBlock** command)
 
 		if (ret /*TRUE*/)
 		{
-			int successID;
+			int successID = 0;
 			if (block->HasFlag(BF_ELSE))
 			{
 				successID = static_cast<int>(*static_cast<float*>(block->GetMemberData(block->GetNumMembers() - 2)));
@@ -1531,7 +1531,7 @@ void CSequencer::CheckLoop(CBlock** command)
 	if (block->GetBlockID() == ID_LOOP)
 	{
 		int memberNum = 0;
-		int iterations;
+		int iterations = 0;
 		//Get the loop ID
 		const CBlockMember* bm = block->GetMember(memberNum++);
 
@@ -1993,7 +1993,7 @@ Handles a completed task and returns a new task to be completed
 
 int CSequencer::Callback(CTaskManager* task_manager, CBlock* block, const int returnCode)
 {
-	CBlock* command;
+	CBlock* command = nullptr;
 
 	if (returnCode == TASK_RETURN_COMPLETE)
 	{
@@ -2049,7 +2049,7 @@ Recall
 
 int CSequencer::Recall(void)
 {
-	CBlock* block;
+	CBlock* block = nullptr;
 
 	if (!m_taskManager)
 	{

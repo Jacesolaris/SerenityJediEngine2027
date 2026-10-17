@@ -398,9 +398,9 @@ R_VBOList_f
 */
 void R_VBOList_f(void)
 {
-	int             i;
-	VBO_t* vbo;
-	IBO_t* ibo;
+	int             i = 0;
+	VBO_t* vbo = nullptr;
+	IBO_t* ibo = nullptr;
 	size_t         vertexesSize = 0;
 	size_t         indexesSize = 0;
 
@@ -679,7 +679,7 @@ void RB_UpdateVBOs(unsigned int attribBits)
 
 		R_BindVBO(frameVbo);
 
-		void* dstPtr;
+		void* dstPtr = nullptr;
 		if (glRefConfig.immutableBuffers)
 		{
 			dstPtr = (byte*)currentFrame->dynamicVboMemory + currentFrame->dynamicVboWriteOffset;
@@ -728,7 +728,7 @@ void RB_UpdateVBOs(unsigned int attribBits)
 			return;
 		}
 
-		void* dst;
+		void* dst = nullptr;
 		if (glRefConfig.immutableBuffers)
 		{
 			dst = (byte*)currentFrame->dynamicIboMemory + currentFrame->dynamicIboWriteOffset;

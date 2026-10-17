@@ -489,12 +489,12 @@ void SV_Player_EndOfLevelSave()
 		//	Shouldn't happen, but does sometimes...
 		)
 	{
-		int i;
+		int i = 0;
 		Cvar_Set(sCVARNAME_PLAYERSAVE, ""); // default to blank
 
 		playerState_t* p_state = cl->gentity->client;
-		const char* s2;
-		const char* s;
+		const char* s2 = nullptr;
+		const char* s = nullptr;
 #ifdef JK2_MODE
 		s = va("%i %i %i %i %i %i %i %f %f %f %i %i %i %i %i %i",
 			p_state->stats[STAT_HEALTH],
@@ -610,7 +610,7 @@ void SV_Player_EndOfLevelSave()
 //
 static void SV_MapTransition_f()
 {
-	const char* spawntarget;
+	const char* spawntarget = nullptr;
 
 #ifdef JK2_MODE
 	SCR_PrecacheScreenshot();
@@ -687,7 +687,7 @@ SV_LoadTransition_f
 */
 void SV_LoadTransition_f()
 {
-	const char* spawntarget;
+	const char* spawntarget = nullptr;
 
 	const char* map = Cmd_Argv(1);
 	if (!*map)

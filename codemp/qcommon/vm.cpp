@@ -115,7 +115,7 @@ vm_t* VM_Restart(vm_t* vm)
 
 vm_t* VM_CreateLegacy(const vmSlots_t vmSlot, intptr_t(*systemCalls)(intptr_t*))
 {
-	vm_t* vm;
+	vm_t* vm = nullptr;
 
 	if (!systemCalls)
 	{

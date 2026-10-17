@@ -467,8 +467,8 @@ static void ParseAnimationEvtBlock(const int gla_index, const unsigned short mod
 	int& last_anim_event,
 	const char** text_p, const bool b_is_frame_skipped)
 {
-	const char* token;
-	int num, n, lowest_val, highest_val;
+	const char* token = nullptr;
+	int num = 0, n = 0, lowest_val = 0, highest_val = 0;
 
 	// get past starting bracket
 	while (qtrue)
@@ -576,7 +576,7 @@ static void ParseAnimationEvtBlock(const int gla_index, const unsigned short mod
 		anim_events[curAnimEvent].keyFrame = key_frame;
 		anim_events[curAnimEvent].glaIndex = gla_index;
 		anim_events[curAnimEvent].modelOnly = modelIndex;
-		int temp_val;
+		int temp_val = 0;
 
 		// now read out the proper data based on the type
 		switch (anim_events[curAnimEvent].eventType)
@@ -849,7 +849,7 @@ static void G_ParseAnimationEvtFile(const int gla_index, const char* events_dire
 	// Sized to the file instead of a fixed 80000 byte buffer.
 	std::vector<char> text;
 
-	fileHandle_t f;
+	fileHandle_t f = 0;
 	char events_path[MAX_QPATH];
 	int modelIndex = 0;
 
@@ -1079,7 +1079,7 @@ static qboolean G_ParseAnimationFile(const int gla_index, const char* skeletonNa
 ////////////////////////////////////////////////////////////////////////
 int G_ParseAnimFileSet(const char* skeletonName, const char* modelName = nullptr)
 {
-	int fileIndex;
+	int fileIndex = 0;
 
 	// Try To Find An Existing Skeleton File For This Animation Set
 	//--------------------------------------------------------------
@@ -1113,7 +1113,7 @@ int G_ParseAnimFileSet(const char* skeletonName, const char* modelName = nullptr
 		animevent_t* legs_anim_events = level.knownAnimFileSets[fileIndex].legsAnimEvents;
 		animevent_t* torso_anim_events = level.knownAnimFileSets[fileIndex].torsoAnimEvents;
 
-		int i;
+		int i = 0;
 
 		// Initialize The Frames Information
 		//-----------------------------------
@@ -1240,8 +1240,8 @@ extern cvar_t* g_char_model;
 void G_LoadAnimFileSet(gentity_t* ent, const char* pModelName)
 {
 	//load its animation config
-	char* modelName;
-	const char* stripped_name;
+	char* modelName = nullptr;
+	const char* stripped_name = nullptr;
 	// Must live for the whole function: stripped_name points into it and is used after the if/else below.
 	char anim_name[MAX_QPATH];
 
@@ -1291,9 +1291,9 @@ void G_LoadAnimFileSet(gentity_t* ent, const char* pModelName)
 
 void NPC_PrecacheAnimationCFG(const char* npc_type)
 {
-	const char* token;
-	const char* value;
-	const char* p;
+	const char* token = nullptr;
+	const char* value = nullptr;
+	const char* p = nullptr;
 
 	if (!Q_stricmp("random", npc_type))
 	{
@@ -1645,10 +1645,10 @@ void CG_NPC_Precache(gentity_t* spawner)
 	clientInfo_t ci = {};
 	renderInfo_t ri = {};
 	team_t player_team = TEAM_FREE;
-	const char* token;
-	const char* value;
-	const char* p;
-	char* patch;
+	const char* token = nullptr;
+	const char* value = nullptr;
+	const char* p = nullptr;
+	char* patch = nullptr;
 	qboolean md3_model = qfalse;
 	char player_model[MAX_QPATH] = { 0 };
 	char customSkin[MAX_QPATH];
@@ -2034,15 +2034,15 @@ extern void g_set_g2_player_model(gentity_t* ent, const char* modelName, const c
 
 qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 {
-	const char* value;
-	const char* p;
-	int n;
-	float f;
+	const char* value = nullptr;
+	const char* p = nullptr;
+	int n = 0;
+	float f = 0.0f;
 	char player_model[MAX_QPATH];
 	char customSkin[MAX_QPATH];
 	clientInfo_t* ci = &npc->client->clientInfo;
 	renderInfo_t* ri = &npc->client->renderInfo;
-	gNPCstats_t* stats;
+	gNPCstats_t* stats = nullptr;
 	qboolean md3_model = qtrue;
 	char surf_off[1024] = { 0 };
 	char surf_on[1024] = { 0 };
@@ -2153,8 +2153,8 @@ qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 	}
 	else
 	{
-		char* patch;
-		const char* token;
+		char* patch = nullptr;
+		const char* token = nullptr;
 		p = NPCParms;
 		COM_BeginParseSession();
 #ifdef _WIN32

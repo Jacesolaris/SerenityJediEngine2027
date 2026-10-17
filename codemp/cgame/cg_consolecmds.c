@@ -491,7 +491,7 @@ so it can perform tab completion
 */
 void CG_InitConsoleCommands(void)
 {
-	size_t i;
+	size_t i = 0;
 
 	for (i = 0; i < num_commands; i++)
 		trap->AddCommand(commands[i].cmd);

@@ -171,7 +171,7 @@ CMod_LoadSubmodels
 static void CMod_LoadSubmodels(const lump_t* l, clipMap_t& cm)
 {
 	cmodel_t* out = nullptr;
-	int j;
+	int j = 0;
 
 	auto in = reinterpret_cast<dmodel_t*>(cmod_base + l->fileofs);
 	if (l->filelen % sizeof * in)
@@ -473,7 +473,7 @@ CMod_LoadEntityString
 */
 static void CMod_LoadEntityString(const lump_t* l, clipMap_t& cm, const char* name)
 {
-	fileHandle_t h;
+	fileHandle_t h = 0;
 	char ent_name[MAX_QPATH];
 
 	// Attempt to load entities from an external .ent file if available
@@ -536,8 +536,8 @@ CMod_LoadPatches
 
 static void CMod_LoadPatches(const lump_t* surfs, const lump_t* verts, clipMap_t& cm)
 {
-	int count;
-	cPatch_t* patch;
+	int count = 0;
+	cPatch_t* patch = nullptr;
 	vec3_t points[MAX_PATCH_VERTS]{};
 
 	auto in = reinterpret_cast<dsurface_t*>(cmod_base + surfs->fileofs);
@@ -634,11 +634,11 @@ qboolean CM_DeleteCachedMap(const qboolean b_guaranteed_ok_to_delete)
 static void CM_LoadMap_Actual(const char* name, const qboolean clientload, int* checksum, clipMap_t& cm)
 {
 	//rwwRMG - function needs heavy modification
-	int* buf;
+	int* buf = nullptr;
 	dheader_t header;
 	static unsigned last_checksum;
 	char orig_name[MAX_OSPATH];
-	fileHandle_t h;
+	fileHandle_t h = 0;
 	const int i_bsp_len = FS_FOpenFileRead(name, &h, qfalse);
 	void* new_buff = Z_Malloc(i_bsp_len, TAG_BSP_DISKIMAGE);
 
@@ -1033,7 +1033,7 @@ void CM_ModelBounds(const clipHandle_t model, vec3_t mins, vec3_t maxs)
 
 int CM_LoadSubBSP(const char* name, const qboolean clientload)
 {
-	int checksum;
+	int checksum = 0;
 
 	int count = cmg.numSubModels;
 	for (int i = 0; i < NumSubBSP; i++)
@@ -1079,7 +1079,7 @@ int CM_FindSubBSP(const int modelIndex)
 static int CM_ModelContents_Actual(const clipHandle_t model, clipMap_t* cm)
 {
 	int contents = 0;
-	int i;
+	int i = 0;
 
 	if (!cm)
 	{

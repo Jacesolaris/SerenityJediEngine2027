@@ -376,7 +376,7 @@ static void g_reflect_missile_to_attacker(const gentity_t* ent, gentity_t* missi
 	//
 	if (!PM_SaberInIdle(ent->client->ps.saberMove))
 	{
-		float min_slop, max_slop;
+		float min_slop = 0.0f, max_slop = 0.0f;
 
 		if (PM_SaberInAttack(ent->client->ps.saberMove) ||
 			PM_SaberInTransitionAny(ent->client->ps.saberMove) ||
@@ -1162,7 +1162,7 @@ qboolean G_MissileImpact(gentity_t* ent, trace_t* trace)
 	vec3_t   fwd;
 	qboolean hit_client = qfalse;
 	qboolean is_knocked_saber = qfalse;
-	int      missile_dmg;
+	int      missile_dmg = 0;
 
 	gentity_t* other = &g_entities[trace->entityNum];
 
@@ -2027,7 +2027,7 @@ void g_run_missile(gentity_t* ent)
 
 	vec3_t origin, ground_spot;
 	trace_t tr;
-	int passent;
+	int passent = 0;
 	qboolean is_knocked_saber = qfalse;
 
 	if (ent->neverFree && ent->s.weapon == WP_SABER && ent->flags & FL_BOUNCE_HALF)
@@ -2427,7 +2427,7 @@ void WP_HandleBoltBlock(gentity_t* bolt, gentity_t* blocker, trace_t* trace, vec
 	}
 	else
 	{
-		float block_points_used;
+		float block_points_used = 0.0f;
 
 		//
 		// Very close range: send to enemy

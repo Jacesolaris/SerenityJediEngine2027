@@ -185,10 +185,10 @@ The server says this item is used on this level
 */
 void CG_RegisterWeapon(const int weapon_num)
 {
-	gitem_t* item, * ammo;
+	gitem_t* item = nullptr, * ammo = nullptr;
 	char path[MAX_QPATH];
 	vec3_t mins, maxs;
-	int i;
+	int i = 0;
 
 	weaponInfo_t* weaponInfo = &cg_weapons[weapon_num];
 
@@ -1334,7 +1334,7 @@ CG_CalculateWeaponPosition
 */
 static void CG_CalculateWeaponPosition(vec3_t origin, vec3_t angles)
 {
-	float scale;
+	float scale = 0.0f;
 
 	VectorCopy(cg.refdef.vieworg, origin);
 	VectorCopy(cg.refdefViewAngles, angles);
@@ -1517,10 +1517,10 @@ void CG_AddViewWeapon(playerState_t* ps)
 	refEntity_t hand;
 	refEntity_t flash;
 	vec3_t angles;
-	const weaponInfo_t* weapon;
-	weaponData_t* w_data;
-	centity_t* cent;
-	float fov_offset, lean_offset;
+	const weaponInfo_t* weapon = nullptr;
+	weaponData_t* w_data = nullptr;
+	centity_t* cent = nullptr;
+	float fov_offset = 0.0f, lean_offset = 0.0f;
 	const qboolean doing_dash_action = cg.predictedPlayerState.communicatingflags & 1 << CF_DASHING ? qtrue : qfalse;
 
 	if (cg.renderingThirdPerson && !cg_trueguns.integer && !cg.zoomMode && (ps->eFlags & EF2_DUAL_WEAPONS || ps->weapon == WP_DROIDEKA))
@@ -1774,7 +1774,7 @@ void CG_AddViewWeapon(playerState_t* ps)
 	}
 
 	// drop gun lower at higher fov
-	float actualFOV;
+	float actualFOV = 0.0f;
 
 	if (!doing_dash_action && cg.snap->ps.forcePowersActive & 1 << FP_SPEED && player->client->ps.forcePowerDuration[
 		FP_SPEED]) //cg.renderingThirdPerson &&
@@ -1872,9 +1872,9 @@ void CG_AddViewWeapon(playerState_t* ps)
 		const clientInfo_t* ci = &cent->gent->client->clientInfo;
 
 		int torso_anim = cent->gent->client->ps.torsoAnim; //pe.torso.animationNumber;
-		float currentFrame;
-		int startFrame, endFrame, flags;
-		float animSpeed;
+		float currentFrame = 0.0f;
+		int startFrame = 0, endFrame = 0, flags = 0;
+		float animSpeed = 0.0f;
 		if (cent->gent->lowerLumbarBone >= 0 && gi.G2API_GetBoneAnimIndex(
 			&cent->gent->ghoul2[cent->gent->playerModel], cent->gent->lowerLumbarBone, cg.time, &currentFrame,
 			&startFrame, &endFrame, &flags, &animSpeed, nullptr))
@@ -2127,10 +2127,10 @@ void CG_AddViewWeaponDuals(playerState_t* ps)
 	refEntity_t hand;
 	refEntity_t flash;
 	vec3_t angles;
-	const weaponInfo_t* weapon;
-	weaponData_t* wData;
-	centity_t* cent;
-	float fovOffset, leanOffset;
+	const weaponInfo_t* weapon = nullptr;
+	weaponData_t* wData = nullptr;
+	centity_t* cent = nullptr;
+	float fovOffset = 0.0f, leanOffset = 0.0f;
 	const qboolean doing_dash_action = cg.predictedPlayerState.communicatingflags & 1 << CF_DASHING ? qtrue : qfalse;
 
 	// no gun if in third person view
@@ -2314,7 +2314,7 @@ void CG_AddViewWeaponDuals(playerState_t* ps)
 	}
 
 	// drop gun lower at higher fov
-	float actualFOV;
+	float actualFOV = 0.0f;
 
 	if (!doing_dash_action && cg.snap->ps.forcePowersActive & 1 << FP_SPEED && player->client->ps.forcePowerDuration[
 		FP_SPEED]) //cg.renderingThirdPerson &&
@@ -2412,9 +2412,9 @@ void CG_AddViewWeaponDuals(playerState_t* ps)
 		const clientInfo_t* ci = &cent->gent->client->clientInfo;
 
 		int torsoAnim = cent->gent->client->ps.torsoAnim; //pe.torso.animationNumber;
-		float currentFrame;
-		int startFrame, endFrame, flags;
-		float animSpeed;
+		float currentFrame = 0.0f;
+		int startFrame = 0, endFrame = 0, flags = 0;
+		float animSpeed = 0.0f;
 		if (cent->gent->lowerLumbarBone >= 0 && gi.G2API_GetBoneAnimIndex(
 			&cent->gent->ghoul2[cent->gent->playerModel], cent->gent->lowerLumbarBone, cg.time, &currentFrame,
 			&startFrame, &endFrame, &flags, &animSpeed, nullptr))
@@ -2744,9 +2744,9 @@ Allows user to cycle through the various weapons currently owned and view the de
 */
 void CG_DrawDataPadWeaponSelect()
 {
-	int i;
-	int sideLeftIconCnt, sideRightIconCnt;
-	int iconCnt;
+	int i = 0;
+	int sideLeftIconCnt = 0, sideRightIconCnt = 0;
+	int iconCnt = 0;
 	vec4_t calc_color;
 	char text[1024] = { 0 };
 	constexpr vec4_t textColor = { .875f, .718f, .121f, 1.0f };
@@ -2867,12 +2867,12 @@ void CG_DrawDataPadWeaponSelect()
 
 		if (!CG_WeaponCheck(cg.DataPadWeaponSelect))
 		{
-			CG_DrawPic(x - bigIconSize / 2, y - (bigIconSize - smallIconSize) / 2 + 10, bigIconSize, bigIconSize,
+			CG_DrawPic(x - bigIconSize / 2.0f, y - (bigIconSize - smallIconSize) / 2.0f + 10, bigIconSize, bigIconSize,
 				weaponInfo->weaponIconNoAmmo);
 		}
 		else
 		{
-			CG_DrawPic(x - bigIconSize / 2, y - (bigIconSize - smallIconSize) / 2 + 10, bigIconSize, bigIconSize,
+			CG_DrawPic(x - bigIconSize / 2.0f, y - (bigIconSize - smallIconSize) / 2.0f + 10, bigIconSize, bigIconSize,
 				weaponInfo->weaponIcon);
 		}
 	}
@@ -2950,7 +2950,7 @@ Draw the proper background graphic for the icons being displayed on the datapad
 */
 void CG_DrawDataPadIconBackground(const int backgroundType)
 {
-	qhandle_t background;
+	qhandle_t background = 0;
 
 	constexpr int x2 = 0;
 	constexpr int y2 = 295;
@@ -3094,11 +3094,11 @@ static int CG_PrevWeaponInCycle(int weapon)
 
 void CG_DrawWeaponSelect()
 {
-	int i;
-	int smallIconSize, bigIconSize;
-	int x2, y2, w2, h2;
-	int sideLeftIconCnt, sideRightIconCnt;
-	int sideMax, iconCnt;
+	int i = 0;
+	int smallIconSize = 0, bigIconSize = 0;
+	int x2 = 0, y2 = 0, w2 = 0, h2 = 0;
+	int sideLeftIconCnt = 0, sideRightIconCnt = 0;
+	int sideMax = 0, iconCnt = 0;
 	vec4_t calc_color;
 	constexpr vec4_t textColor = { .875f, .718f, .121f, 1.0f };
 	constexpr int yOffset = 0;
@@ -4140,7 +4140,7 @@ void CG_Weapon_f()
 	}
 	else if (num >= WP_THERMAL && num <= WP_DET_PACK) // these weapons cycle
 	{
-		int weap, i = 0;
+		int weap = 0, i = 0;
 
 		if (cg.snap->ps.weapon >= WP_THERMAL && cg.snap->ps.weapon <= WP_DET_PACK)
 		{
@@ -4225,7 +4225,7 @@ The current weapon has just run out of ammo
 */
 void CG_OutOfAmmoChange()
 {
-	int i;
+	int i = 0;
 
 	if (cg.weaponSelectTime + 200 > cg.time)
 		return;
@@ -4460,7 +4460,7 @@ Caused by an EV_MISSILE_MISS event, or directly by local bullet tracing
 */
 void cg_missile_hit_wall(const centity_t* cent, const int weapon, vec3_t origin, vec3_t dir, const qboolean alt_fire)
 {
-	int parm;
+	int parm = 0;
 
 	switch (weapon)
 	{

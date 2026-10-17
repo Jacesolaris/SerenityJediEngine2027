@@ -710,7 +710,7 @@ static void Rancor_Bite()
 				if (!Q_irand(0, 1))
 				{
 					//bite something off
-					int hit_loc;
+					int hit_loc = 0;
 					if (g_dismemberment->integer < 3)
 					{
 						hit_loc = Q_irand(HL_BACK_RT, HL_HAND_LT);
@@ -969,7 +969,7 @@ void Rancor_Attack(const float distance, const qboolean do_charge, const qboolea
 
 	if (TIMER_Done2(NPC, "attack_dmg", qtrue))
 	{
-		float player_dist;
+		float player_dist = 0.0f;
 
 		switch (NPC->client->ps.legsAnim)
 		{

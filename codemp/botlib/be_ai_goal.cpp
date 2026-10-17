@@ -442,8 +442,8 @@ void RemoveLevelItemFromList(levelitem_t* li)
 //===========================================================================
 void BotFreeInfoEntities(void)
 {
-	maplocation_t* nextml;
-	campspot_t* nextcs;
+	maplocation_t* nextml = nullptr;
+	campspot_t* nextcs = nullptr;
 
 	for (maplocation_t* ml = maplocations; ml; ml = nextml)
 	{
@@ -524,7 +524,7 @@ void BotInitInfoEntities(void)
 //===========================================================================
 void BotInitLevelItems(void)
 {
-	int i, spawnflags, value;
+	int i = 0, spawnflags = 0, value = 0;
 	vec3_t end;
 
 	//initialize the map locations and camp spots
@@ -718,7 +718,7 @@ void BotDumpAvoidGoals(const int goalstate)
 //===========================================================================
 void BotAddToAvoidGoals(bot_goalstate_t* gs, const int number, const float avoidtime)
 {
-	int i;
+	int i = 0;
 
 	for (i = 0; i < MAX_AVOIDGOALS; i++)
 	{
@@ -967,8 +967,8 @@ constexpr auto ET_ITEM = 2;
 
 void BotUpdateEntityItems(void)
 {
-	int i;
-	levelitem_t* li, * nextli;
+	int i = 0;
+	levelitem_t* li = nullptr, * nextli = nullptr;
 	aas_entityinfo_t entinfo;
 
 	//timeout current entity items if necessary
@@ -1226,9 +1226,9 @@ int BotGetSecondGoal(const int goalstate, bot_goal_t* goal)
 //===========================================================================
 int BotChooseLTGItem(const int goalstate, vec3_t origin, int* inventory, const int travelflags)
 {
-	int t;
-	float weight, avoidtime;
-	iteminfo_t* iteminfo;
+	int t = 0;
+	float weight = 0.0f, avoidtime = 0.0f;
+	iteminfo_t* iteminfo = nullptr;
 	bot_goal_t goal;
 
 	bot_goalstate_t* gs = BotGoalStateFromHandle(goalstate);
@@ -1391,9 +1391,9 @@ int BotChooseLTGItem(const int goalstate, vec3_t origin, int* inventory, const i
 int BotChooseNBGItem(const int goalstate, vec3_t origin, int* inventory, const int travelflags,
 	bot_goal_t* ltg, const float maxtime)
 {
-	int t, ltg_time;
-	float weight, avoidtime;
-	iteminfo_t* iteminfo;
+	int t = 0, ltg_time = 0;
+	float weight = 0.0f, avoidtime = 0.0f;
+	iteminfo_t* iteminfo = nullptr;
 	bot_goal_t goal;
 
 	bot_goalstate_t* gs = BotGoalStateFromHandle(goalstate);

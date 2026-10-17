@@ -499,14 +499,14 @@ void CG_InitGlass(void)
 
 void CG_DoGlass(vec3_t verts[], vec3_t dmg_pt, vec3_t dmg_dir, const float dmg_radius, const int max_shards)
 {
-	int i, t;
-	int mx_height;
-	float height, width;
-	float step_height;
-	float time_decay;
-	float x, z;
-	float xx, zz;
-	int time;
+	int i = 0, t = 0;
+	int mx_height = 0;
+	float height = 0.0f, width = 0.0f;
+	float step_height = 0.0f;
+	float time_decay = 0.0f;
+	float x = 0.0f, z = 0.0f;
+	float xx = 0.0f, zz = 0.0f;
+	int time = 0;
 	int glass_shards = 0;
 	qboolean stick;
 

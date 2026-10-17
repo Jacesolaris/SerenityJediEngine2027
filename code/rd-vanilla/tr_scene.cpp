@@ -95,8 +95,8 @@ Adds all the scene's polys into this view's drawsurf list
 =====================
 */
 void R_AddPolygonSurfaces(void) {
-	int			i;
-	srfPoly_t* poly;
+	int			i = 0;
+	srfPoly_t* poly = nullptr;
 
 	tr.currententity_num = REFENTITYNUM_WORLD;
 	tr.shiftedEntityNum = tr.currententity_num << QSORT_REFENTITYNUM_SHIFT;
@@ -115,10 +115,10 @@ RE_AddPolyToScene
 */
 void RE_AddPolyToScene(const qhandle_t hShader, const int numVerts, const polyVert_t* verts, const int numPolys)
 {
-	srfPoly_t* poly;
-	int			i, j;
+	srfPoly_t* poly = nullptr;
+	int			i = 0, j = 0;
 	int			fogIndex = 0;
-	fog_t* fog;
+	fog_t* fog = nullptr;
 	vec3_t		bounds[2]{};
 
 	if (!tr.registered) {

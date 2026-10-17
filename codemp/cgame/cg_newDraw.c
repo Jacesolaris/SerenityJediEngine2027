@@ -37,7 +37,7 @@ static int CG_GetSelectedPlayer()
 
 qhandle_t CG_StatusHandle(const int task)
 {
-	qhandle_t h;
+	qhandle_t h = 0;
 	switch (task)
 	{
 	case TEAMTASK_OFFENSE:
@@ -70,7 +70,7 @@ qhandle_t CG_StatusHandle(const int task)
 
 float CG_GetValue(const int owner_draw)
 {
-	clientInfo_t* ci;
+	clientInfo_t* ci = NULL;
 
 	const centity_t* cent = &cg_entities[cg.snap->ps.clientNum];
 	const playerState_t* ps = &cg.snap->ps;
@@ -327,7 +327,7 @@ static void CG_Text_Paint_Limit(float* max_x, const float x, const float y, cons
 			&& ps_out < &s_temp[sizeof s_temp - 1] // sanity
 			)
 		{
-			int i_advance_count;
+			int i_advance_count = 0;
 			ps_out_last_good = ps_out;
 
 			const unsigned int ui_letter = trap->R_AnyLanguage_ReadCharFromString(
@@ -363,11 +363,11 @@ static void CG_Text_Paint_Limit(float* max_x, const float x, const float y, cons
 extern const char* CG_GetLocationString(const char* loc); //cg_main.c
 static void CG_DrawNewTeamInfo(const rectDef_t* rect, const float text_y, const float scale, vec4_t color)
 {
-	int i, len;
-	const char* p;
-	float maxx, left_over;
-	clientInfo_t* ci;
-	qhandle_t h;
+	int i = 0, len = 0;
+	const char* p = NULL;
+	float maxx = 0.0f, left_over = 0.0f;
+	clientInfo_t* ci = NULL;
+	qhandle_t h = 0;
 
 	// max player name width
 	float pwidth = 0;
@@ -480,7 +480,7 @@ static void CG_DrawTeamSpectators(const rectDef_t* rect, const float scale, vec4
 {
 	if (cg.spectatorLen)
 	{
-		float max_x;
+		float max_x = 0.0f;
 
 		if (cg.spectatorWidth == -1)
 		{

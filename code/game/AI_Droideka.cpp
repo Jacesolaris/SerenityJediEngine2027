@@ -98,7 +98,7 @@ void droideka_dying(gentity_t* self)
 		self->client->ps.powerups[PW_SHOCKED] = level.time + 1000;
 		if (TIMER_Done(self, "dyingExplosion"))
 		{
-			int new_bolt;
+			int new_bolt = 0;
 			switch (Q_irand(1, 14))
 			{
 				// Find place to generate explosion
@@ -253,7 +253,7 @@ void npc_droideka_pain(gentity_t* self, gentity_t* inflictor, gentity_t* attacke
 		{
 			if (self->delay < level.time)
 			{
-				int speech;
+				int speech = 0;
 				switch (self->count)
 				{
 				default:

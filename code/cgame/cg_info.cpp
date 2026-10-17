@@ -77,9 +77,9 @@ Print a single mission objective
 */
 static void ObjectivePrint_Line(const int color, const int object_index, int& mission_ycnt)
 {
-	int y;
+	int y = 0;
 	char finalText[2048];
-	qhandle_t graphic;
+	qhandle_t graphic = 0;
 
 	const int iYPixelsPerLine = cgi_R_Font_HeightPixels(cgs.media.qhFontMedium, 1.0f);
 
@@ -252,14 +252,14 @@ static void ObjectivePrint_Line(const int color, const int object_index, int& mi
 	{
 		y = missionYpos + iYPixelsPerLine * mission_ycnt;
 		graphic = cgi_R_RegisterShaderNoMip("textures/system/securitycode");
-		CG_DrawPic(320 - 128 / 2, y + 8, 128, 32, graphic);
+		CG_DrawPic(320 - 128 / 2.0f, y + 8, 128, 32, graphic);
 		obj_graphics[0] = qtrue;
 	}
 	else if (object_index == KEJIM_POST_OBJ3)
 	{
 		y = missionYpos + iYPixelsPerLine * mission_ycnt;
 		graphic = cgi_R_RegisterShaderNoMip("textures/system/securitycode_red");
-		CG_DrawPic(320 - 32 / 2, y + 8, 32, 32, graphic);
+		CG_DrawPic(320 - 32 / 2.0f, y + 8, 32, 32, graphic);
 		obj_graphics[1] = qtrue;
 	}
 	else if (object_index == KEJIM_POST_OBJ4)
@@ -270,7 +270,7 @@ static void ObjectivePrint_Line(const int color, const int object_index, int& mi
 			y += 32 + 4;
 		}
 		graphic = cgi_R_RegisterShaderNoMip("textures/system/securitycode_green");
-		CG_DrawPic(320 - 32 / 2, y + 8, 32, 32, graphic);
+		CG_DrawPic(320 - 32 / 2.0f, y + 8, 32, 32, graphic);
 		obj_graphics[2] = qtrue;
 	}
 	else if (object_index == KEJIM_POST_OBJ5)
@@ -285,7 +285,7 @@ static void ObjectivePrint_Line(const int color, const int object_index, int& mi
 			y += 32 + 4;
 		}
 		graphic = cgi_R_RegisterShaderNoMip("textures/system/securitycode_blue");
-		CG_DrawPic(320 - 32 / 2, y + 8, 32, 32, graphic);
+		CG_DrawPic(320 - 32 / 2.0f, y + 8, 32, 32, graphic);
 		obj_graphics[3] = qtrue;
 	}
 }
@@ -299,7 +299,7 @@ Draw routine for the objective info screen of the data pad.
 */
 void CG_DrawDataPadObjectives(const centity_t* cent)
 {
-	int i;
+	int i = 0;
 	const int i_y_pixels_per_line = cgi_R_Font_HeightPixels(cgs.media.qhFontMedium, 1.0f);
 
 	constexpr short title_x_pos = objectiveStartingXpos - 22; // X starting position for title text
@@ -394,7 +394,7 @@ static void LoadTips(void)
 		(SCREENTIP_NEXT_UPDATE_TIME == 0 || SCREENTIP_NEXT_UPDATE_TIME < time))
 	{
 		static int lastIndex = -1;
-		int index;
+		int index = 0;
 
 		// Prevent repeating the same tip twice
 		do {
@@ -527,10 +527,10 @@ static int CG_DrawLoadWeaponsPrintRow(const char* item_name, const int weapons_b
 	const int start_index)
 {
 	int end_index = 0, printed_icon_cnt = 0;
-	int x, y;
-	int width, height;
+	int x = 0, y = 0;
+	int width = 0, height = 0;
 	vec4_t color;
-	qhandle_t background;
+	qhandle_t background = 0;
 
 	if (!cgi_UI_GetMenuItemInfo(
 		"loadScreen",
@@ -624,10 +624,10 @@ static int CG_DrawLoadForcePrintRow(const char* item_name, const int force_bits,
 	const int start_index)
 {
 	int end_index = 0, printedIconCnt = 0;
-	int x, y;
-	int width, height;
+	int x = 0, y = 0;
+	int width = 0, height = 0;
 	vec4_t color;
-	qhandle_t background;
+	qhandle_t background = 0;
 
 	if (!cgi_UI_GetMenuItemInfo(
 		"loadScreen",
@@ -735,8 +735,8 @@ static void CG_DrawLoadForcePowers(const int force_bits)
 static void CG_GetLoadScreenInfo(int* weapon_bits, int* force_bits)
 {
 	char  s[MAX_STRING_CHARS];
-	int   i_dummy;
-	float f_dummy;
+	int   i_dummy = 0;
+	float f_dummy = 0.0f;
 
 	// Read the saved player state string
 	gi.Cvar_VariableStringBuffer(sCVARNAME_PLAYERSAVE, s, sizeof s);
@@ -789,9 +789,9 @@ Load screen displays the map pic, the mission briefing and weapons/force powers
 */
 static void CG_DrawLoadingScreen(const qhandle_t levelshot, const char* map_name)
 {
-	int xPos, yPos, width, height;
+	int xPos = 0, yPos = 0, width = 0, height = 0;
 	vec4_t color;
-	qhandle_t background;
+	qhandle_t background = 0;
 	int weapons = 0, forcepowers = 0;
 
 	if (cg.loadLCARSStage >= 4)

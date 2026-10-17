@@ -593,7 +593,7 @@ static QINLINE int g_saber_attack_power(gentity_t* ent, const qboolean attacking
 			ent->client->olderIsValid)
 		{
 			vec3_t v_sub;
-			int tolerance_amt;
+			int tolerance_amt = 0;
 
 			//We want different "tolerance" levels for adding in the distance of the last swing
 			//to the base power level depending on which stance we are using. Otherwise fast
@@ -1396,7 +1396,7 @@ static QINLINE void G_G2PlayerAngles(gentity_t* ent, matrix3_t legs, vec3_t legs
 			//is index+1 because index 0 is valid.
 			const int held_by_index = ent->client->ps.heldByClient - 1;
 			gentity_t* other = &g_entities[held_by_index];
-			int l_hand_bolt;
+			int l_hand_bolt = 0;
 
 			if (other && other->inuse && other->client && other->ghoul2)
 			{
@@ -1684,7 +1684,7 @@ extern qboolean BG_CheckIncrementLockAnim(int anim, int win_or_lose); //bg_saber
 
 static QINLINE qboolean WP_SabersCheckLock2(gentity_t* attacker, gentity_t* defender, sabersLockMode_t lockMode)
 {
-	int attAnim, defAnim = 0;
+	int attAnim = 0, defAnim = 0;
 	float attStart = 0.5f, defStart = 0.5f;
 	float ideal_dist = 48.0f;
 	vec3_t att_angles = { 0, 0, 0 };
@@ -2026,7 +2026,7 @@ extern saberMoveData_t saberMoveData[LS_MOVE_MAX];
 
 qboolean WP_SabersCheckLock(gentity_t* ent1, gentity_t* ent2)
 {
-	int lock_quad;
+	int lock_quad = 0;
 
 	if (g_debugSaberLocks.integer)
 	{
@@ -2600,7 +2600,7 @@ static qboolean g_saber_face_collision_check(
 	vec3_t atk_maxs,
 	vec3_t impact_point)
 {
-	float side, side2, dist;
+	float side = 0.0f, side2 = 0.0f, dist = 0.0f;
 	vec3_t dir;
 
 	// If mins/maxs are zero, give the saber a default thickness
@@ -5338,13 +5338,13 @@ qboolean G_DoDodge(gentity_t* self, gentity_t* shooter, vec3_t dmg_origin, int h
 		else
 		{
 			//can't just do a simple dodge
-			int rolled;
+			int rolled = 0;
 			vec3_t tangles;
 			vec3_t forward;
 			vec3_t right;
 			vec3_t impactpoint;
-			int x;
-			int fall_check_max;
+			int x = 0;
+			int fall_check_max = 0;
 
 			VectorSubtract(dmg_origin, self->client->ps.origin, impactpoint);
 			VectorNormalize(impactpoint);
@@ -5903,13 +5903,13 @@ static qboolean G_DoSaberDodge(gentity_t* dodger, gentity_t* attacker, vec3_t dm
 		else
 		{
 			//can't just do a simple dodge
-			int rolled;
+			int rolled = 0;
 			vec3_t tangles;
 			vec3_t forward;
 			vec3_t right;
 			vec3_t impactpoint;
-			int x;
-			int fall_check_max;
+			int x = 0;
+			int fall_check_max = 0;
 
 			VectorSubtract(dmg_origin, dodger->client->ps.origin, impactpoint);
 			VectorNormalize(impactpoint);
@@ -6119,7 +6119,7 @@ void WP_SaberClearDamageForEntNum(gentity_t* attacker, const int entityNum, cons
 				if (victim && victim->client)
 				{
 					vec3_t center, dir_to_center;
-					float knock_down_thresh_hold;
+					float knock_down_thresh_hold = 0.0f;
 					const float knockback = knock_back_scale * totalDmg[i] * 0.5f;
 
 					VectorAdd(victim->r.absmin, victim->r.absmax, center);
@@ -7517,13 +7517,13 @@ void wp_saber_start_missile_block_check(gentity_t* self, usercmd_t* ucmd)
 	qboolean closest_swing_block = qfalse; //default setting makes the compiler happy.
 	int swing_block_quad = Q_T;
 	int closest_swing_quad = Q_T;
-	float dist;
-	gentity_t* ent, * incoming = NULL;
+	float dist = 0.0f;
+	gentity_t* ent = NULL, * incoming = NULL;
 	static int entity_list[MAX_GENTITIES];
-	int num_listed_entities;
-	int i, e;
+	int num_listed_entities = 0;
+	int i = 0, e = 0;
 	vec3_t mins = { 0 }, maxs = { 0 };
-	float closest_dist, radius = 256;
+	float closest_dist = 0.0f, radius = 256;
 	vec3_t forward, fwdangles = { 0 };
 	trace_t trace;
 	vec3_t trace_to, ent_dir;
@@ -7664,7 +7664,7 @@ void wp_saber_start_missile_block_check(gentity_t* self, usercmd_t* ucmd)
 
 	for (e = 0; e < num_listed_entities; e++)
 	{
-		float dot1;
+		float dot1 = 0.0f;
 		vec3_t dir;
 		ent = &g_entities[entity_list[e]];
 		swing_block = qfalse;
@@ -7684,7 +7684,7 @@ void wp_saber_start_missile_block_check(gentity_t* self, usercmd_t* ucmd)
 		{
 			//seems like a valid enemy to look at.
 			vec3_t vec_sub;
-			float vec_len;
+			float vec_len = 0.0f;
 
 			VectorSubtract(self->client->ps.origin, ent->client->ps.origin, vec_sub);
 			vec_len = VectorLength(vec_sub);
@@ -7716,7 +7716,7 @@ void wp_saber_start_missile_block_check(gentity_t* self, usercmd_t* ucmd)
 		if (ent->s.eType != ET_MISSILE && !(ent->s.eFlags & EF_MISSILE_STICK))
 		{
 			//not a normal projectile
-			gentity_t* p_owner;
+			gentity_t* p_owner = NULL;
 
 			if (ent->r.ownerNum < 0 || ent->r.ownerNum >= ENTITYNUM_WORLD)
 			{
@@ -7919,7 +7919,7 @@ void wp_saber_start_missile_block_check(gentity_t* self, usercmd_t* ucmd)
 		//see if they're heading towards me
 		if (!swing_block)
 		{
-			float dot2;
+			float dot2 = 0.0f;
 			vec3_t missile_dir;
 			VectorCopy(ent->s.pos.trDelta, missile_dir);
 			VectorNormalize(missile_dir);
@@ -8094,8 +8094,8 @@ static QINLINE qboolean WP_CheckThrownSaberDamaged(gentity_t* saberent,
 	const qboolean no_d_check)
 {
 	vec3_t    vecsub;
-	float     veclen;
-	gentity_t* te;
+	float     veclen = 0.0f;
+	gentity_t* te = NULL;
 
 	if (!saber_owner || !saber_owner->client)
 		return qfalse;
@@ -8400,7 +8400,7 @@ static void MakeDeadSaber(const gentity_t* ent)
 	//This entity will remove itself after a very short time period.
 	vec3_t startorg;
 	vec3_t startang;
-	const gentity_t* owner;
+	const gentity_t* owner = NULL;
 	//trace stuct used for determining if it's safe to spawn at current location
 	trace_t tr;
 
@@ -9429,7 +9429,7 @@ void WP_saberBackToOwner(gentity_t* saberent)
 
 	if (saberent->speed < level.time)
 	{
-		float base_speed;
+		float base_speed = 0.0f;
 
 		VectorNormalize(dir);
 
@@ -10660,7 +10660,7 @@ static void G_PunchSomeMofos(gentity_t* ent)
 {
 	trace_t tr;
 	const renderInfo_t* ri = &ent->client->renderInfo;
-	int boltIndex;
+	int boltIndex = 0;
 
 	if (ent->client->ps.torsoAnim == BOTH_MELEE1 ||
 		ent->client->ps.torsoAnim == BOTH_MELEE3 ||
@@ -11880,7 +11880,7 @@ void WP_SaberPositionUpdate(gentity_t* self, usercmd_t* ucmd)
 	vec3_t rawAngles;
 	int returnAfterUpdate = 0;
 	float animSpeedScale = 1.0f;
-	int saberNum;
+	int saberNum = 0;
 	qboolean clientOverride;
 	gentity_t* vehEnt = NULL;
 	float fVSpeed = 0;
@@ -12016,7 +12016,7 @@ void WP_SaberPositionUpdate(gentity_t* self, usercmd_t* ucmd)
 				if (self->client->grappleState >= 20)
 				{ //grapplee
 					//try to position myself at the correct distance from my grappler
-					float idealDist;
+					float idealDist = 0.0f;
 					vec3_t gFwd, idealSpot;
 					trace_t trace;
 
@@ -12870,9 +12870,9 @@ nextStep:
 								vec3_t oldSaberEnd;
 								vec3_t saberAngleNow;
 								vec3_t saberAngleBefore;
-								float delta_x;
-								float delta_y;
-								float delta_z;
+								float delta_x = 0.0f;
+								float delta_y = 0.0f;
+								float delta_z = 0.0f;
 
 								if (level.time - self->client->saber[rSaberNum].blade[rBladeNum].trail.lastTime > 100)
 								{
@@ -15564,7 +15564,7 @@ qboolean WP_SaberCanBlockThrownSaber(gentity_t* self, vec3_t point, qboolean pro
 qboolean HasSetSaberOnly(void)
 {
 	int i = 0;
-	int w_disable;
+	int w_disable = 0;
 
 	if (level.gametype == GT_JEDIMASTER)
 	{
@@ -16383,7 +16383,7 @@ static qboolean G_IsFireEffectName(const char* name)
 {
 	static const char* fire_words[] = { "fire", "flame", "burn", "torch", "lava", "inferno", "blaze" };
 	char lower[MAX_QPATH];
-	int i;
+	int i = 0;
 
 	if (!name || !name[0])
 	{
@@ -16420,7 +16420,7 @@ qboolean G_FxRunnerIsFire(const gentity_t* ent)
 // a fire fx_runner inside (or within 48 units of) this trigger's box: a trigger_hurt there is a fire
 qboolean G_NearFireEffect(const gentity_t* area)
 {
-	int i, a;
+	int i = 0, a = 0;
 
 	for (i = MAX_CLIENTS; i < level.num_entities; i++)
 	{
@@ -16460,7 +16460,7 @@ void player_StopBurn(const gentity_t* self)
 // set a character on fire, or keep them burning longer; attacker (may be NULL) gets the kill
 void G_SetOnFire(gentity_t* self, gentity_t* attacker)
 {
-	int num;
+	int num = 0;
 
 	if (!self || !self->client || self->health <= 0 || self->s.eFlags & EF_NODRAW)
 	{
@@ -16485,9 +16485,9 @@ void G_SetOnFire(gentity_t* self, gentity_t* attacker)
 // every frame for every client (ClientThink_real): the damage, and putting the fire out
 void Player_CheckBurn(const gentity_t* self)
 {
-	int num;
-	gentity_t* ent;
-	gentity_t* attacker;
+	int num = 0;
+	gentity_t* ent = NULL;
+	gentity_t* attacker = NULL;
 
 	if (!self || !self->client || !(self->client->ps.PlayerEffectFlags & 1 << PEF_BURNING))
 	{

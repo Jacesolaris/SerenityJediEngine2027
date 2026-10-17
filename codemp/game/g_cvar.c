@@ -62,8 +62,8 @@ static const size_t gameCvarTableSize = ARRAY_LEN(gameCvarTable);
 
 void G_RegisterCvars(void)
 {
-	size_t i;
-	const cvarTable_t* cv;
+	size_t i = 0;
+	const cvarTable_t* cv = NULL;
 
 	for (i = 0, cv = gameCvarTable; i < gameCvarTableSize; i++, cv++)
 	{
@@ -75,8 +75,8 @@ void G_RegisterCvars(void)
 
 void G_UpdateCvars(void)
 {
-	size_t i;
-	const cvarTable_t* cv;
+	size_t i = 0;
+	const cvarTable_t* cv = NULL;
 
 	for (i = 0, cv = gameCvarTable; i < gameCvarTableSize; i++, cv++)
 	{

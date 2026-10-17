@@ -56,8 +56,8 @@ void CG_LoadHolsterData(clientInfo_t* ci)
 	// Adjusts the manual holster positional data based on the holster.cfg file
 	// associated with the model or simply use the default values.
 
-	fileHandle_t f;
-	int f_len;
+	fileHandle_t f = 0;
+	int f_len = 0;
 
 	// These buffers are large — make them static to avoid 16 KB+ stack usage.
 	static char file_buffer[MAX_HOLSTER_INFO_SIZE];

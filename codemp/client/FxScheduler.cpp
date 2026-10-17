@@ -54,7 +54,7 @@ CFxScheduler::CFxScheduler()
 int CFxScheduler::ScheduleLoopedEffect(const int id, const int boltInfo, CGhoul2Info_v* ghoul2, const bool isPortal,
 	const int iLoopTime, const bool isRelative)
 {
-	int i;
+	int i = 0;
 
 	assert(id);
 	assert(boltInfo != -1);
@@ -285,7 +285,7 @@ int CFxScheduler::RegisterEffect(const char* path, bool bHasCorrectPath)
 	}
 
 	CGenericParser2 parser;
-	fileHandle_t fh;
+	fileHandle_t fh = 0;
 	char* bufParse = nullptr;
 
 	// if our file doesn't have an extension, add one
@@ -375,9 +375,9 @@ struct primitiveType_s
 
 int CFxScheduler::ParseEffect(const char* file, const CGPGroup* base)
 {
-	const char* grpName;
-	int handle;
-	CGPValue* pair;
+	const char* grpName = nullptr;
+	int handle = 0;
+	CGPValue* pair = nullptr;
 
 	SEffectTemplate* effect = GetNewEffectTemplate(&handle, file);
 
@@ -756,11 +756,11 @@ void CFxScheduler::PlayEffect(const int id, vec3_t origin, matrix3_t axis, const
 	const int fxParm /*-1*/, const int vol, const int rad, const bool isPortal/*false*/,
 	const int iLoopTime/*0*/, const bool isRelative)
 {
-	SEffectTemplate* fx;
-	CPrimitiveTemplate* prim;
-	int count;
-	int delay;
-	float factor = 0.0f, fxscale;
+	SEffectTemplate* fx = nullptr;
+	CPrimitiveTemplate* prim = nullptr;
+	int count = 0;
+	int delay = 0;
+	float factor = 0.0f, fxscale = 0.0f;
 	bool forceScheduling = false;
 
 	if (id < 1 || id >= FX_MAX_EFFECTS || !mEffectTemplates[id].mInUse)
@@ -1181,7 +1181,7 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate* fx, const vec3_t origin, mat
 		sRGB, eRGB,
 		ang, angDelta,
 		ax[3];
-	int emitterModel;
+	int emitterModel = 0;
 
 	// We may modify the axis, so make a work copy
 	AxisCopy(axis, ax);

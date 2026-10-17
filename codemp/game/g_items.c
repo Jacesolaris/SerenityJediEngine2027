@@ -854,7 +854,7 @@ void pas_think(gentity_t* ent)
 
 	int i = 0;
 	qboolean clTrapped = qfalse;
-	int num_listed_entities;
+	int num_listed_entities = 0;
 
 	// ---------------------------------------------------------
 	// BUILD TEST BOUNDS AROUND THE TURRET
@@ -996,7 +996,7 @@ void pas_think(gentity_t* ent)
 	// AIM / ROTATION LOGIC
 	// ---------------------------------------------------------
 	qboolean moved = qfalse;
-	float diff_yaw;
+	float diff_yaw = 0.0f;
 	float diffPitch = 0.0f;
 
 	ent->speed = AngleNormalize360(ent->speed);
@@ -1588,10 +1588,10 @@ void Flamethrower_Fire(gentity_t* self)
 	vec3_t ent_org;
 	vec3_t dir;
 
-	float radius;
-	int   num_listed_entities;
-	int   i;
-	int   e;
+	float radius = 0.0f;
+	int   num_listed_entities = 0;
+	int   i = 0;
+	int   e = 0;
 
 	if (self == NULL || self->client == NULL)
 	{
@@ -1644,10 +1644,10 @@ void Flamethrower_Fire(gentity_t* self)
 	// Process each candidate entity
 	for (e = 0; e < num_listed_entities; e++)
 	{
-		gentity_t* traceEnt;
-		float      dot;
-		float      dist;
-		int        damage;
+		gentity_t* traceEnt = NULL;
+		float      dot = 0.0f;
+		float      dist = 0.0f;
+		int        damage = 0;
 
 		traceEnt = s_entityList[e];
 
@@ -2031,7 +2031,7 @@ void G_LoadDispensers(void)
 
 void ItemUse_UseDisp(gentity_t* ent, int type)
 {
-	gitem_t* item;
+	gitem_t* item = NULL;
 
 	if (!ent->client ||
 		ent->client->tossableItemDebounce > level.time)
@@ -2486,7 +2486,7 @@ static void EWebThink(gentity_t* self)
 
 		if (!killMe)
 		{
-			float yaw;
+			float yaw = 0.0f;
 
 			if (BG_EmplacedView(owner->client->ps.viewangles, self->s.angles, &yaw, self->s.origin2[0]))
 			{
@@ -2723,7 +2723,7 @@ void ItemUse_UseEWeb(gentity_t* ent)
 
 static int Pickup_Powerup(const gentity_t* ent, const gentity_t* other)
 {
-	int quantity;
+	int quantity = 0;
 
 	if (!other->client->ps.powerups[ent->item->giTag])
 	{
@@ -2913,7 +2913,7 @@ void Add_Batteries(gentity_t* ent, int* count)
 //-------------------------------------------------------
 static int Pickup_Battery(const gentity_t* ent, gentity_t* other)
 {
-	int quantity;
+	int quantity = 0;
 
 	if (ent->count)
 	{
@@ -2932,7 +2932,7 @@ static int Pickup_Battery(const gentity_t* ent, gentity_t* other)
 
 static int Pickup_Ammo(const gentity_t* ent, const gentity_t* other)
 {
-	int quantity;
+	int quantity = 0;
 
 	if (ent->count)
 	{
@@ -2986,7 +2986,7 @@ static int Pickup_Ammo(const gentity_t* ent, const gentity_t* other)
 
 static int Pickup_Weapon(const gentity_t* ent, gentity_t* other)
 {
-	int quantity;
+	int quantity = 0;
 
 	if (ent->count < 0)
 	{
@@ -3045,8 +3045,8 @@ static int Pickup_Weapon(const gentity_t* ent, gentity_t* other)
 
 static int Pickup_Health(const gentity_t* ent, gentity_t* other)
 {
-	int max;
-	int quantity;
+	int max = 0;
+	int quantity = 0;
 
 	// small and mega healths will go over the max
 	if (ent->item->quantity != 5 && ent->item->quantity != 100)
@@ -3191,7 +3191,7 @@ void RespawnItem(gentity_t* ent)
 	// ---------------------------------------------------------
 	if (ent->item->giType == IT_POWERUP)
 	{
-		gentity_t* te;
+		gentity_t* te = NULL;
 
 		// If ent->speed is non-zero, sound is local; otherwise global
 		if (ent->speed)
@@ -3296,7 +3296,7 @@ Touch_Item
 
 void Touch_Item(gentity_t* ent, gentity_t* other, trace_t* trace)
 {
-	int respawn;
+	int respawn = 0;
 
 	if (ent->genericValue10 > level.time &&
 		other &&
@@ -3440,7 +3440,7 @@ void Touch_Item(gentity_t* ent, gentity_t* other, trace_t* trace)
 		respawn = Pickup_Ammo(ent, other);
 		if (ent->item->giTag == AMMO_THERMAL || ent->item->giTag == AMMO_TRIPMINE || ent->item->giTag == AMMO_DETPACK)
 		{
-			int weap_for_ammo;
+			int weap_for_ammo = 0;
 
 			if (ent->item->giTag == AMMO_THERMAL)
 			{
@@ -4157,7 +4157,7 @@ be on an entity that hasn't spawned yet.
 */
 void G_SpawnItem(gentity_t* ent, gitem_t* item)
 {
-	int w_disable;
+	int w_disable = 0;
 
 	G_SpawnFloat("random", "0", &ent->random);
 	G_SpawnFloat("wait", "0", &ent->wait);
@@ -4291,7 +4291,7 @@ void G_RunItem(gentity_t* ent)
 {
 	vec3_t origin;
 	trace_t tr;
-	int mask;
+	int mask = 0;
 
 	// if groundentity has been set to ENTITYNUM_NONE, it may have been pushed off an edge
 	if (ent->s.groundEntityNum == ENTITYNUM_NONE)

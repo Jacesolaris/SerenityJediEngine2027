@@ -166,7 +166,7 @@ void QDECL Com_Printf(const char* fmt, ...)
 		//   also, avoid recursing in the qconsole.log opening (i.e. if fs_debug is on)
 		if (!logfile && FS_Initialized() && !opening_qconsole)
 		{
-			time_t aclock;
+			time_t aclock = 0;
 
 			opening_qconsole = qtrue;
 
@@ -535,7 +535,7 @@ Com_StringContains
 */
 static char* Com_StringContains(char* str1, char* str2, const int casesensitive)
 {
-	int j;
+	int j = 0;
 
 	const int len = strlen(str1) - strlen(str2);
 	for (int i = 0; i <= len; i++, str1++)
@@ -573,7 +573,7 @@ Com_Filter
 int Com_Filter(char* filter, char* name, const int casesensitive)
 {
 	char buf[MAX_TOKEN_CHARS]{};
-	int i;
+	int i = 0;
 
 	while (*filter)
 	{
@@ -670,7 +670,7 @@ Com_FilterPath
 */
 int Com_FilterPath(char* filter, char* name, const int casesensitive)
 {
-	int i;
+	int i = 0;
 	char new_filter[MAX_QPATH]{};
 	char new_name[MAX_QPATH]{};
 
@@ -724,7 +724,7 @@ Com_RealTime
 */
 int Com_RealTime(qtime_t* qtime)
 {
-	time_t t;
+	time_t t = 0;
 
 	t = time(nullptr);
 	if (!qtime)
@@ -803,7 +803,7 @@ Com_GetRealEvent
 */
 static sysEvent_t Com_GetRealEvent(void)
 {
-	int r;
+	int r = 0;
 	sysEvent_t ev;
 
 	// either get an event from the system or the journal file
@@ -1233,7 +1233,7 @@ void Com_Init(char* commandLine)
 
 	try
 	{
-		char* s;
+		char* s = nullptr;
 		// initialize the weak pseudo-random number generator for use later.
 		Com_InitRand();
 
@@ -1517,7 +1517,7 @@ Com_ModifyMsec
 */
 static int Com_ModifyMsec(int msec)
 {
-	int clampTime;
+	int clampTime = 0;
 
 	//
 	// modify time for debugging values
@@ -1612,8 +1612,8 @@ void Com_Frame(void)
 #ifdef G2_PERFORMANCE_ANALYSIS
 		G2PerformanceTimer_PreciseFrame.Start();
 #endif
-		int minMsec;
-		int timeVal;
+		int minMsec = 0;
+		int timeVal = 0;
 		static int lastTime = 0;
 
 		int timeBeforeFirstEvents = 0;
@@ -1882,7 +1882,7 @@ FindMatches
 */
 static void FindMatches(const char* s)
 {
-	int i;
+	int i = 0;
 
 	if (Q_stricmpn(s, completionString, strlen(completionString)))
 	{
@@ -2102,7 +2102,7 @@ void Field_CompleteCommand(char* cmd, const qboolean doCommands, const qboolean 
 	if (completionArgument > 1)
 	{
 		const char* baseCmd = Cmd_Argv(0);
-		char* p;
+		char* p = nullptr;
 
 #ifndef DEDICATED
 		if (baseCmd[0] == '\\' || baseCmd[0] == '/')

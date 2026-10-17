@@ -96,7 +96,7 @@ static void CG_DrawClientScore(const int y, const score_t* score, float* color, 
 	if (ci->powerups & 1 << PW_NEUTRALFLAG)
 	{
 		if (largeFormat)
-			CG_DrawFlagModel(iconx, y - (32 - BIGCHAR_HEIGHT) / 2, iconSize, iconSize, TEAM_FREE, qfalse);
+			CG_DrawFlagModel(iconx, y - (32 - BIGCHAR_HEIGHT) / 2.0f, iconSize, iconSize, TEAM_FREE, qfalse);
 		else
 			CG_DrawFlagModel(iconx, y, iconSize, iconSize, TEAM_FREE, qfalse);
 	}
@@ -131,7 +131,7 @@ static void CG_DrawClientScore(const int y, const score_t* score, float* color, 
 	if (score->client == cg.snap->ps.clientNum)
 	{
 		float hcolor[4];
-		int rank;
+		int rank = 0;
 
 		localClient = qtrue;
 
@@ -327,13 +327,13 @@ int cg_siegeWinTeam = 0;
 
 qboolean CG_DrawOldScoreboard(void)
 {
-	int x, y, n1, n2;
-	float fade;
-	float* fadeColor;
-	char* s;
-	int maxClients;
-	int lineHeight;
-	int topBorderSize, bottomBorderSize;
+	int x = 0, y = 0, n1 = 0, n2 = 0;
+	float fade = 0.0f;
+	float* fadeColor = NULL;
+	char* s = NULL;
+	int maxClients = 0;
+	int lineHeight = 0;
+	int topBorderSize = 0, bottomBorderSize = 0;
 
 	// don't draw amuthing if the menu or console is up
 	if (cl_paused.integer)
@@ -377,7 +377,7 @@ qboolean CG_DrawOldScoreboard(void)
 
 		x = SCREEN_WIDTH / 2;
 		y = 40;
-		CG_Text_Paint(x - CG_Text_Width(s, 1.0f, FONT_MEDIUM) / 2, y, 1.0f, colorWhite, s, 0, 0,
+		CG_Text_Paint(x - CG_Text_Width(s, 1.0f, FONT_MEDIUM) / 2.0f, y, 1.0f, colorWhite, s, 0, 0,
 			ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM);
 	}
 	else if ((cgs.gametype == GT_DUEL || cgs.gametype == GT_POWERDUEL) && cgs.duelist1 != -1 && cgs.duelist2 != -1 &&
@@ -397,7 +397,7 @@ qboolean CG_DrawOldScoreboard(void)
 
 		x = SCREEN_WIDTH / 2;
 		y = 40;
-		CG_Text_Paint(x - CG_Text_Width(s, 1.0f, FONT_MEDIUM) / 2, y, 1.0f, colorWhite, s, 0, 0,
+		CG_Text_Paint(x - CG_Text_Width(s, 1.0f, FONT_MEDIUM) / 2.0f, y, 1.0f, colorWhite, s, 0, 0,
 			ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM);
 	}
 	else if (cg.killerName[0])
@@ -406,7 +406,7 @@ qboolean CG_DrawOldScoreboard(void)
 
 		x = SCREEN_WIDTH / 2;
 		y = 40;
-		CG_Text_Paint(x - CG_Text_Width(s, 1.0f, FONT_MEDIUM) / 2, y, 1.0f, colorWhite, s, 0, 0,
+		CG_Text_Paint(x - CG_Text_Width(s, 1.0f, FONT_MEDIUM) / 2.0f, y, 1.0f, colorWhite, s, 0, 0,
 			ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM);
 	}
 
@@ -457,7 +457,7 @@ qboolean CG_DrawOldScoreboard(void)
 		x = SCREEN_WIDTH / 2;
 		y = 60;
 
-		CG_Text_Paint(x - CG_Text_Width(s, 1.0f, FONT_MEDIUM) / 2, y, 1.0f, colorWhite, s, 0, 0,
+		CG_Text_Paint(x - CG_Text_Width(s, 1.0f, FONT_MEDIUM) / 2.0f, y, 1.0f, colorWhite, s, 0, 0,
 			ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM);
 	}
 	else if (cgs.gametype == GT_SIEGE && (cg_siegeWinTeam == 1 || cg_siegeWinTeam == 2))
@@ -474,7 +474,7 @@ qboolean CG_DrawOldScoreboard(void)
 		x = SCREEN_WIDTH / 2;
 		y = 60;
 
-		CG_Text_Paint(x - CG_Text_Width(s, 1.0f, FONT_MEDIUM) / 2, y, 1.0f, colorWhite, s, 0, 0,
+		CG_Text_Paint(x - CG_Text_Width(s, 1.0f, FONT_MEDIUM) / 2.0f, y, 1.0f, colorWhite, s, 0, 0,
 			ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM);
 	}
 

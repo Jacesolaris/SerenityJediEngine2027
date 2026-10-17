@@ -252,7 +252,7 @@ valid snapshot.
 */
 static snapshot_t* CG_ReadNextSnapshot()
 {
-	snapshot_t* dest;
+	snapshot_t* dest = nullptr;
 
 	while (cg.processedSnapshotNum < cg.latestSnapshotNum)
 	{

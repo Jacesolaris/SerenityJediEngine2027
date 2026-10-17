@@ -547,7 +547,7 @@ static qboolean SV_EntityContact(const vec3_t mins, const vec3_t maxs, const sha
 
 static void SV_SetBrushModel(sharedEntity_t* ent, const char* name)
 {
-	clipHandle_t h;
+	clipHandle_t h = 0;
 	vec3_t mins, maxs;
 
 	if (!name)
@@ -689,7 +689,7 @@ static const char* SV_SetActiveSubBSP(const int index)
 
 static qboolean SV_GetEntityToken(char* buffer, const int buffer_size)
 {
-	char* s;
+	char* s = nullptr;
 
 	if (sv.mLocalSubBSPIndex == -1)
 	{
@@ -3407,8 +3407,8 @@ intptr_t SV_GameSystemCalls(intptr_t* args)
 
 void SV_InitGame(const qboolean restart)
 {
-	int i;
-	client_t* cl;
+	int i = 0;
+	client_t* cl = nullptr;
 
 	// clear level pointers
 	sv.entityParsePoint = CM_EntityString();

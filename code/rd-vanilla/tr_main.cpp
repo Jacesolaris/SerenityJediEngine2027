@@ -58,11 +58,11 @@ Returns CULL_IN, CULL_CLIP, or CULL_OUT
 */
 int R_CullLocalBox(const vec3_t bounds[2])
 {
-	int i;
+	int i = 0;
 	vec3_t transformed[8]{};
 	float dists[8]{};
 	vec3_t v{};
-	int back;
+	int back = 0;
 
 	if (r_nocull->integer == 1)
 	{
@@ -138,9 +138,9 @@ int R_CullLocalPointAndRadius(const vec3_t pt, const float radius)
 */
 int R_CullPointAndRadius(const vec3_t pt, const float radius)
 {
-	int		i;
-	float dist;
-	cplane_t* frust;
+	int		i = 0;
+	float dist = 0.0f;
+	cplane_t* frust = nullptr;
 	qboolean mightBeClipped = qfalse;
 
 	if (r_nocull->integer == 1)
@@ -260,7 +260,7 @@ R_TransformModelToClip
 */
 void R_TransformModelToClip(const vec3_t src, const float* modelMatrix, const float* projectionMatrix, vec4_t eye, vec4_t dst)
 {
-	int i;
+	int i = 0;
 
 	for (i = 0; i < 4; i++)
 	{
@@ -335,7 +335,7 @@ void R_RotateForEntity(const trRefEntity_t* ent, const viewParms_t* viewParms, o
 {
 	//	float	glMatrix[16];
 	vec3_t delta;
-	float axisLength;
+	float axisLength = 0.0f;
 
 	if (ent->e.reType != RT_MODEL)
 	{
@@ -639,10 +639,10 @@ R_PlaneForSurface
 */
 static void R_PlaneForSurface(surfaceType_t* surfType, cplane_t* plane)
 {
-	srfTriangles_t* tri;
-	srfGridMesh_t* grid;
-	srfPoly_t* poly;
-	drawVert_t* v1, * v2, * v3;
+	srfTriangles_t* tri = nullptr;
+	srfGridMesh_t* grid = nullptr;
+	srfPoly_t* poly = nullptr;
+	drawVert_t* v1 = nullptr, * v2 = nullptr, * v3 = nullptr;
 	vec4_t plane4;
 
 	if (!surfType)
@@ -879,11 +879,11 @@ static qboolean IsMirror(const drawSurf_t* drawSurf, const int entityNum)
 static qboolean SurfIsOffscreen(const drawSurf_t* drawSurf, vec4_t clipDest[128])
 {
 	float shortest = 1000000000;
-	int entityNum;
-	shader_t* shader;
-	int fogNum;
-	int dlighted;
-	int i;
+	int entityNum = 0;
+	shader_t* shader = nullptr;
+	int fogNum = 0;
+	int dlighted = 0;
+	int i = 0;
 	unsigned int pointOr = 0;
 	unsigned int pointAnd = static_cast<unsigned>(~0);
 
@@ -934,7 +934,7 @@ static qboolean SurfIsOffscreen(const drawSurf_t* drawSurf, vec4_t clipDest[128]
 	for (i = 0; i < tess.numIndexes; i += 3)
 	{
 		vec3_t normal;
-		float dot;
+		float dot = 0.0f;
 
 		VectorSubtract(tess.xyz[tess.indexes[i]], tr.viewParms.ori.origin, normal);
 
@@ -1109,7 +1109,7 @@ static QINLINE void R_Radix(const int byte, const int size, drawSurf_t* source, 
 {
 	int count[256] = { 0 };
 	int index[256]{};
-	int i;
+	int i = 0;
 
 	unsigned char* sortKey = reinterpret_cast<unsigned char*>(&source[0].sort) + byte;
 	const unsigned char* end = sortKey + size * sizeof(drawSurf_t);
@@ -1158,7 +1158,7 @@ R_AddDrawSurf
 */
 void R_AddDrawSurf(surfaceType_t* surface, const shader_t* shader, int fogIndex, const int dlightMap)
 {
-	int			index;
+	int			index = 0;
 	const shader_t* drawShader = (shader->remappedShader) ? shader->remappedShader : shader;
 
 	// instead of checking for overflow, we just mask the index
@@ -1202,10 +1202,10 @@ R_SortDrawSurfs
 */
 static void R_SortDrawSurfs(drawSurf_t* drawSurfs, int numDrawSurfs)
 {
-	shader_t* shader;
-	int fogNum;
-	int entityNum;
-	int dlighted;
+	shader_t* shader = nullptr;
+	int fogNum = 0;
+	int entityNum = 0;
+	int dlighted = 0;
 
 	// it is possible for some views to not have any surfaces
 	if (numDrawSurfs < 1)
@@ -1257,7 +1257,7 @@ R_AddEntitySurfaces
 */
 static void R_AddEntitySurfaces(void)
 {
-	shader_t* shader;
+	shader_t* shader = nullptr;
 
 	if (!r_drawentities->integer)
 	{
@@ -1409,7 +1409,7 @@ R_DebugPolygon
 */
 static void R_DebugPolygon(const int color, const int numPoints, const float* points)
 {
-	int i;
+	int i = 0;
 
 	GL_State(GLS_DEPTHMASK_TRUE | GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE);
 

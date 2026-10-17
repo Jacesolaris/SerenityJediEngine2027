@@ -34,8 +34,8 @@ short* snd_out;
 #if !defined(_MSC_VER) || !id386
 static void S_WriteLinearBlastStereo16(void)
 {
-	int		i;
-	int		val;
+	int		i = 0;
+	int		val = 0;
 
 	for (i = 0; i < snd_linear_count; i += 2)
 	{
@@ -198,19 +198,19 @@ S_TransferPaintBuffer
 */
 static void S_TransferPaintBuffer(int endtime)
 {
-	int 	out_idx;
-	int 	count;
-	int 	out_mask;
-	int* p;
-	int 	step;
-	int		val;
-	unsigned long* pbuf;
+	int 	out_idx = 0;
+	int 	count = 0;
+	int 	out_mask = 0;
+	int* p = nullptr;
+	int 	step = 0;
+	int		val = 0;
+	unsigned long* pbuf = nullptr;
 
 	pbuf = (unsigned long*)dma.buffer;
 
 	if (s_testsound->integer) {
-		int		i;
-		int		count;
+		int		i = 0;
+		int		count = 0;
 
 		// write a fixed sine wave
 		count = (endtime - s_paintedtime);
@@ -272,8 +272,8 @@ CHANNEL MIXING
 */
 static void S_PaintChannelFrom16(channel_t* ch, const sfx_t* sfx, int count, int sampleOffset, int bufferOffset)
 {
-	portable_samplepair_t* pSamplesDest;
-	int iData;
+	portable_samplepair_t* pSamplesDest = nullptr;
+	int iData = 0;
 	float ofst = sampleOffset;
 
 	int iLeftVol = ch->leftvol * snd_vol;
@@ -298,11 +298,11 @@ static void S_PaintChannelFrom16(channel_t* ch, const sfx_t* sfx, int count, int
 
 static void S_PaintChannelFromMP3(channel_t* ch, const sfx_t* sc, int count, int sampleOffset, int bufferOffset)
 {
-	int data;
-	int leftvol, rightvol;
-	signed short* sfx;
-	int	i;
-	portable_samplepair_t* samp;
+	int data = 0;
+	int leftvol = 0, rightvol = 0;
+	signed short* sfx = nullptr;
+	int	i = 0;
+	portable_samplepair_t* samp = nullptr;
 	static short tempMP3Buffer[PAINTBUFFER_SIZE];
 
 	MP3Stream_GetSamples(ch, sampleOffset, count, tempMP3Buffer, qfalse);	// qfalse = not stereo
@@ -367,13 +367,13 @@ static void ChannelPaint(channel_t* ch, sfx_t* sc, int count, int sampleOffset, 
 
 void S_PaintChannels(int endtime)
 {
-	int 	i;
-	int 	end;
-	channel_t* ch;
-	sfx_t* sc;
-	int		ltime, count;
-	int		sampleOffset;
-	int	normal_vol, voice_vol;
+	int 	i = 0;
+	int 	end = 0;
+	channel_t* ch = nullptr;
+	sfx_t* sc = nullptr;
+	int		ltime = 0, count = 0;
+	int		sampleOffset = 0;
+	int	normal_vol = 0, voice_vol = 0;
 
 	snd_vol = normal_vol = s_volume->value * 256;
 	voice_vol = (int)(s_volumeVoice->value * 256);
@@ -397,8 +397,8 @@ void S_PaintChannels(int endtime)
 		}
 		else {
 			// copy from the streaming sound source
-			int		s;
-			int		stop;
+			int		s = 0;
+			int		stop = 0;
 
 			stop = (end < s_rawend) ? end : s_rawend;
 

@@ -234,7 +234,7 @@ void MSG_WriteBits(msg_t* msg, int value, int bits)
 	}
 	else
 	{
-		int i;
+		int i = 0;
 		value &= (0xffffffff >> (32 - bits));
 		if (bits & 7)
 		{
@@ -275,8 +275,8 @@ void MSG_WriteBits(msg_t* msg, int value, int bits)
 
 int MSG_ReadBits(msg_t* msg, int bits)
 {
-	int value;
-	int get;
+	int value = 0;
+	int get = 0;
 	qboolean sgn;
 
 	if (msg->readcount > msg->cursize)
@@ -306,7 +306,7 @@ int MSG_ReadBits(msg_t* msg, int bits)
 		}
 		else if (bits == 16)
 		{
-			short temp;
+			short temp = 0;
 
 			CopyLittleShort(&temp, &msg->data[msg->readcount]);
 			value = temp;
@@ -326,7 +326,7 @@ int MSG_ReadBits(msg_t* msg, int bits)
 	}
 	else
 	{
-		int i;
+		int i = 0;
 		int nbits = 0;
 		if (bits & 7)
 		{
@@ -1189,9 +1189,9 @@ identical, under the assumption that the in-order delta code will catch it.
 */
 void MSG_WriteDeltaEntity(msg_t* msg, entityState_s* from, entityState_s* to, const qboolean force)
 {
-	int i;
-	netField_t* field;
-	int* fromF, * toF;
+	int i = 0;
+	netField_t* field = nullptr;
+	int* fromF = nullptr, * toF = nullptr;
 
 	constexpr int numFields = static_cast<int>(std::size(entityStateFields));
 
@@ -1329,11 +1329,11 @@ Can go from either a baseline or a previous packet_entity
 void MSG_ReadDeltaEntity(msg_t* msg, entityState_t* from, entityState_t* to,
 	const int number)
 {
-	int i;
-	netField_t* field;
-	int* fromF, * toF;
-	int print;
-	int startBit;
+	int i = 0;
+	netField_t* field = nullptr;
+	int* fromF = nullptr, * toF = nullptr;
+	int print = 0;
+	int startBit = 0;
 
 	if (number < 0 || number >= MAX_GENTITIES)
 	{
@@ -1468,7 +1468,7 @@ void MSG_ReadDeltaEntity(msg_t* msg, entityState_t* from, entityState_t* to,
 
 	if (print)
 	{
-		int endBit;
+		int endBit = 0;
 		if (msg->bit == 0)
 		{
 			endBit = msg->readcount * 8 - GENTITYNUM_BITS;
@@ -2572,18 +2572,18 @@ void MSG_WriteDeltaPlayerstate(msg_t* msg, struct playerState_s* from, struct pl
 void MSG_WriteDeltaPlayerstate(msg_t * msg, playerState_s * from, playerState_s * to, const qboolean isVehiclePS)
 {
 #endif
-	int i;
+	int i = 0;
 	playerState_t dummy{};
-	int statsbits;
-	int persistantbits;
-	int ammobits;
-	int powerupbits;
-	int numFields;
-	netField_t* field;
+	int statsbits = 0;
+	int persistantbits = 0;
+	int ammobits = 0;
+	int powerupbits = 0;
+	int numFields = 0;
+	netField_t* field = nullptr;
 	netField_t* PSFields = playerStateFields;
-	int* fromF, * toF;
-	float fullFloat;
-	int trunc, lc;
+	int* fromF = nullptr, * toF = nullptr;
+	float fullFloat = 0.0f;
+	int trunc = 0, lc = 0;
 #ifdef _ONEBIT_COMBO
 	int				bitComboMask = 0;
 	int				numBitsInMask = 0;
@@ -2842,14 +2842,14 @@ MSG_ReadDeltaPlayerstate
 */
 void MSG_ReadDeltaPlayerstate(msg_t * msg, playerState_t * from, playerState_t * to, const qboolean isVehiclePS)
 {
-	int i, lc;
-	netField_t* field;
+	int i = 0, lc = 0;
+	netField_t* field = nullptr;
 	netField_t* PSFields = playerStateFields;
-	int numFields;
-	int startBit;
-	int print;
-	int* fromF, * toF;
-	int trunc;
+	int numFields = 0;
+	int startBit = 0;
+	int print = 0;
+	int* fromF = nullptr, * toF = nullptr;
+	int trunc = 0;
 #ifdef _ONEBIT_COMBO
 	int			numBitsInMask = 0;
 #endif
@@ -2985,7 +2985,7 @@ void MSG_ReadDeltaPlayerstate(msg_t * msg, playerState_t * from, playerState_t *
 	// read the arrays
 	if (MSG_ReadBits(msg, 1))
 	{
-		int bits;
+		int bits = 0;
 		// parse stats
 		if (MSG_ReadBits(msg, 1))
 		{
@@ -3053,7 +3053,7 @@ void MSG_ReadDeltaPlayerstate(msg_t * msg, playerState_t * from, playerState_t *
 
 	if (print)
 	{
-		int endBit;
+		int endBit = 0;
 		if (msg->bit == 0)
 		{
 			endBit = msg->readcount * 8 - GENTITYNUM_BITS;

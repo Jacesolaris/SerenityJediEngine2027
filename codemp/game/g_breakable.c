@@ -440,7 +440,7 @@ void health_use(gentity_t* self, gentity_t* other, gentity_t* activator)
 	}
 	else
 	{
-		int dif;
+		int dif = 0;
 		if (other->client)
 		{
 			// He's dead, Jim. Don't give him health
@@ -581,7 +581,7 @@ void ammo_use(gentity_t* self, gentity_t* other, gentity_t* activator)
 	}
 	else
 	{
-		int dif;
+		int dif = 0;
 		if (other->client)
 		{
 			dif = ammoData[AMMO_BLASTER].max - other->client->ps.ammo[AMMO_BLASTER];
@@ -860,7 +860,7 @@ void SP_misc_model_breakable(gentity_t* ent)
 
 	if (!bHasScale)
 	{
-		float temp;
+		float temp = 0.0f;
 		G_SpawnFloat("modelscale", "0", &temp);
 		if (temp != 0.0f)
 		{

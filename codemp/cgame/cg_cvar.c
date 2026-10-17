@@ -86,8 +86,8 @@ static const size_t cvarTableSize = ARRAY_LEN(cvarTable);
 
 void CG_RegisterCvars(void)
 {
-	size_t i;
-	const cvarTable_t* cv;
+	size_t i = 0;
+	const cvarTable_t* cv = NULL;
 
 	for (i = 0, cv = cvarTable; i < cvarTableSize; i++, cv++)
 	{
@@ -99,8 +99,8 @@ void CG_RegisterCvars(void)
 
 void CG_UpdateCvars(void)
 {
-	size_t i;
-	const cvarTable_t* cv;
+	size_t i = 0;
+	const cvarTable_t* cv = NULL;
 
 	for (i = 0, cv = cvarTable; i < cvarTableSize; i++, cv++)
 	{

@@ -32,7 +32,7 @@ static char* GetToken(char** text, const bool allowLineBreaks, const bool readUn
 {
 	char* pointer = *text;
 	int length = 0;
-	int c;
+	int c = 0;
 
 	token[0] = 0;
 	if (!pointer)
@@ -273,7 +273,7 @@ CGPValue::~CGPValue(void)
 
 CGPValue* CGPValue::Duplicate(CTextPool** textPool) const
 {
-	char* name;
+	char* name = nullptr;
 
 	if (textPool)
 	{
@@ -368,7 +368,7 @@ bool CGPValue::Parse(char** dataPtr, CTextPool** textPool)
 
 bool CGPValue::Write(CTextPool** textPool, const int depth) const
 {
-	int i;
+	int i = 0;
 
 	if (!mList)
 	{
@@ -488,7 +488,7 @@ void CGPGroup::Clean(void)
 
 CGPGroup* CGPGroup::Duplicate(CTextPool** textPool, CGPGroup* initParent) const
 {
-	char* name;
+	char* name = nullptr;
 
 	if (textPool)
 	{
@@ -680,7 +680,7 @@ bool CGPGroup::Parse(char** dataPtr, CTextPool** textPool)
 
 bool CGPGroup::Write(CTextPool** textPool, const int depth) const
 {
-	int i;
+	int i = 0;
 	const CGPValue* mPair = mPairs;
 	const CGPGroup* mSubGroup = mSubGroups;
 
@@ -739,8 +739,8 @@ bool CGPGroup::Write(CTextPool** textPool, const int depth) const
  ************************************************************************************************/
 CGPValue* CGPGroup::FindPair(const char* key) const
 {
-	size_t length;
-	const char* next;
+	size_t length = 0;
+	const char* next = nullptr;
 
 	const char* pos = key;
 	while (pos[0])
@@ -799,7 +799,7 @@ CGenericParser2::~CGenericParser2(void)
 
 bool CGenericParser2::Parse(char** dataPtr, const bool cleanFirst, const bool writeable)
 {
-	CTextPool* topPool;
+	CTextPool* topPool = nullptr;
 
 	if (cleanFirst)
 	{

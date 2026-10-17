@@ -686,7 +686,7 @@ void RestoreGhoul2InfoArray()
 	// into the wrong list (crash in G2API_AttachG2Model / G2_GetBoltMatrixLow).
 	TheGhoul2InfoArray();
 
-	size_t size;
+	size_t size = 0;
 	const void* data = ri.PD_Load(PERSISTENT_G2DATA, &size);
 	if (data == nullptr)
 	{
@@ -828,7 +828,7 @@ qhandle_t G2API_PrecacheGhoul2Model(const char* fileName)
 // initialise all that needs to be on a new Ghoul II model
 int G2API_InitGhoul2Model(CGhoul2Info_v** ghoul2Ptr, const char* fileName, int modelIndex, const qhandle_t customSkin, const qhandle_t customShader, int modelFlags, const int lodBias)
 {
-	int model;
+	int model = 0;
 
 	// are we actually asking for a model to be loaded.
 	if (!fileName || !fileName[0])
@@ -2210,7 +2210,7 @@ static bool G2_NeedRetransform(CGhoul2Info* g2, const int frameNum)
 	bool needTrans = false;
 	while (i < g2->mBlist.size())
 	{
-		float time;
+		float time = 0.0f;
 		boneInfo_t& bone = g2->mBlist[i];
 
 		if (bone.pauseTime)
@@ -2321,7 +2321,7 @@ void G2API_CollisionDetectCache(CollisionRecord_t* collRecMap, CGhoul2Info_v& gh
 #else
 		G2_TraceModels(ghoul2, transRayStart, transRayEnd, collRecMap, entNum, traceFlags, useLod, fRadius);
 #endif
-		int i;
+		int i = 0;
 		// ReSharper disable once CppPossiblyErroneousEmptyStatements
 		for (i = 0; i < MAX_G2_COLLISIONS && collRecMap[i].mEntityNum != -1; i++);
 
@@ -2364,7 +2364,7 @@ void G2API_CollisionDetect(CollisionRecord_t* collRecMap, CGhoul2Info_v& ghoul2,
 #else
 		G2_TraceModels(ghoul2, transRayStart, transRayEnd, collRecMap, entNum, traceFlags, useLod, fRadius);
 #endif
-		int i;
+		int i = 0;
 		// ReSharper disable once CppPossiblyErroneousEmptyStatements
 		for (i = 0; i < MAX_G2_COLLISIONS && collRecMap[i].mEntityNum != -1; i++);
 
@@ -2559,7 +2559,7 @@ char* G2API_GetSurfaceName(CGhoul2Info_v& ghoul2, const int modelIndex, const in
 	if (G2_SetupModelPointers(ghlInfo))
 	{
 		auto mod = (model_t*)ghlInfo->currentModel;
-		mdxmSurface_t* surf;
+		mdxmSurface_t* surf = nullptr;
 
 #ifndef FINAL_BUILD
 		if (!mod || !mod->mdxm)
@@ -2580,7 +2580,7 @@ char* G2API_GetSurfaceName(CGhoul2Info_v& ghoul2, const int modelIndex, const in
 		surf = static_cast<mdxmSurface_t*>(G2_FindSurface(mod, surfNumber, 0));
 		if (surf)
 		{
-			mdxmSurfHierarchy_t* surfInfo;
+			mdxmSurfHierarchy_t* surfInfo = nullptr;
 #ifndef FINAL_BUILD
 			if (surf->thisSurfaceIndex < 0 || surf->thisSurfaceIndex >= mod->mdxm->numSurfaces)
 			{

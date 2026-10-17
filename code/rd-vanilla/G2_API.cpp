@@ -518,7 +518,7 @@ public:
 	size_t Deserialize(const char* buffer, size_t size)
 	{
 		const char* base = buffer;
-		size_t count;
+		size_t count = 0;
 
 		// Free indices
 		count = *(int*)buffer;
@@ -736,7 +736,7 @@ void RestoreGhoul2InfoArray()
 	// into the wrong list (crash in G2API_AttachG2Model / G2_GetBoltMatrixLow).
 	TheGhoul2InfoArray();
 
-	size_t size;
+	size_t size = 0;
 	const void* data = ri.PD_Load(PERSISTENT_G2DATA, &size);
 	if (data == nullptr)
 	{
@@ -1158,7 +1158,7 @@ qboolean G2API_GetBoneAnimIndex(CGhoul2Info* ghlInfo, const int iBoneIndex, cons
 			G2NOTE(ghlInfo->mBlist[iBoneIndex].flags & (BONE_ANIM_OVERRIDE_LOOP | BONE_ANIM_OVERRIDE), "GetBoneAnim on non-animating bone.");
 			if ((ghlInfo->mBlist[iBoneIndex].flags & (BONE_ANIM_OVERRIDE_LOOP | BONE_ANIM_OVERRIDE)))
 			{
-				int sf, ef;
+				int sf = 0, ef = 0;
 				ret = G2_Get_Bone_Anim_Index(ghlInfo->mBlist,// boneInfo_v &blist,
 					iBoneIndex,		// const int index,
 					currentTime,	// const int currentTime,
@@ -2422,7 +2422,7 @@ qboolean G2_SetupModelPointers(CGhoul2Info* ghlInfo) // returns true if the mode
 qboolean G2_SetupModelPointers(CGhoul2Info_v& ghoul2) // returns true if any model is properly set up
 {
 	qboolean ret = qfalse;
-	int i;
+	int i = 0;
 	for (i = 0; i < ghoul2.size(); i++)
 	{
 		qboolean r = G2_SetupModelPointers(&ghoul2[i]);

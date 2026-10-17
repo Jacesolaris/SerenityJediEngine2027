@@ -243,7 +243,7 @@ void AAS_FreeRoutingCache(aas_routingcache_t* cache)
 //===========================================================================
 void AAS_RemoveRoutingCacheInCluster(const int clusternum)
 {
-	aas_routingcache_t* nextcache;
+	aas_routingcache_t* nextcache = nullptr;
 
 	if (!aasworld.clusterareacache)
 		return;
@@ -266,7 +266,7 @@ void AAS_RemoveRoutingCacheInCluster(const int clusternum)
 //===========================================================================
 void AAS_RemoveRoutingCacheUsingArea(const int areanum)
 {
-	aas_routingcache_t* nextcache;
+	aas_routingcache_t* nextcache = nullptr;
 
 	const int clusternum = aasworld.areasettings[areanum].cluster;
 	if (clusternum > 0)
@@ -405,10 +405,10 @@ void AAS_InitAreaContentsTravelFlags(void)
 //===========================================================================
 void AAS_CreateReversedReachability(void)
 {
-	aas_reversedlink_t* revlink;
-	aas_reachability_t* reach;
-	aas_areasettings_t* settings;
-	char* ptr;
+	aas_reversedlink_t* revlink = nullptr;
+	aas_reachability_t* reach = nullptr;
+	aas_areasettings_t* settings = nullptr;
+	char* ptr = nullptr;
 #ifdef DEBUG
 	int starttime;
 
@@ -483,12 +483,12 @@ unsigned short int AAS_AreaTravelTime(const int areanum, vec3_t start, vec3_t en
 //===========================================================================
 void AAS_CalculateAreaTravelTimes(void)
 {
-	int i, n, size;
-	char* ptr;
-	aas_reversedreachability_t* revreach;
-	aas_reversedlink_t* revlink;
-	aas_reachability_t* reach;
-	aas_areasettings_t* settings;
+	int i = 0, n = 0, size = 0;
+	char* ptr = nullptr;
+	aas_reversedreachability_t* revreach = nullptr;
+	aas_reversedlink_t* revlink = nullptr;
+	aas_reachability_t* reach = nullptr;
+	aas_areasettings_t* settings = nullptr;
 #ifdef DEBUG
 	int starttime;
 
@@ -552,8 +552,8 @@ void AAS_CalculateAreaTravelTimes(void)
 //===========================================================================
 int AAS_PortalMaxTravelTime(const int portalnum)
 {
-	int n;
-	aas_reversedlink_t* revlink;
+	int n = 0;
+	aas_reversedlink_t* revlink = nullptr;
 
 	const aas_portal_t* portal = &aasworld.portals[portalnum];
 	//reversed reachabilities of this portal area
@@ -676,7 +676,7 @@ int AAS_FreeOldestCache(void)
 //===========================================================================
 int AAS_FreeOldestCache(void)
 {
-	aas_routingcache_t* cache;
+	aas_routingcache_t* cache = nullptr;
 
 	for (cache = aasworld.oldestcache; cache; cache = cache->time_next) {
 		// never free area cache leading towards a portal
@@ -735,7 +735,7 @@ aas_routingcache_t* AAS_AllocRoutingCache(const int numtraveltimes)
 //===========================================================================
 void AAS_FreeAllClusterAreaCache(void)
 {
-	aas_routingcache_t* nextcache;
+	aas_routingcache_t* nextcache = nullptr;
 
 	//free all cluster cache if existing
 	if (!aasworld.clusterareacache) return;
@@ -765,7 +765,7 @@ void AAS_FreeAllClusterAreaCache(void)
 //===========================================================================
 void AAS_InitClusterAreaCache(void)
 {
-	int i, size;
+	int i = 0, size = 0;
 
 	//
 	for (size = 0, i = 0; i < aasworld.numclusters; i++)
@@ -793,7 +793,7 @@ void AAS_InitClusterAreaCache(void)
 //===========================================================================
 void AAS_FreeAllPortalCache(void)
 {
-	aas_routingcache_t* nextcache;
+	aas_routingcache_t* nextcache = nullptr;
 
 	//free all portal cache if existing
 	if (!aasworld.portalcache) return;
@@ -903,10 +903,10 @@ using routecacheheader_t = struct routecacheheader_s
 
 void AAS_WriteRouteCache(void)
 {
-	int i, j;
-	aas_routingcache_t* cache;
-	aas_cluster_t* cluster;
-	fileHandle_t fp;
+	int i = 0, j = 0;
+	aas_routingcache_t* cache = nullptr;
+	aas_cluster_t* cluster = nullptr;
+	fileHandle_t fp = 0;
 	char filename[MAX_QPATH];
 	routecacheheader_t routecacheheader;
 
@@ -1000,7 +1000,7 @@ void AAS_WriteRouteCache(void)
 //===========================================================================
 aas_routingcache_t* AAS_ReadCache(const fileHandle_t fp)
 {
-	int size;
+	int size = 0;
 
 	botimport.FS_Read(&size, sizeof size, fp);
 	const auto cache = static_cast<aas_routingcache_t*>(GetMemory(size));
@@ -1018,11 +1018,11 @@ aas_routingcache_t* AAS_ReadCache(const fileHandle_t fp)
 //===========================================================================
 int AAS_ReadRouteCache(void)
 {
-	int i;//, size;
-	fileHandle_t fp;
+	int i = 0;//, size;
+	fileHandle_t fp = 0;
 	char filename[MAX_QPATH];
 	routecacheheader_t routecacheheader;
-	aas_routingcache_t* cache;
+	aas_routingcache_t* cache = nullptr;
 
 	Com_sprintf(filename, MAX_QPATH, "maps/%s.rcd", aasworld.mapname);
 	botimport.FS_FOpenFile(filename, &fp, FS_READ);
@@ -1252,13 +1252,13 @@ void AAS_FreeRoutingCaches(void)
 //===========================================================================
 void AAS_UpdateAreaRoutingCache(aas_routingcache_t* areacache)
 {
-	int i, nextareanum, cluster, badtravelflags, clusterareanum, linknum;
-	int numreachabilityareas;
-	unsigned short int t, startareatraveltimes[128]; //NOTE: not more than 128 reachabilities per area allowed
-	aas_routingupdate_t* updateliststart, * updatelistend, * curupdate, * nextupdate;
-	aas_reachability_t* reach;
-	aas_reversedreachability_t* revreach;
-	aas_reversedlink_t* revlink;
+	int i = 0, nextareanum = 0, cluster = 0, badtravelflags = 0, clusterareanum = 0, linknum = 0;
+	int numreachabilityareas = 0;
+	unsigned short int t = 0, startareatraveltimes[128]; //NOTE: not more than 128 reachabilities per area allowed
+	aas_routingupdate_t* updateliststart = nullptr, * updatelistend = nullptr, * curupdate = nullptr, * nextupdate = nullptr;
+	aas_reachability_t* reach = nullptr;
+	aas_reversedreachability_t* revreach = nullptr;
+	aas_reversedlink_t* revlink = nullptr;
 
 #ifdef ROUTING_DEBUG
 	numareacacheupdates++;
@@ -1363,7 +1363,7 @@ void AAS_UpdateAreaRoutingCache(aas_routingcache_t* areacache)
 //===========================================================================
 aas_routingcache_t* AAS_GetAreaRoutingCache(const int clusternum, const int areanum, const int travelflags)
 {
-	aas_routingcache_t* cache;
+	aas_routingcache_t* cache = nullptr;
 
 	//number of the area in the cluster
 	const int clusterareanum = AAS_ClusterAreaNum(clusternum, areanum);
@@ -1408,12 +1408,12 @@ aas_routingcache_t* AAS_GetAreaRoutingCache(const int clusternum, const int area
 //===========================================================================
 void AAS_UpdatePortalRoutingCache(aas_routingcache_t* portalcache)
 {
-	int portalnum, clusterareanum, clusternum;
-	unsigned short int t;
-	aas_portal_t* portal;
-	aas_cluster_t* cluster;
-	aas_routingcache_t* cache;
-	aas_routingupdate_t* updateliststart, * updatelistend, * curupdate, * nextupdate;
+	int portalnum = 0, clusterareanum = 0, clusternum = 0;
+	unsigned short int t = 0;
+	aas_portal_t* portal = nullptr;
+	aas_cluster_t* cluster = nullptr;
+	aas_routingcache_t* cache = nullptr;
+	aas_routingupdate_t* updateliststart = nullptr, * updatelistend = nullptr, * curupdate = nullptr, * nextupdate = nullptr;
 
 #ifdef ROUTING_DEBUG
 	numportalcacheupdates++;
@@ -1506,7 +1506,7 @@ void AAS_UpdatePortalRoutingCache(aas_routingcache_t* portalcache)
 //===========================================================================
 aas_routingcache_t* AAS_GetPortalRoutingCache(const int clusternum, const int areanum, const int travelflags)
 {
-	aas_routingcache_t* cache;
+	aas_routingcache_t* cache = nullptr;
 
 	//find the cached portal routing if existing
 	for (cache = aasworld.portalcache[areanum]; cache; cache = cache->next)
@@ -1548,11 +1548,11 @@ aas_routingcache_t* AAS_GetPortalRoutingCache(const int clusternum, const int ar
 //===========================================================================
 int AAS_AreaRouteToGoalArea(const int areanum, vec3_t origin, const int goalareanum, int travelflags, int* traveltime, int* reachnum)
 {
-	int clusterareanum;
-	aas_portal_t* portal;
-	aas_cluster_t* cluster;
-	aas_routingcache_t* areacache;
-	aas_reachability_t* reach;
+	int clusterareanum = 0;
+	aas_portal_t* portal = nullptr;
+	aas_cluster_t* cluster = nullptr;
+	aas_routingcache_t* areacache = nullptr;
+	aas_reachability_t* reach = nullptr;
 
 	if (!aasworld.initialized) return qfalse;
 
@@ -1729,7 +1729,7 @@ int AAS_AreaRouteToGoalArea(const int areanum, vec3_t origin, const int goalarea
 //===========================================================================
 int AAS_AreaTravelTimeToGoalArea(const int areanum, vec3_t origin, const int goalareanum, const int travelflags)
 {
-	int traveltime, reachnum = 0;
+	int traveltime = 0, reachnum = 0;
 
 	if (AAS_AreaRouteToGoalArea(areanum, origin, goalareanum, travelflags, &traveltime, &reachnum))
 	{
@@ -1745,7 +1745,7 @@ int AAS_AreaTravelTimeToGoalArea(const int areanum, vec3_t origin, const int goa
 //===========================================================================
 int AAS_AreaReachabilityToGoalArea(const int areanum, vec3_t origin, const int goalareanum, const int travelflags)
 {
-	int traveltime, reachnum = 0;
+	int traveltime = 0, reachnum = 0;
 
 	if (AAS_AreaRouteToGoalArea(areanum, origin, goalareanum, travelflags, &traveltime, &reachnum))
 	{
@@ -1764,7 +1764,7 @@ int AAS_PredictRoute(aas_predictroute_s* route, const int areanum, vec3_t origin
 	const int goalareanum, const int travelflags, const int maxareas, const int maxtime,
 	const int stopevent, const int stopcontents, const int stoptfl, const int stopareanum)
 {
-	int testareanum;
+	int testareanum = 0;
 	vec3_t curorigin;
 
 	//init output
@@ -2035,7 +2035,7 @@ float DistancePointToLine(vec3_t v1, vec3_t v2, vec3_t point)
 //===========================================================================
 int AAS_NearestHideArea(int srcnum, vec3_t origin, const int areanum, int enemynum, vec3_t enemyorigin, const int enemyareanum, const int travelflags)
 {
-	int j;
+	int j = 0;
 	static unsigned short int* hidetraveltimes;
 
 	//

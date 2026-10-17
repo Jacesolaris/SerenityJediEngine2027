@@ -78,7 +78,7 @@ extern float Q_flrand(float min, float max);
 //------------------------------------
 static void Seeker_MaintainHeight(void)
 {
-	float dif;
+	float dif = 0.0f;
 
 	// Update our angles regardless
 	NPC_UpdateAngles(qtrue, qtrue);
@@ -122,7 +122,7 @@ static void Seeker_MaintainHeight(void)
 	}
 	else
 	{
-		const gentity_t* goal;
+		const gentity_t* goal = NULL;
 
 		if (NPCS.NPCInfo->goalEntity) // Is there a goal?
 		{
@@ -180,7 +180,7 @@ static void Seeker_MaintainHeight(void)
 //------------------------------------
 void Seeker_Strafe(void)
 {
-	int side;
+	int side = 0;
 	vec3_t end, right;
 	trace_t tr;
 
@@ -658,7 +658,7 @@ static void Seeker_FollowPlayer(void)
 	//hover around the closest player
 #if 1
 	float min_dist_sqr = MIN_DISTANCE_SQR;
-	gentity_t* target;
+	gentity_t* target = NULL;
 
 	Seeker_MaintainHeight();
 

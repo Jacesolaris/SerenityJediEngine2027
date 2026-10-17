@@ -177,7 +177,7 @@ Cbuf_Execute
 */
 void Cbuf_Execute()
 {
-	int i;
+	int i = 0;
 	char line[MAX_CMD_LINE];
 
 	// This will keep // style comments all on one line by not breaking on
@@ -738,7 +738,7 @@ A complete command line has been parsed, so try to execute it
 */
 void Cmd_ExecuteString(const char* text)
 {
-	cmd_function_t* cmd;
+	cmd_function_t* cmd = nullptr;
 
 	// execute the command line
 	Cmd_TokenizeString(text);
@@ -806,8 +806,8 @@ Cmd_List_f
 */
 void Cmd_List_f()
 {
-	const cmd_function_t* cmd;
-	int i, j;
+	const cmd_function_t* cmd = nullptr;
+	int i = 0, j = 0;
 	const char* match = nullptr;
 
 	if (Cmd_Argc() > 1)

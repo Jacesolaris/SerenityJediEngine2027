@@ -396,7 +396,7 @@ static localEntity_t* FX_AddOrientedLine(vec3_t start, vec3_t end, vec3_t normal
 	const float kill_time,
 	const qhandle_t shader)
 {
-	localEntity_t* le;
+	localEntity_t* le = NULL;
 
 #ifdef _DEBUG
 	if (!shader)
@@ -449,7 +449,7 @@ static void FX_DrawPortableShield(const centity_t* cent)
 	//it this way yet it worked in EF the other way.
 
 	vec3_t start, end, normal;
-	qhandle_t shader;
+	qhandle_t shader = 0;
 
 	if (cl_paused.integer)
 	{
@@ -489,8 +489,8 @@ static void FX_DrawPortableShield(const centity_t* cent)
 	normal[0] = 1;
 	normal[1] = 1;
 
-	start[2] += height / 2;
-	end[2] += height / 2;
+	start[2] += height / 2.0f;
+	end[2] += height / 2.0f;
 
 	if (team == TEAM_RED)
 	{
@@ -838,7 +838,7 @@ extern qboolean BG_GetRootSurfNameWithVariant(void* ghoul2, const char* rootSurf
 static void CG_General(centity_t* cent)
 {
 	refEntity_t ent;
-	entityState_t* s1;
+	entityState_t* s1 = NULL;
 	mdxaBone_t matrix;
 	qboolean do_not_set_model = qfalse;
 
@@ -873,16 +873,16 @@ static void CG_General(centity_t* cent)
 
 	if (cent->currentState.weapon == WP_STUN_BATON)
 	{
-		int i;
+		int i = 0;
 		orientation_t lerped;
 
 		vec3_t start;
 		vec3_t end;
 		vec3_t r_hand_pos = { 0 };
 
-		centity_t* parent;
+		centity_t* parent = NULL;
 		mdxaBone_t mat;
-		int color;
+		int color = 0;
 		color = 0x000020;
 
 		// lerp the tag
@@ -909,15 +909,15 @@ static void CG_General(centity_t* cent)
 
 	if (cent->currentState.weapon == WP_MELEE)
 	{
-		int i;
+		int i = 0;
 		orientation_t lerped;
 
 		vec3_t start;
 		vec3_t end;
 
-		centity_t* parent;
+		centity_t* parent = NULL;
 		mdxaBone_t mat;
-		int color;
+		int color = 0;
 		color = 0x000020;
 
 		// lerp the tag grapple
@@ -1083,7 +1083,7 @@ static void CG_General(centity_t* cent)
 		cent->currentState.weapon == G2_MODEL_PART)
 	{
 		//special case for client limbs
-		centity_t* cl_ent;
+		centity_t* cl_ent = NULL;
 		int dismember_settings = cg_dismember.integer;
 		float smooth_factor = 0.5f * timescale.value;
 		int k = 0;
@@ -1115,14 +1115,14 @@ static void CG_General(centity_t* cent)
 
 		if (!cent->ghoul2)
 		{
-			const char* rotate_bone;
+			const char* rotate_bone = NULL;
 			char limb_name[MAX_QPATH];
 			char stub_name[MAX_QPATH];
 			char limb_cap_name[MAX_QPATH];
 			char stub_cap_name[MAX_QPATH];
-			char* limb_tag_name;
-			char* stub_tag_name;
-			int new_bolt;
+			char* limb_tag_name = NULL;
+			char* stub_tag_name = NULL;
+			int new_bolt = 0;
 			int limb_bit = (1 << (cent->currentState.modelGhoul2 - 10));
 
 			if (cl_ent && cl_ent->torsoBolt & limb_bit)
@@ -1390,7 +1390,7 @@ static void CG_General(centity_t* cent)
 		cent->currentState.NPC_class != CLASS_VEHICLE)
 	{
 		vec3_t emp_angles;
-		centity_t* emp_own;
+		centity_t* emp_own = NULL;
 
 		emp_own = &cg_entities[cent->currentState.emplacedOwner];
 
@@ -1473,7 +1473,7 @@ static void CG_General(centity_t* cent)
 			if (cent->ghoul2 && trap->G2API_SkinlessModel(cent->ghoul2, 0))
 			{
 				int skin = 0;
-				int l;
+				int l = 0;
 				char skin_name[MAX_QPATH];
 				//well, you'd never want a skinless model, so try to get his skin...
 				Q_strncpyz(skin_name, modelName, MAX_QPATH);
@@ -1568,7 +1568,7 @@ static void CG_General(centity_t* cent)
 
 	if (cent->currentState.time > cg.time && cent->currentState.weapon == WP_EMPLACED_GUN)
 	{
-		float val;
+		float val = 0.0f;
 		// make the gun pulse red to warn about it exploding
 		val = (1.0f - (float)(cent->currentState.time - cg.time) / 3200.0f) * 0.3f;
 
@@ -1602,7 +1602,7 @@ static void CG_General(centity_t* cent)
 		{
 			qboolean light_side = cent->teamPowerType != 0 ? qtrue : qfalse;
 			vec3_t hit_loc, temp_ang;
-			float temp_length;
+			float temp_length = 0.0f;
 			int cur_time_dif = cg.time + 60000 - cent->bodyFadeTime;
 			int t_mult = cur_time_dif * 0.08;
 
@@ -1760,7 +1760,7 @@ static void CG_General(centity_t* cent)
 	if (cent->bolt3 == 999)
 	{
 		//this is an in-flight saber being rendered manually
-		float wv;
+		float wv = 0.0f;
 		addspriteArgStruct_t fx_s_args = { 0 };
 
 		ent.customShader = cgs.media.solidWhite;
@@ -1796,7 +1796,7 @@ static void CG_General(centity_t* cent)
 	{
 		//holocron special effects
 		vec3_t org;
-		float wv;
+		float wv = 0.0f;
 		addspriteArgStruct_t fx_s_args = { 0 };
 
 		ent.customShader = cgs.media.solidWhite;
@@ -1913,7 +1913,7 @@ static void CG_General(centity_t* cent)
 	if (cent->currentState.time == -1 && cent->currentState.weapon == WP_TRIP_MINE && cent->currentState.eFlags & EF_FIRING)
 	{
 		vec3_t beam_org;
-		int beam_id;
+		int beam_id = 0;
 		//if force sight is active, render the laser multiple times up to the force sight level to increase visibility
 		if (!cg.snap->ps.duelInProgress ||
 			cent->currentState.otherentityNum == cg.snap->ps.clientNum ||
@@ -2230,10 +2230,10 @@ CG_Item
 static void CG_Item(centity_t* cent)
 {
 	refEntity_t ent;
-	entityState_t* es;
-	gitem_t* item;
-	int msec;
-	weaponInfo_t* wi;
+	entityState_t* es = NULL;
+	gitem_t* item = NULL;
+	int msec = 0;
+	weaponInfo_t* wi = NULL;
 
 	es = &cent->currentState;
 	if (es->modelIndex >= bg_numItems)
@@ -2368,7 +2368,7 @@ static void CG_Item(centity_t* cent)
 	if ((!(cent->currentState.eFlags & EF_DROPPEDWEAPON) || item->giType == IT_POWERUP) &&
 		(item->giType == IT_WEAPON || item->giType == IT_POWERUP))
 	{
-		float scale;
+		float scale = 0.0f;
 		// items bob up and down continuously
 		scale = 0.005 + cent->currentState.number * 0.00001;
 		cent->lerpOrigin[2] += 4 + cos((cg.time + 1000) * scale) * 4;
@@ -2563,8 +2563,8 @@ static void CG_Item(centity_t* cent)
 		eFlags & EF_DROPPEDWEAPON))
 	{
 		// if just respawned, fade in, but don't do this for flags.
-		float alpha;
-		int a;
+		float alpha = 0.0f;
+		int a = 0;
 
 		alpha = (float)msec / ITEM_SCALEUP_TIME;
 		a = alpha * 255.0;
@@ -2781,7 +2781,7 @@ static void CG_SaberBodyStickPlace(centity_t* cent)
 	const entityState_t* s1 = &cent->currentState;
 	mdxaBone_t matrix;
 	vec3_t org, axis[3], hilt, dir;
-	int i;
+	int i = 0;
 
 	if (!(s1->eFlags & EF_MISSILE_STICK) || VectorCompare(s1->angles2, vec3_origin)
 		|| s1->otherentityNum2 < 0 || s1->otherentityNum2 >= ENTITYNUM_WORLD)
@@ -2848,8 +2848,8 @@ static void CG_SaberBodyStickPlace(centity_t* cent)
 static void CG_Missile(centity_t* cent)
 {
 	refEntity_t ent = { 0 };
-	entityState_t* s1;
-	const weaponInfo_t* weapon;
+	entityState_t* s1 = NULL;
+	const weaponInfo_t* weapon = NULL;
 
 	if (cg.snap->ps.duelInProgress &&
 		cent->currentState.eType == ET_MISSILE &&
@@ -2909,8 +2909,8 @@ static void CG_Missile(centity_t* cent)
 			{
 				clientInfo_t* saber_owner_info = &cgs.clientinfo[s1->owner];
 				int m = 0;
-				int tag_bolt;
-				char* tag_name;
+				int tag_bolt = 0;
+				char* tag_name = NULL;
 
 				while (m < saber_owner_info->saber[0].numBlades)
 				{
@@ -2963,16 +2963,16 @@ static void CG_Missile(centity_t* cent)
 
 	if (s1->weapon == WP_STUN_BATON)
 	{
-		int i;
+		int i = 0;
 		orientation_t lerped;
 
 		vec3_t start;
 		vec3_t end;
 		vec3_t r_hand_pos = { 0 };
 
-		centity_t* parent;
+		centity_t* parent = NULL;
 		mdxaBone_t mat;
-		int color;
+		int color = 0;
 		color = 0x000020;
 
 		// lerp the tag
@@ -3002,15 +3002,15 @@ static void CG_Missile(centity_t* cent)
 
 	if (s1->weapon == WP_MELEE)
 	{
-		int i;
+		int i = 0;
 		orientation_t lerped;
 
 		vec3_t start;
 		vec3_t end;
 
-		centity_t* parent;
+		centity_t* parent = NULL;
 		mdxaBone_t mat;
-		int color;
+		int color = 0;
 		color = 0x000020;
 
 		// lerp the tag grapple
@@ -3267,7 +3267,7 @@ static void CG_Missile(centity_t* cent)
 			//is the only one that can be tossed...for now.
 			if (saber_own_info->saber[0].model[0])
 			{
-				int k;
+				int k = 0;
 				k = 0;
 				while (k < saber_own_info->saber[0].numBlades)
 				{
@@ -3306,8 +3306,8 @@ static void CG_Missile(centity_t* cent)
 			s1->owner == cg.snap->ps.clientNum)) //or it's our saber and we've dropped it.
 	{
 		// always make the saber glow when on the ground
-		float wv;
-		int i;
+		float wv = 0.0f;
+		int i = 0;
 		addspriteArgStruct_t fx_s_args = { 0 };
 
 		ent.customShader = cgs.media.solidWhite;
@@ -4122,8 +4122,8 @@ CG_AddPacketEntities
 */
 void CG_AddPacketEntities(const qboolean is_portal)
 {
-	int num;
-	centity_t* cent;
+	int num = 0;
+	centity_t* cent = NULL;
 
 	if (is_portal)
 	{
@@ -4255,7 +4255,7 @@ void CG_AddPacketEntities(const qboolean is_portal)
 
 void CG_ROFF_NotetrackCallback(const centity_t* cent, const char* notetrack)
 {
-	int i = 0, r = 0, object_id;
+	int i = 0, r = 0, object_id = 0;
 	char type[256] = { 0 };
 	char argument[512] = { 0 };
 	char addl_arg[512] = { 0 };

@@ -367,7 +367,7 @@ void* GetClearedMemoryDebug(unsigned long size, char* label, char* file, int lin
 void* GetClearedMemory(unsigned long size)
 #endif //MEMDEBUG
 {
-	void* ptr;
+	void* ptr = nullptr;
 #ifdef MEMDEBUG
 	ptr = GetMemoryDebug(size, label, file, line);
 #else
@@ -406,7 +406,7 @@ void* GetClearedHunkMemoryDebug(unsigned long size, char* label, char* file, int
 void* GetClearedHunkMemory(unsigned long size)
 #endif //MEMDEBUG
 {
-	void* ptr;
+	void* ptr = nullptr;
 #ifdef MEMDEBUG
 	ptr = GetHunkMemoryDebug(size, label, file, line);
 #else

@@ -74,7 +74,7 @@ Will allways succeed, even if it requires freeing an old active mark
 ===================
 */
 decalPoly_t* RE_AllocDecal(const int type) {
-	decalPoly_t* le;
+	decalPoly_t* le = nullptr;
 
 	// See if the cvar changed
 	if (re_decalPolyTotal[type] > r_markcount->integer)
@@ -137,12 +137,12 @@ passed to the renderer.
 void RE_AddDecalToScene(const qhandle_t decalShader, const vec3_t origin, const vec3_t dir, const float orientation, const float red, const float green, const float blue, const float alpha, qboolean alphaFade, const float radius, const qboolean temporary)
 {
 	matrix3_t		axis{};
-	float			texCoordScale;
+	float			texCoordScale = 0.0f;
 	vec3_t			originalPoints[4]{};
 	byte			colors[4]{};
-	int				i, j;
-	int				numFragments;
-	markFragment_t	markFragments[MAX_DECAL_FRAGMENTS], * mf;
+	int				i = 0, j = 0;
+	int				numFragments = 0;
+	markFragment_t	markFragments[MAX_DECAL_FRAGMENTS], * mf = nullptr;
 	vec3_t			markPoints[MAX_DECAL_POINTS]{};
 	vec3_t			projection;
 
@@ -184,9 +184,9 @@ void RE_AddDecalToScene(const qhandle_t decalShader, const vec3_t origin, const 
 
 	for (i = 0, mf = markFragments; i < numFragments; i++, mf++)
 	{
-		polyVert_t* v;
+		polyVert_t* v = nullptr;
 		polyVert_t	verts[MAX_VERTS_ON_DECAL_POLY]{};
-		decalPoly_t* decal;
+		decalPoly_t* decal = nullptr;
 
 		// we have an upper limit on the complexity of polygons
 		// that we store persistantly
@@ -237,8 +237,8 @@ R_AddDecals
 */
 void R_AddDecals(void)
 {
-	int			decalPoly;
-	int			type;
+	int			decalPoly = 0;
+	int			type = 0;
 	static int  lastMarkCount = -1;
 
 	if (r_markcount->integer != lastMarkCount) {
@@ -263,14 +263,14 @@ void R_AddDecals(void)
 			{
 				if (p->fadetime)
 				{
-					int t;
+					int t = 0;
 
 					// fade all marks out with time
 					t = tr.refdef.time - p->time;
 					if (t < DECAL_FADE_TIME)
 					{
-						float fade;
-						int	  j;
+						float fade = 0.0f;
+						int	  j = 0;
 
 						fade = 255.0f * (1.0f - ((float)t / DECAL_FADE_TIME));
 

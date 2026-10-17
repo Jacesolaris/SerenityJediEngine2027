@@ -9,7 +9,7 @@ void LoadDynamicMusicGroup(char* mapname, char* buffer);
 void LoadDynamicMusic(void)
 {
 	// Tries to load dynamic music data for this map.
-	fileHandle_t f;
+	fileHandle_t f = 0;
 
 	// FIX: move huge buffer off the stack
 	static char buffer[DMS_INFO_SIZE];
@@ -169,7 +169,7 @@ static void LoadDMSSongLengths(void)
 	// FIX: move huge buffer off the stack
 	static char buffer[DMS_INFO_SIZE];
 
-	fileHandle_t f;
+	fileHandle_t f = 0;
 
 	if (!DMSData.valid)
 	{
@@ -279,8 +279,8 @@ void LoadDynamicMusicGroup(char* mapname, char* buffer)
 //Do the transitions between DMS action/explore DMS states
 static void TransitionBetweenState(void)
 {
-	DynamicMusicSet_t* oldSongGroup;
-	DynamicMusicSet_t* newSongGroup;
+	DynamicMusicSet_t* oldSongGroup = NULL;
+	DynamicMusicSet_t* newSongGroup = NULL;
 
 	if (DMSData.olddmState != DM_ACTION && DMSData.olddmState != DM_EXPLORE
 		|| !DMSData.dmStartTime)
@@ -347,7 +347,7 @@ static void TransitionBetweenState(void)
 void G_DynamicMusicUpdate(void)
 {
 	int battle = 0;
-	int entTeam;
+	int entTeam = 0;
 	vec3_t mins = { 0, 0, 0 }, maxs = { 0, 0, 0 };
 
 	if (DMSData.dmDebounceTime >= 0 && DMSData.dmDebounceTime < level.time)

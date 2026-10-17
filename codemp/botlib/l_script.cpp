@@ -361,7 +361,7 @@ static int PS_ReadWhiteSpace(script_t* script)
 //============================================================================
 static int PS_ReadEscapeCharacter(script_t* script, char* ch)
 {
-	int c, val, i;
+	int c = 0, val = 0, i = 0;
 
 	//step over the leading '\\'
 	script->script_p++;
@@ -526,7 +526,7 @@ static int PS_ReadString(script_t* script, token_t* token, const int quote)
 static int PS_ReadName(script_t* script, token_t* token)
 {
 	int len = 0;
-	char c;
+	char c = 0;
 
 	token->type = TT_NAME;
 	do
@@ -627,7 +627,7 @@ static void NumberValue(char* string, const int subtype, unsigned long int* intv
 static int PS_ReadNumber(script_t* script, token_t* token)
 {
 	int len = 0;
-	char c;
+	char c = 0;
 	//	unsigned long int intvalue = 0;
 	//	long double floatvalue = 0;
 
@@ -680,7 +680,7 @@ static int PS_ReadNumber(script_t* script, token_t* token)
 #endif //BINARYNUMBERS
 	else //decimal or octal integer or floating point number
 	{
-		int octal;
+		int octal = 0;
 		octal = qfalse;
 		int dot = qfalse;
 		if (*script->script_p == '0') octal = qtrue;
@@ -781,8 +781,8 @@ static int PS_ReadLiteral(script_t* script, token_t* token)
 //============================================================================
 int PS_ReadPunctuation(script_t* script, token_t* token)
 {
-	int len;
-	const char* p;
+	int len = 0;
+	const char* p = nullptr;
 
 #ifdef PUNCTABLE
 	for (punctuation_t* punc = script->punctuationtable[static_cast<unsigned>(*script->script_p)]; punc; punc = punc->next)
@@ -1295,8 +1295,8 @@ static int ScriptSkipTo(script_t * script, char* value)
 //============================================================================
 int FileLength(FILE * fp)
 {
-	int pos;
-	int end;
+	int pos = 0;
+	int end = 0;
 
 	pos = ftell(fp);
 	fseek(fp, 0, SEEK_END);
@@ -1320,8 +1320,8 @@ script_t* LoadScriptFile(const char* filename)
 #else
 	FILE* fp;
 #endif
-	int length;
-	void* buffer;
+	int length = 0;
+	void* buffer = nullptr;
 	script_t* script;
 
 #ifdef BOTLIB

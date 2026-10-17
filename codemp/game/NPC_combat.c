@@ -207,7 +207,7 @@ static qboolean G_CheckSaberAllyAttackDelay(const gentity_t* self, const gentity
 		{
 			return qtrue;
 		}
-		int delay;
+		int delay = 0;
 		if (distance > 2048)
 		{
 			//the farther they are, the shorter the delay
@@ -1097,7 +1097,7 @@ ShootThink
 */
 void ShootThink(void)
 {
-	int delay;
+	int delay = 0;
 
 	NPCS.ucmd.buttons |= BUTTON_ATTACK;
 
@@ -1660,10 +1660,10 @@ gentity_t* NPC_PickEnemy(const gentity_t* closestTo, const int enemyTeam, const 
 {
 	int num_choices = 0;
 	int choice[128] = { 0 }; //FIXME: need a different way to determine how many choices?
-	gentity_t* newenemy;
+	gentity_t* newenemy = NULL;
 	gentity_t* closestEnemy = NULL;
 	vec3_t diff;
-	float relDist;
+	float relDist = 0.0f;
 	float bestDist = 2048.0f;
 	qboolean failed = qfalse;
 	int visChecks = CHECK_360 | CHECK_FOV | CHECK_VISRANGE;
@@ -2817,7 +2817,7 @@ static int NPC_CollectCombatPoints(const vec3_t origin, const float radius, comb
 	const int flags)
 {
 	const float radiusSqr = radius * radius;
-	float distance;
+	float distance = 0.0f;
 	float bestDistance = Q3_INFINITE;
 	int numPoints = 0;
 
@@ -2899,7 +2899,7 @@ int NPC_FindCombatPoint(const vec3_t position, const vec3_t avoidPosition, vec3_
 {
 	combatPt_t points[MAX_COMBAT_POINTS];
 	int best = -1, bestCost = Q3_INFINITE, waypoint = WAYPOINT_NONE;
-	float dist;
+	float dist = 0.0f;
 	trace_t tr;
 	float collRad = CP_COLLECT_RADIUS;
 	float modifiedAvoidDist = avoidDist;

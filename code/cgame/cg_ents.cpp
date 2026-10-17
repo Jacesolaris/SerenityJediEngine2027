@@ -107,7 +107,7 @@ tag location
 void CG_PositionRotatedEntityOnTag(refEntity_t* entity, const refEntity_t* parent,
 	const qhandle_t parent_model, const char* tag_name, orientation_t* tag_orient)
 {
-	int i;
+	int i = 0;
 	orientation_t lerped;
 	vec3_t tempAxis[3];
 
@@ -386,7 +386,7 @@ CG_General
 static void CG_General(centity_t* cent)
 {
 	refEntity_t ent;
-	entityState_t* s1;
+	entityState_t* s1 = nullptr;
 
 	if (cent->currentState.eFlags2 & EF2_RADAROBJECT)
 	{
@@ -482,16 +482,16 @@ static void CG_General(centity_t* cent)
 
 	if (cent->currentState.weapon == WP_STUN_BATON)
 	{
-		int i;
+		int i = 0;
 		orientation_t lerped;
 
 		vec3_t start;
 		vec3_t end;
 		vec3_t r_hand_pos{};
 
-		centity_t* parent;
+		centity_t* parent = nullptr;
 		mdxaBone_t mat;
-		int color;
+		int color = 0;
 		color = 0x000020;
 
 		// lerp the tag
@@ -518,15 +518,15 @@ static void CG_General(centity_t* cent)
 
 	if (cent->currentState.weapon == WP_MELEE)
 	{
-		int i;
+		int i = 0;
 		orientation_t lerped;
 
 		vec3_t start;
 		vec3_t end;
 
-		centity_t* parent;
+		centity_t* parent = nullptr;
 		mdxaBone_t mat;
-		int color;
+		int color = 0;
 		color = 0x000020;
 
 		// lerp the tag grapple
@@ -795,7 +795,7 @@ static void CG_General(centity_t* cent)
 					}
 					else
 					{
-						int spin_sound;
+						int spin_sound = 0;
 						if (cent->gent->owner->client->ps.saber[0].spinSound
 							&& cgs.sound_precache[cent->gent->owner->client->ps.saber[0].spinSound])
 						{
@@ -873,7 +873,7 @@ static void CG_General(centity_t* cent)
 				}
 				else
 				{
-					int spin_sound;
+					int spin_sound = 0;
 					if (cent->gent->owner->client->ps.saber[0].spinSound
 						&& cgs.sound_precache[cent->gent->owner->client->ps.saber[0].spinSound])
 					{
@@ -946,7 +946,7 @@ static void CG_General(centity_t* cent)
 		//special code for adding the beam to the attached tripwire mine
 		vec3_t beam_org;
 		int handle = 0;
-		SEffectTemplate* temp;
+		SEffectTemplate* temp = nullptr;
 
 		VectorMA(ent.origin, 6.6f, ent.axis[0], beam_org); // forward
 
@@ -1771,7 +1771,7 @@ void CG_Cube(vec3_t mins, vec3_t maxs, vec3_t color, const float alpha)
 {
 	vec3_t point[4]{}, rot = { 0, 0, 0 };
 	int vec[3]{};
-	int axis;
+	int axis = 0;
 
 	for (axis = 0, vec[0] = 0, vec[1] = 1, vec[2] = 2; axis < 3; axis++, vec[0]++, vec[1]++, vec[2]++)
 	{
@@ -1815,7 +1815,7 @@ void CG_CubeOutline(vec3_t mins, vec3_t maxs, const int time, const unsigned int
 {
 	vec3_t point1{}, point2{}, point3{}, point4{};
 	int vec[3]{};
-	int axis;
+	int axis = 0;
 
 	for (axis = 0, vec[0] = 0, vec[1] = 1, vec[2] = 2; axis < 3; axis++, vec[0]++, vec[1]++, vec[2]++)
 	{
@@ -2224,8 +2224,8 @@ void CG_DLightThink(const centity_t* cent)
 		float percentage = t_delta / cent->gent->speed;
 		vec3_t org;
 		vec4_t current_rgba{};
-		const gentity_t* owner;
-		int i;
+		const gentity_t* owner = nullptr;
+		int i = 0;
 
 		if (percentage >= 1.0f)
 		{
@@ -2899,8 +2899,8 @@ CG_AddPacketEntities
 */
 void CG_AddPacketEntities(const qboolean is_portal)
 {
-	int num;
-	centity_t* cent;
+	int num = 0;
+	centity_t* cent = nullptr;
 
 	if (is_portal)
 	{
@@ -2975,7 +2975,7 @@ void CG_AddPacketEntities(const qboolean is_portal)
 //callback once that's implemented fully.
 void CG_ROFF_NotetrackCallback(const centity_t* cent, const char* notetrack)
 {
-	int i = 0, r = 0, object_id;
+	int i = 0, r = 0, object_id = 0;
 	char type[256]{};
 	char argument[512]{};
 	char addl_arg[512]{};

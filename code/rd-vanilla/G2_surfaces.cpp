@@ -216,7 +216,7 @@ qboolean G2_SetSurfaceOnOff(CGhoul2Info* ghlInfo, const char* surfaceName, const
 		return qtrue;
 	}
 	// ok, not in the list already - in that case, lets verify this surface exists in the model mesh
-	uint32_t flags;
+	uint32_t flags = 0;
 	const int surfaceNum = G2_IsSurfaceLegal(ghlInfo->currentModel, surfaceName, &flags);
 	if (surfaceNum != -1)
 	{
@@ -350,7 +350,7 @@ int G2_AddSurface(CGhoul2Info* ghoul2, const int surfaceNumber, const int polyNu
 	lod = G2_DecideTraceLod(*ghoul2, lod);
 
 	// first up, see if we have a free one already set up  - look only from the end of the constant surfaces onwards
-	size_t i;
+	size_t i = 0;
 	for (i = 0; i < ghoul2->mSlist.size(); i++)
 	{
 		// is the surface count -1? That would indicate it's free
@@ -398,7 +398,7 @@ int G2_GetParentSurface(CGhoul2Info* ghlInfo, const int index)
 
 int G2_GetSurfaceIndex(CGhoul2Info* ghlInfo, const char* surfaceName)
 {
-	uint32_t			flags;
+	uint32_t			flags = 0;
 	assert(ghlInfo->currentModel);
 	return G2_IsSurfaceLegal(ghlInfo->currentModel, surfaceName, &flags);
 }

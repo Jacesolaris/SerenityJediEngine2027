@@ -397,7 +397,7 @@ int G2_DecideTraceLod(CGhoul2Info& ghoul2, int useLod)
 
 static void R_TransformEachSurface(const mdxmSurface_t* surface, vec3_t scale, CMiniHeap* G2VertSpace, intptr_t* TransformedVertsArray, CBoneCache* boneCache)
 {
-	int				 j, k;
+	int				 j = 0, k = 0;
 
 	//
 	// deform the vertexes by the lerped bones
@@ -550,7 +550,7 @@ void G2_TransformModel(CGhoul2Info_v& ghoul2, const int frameNum, vec3_t scale, 
 void G2_TransformModel(CGhoul2Info_v& ghoul2, const int frameNum, vec3_t scale, CMiniHeap* G2VertSpace, int useLod)
 #endif
 {
-	int lod;
+	int lod = 0;
 	vec3_t			correctScale;
 
 #if !defined(JK2_MODE) || defined(_G2_GORE)
@@ -795,7 +795,7 @@ int	G2API_GetTime(int arg_time);
 // now we at poly level, check each model space transformed poly against the model world transfomed ray
 static void G2_GorePolys(const mdxmSurface_t* surface, CTraceSurface& TS, const mdxmSurfHierarchy_t* surfInfo)
 {
-	int			j;
+	int			j = 0;
 	vec3_t basis1;
 	vec3_t basis2;
 	vec3_t taxis;
@@ -966,7 +966,7 @@ static void G2_GorePolys(const mdxmSurface_t* surface, CTraceSurface& TS, const 
 		return;
 	}
 
-	int newTag;
+	int newTag = 0;
 	const auto f = GoreTagsTemp.find(std::make_pair(goreModelIndex, TS.surfaceNum));
 	if (f == GoreTagsTemp.end()) // need to generate a record
 	{
@@ -1099,7 +1099,7 @@ static bool G2_TracePolys(const mdxmSurface_t* surface, const mdxmSurfHierarchy_
 	const int numTris = surface->numTriangles;
 	for (int j = 0; j < numTris; j++)
 	{
-		float			face;
+		float			face = 0.0f;
 		vec3_t	hitPoint, normal;
 		// determine actual coords for this triangle
 		const float* point1 = &verts[(tris[j].indexes[0] * 5)];
@@ -1224,7 +1224,7 @@ static bool G2_RadiusTracePolys(
 	CTraceSurface& TS
 )
 {
-	int		j;
+	int		j = 0;
 	vec3_t basis1;
 	vec3_t basis2{};
 	vec3_t taxis;
@@ -1388,7 +1388,7 @@ static bool G2_RadiusTracePolys(
 #else
 				//yeah, I want the collision point. Let's work out the impact point on the triangle. -rww
 				vec3_t hitPoint;
-				float dist;
+				float dist = 0.0f;
 				const float third = -(A[0] * (B[1] * C[2] - C[1] * B[2]) + B[0] * (C[1] * A[2] - A[1] * C[2]) + C[0] * (A[1] * B[2] - B[1] * A[2]));
 
 				VectorSubtract(TS.rayEnd, TS.rayStart, distVect);
@@ -1522,9 +1522,9 @@ void G2_TraceModels(CGhoul2Info_v& ghoul2, vec3_t rayStart, vec3_t rayEnd, CColl
 void G2_TraceModels(CGhoul2Info_v& ghoul2, vec3_t rayStart, vec3_t rayEnd, CCollisionRecord* collRecMap, int entNum, EG2_Collision eG2TraceType, int useLod, float fRadius)
 #endif
 {
-	int lod;
-	skin_t* skin;
-	shader_t* cust_shader;
+	int lod = 0;
+	skin_t* skin = nullptr;
+	shader_t* cust_shader = nullptr;
 #if !defined(JK2_MODE) || defined(_G2_GORE)
 	qboolean		firstModelOnly = qfalse;
 #endif // !JK2_MODE || _G2_GORE
@@ -1674,7 +1674,7 @@ void Create_Matrix(const float* angle, mdxaBone_t* matrix)
 // given a matrix, generate the inverse of that matrix
 void Inverse_Matrix(const mdxaBone_t* src, mdxaBone_t* dest)
 {
-	int i, j;
+	int i = 0, j = 0;
 
 	for (i = 0; i < 3; i++)
 	{

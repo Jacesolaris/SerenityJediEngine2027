@@ -31,7 +31,7 @@ CM_PointLeafnum_r
 */
 int CM_PointLeafnum_r(const vec3_t p, int num, const clipMap_t* local)
 {
-	float d;
+	float d = 0.0f;
 
 	while (num >= 0)
 	{
@@ -91,7 +91,7 @@ void CM_StoreLeafs(leafList_t* ll, const int nodenum)
 
 void CM_StoreBrushes(leafList_t* ll, const int nodenum)
 {
-	int i;
+	int i = 0;
 
 	const int leafnum = -1 - nodenum;
 
@@ -210,10 +210,10 @@ CM_PointContents
 */
 int CM_PointContents(const vec3_t p, const clipHandle_t model)
 {
-	int leafnum;
-	int i;
-	cLeaf_t* leaf;
-	clipMap_t* local;
+	int leafnum = 0;
+	int i = 0;
+	cLeaf_t* leaf = nullptr;
+	clipMap_t* local = nullptr;
 
 	if (!cmg.numNodes)
 	{

@@ -167,7 +167,7 @@ static	void R_LoadLightmaps(const lump_t* l, const char* ps_map_name, world_t& w
 {
 	static byte image[LIGHTMAP_SIZE * LIGHTMAP_SIZE * 4]; // off the stack (C6262)
 	memset(image, 0, sizeof(image)); // cleared each time, as the {} on the stack was
-	int j;
+	int j = 0;
 	float				max_intensity = 0;
 	double				sum_intensity = 0;
 
@@ -336,7 +336,7 @@ ParseFace
 */
 static void ParseFace(const dsurface_t* ds, mapVert_t* verts, msurface_t* surf, int* indexes, byte*& p_face_data_buffer, const world_t& worldData, const int index)
 {
-	int			i, j, k;
+	int			i = 0, j = 0, k = 0;
 	int			lightmapNum[MAXLIGHTMAPS]{};
 
 	for (i = 0; i < MAXLIGHTMAPS; i++)
@@ -417,7 +417,7 @@ ParseMesh
 ===============
 */
 static void ParseMesh(const dsurface_t* ds, mapVert_t* verts, msurface_t* surf, const world_t& worldData, const int index) {
-	int				i, j, k;
+	int				i = 0, j = 0, k = 0;
 	static drawVert_t points[MAX_PATCH_SIZE * MAX_PATCH_SIZE]; // off the stack (C6262)
 	memset(points, 0, sizeof(points)); // cleared each time, as the {} on the stack was
 	int				lightmapNum[MAXLIGHTMAPS]{};
@@ -500,7 +500,7 @@ ParseTriSurf
 ===============
 */
 static void ParseTriSurf(const dsurface_t* ds, mapVert_t* verts, msurface_t* surf, int* indexes, const world_t& worldData, const int index) {
-	int				i, j, k;
+	int				i = 0, j = 0, k = 0;
 
 	// get fog volume
 	surf->fogIndex = LittleLong ds->fogNum + 1;
@@ -610,7 +610,7 @@ R_LoadSurfaces
 */
 static void R_LoadSurfaces(const lump_t* surfs, const lump_t* verts, const lump_t* index_lump, world_t& worldData, const int index)
 {
-	int			i;
+	int			i = 0;
 
 	int numFaces = 0;
 	int numMeshes = 0;
@@ -695,7 +695,7 @@ R_LoadSubmodels
 =================
 */
 static void R_LoadSubmodels(const lump_t* l, world_t& worldData, const int index) {
-	bmodel_t* out;
+	bmodel_t* out = nullptr;
 
 	dmodel_t* in = reinterpret_cast<dmodel_t*>(fileBase + l->fileofs);
 	if (l->filelen % sizeof * in)
@@ -765,7 +765,7 @@ R_LoadNodesAndLeafs
 */
 static void R_LoadNodesAndLeafs(const lump_t* nodeLump, const lump_t* leafLump, world_t& worldData)
 {
-	int			i, j;
+	int			i = 0, j = 0;
 
 	dnode_t* in = reinterpret_cast<dnode_t*>(fileBase + nodeLump->fileofs);
 	if (nodeLump->filelen % sizeof(dnode_t) ||
@@ -919,9 +919,9 @@ R_LoadFogs
 */
 static void R_LoadFogs(const lump_t* l, const lump_t* brushesLump, const lump_t* sidesLump, world_t& worldData, const int index)
 {
-	fog_t* out;
-	int			side_num;
-	int			plane_num;
+	fog_t* out = nullptr;
+	int			side_num = 0;
+	int			plane_num = 0;
 	int			first_side = 0;
 	constexpr int			lightmaps[MAXLIGHTMAPS] = { LIGHTMAP_NONE };
 
@@ -1082,7 +1082,7 @@ R_LoadLightGrid
 ================
 */
 static void R_LoadLightGrid(const lump_t* l, world_t& worldData) {
-	int		i;
+	int		i = 0;
 	vec3_t	maxs{};
 
 	world_t* w = &worldData;
@@ -1173,7 +1173,7 @@ R_LoadLightGridArray
 ================
 */
 static void R_LoadLightGridArray(const lump_t* l, world_t& worldData) {
-	world_t* w;
+	world_t* w = nullptr;
 #ifdef Q3_BIG_ENDIAN
 	int i;
 #endif

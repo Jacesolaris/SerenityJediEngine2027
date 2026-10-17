@@ -752,7 +752,7 @@ unsigned int AnyLanguage_ReadCharFromString(char* psText, int* piAdvanceCount, q
 	return uiLetter;
 #else
 	auto psString = reinterpret_cast<const byte*>(psText);	// avoid sign-promote bug
-	unsigned int uiLetter;
+	unsigned int uiLetter = 0;
 
 	switch (GetLanguageEnum())
 	{
@@ -835,7 +835,7 @@ unsigned int AnyLanguage_ReadCharFromString(char* psText, int* piAdvanceCount, q
 
 	case eThai:
 	{
-		int iThaiBytes;
+		int iThaiBytes = 0;
 		uiLetter = Thai_ValidTISCode(psString, iThaiBytes);
 		if (uiLetter)
 		{
@@ -930,7 +930,7 @@ qboolean Language_UsesSpaces()
 //
 CFontInfo::CFontInfo(const char* _fontName)
 {
-	void* buff;
+	void* buff = nullptr;
 
 	// remove any special hack name insertions...
 	//
@@ -1017,7 +1017,7 @@ CFontInfo::CFontInfo(const char* _fontName)
 
 			// SBCS override languages...
 			//
-			fileHandle_t f;
+			fileHandle_t f = 0;
 			for (int i = 0; g_SBCSOverrideLanguages[i].m_psName; i++)
 			{
 				char sTemp[MAX_QPATH];
@@ -1237,6 +1237,8 @@ const glyphInfo_t* CFontInfo::GetLetter(const unsigned int uiLetter, int* piShad
 				const int iRow = iCollapsedAsianCode / m_iAsianGlyphsAcross;
 				const bool bHalfT = iTexturePageIndex == m_iAsianPagesLoaded - 1 && m_bAsianLastPageHalfHeight;
 				const int iAsianGlyphsDown = bHalfT ? m_iAsianGlyphsAcross / 2 : m_iAsianGlyphsAcross;
+				const int iCellW = 1024 / m_iAsianGlyphsAcross;	// glyph cell size on the texture page, in whole pixels
+				const int iCellH = 1024 / iAsianGlyphsDown;
 
 				switch (GetLanguageEnum())
 				{
@@ -1252,26 +1254,26 @@ const glyphInfo_t* CFontInfo::GetLetter(const unsigned int uiLetter, int* piShad
 
 				case eTaiwanese:
 				{
-					m_AsianGlyph.s = static_cast<float>(1024 / m_iAsianGlyphsAcross * iColumn + 1) / 1024.0f;
-					m_AsianGlyph.t = static_cast<float>(1024 / iAsianGlyphsDown * iRow + 1) / 1024.0f;
-					m_AsianGlyph.s2 = static_cast<float>(1024 / m_iAsianGlyphsAcross * (iColumn + 1)) / 1024.0f;
-					m_AsianGlyph.t2 = static_cast<float>(1024 / iAsianGlyphsDown * (iRow + 1)) / 1024.0f;
+					m_AsianGlyph.s = static_cast<float>(iCellW * iColumn + 1) / 1024.0f;
+					m_AsianGlyph.t = static_cast<float>(iCellH * iRow + 1) / 1024.0f;
+					m_AsianGlyph.s2 = static_cast<float>(iCellW * (iColumn + 1)) / 1024.0f;
+					m_AsianGlyph.t2 = static_cast<float>(iCellH * (iRow + 1)) / 1024.0f;
 				}
 				break;
 
 				case eJapanese:
 				case eChinese:
 				{
-					m_AsianGlyph.s = static_cast<float>(1024 / m_iAsianGlyphsAcross * iColumn) / 1024.0f;
-					m_AsianGlyph.t = static_cast<float>(1024 / iAsianGlyphsDown * iRow) / 1024.0f;
-					m_AsianGlyph.s2 = static_cast<float>(1024 / m_iAsianGlyphsAcross * (iColumn + 1) - 1) / 1024.0f;
-					m_AsianGlyph.t2 = static_cast<float>(1024 / iAsianGlyphsDown * (iRow + 1) - 1) / 1024.0f;
+					m_AsianGlyph.s = static_cast<float>(iCellW * iColumn) / 1024.0f;
+					m_AsianGlyph.t = static_cast<float>(iCellH * iRow) / 1024.0f;
+					m_AsianGlyph.s2 = static_cast<float>(iCellW * (iColumn + 1) - 1) / 1024.0f;
+					m_AsianGlyph.t2 = static_cast<float>(iCellH * (iRow + 1) - 1) / 1024.0f;
 				}
 				break;
 
 				case eThai:
 				{
-					int iGlyphXpos = 1024 / m_iAsianGlyphsAcross * iColumn;
+					int iGlyphXpos = iCellW * iColumn;
 					int iGlyphWidth = g_ThaiCodes.GetWidth(iOriginalCollapsedAsianCode);
 
 					// very thai-specific language-code...
@@ -1282,13 +1284,13 @@ const glyphInfo_t* CFontInfo::GetLetter(const unsigned int uiLetter, int* piShad
 						iGlyphWidth = 20;	//
 					}
 					m_AsianGlyph.s = static_cast<float>(iGlyphXpos) / 1024.0f;
-					m_AsianGlyph.t = static_cast<float>(1024 / iAsianGlyphsDown * iRow) / 1024.0f;
+					m_AsianGlyph.t = static_cast<float>(iCellH * iRow) / 1024.0f;
 					// technically this .s2 line should be modified to blit only the correct width, but since
 					//	all Thai glyphs are up against the left edge of their cells and have blank to the cell
 					//	boundary then it's better to keep these calculations simpler...
 
 					m_AsianGlyph.s2 = static_cast<float>(iGlyphXpos + iGlyphWidth) / 1024.0f;
-					m_AsianGlyph.t2 = static_cast<float>(1024 / iAsianGlyphsDown * (iRow + 1) - 1) / 1024.0f;
+					m_AsianGlyph.t2 = static_cast<float>(iCellH * (iRow + 1) - 1) / 1024.0f;
 
 					// special addition for Thai, need to bodge up the width and advance fields...
 					//
@@ -1496,7 +1498,7 @@ int RE_Font_StrLenPixels(const char* psText, const int iFontHandle, const float 
 
 	while (*psText)
 	{
-		int iAdvanceCount;
+		int iAdvanceCount = 0;
 		unsigned int uiLetter = AnyLanguage_ReadCharFromString(const_cast<char*>(psText), &iAdvanceCount, nullptr);
 		psText += iAdvanceCount;
 
@@ -1545,7 +1547,7 @@ int RE_Font_StrLenChars(const char* psText)
 	{
 		// in other words, colour codes and CR/LF don't count as chars, all else does...
 		//
-		int iAdvanceCount;
+		int iAdvanceCount = 0;
 		const unsigned int uiLetter = AnyLanguage_ReadCharFromString(const_cast<char*>(psText), &iAdvanceCount, nullptr);
 		psText += iAdvanceCount;
 
@@ -1717,8 +1719,8 @@ void RE_Font_DrawString(int ox, int oy, const char* psText, const float* rgba, c
 	//let it remember the old color //RE_SetColor(NULL);
 #else
 	static qboolean gbInShadow = qfalse;	// MUST default to this
-	const glyphInfo_t* pLetter;
-	qhandle_t			hShader;
+	const glyphInfo_t* pLetter = nullptr;
+	qhandle_t			hShader = 0;
 
 	assert(psText);
 
@@ -1769,7 +1771,7 @@ void RE_Font_DrawString(int ox, int oy, const char* psText, const float* rgba, c
 	qboolean bNextTextWouldOverflow = qfalse;
 	while (*psText && !bNextTextWouldOverflow)
 	{
-		int iAdvanceCount;
+		int iAdvanceCount = 0;
 		unsigned int uiLetter = AnyLanguage_ReadCharFromString(const_cast<char*>(psText), &iAdvanceCount, nullptr);
 		psText += iAdvanceCount;
 

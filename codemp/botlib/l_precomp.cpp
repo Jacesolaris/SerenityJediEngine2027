@@ -303,7 +303,7 @@ void PC_FreeToken(token_t* token)
 //============================================================================
 static int PC_ReadSourceToken(source_t* source, token_t* token)
 {
-	int type, skip;
+	int type = 0, skip = 0;
 
 	// if there's no token already available
 	while (!source->tokens)
@@ -378,7 +378,7 @@ int PC_UnreadSourceToken(source_t* source, token_t* token)
 int PC_ReadDefineParms(source_t* source, define_t* define, token_t** parms, const int maxparms)
 {
 	token_t token;
-	int done, numparms, indent;
+	int done = 0, numparms = 0, indent = 0;
 
 	if (!PC_ReadSourceToken(source, &token))
 	{
@@ -715,7 +715,7 @@ int PC_ExpandBuiltinDefine(source_t* source, token_t* deftoken, define_t* define
 	token_t** firsttoken, token_t** lasttoken)
 {
 	time_t t;
-	char* curtime;
+	char* curtime = nullptr;
 
 	token_t* token = PC_CopyToken(deftoken);
 	switch (define->builtin)
@@ -975,7 +975,7 @@ int PC_ExpandDefineIntoSource(source_t* source, token_t* deftoken, define_t* def
 //============================================================================
 void PC_ConvertPath(char* path)
 {
-	char* ptr;
+	char* ptr = nullptr;
 
 	//remove double path seperators
 	for (ptr = path; *ptr;)
@@ -1143,7 +1143,7 @@ int PC_Directive_undef(source_t* source)
 {
 	token_t token;
 	define_t* define, * lastdefine;
-	int hash;
+	int hash = 0;
 
 	if (source->skip > 0) return qtrue;
 	//
@@ -1357,7 +1357,7 @@ int PC_Directive_define(source_t* source)
 define_t* PC_DefineFromString(char* string)
 {
 	source_t src;
-	int res;
+	int res = 0;
 	define_t* def;
 
 	PC_InitTokenHeap();
@@ -1582,7 +1582,7 @@ int PC_Directive_if_def(source_t* source, const int type)
 {
 	token_t token;
 	define_t* d;
-	int skip;
+	int skip = 0;
 
 	if (!PC_ReadLine(source, &token))
 	{
@@ -1632,7 +1632,7 @@ int PC_Directive_ifndef(source_t* source)
 //============================================================================
 int PC_Directive_else(source_t* source)
 {
-	int type, skip;
+	int type = 0, skip = 0;
 
 	PC_PopIndent(source, &type, &skip);
 	if (!type)
@@ -1656,7 +1656,7 @@ int PC_Directive_else(source_t* source)
 //============================================================================
 int PC_Directive_endif(source_t* source)
 {
-	int type, skip;
+	int type = 0, skip = 0;
 
 	PC_PopIndent(source, &type, &skip);
 	if (!type)
@@ -1749,8 +1749,8 @@ constexpr auto MAX_OPERATORS = 64;
 int PC_EvaluateTokens(source_t* source, token_t* tokens, signed long int* intvalue,
 	double* floatvalue, int integer)
 {
-	operator_t* o, * firstoperator, * lastoperator;
-	value_t* v, * firstvalue, * lastvalue, * v1, * v2;
+	operator_t* o = nullptr, * firstoperator = nullptr, * lastoperator = nullptr;
+	value_t* v = nullptr, * firstvalue = nullptr, * lastvalue = nullptr, * v1 = nullptr, * v2 = nullptr;
 	token_t* t;
 	int brace = 0;
 	int parentheses = 0;
@@ -2410,8 +2410,8 @@ int PC_DollarEvaluate(source_t* source, signed long int* intvalue,
 //============================================================================
 int PC_Directive_elif(source_t* source)
 {
-	signed long int value;
-	int type, skip;
+	signed long int value = 0;
+	int type = 0, skip = 0;
 
 	PC_PopIndent(source, &type, &skip);
 	if (!type || type == INDENT_ELSE)
@@ -2432,7 +2432,7 @@ int PC_Directive_elif(source_t* source)
 //============================================================================
 int PC_Directive_if(source_t* source)
 {
-	signed long int value;
+	signed long int value = 0;
 
 	if (!PC_Evaluate(source, &value, nullptr, qtrue)) return qfalse;
 	const int skip = value == 0;
@@ -2506,7 +2506,7 @@ void UnreadSignToken(source_t* source)
 //============================================================================
 int PC_Directive_eval(source_t* source)
 {
-	signed long int value;
+	signed long int value = 0;
 	token_t token;
 
 	if (!PC_Evaluate(source, &value, nullptr, qtrue)) return qfalse;
@@ -2530,7 +2530,7 @@ int PC_Directive_eval(source_t* source)
 //============================================================================
 int PC_Directive_evalfloat(source_t* source)
 {
-	double value;
+	double value = 0.0f;
 	token_t token;
 
 	if (!PC_Evaluate(source, nullptr, &value, qfalse)) return qfalse;
@@ -2610,7 +2610,7 @@ int PC_ReadDirective(source_t* source)
 //============================================================================
 int PC_DollarDirective_evalint(source_t* source)
 {
-	signed long int value;
+	signed long int value = 0;
 	token_t token;
 
 	if (!PC_DollarEvaluate(source, &value, nullptr, qtrue)) return qfalse;
@@ -2642,7 +2642,7 @@ int PC_DollarDirective_evalint(source_t* source)
 //============================================================================
 int PC_DollarDirective_evalfloat(source_t* source)
 {
-	double value;
+	double value = 0.0f;
 	token_t token;
 
 	if (!PC_DollarEvaluate(source, nullptr, &value, qfalse)) return qfalse;
@@ -3208,7 +3208,7 @@ source_t* sourceFiles[MAX_SOURCEFILES];
 
 int PC_LoadSourceHandle(const char* filename)
 {
-	int i;
+	int i = 0;
 
 	for (i = 1; i < MAX_SOURCEFILES; i++)
 	{

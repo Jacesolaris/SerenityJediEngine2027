@@ -184,7 +184,7 @@ static void CL_GetGlconfig(glconfig_t* config)
 
 static void GetClipboardData(char* buf, const int buflen)
 {
-	char* cbd, * c;
+	char* cbd = nullptr, * c = nullptr;
 
 	c = cbd = Sys_GetClipboardData();
 	if (!cbd)

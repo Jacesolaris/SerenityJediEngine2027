@@ -53,8 +53,8 @@ CG_RunLightStyles
 */
 void CG_RunLightStyles(void)
 {
-	int i;
-	clightstyle_t* ls;
+	int i = 0;
+	clightstyle_t* ls = NULL;
 
 	const int ofs = cg.time / 50;
 	//	if ( ofs == lastofs )

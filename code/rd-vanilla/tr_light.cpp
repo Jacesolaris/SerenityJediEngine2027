@@ -63,7 +63,7 @@ Determine which dynamic lights may effect this bmodel
 */
 void R_DlightBmodel(const bmodel_t* bmodel, const qboolean NoLight)
 {
-	int			i;
+	int			i = 0;
 
 	// transform all the lights
 	R_TransformDlights(tr.refdef.num_dlights, tr.refdef.dlights, &tr.ori);
@@ -71,7 +71,7 @@ void R_DlightBmodel(const bmodel_t* bmodel, const qboolean NoLight)
 	int mask = 0;
 	if (!NoLight)
 	{
-		int j;
+		int j = 0;
 		for (i = 0; i < tr.refdef.num_dlights; i++) {
 			const dlight_t* dl = &tr.refdef.dlights[i];
 
@@ -135,12 +135,12 @@ static void R_SetupEntityLightingGrid(trRefEntity_t* ent)
 {
 	vec3_t			lightOrigin;
 	int				pos[3]{};
-	int				i, j;
+	int				i = 0, j = 0;
 	float			frac[3]{};
 	int				grid_step[3]{};
 	vec3_t			direction;
-	float			total_factor;
-	unsigned short* start_grid_pos;
+	float			total_factor = 0.0f;
+	unsigned short* start_grid_pos = nullptr;
 
 	if (r_fullbright->integer || (tr.refdef.rdflags & RDF_doLAGoggles))
 	{
@@ -169,7 +169,7 @@ static void R_SetupEntityLightingGrid(trRefEntity_t* ent)
 
 	VectorSubtract(lightOrigin, tr.world->lightGridOrigin, lightOrigin);
 	for (i = 0; i < 3; i++) {
-		float	v;
+		float	v = 0.0f;
 
 		v = lightOrigin[i] * tr.world->lightGridInverseSize[i];
 		pos[i] = floor(v);
@@ -201,10 +201,10 @@ static void R_SetupEntityLightingGrid(trRefEntity_t* ent)
 
 	total_factor = 0;
 	for (i = 0; i < 8; i++) {
-		float			factor;
-		mgrid_t* data;
-		unsigned short* grid_pos;
-		int				lat, lng;
+		float			factor = 0.0f;
+		mgrid_t* data = nullptr;
+		unsigned short* grid_pos = nullptr;
+		int				lat = 0, lng = 0;
 		vec3_t			normal{};
 #if ACCURATE_LIGHTGRID_SAMPLING
 		vec3_t			gridOrg;
@@ -378,7 +378,7 @@ by the Calc_* functions
 */
 void R_SetupEntityLighting(const trRefdef_t* refdef, trRefEntity_t* ent)
 {
-	int				i;
+	int				i = 0;
 	vec3_t			lightDir;
 	vec3_t			lightOrigin;
 

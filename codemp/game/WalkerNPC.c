@@ -92,7 +92,7 @@ static void ProcessMoveCommands(Vehicle_t* p_veh)
 	const bgEntity_t* parent = p_veh->m_pParentEntity;
 	playerState_t* parent_ps = parent->playerState;
 
-	float       speedInc;
+	float       speedInc = 0.0f;
 	const float speedIdle = p_veh->m_pVehicleInfo->speedIdle;
 	const float speedMin = p_veh->m_pVehicleInfo->speedMin;
 	const float speedIdleDec = p_veh->m_pVehicleInfo->decelIdle * p_veh->m_fTimeModifier;
@@ -339,7 +339,7 @@ static void ProcessOrientCommands(const Vehicle_t* p_veh)
 static void AnimateVehicle(const Vehicle_t* p_veh)
 {
 	animNumber_t Anim;
-	int iFlags, i_blend;
+	int iFlags = 0, i_blend = 0;
 	gentity_t* parent = (gentity_t*)p_veh->m_pParentEntity;
 
 	// We're dead (boarding is reused here so I don't have to make another variable :-).

@@ -488,7 +488,7 @@ int G_CheckAlertEvents(gentity_t* self,
 	const qboolean mustHaveOwner,
 	const int minAlertLevel)
 {
-	int bestSightEvent;
+	int bestSightEvent = 0;
 	int bestSoundAlert = -1;
 	int bestSightAlert = -1;
 

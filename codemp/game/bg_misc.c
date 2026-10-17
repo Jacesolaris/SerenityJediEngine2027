@@ -2338,7 +2338,7 @@ int bg_numItems = sizeof bg_itemlist / sizeof bg_itemlist[0] - 1;
 
 float vectoyaw(const vec3_t vec)
 {
-	float yaw;
+	float yaw = 0.0f;
 
 	if (vec[YAW] == 0 && vec[PITCH] == 0)
 	{
@@ -2595,7 +2595,7 @@ int BG_ProperForceIndex(const int power)
 
 void bg_cycle_force(playerState_t* ps, const int direction)
 {
-	int i, x;
+	int i = 0, x = 0;
 	int foundnext = -1;
 
 	int presel = x = i = ps->fd.forcePowerSelected;
@@ -3070,8 +3070,8 @@ BG_EvaluateTrajectory
 */
 void BG_EvaluateTrajectory(const trajectory_t* tr, int at_time, vec3_t result)
 {
-	float delta_time;
-	float phase;
+	float delta_time = 0.0f;
+	float phase = 0.0f;
 
 	switch (tr->trType)
 	{
@@ -3142,8 +3142,8 @@ For determining velocity at a given time
 */
 void BG_EvaluateTrajectoryDelta(const trajectory_t* tr, const int at_time, vec3_t result)
 {
-	float delta_time;
-	float phase;
+	float delta_time = 0.0f;
+	float phase = 0.0f;
 
 	switch (tr->trType)
 	{
@@ -3464,7 +3464,7 @@ int BG_EmplacedView(vec3_t base_angles, vec3_t angles, float* new_yaw, const flo
 	if (dif > constraint ||
 		dif < -constraint)
 	{
-		float amt;
+		float amt = 0.0f;
 
 		if (dif > constraint)
 		{

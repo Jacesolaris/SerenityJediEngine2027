@@ -301,7 +301,7 @@ static void Svcmd_SaberColor_f()
 	//FIXME: just list the colors, each additional listing sets that blade
 	int saberNum = atoi(gi.argv(1));
 	const char* color[MAX_BLADES]{};
-	int bladeNum;
+	int bladeNum = 0;
 
 	for (bladeNum = 0; bladeNum < MAX_BLADES; bladeNum++)
 	{
@@ -660,7 +660,7 @@ static void Svcmd_SaberAttackCycle_f()
 		return;
 	}
 
-	int saberAnimLevel;
+	int saberAnimLevel = 0;
 	if (!self->s.number)
 	{
 		saberAnimLevel = cg.saberAnimLevelPending;
@@ -1292,6 +1292,39 @@ static void Svcmd_ForceBlinding_f()
 	}
 }
 
+static void Svcmd_ForceRepulse_f()
+{
+	if (!g_entities[0].client)
+	{
+		return;
+	}
+	const char* newVal = gi.argv(1);
+	if (!VALIDSTRING(newVal))
+	{
+		gi.Printf("Current Repulse level is %d\n", g_entities[0].client->ps.forcePowerLevel[FP_REPULSE]);
+		gi.Printf("Usage:  ForceRepulse <level> (1 - 3)\n");
+		return;
+	}
+	const int val = atoi(newVal);
+	if (val > FORCE_LEVEL_0)
+	{
+		g_entities[0].client->ps.forcePowersKnown |= 1 << FP_REPULSE;
+	}
+	else
+	{
+		g_entities[0].client->ps.forcePowersKnown &= ~(1 << FP_REPULSE);
+	}
+	g_entities[0].client->ps.forcePowerLevel[FP_REPULSE] = val;
+	if (g_entities[0].client->ps.forcePowerLevel[FP_REPULSE] < FORCE_LEVEL_0)
+	{
+		g_entities[0].client->ps.forcePowerLevel[FP_REPULSE] = FORCE_LEVEL_0;
+	}
+	else if (g_entities[0].client->ps.forcePowerLevel[FP_REPULSE] > FORCE_LEVEL_3)
+	{
+		g_entities[0].client->ps.forcePowerLevel[FP_REPULSE] = FORCE_LEVEL_3;
+	}
+}
+
 static void Svcmd_GiveForceAll_f()
 {
 	Svcmd_ForceJump_f();
@@ -1305,6 +1338,7 @@ static void Svcmd_GiveForceAll_f()
 	Svcmd_ForceStrike_f();
 	Svcmd_ForceBlast_f();
 	Svcmd_ForceBlinding_f();
+	Svcmd_ForceRepulse_f();
 	Svcmd_SaberDefense_f();
 	Svcmd_SaberOffense_f();
 	Svcmd_ForceSetLevel_f(FP_ABSORB);
@@ -1367,7 +1401,7 @@ static void Svcmd_RunScript_f()
 		const char* cmd3 = gi.argv(2);
 		if (cmd3 && cmd3[0])
 		{
-			const gentity_t* found;
+			const gentity_t* found = nullptr;
 			if ((found = G_Find(nullptr, FOFS(targetname), cmd2)) != nullptr)
 			{
 				Quake3Game()->RunScript(found, cmd3);
@@ -1392,7 +1426,7 @@ static void Svcmd_RunScript_f()
 static void Svcmd_Weather_f(void)
 {
 	char arg1[MAX_STRING_CHARS]{};
-	int num;
+	int num = 0;
 	CG_Argv(1);
 
 	if ((Q_stricmp(arg1, "snow") == 0) || (Q_stricmp(arg1, "1") == 0))

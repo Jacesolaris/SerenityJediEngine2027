@@ -124,7 +124,7 @@ static void Sentry_Fire()
 	vec3_t muzzle;
 	static vec3_t forward, vright, up;
 	mdxaBone_t boltMatrix;
-	int bolt;
+	int bolt = 0;
 
 	NPC->flags &= ~FL_SHIELDED;
 
@@ -216,7 +216,7 @@ Sentry_MaintainHeight
 */
 static void Sentry_MaintainHeight()
 {
-	float dif;
+	float dif = 0.0f;
 
 	NPC->s.loopSound = G_SoundIndex("sound/chars/sentry/misc/sentry_hover_1_lp");
 
@@ -242,7 +242,7 @@ static void Sentry_MaintainHeight()
 	}
 	else
 	{
-		const gentity_t* goal;
+		const gentity_t* goal = nullptr;
 
 		if (NPCInfo->goalEntity) // Is there a goal?
 		{

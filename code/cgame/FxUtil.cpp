@@ -171,8 +171,8 @@ static SEffectList* FX_GetValidEffect()
 		return nextValidEffect;
 	}
 
-	int i;
-	SEffectList* ef;
+	int i = 0;
+	SEffectList* ef = nullptr;
 
 	// Blah..plow through the list till we find something that is currently untainted
 	for (i = 0, ef = effectList; i < MAX_EFFECTS; i++, ef++)
@@ -212,8 +212,8 @@ bool FX_ActiveFx()
 //-------------------------
 void FX_Add(const bool portal)
 {
-	int i;
-	SEffectList* ef;
+	int i = 0;
+	SEffectList* ef = nullptr;
 
 	drawnFx = 0;
 	mParticles = 0;

@@ -76,7 +76,7 @@ void MD5Init(MD5Context* ctx)
  */
 static void MD5Transform(uint32_t buf[4], const uint32_t in[16])
 {
-	uint32_t a, b, c, d;
+	uint32_t a = 0, b = 0, c = 0, d = 0;
 
 	a = buf[0];
 	b = buf[1];
@@ -257,7 +257,7 @@ char* Com_MD5File(const char* fn, int length, const char* prefix, const int pref
 {
 	static char final[33] = { "" };
 	unsigned char digest[16] = { "" };
-	fileHandle_t f;
+	fileHandle_t f = 0;
 	MD5_CTX md5;
 	int total = 0;
 

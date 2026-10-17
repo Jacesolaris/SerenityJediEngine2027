@@ -233,7 +233,7 @@ copied out.
 qboolean Netchan_Process(netchan_t* chan, msg_t* msg)
 {
 	//int			qport;
-	int fragmentStart, fragmentLength;
+	int fragmentStart = 0, fragmentLength = 0;
 	qboolean fragmented;
 
 	// get sequence numbers
@@ -424,7 +424,7 @@ Compare without port, and up to the bit number given in netmask.
 */
 qboolean NET_CompareBaseAdrMask(netadr_t a, netadr_t b, int netmask)
 {
-	byte* addra, * addrb;
+	byte* addra = nullptr, * addrb = nullptr;
 
 	if (a.type != b.type)
 		return qfalse;

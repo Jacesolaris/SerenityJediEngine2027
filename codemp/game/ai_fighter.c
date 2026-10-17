@@ -149,7 +149,7 @@ static void Walk_Load(void)
 	char map_name[MAX_QPATH];
 	trap->Cvar_VariableStringBuffer("mapname", map_name, sizeof map_name);
 	const char* file_name = va("shiproutes/%s.walk", map_name);
-	fileHandle_t f;
+	fileHandle_t f = 0;
 	const int len = trap->FS_Open(file_name, &f, FS_READ);
 	if (len <= 0 || !f)
 	{
@@ -1241,7 +1241,7 @@ static void Route_Load(const int report_to)
 	route_links_dirty = qtrue;
 	Route_ResetShips();
 
-	fileHandle_t f;
+	fileHandle_t f = 0;
 	const int len = trap->FS_Open(Route_FileName(), &f, FS_READ);
 	if (len <= 0 || !f)
 	{
@@ -1286,7 +1286,7 @@ static void Route_Load(const int report_to)
 
 static void Route_Save(const int client_num)
 {
-	fileHandle_t f;
+	fileHandle_t f = 0;
 	trap->FS_Open(Route_FileName(), &f, FS_WRITE);
 	if (!f)
 	{
@@ -1729,7 +1729,7 @@ static qboolean Fighter_HangarExit(gentity_t* npc, const gentity_t* ship, const 
 	vec3_t want;
 	VectorCopy(out_dir, want);
 	float step = max_step;
-	int cruise; // the speed it leaves at: slow enough to climb out of the trench before its far wall
+	int cruise = 0; // the speed it leaves at: slow enough to climb out of the trench before its far wall
 	if (tr.fraction < 1.0f)
 	{
 		// under the hangar's roof: straight on out

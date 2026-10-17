@@ -461,7 +461,7 @@ extern cvar_t* cvar_vars;
 
 static void SG_WriteCvars()
 {
-	cvar_t* var;
+	cvar_t* var = nullptr;
 	int i_count = 0;
 
 	ojk::SavedGameHelper saved_game(
@@ -541,7 +541,7 @@ static void SG_WriteServerConfigStrings()
 		&ojk::SavedGame::get_instance());
 
 	int iCount = 0;
-	int i;
+	int i = 0;
 	// not in FOR statement in case compiler goes weird by reg-optimizing it then failing to get the address later
 
 	// count how many non-blank server strings there are...
@@ -680,7 +680,7 @@ int SG_GetSaveGameComment(
 	char* sComment,
 	char* sMapName)
 {
-	int ret;
+	int ret = 0;
 
 	ojk::SavedGame& saved_game = ojk::SavedGame::get_instance();
 
@@ -739,7 +739,7 @@ int SG_GetSaveGameComment(
 	//
 	if (is_succeed && saved_game.is_next_chunk(INT_ID('S', 'H', 'L', 'N')))
 	{
-		size_t iScreenShotLength;
+		size_t iScreenShotLength = 0;
 
 		is_succeed = sgh.try_read_chunk<uint32_t>(
 			INT_ID('S', 'H', 'L', 'N'),
@@ -854,8 +854,8 @@ static bool SG_ReadScreenshot(
 	// decompress JPG data...
 	//
 	byte* image = nullptr;
-	int width;
-	int height;
+	int width = 0;
+	int height = 0;
 
 	if (is_succeed)
 	{
@@ -956,7 +956,7 @@ static void SG_WriteScreenshot(qboolean qbAutosave, const char* psMapName)
 
 	byte* pbRawScreenShot = nullptr;
 	byte* byBlank = nullptr;
-	byte* src, * dst;
+	byte* src = nullptr, * dst = nullptr;
 
 	if (qbAutosave)
 	{

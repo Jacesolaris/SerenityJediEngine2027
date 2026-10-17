@@ -1547,7 +1547,7 @@ qboolean PM_SaberKataDone(const int curmove, const int newmove)
 			newmove == LS_A_R2L ||
 			newmove == LS_A_TR2BL)
 		{ //lower chaining tolerance for spinning saber anims
-			int chainTolerance;
+			int chainTolerance = 0;
 
 			if (pm->ps->fd.saberAnimLevel == FORCE_LEVEL_1)
 			{
@@ -2072,8 +2072,8 @@ static void PM_SaberLocked(void)
 		{
 			if (pm->ps->saberLockAdvance)
 			{
-				int remaining;
-				int cur_frame;
+				int remaining = 0;
+				int cur_frame = 0;
 				const int strength = 1;
 
 				pm->ps->saberLockAdvance = qfalse;
@@ -2197,8 +2197,8 @@ static void PM_SaberLocked(void)
 				//holding attack
 				if (!(pm->ps->pm_flags & PMF_ATTACK_HELD))
 				{
-					int remaining;
-					int cur_frame;
+					int remaining = 0;
+					int cur_frame = 0;
 					const int strength = Q_irand(1, pm->ps->fd.forcePowerLevel[FP_SABER_OFFENSE]);
 
 					pm->ps->saberLockAdvance = qfalse;
@@ -4907,7 +4907,7 @@ static qboolean PM_SaberBlocking(void)
 				|| !PM_SaberInAttack(pm->ps->saberMove) && !PM_SaberInStart(pm->ps->saberMove))
 			{
 				//already in the bounce, go into an attack or transition to ready.. should never get here since can't be blocked in a bounce!
-				int next_move;
+				int next_move = 0;
 
 				if (pm->cmd.buttons & BUTTON_ATTACK)
 				{
@@ -5246,7 +5246,7 @@ static qboolean PM_EnemyCloseEnoughForNormalKata(void)
 	const float range = 150.0f;    // close range
 	const float arcDegrees = 45.0f; // arc to each side
 
-	vec3_t baseAngles;
+	vec3_t baseAngles = { 0 };
 	baseAngles[0] = pm->ps->viewangles[PITCH];
 	baseAngles[1] = pm->ps->viewangles[YAW];
 	baseAngles[2] = pm->ps->viewangles[ROLL];
@@ -5353,7 +5353,7 @@ static qboolean PM_KataEnemyDistance(float* dist, float* dz, float* dot)
 // can (in front, roughly level). No enemy known: the old check (no enemy in the kata's arc).
 static qboolean PM_SmashdownBetterThanKata(void)
 {
-	float dist, dz, dot;
+	float dist = 0.0f, dz = 0.0f, dot = 0.0f;
 	if (!PM_KataEnemyDistance(&dist, &dz, &dot))
 	{
 		return PM_EnemyCloseEnoughForNormalKata() ? qfalse : qtrue;
@@ -5370,7 +5370,7 @@ static qboolean PM_CanDoSmashdown(const pmove_t* pm)
 
 	// Difficulty chance
 	int roll = Q_irand(0, 99);
-	int chanceThreshold;
+	int chanceThreshold = 0;
 
 	switch (pm->ps->fd.saberAnimLevel)
 	{// chance based on saber style BOT is using.
@@ -6468,7 +6468,7 @@ weapChecks:
 	if (!delayed_fire)
 	{
 		// Current saber move index (logical saber state).
-		int curmove;
+		int curmove = 0;
 
 		// Start with the current move, and cross-index it with the current control states.
 		if (pm->ps->saberMove > LS_NONE && pm->ps->saberMove < LS_MOVE_MAX)

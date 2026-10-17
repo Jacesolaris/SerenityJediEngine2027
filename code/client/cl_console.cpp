@@ -101,10 +101,10 @@ Save the console contents out to a file
 */
 static void Con_Dump_f()
 {
-	int l, x;
-	short* line;
-	int bufferlen;
-	char* buffer;
+	int l = 0, x = 0;
+	short* line = nullptr;
+	int bufferlen = 0;
+	char* buffer = nullptr;
 	char filename[MAX_QPATH];
 
 	if (Cmd_Argc() != 2)
@@ -205,7 +205,7 @@ Con_CheckResize
 */
 void Con_CheckResize(void)
 {
-	int i;
+	int i = 0;
 
 	/* Allocate large temporary buffer once (avoids C6262 stack overflow) */
 	static short* tbuf = nullptr;
@@ -533,7 +533,7 @@ Draws the last few lines of output transparently over the game top
 */
 void Con_DrawNotify()
 {
-	int x;
+	int x = 0;
 
 	int currentColor = 7;
 	re.SetColor(g_color_table[currentColor]);
@@ -613,7 +613,7 @@ Draws the console with the solid background
 */
 static void Con_DrawSolidConsole(const float frac)
 {
-	int x;
+	int x = 0;
 
 	int lines = cls.glconfig.vidHeight * frac;
 	if (lines <= 0)

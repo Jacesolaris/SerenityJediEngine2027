@@ -38,7 +38,7 @@ void BG_AttachToRancor(void* ghoul2, const float ranc_yaw, vec3_t ranc_origin, i
 	matrix3_t out_axis)
 {
 	mdxaBone_t boltMatrix;
-	int boltIndex;
+	int boltIndex = 0;
 	vec3_t ranc_angles;
 	vec3_t temp_angles;
 	// Getting the bolt here

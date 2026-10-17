@@ -336,10 +336,10 @@ order.
 */
 void Team_FragBonuses(const gentity_t* targ, const gentity_t* attacker)
 {
-	int i;
-	int flag_pw, enemy_flag_pw;
+	int i = 0;
+	int flag_pw = 0, enemy_flag_pw = 0;
 	const gentity_t* carrier = NULL;
-	char* c;
+	char* c = NULL;
 	vec3_t v1, v2;
 
 	// no bonus for fragging yourself or team mates
@@ -504,7 +504,7 @@ carrier defense.
 */
 void Team_CheckHurtCarrier(const gentity_t* targ, const gentity_t* attacker)
 {
-	int flag_pw;
+	int flag_pw = 0;
 
 	if (!targ->client || !attacker->client)
 		return;
@@ -527,7 +527,7 @@ void Team_CheckHurtCarrier(const gentity_t* targ, const gentity_t* attacker)
 
 static gentity_t* Team_ResetFlag(const int team)
 {
-	char* c;
+	char* c = NULL;
 	gentity_t* rent = NULL;
 
 	switch (team)
@@ -732,9 +732,9 @@ int Team_TouchEnemyFlag(gentity_t* ent, const gentity_t* other, int team);
 
 static int Team_TouchOurFlag(gentity_t* ent, const gentity_t* other, const int team)
 {
-	int enemyTeam;
+	int enemyTeam = 0;
 	gclient_t* cl = other->client;
-	int enemy_flag;
+	int enemy_flag = 0;
 	vec3_t mins, maxs;
 
 	// static: too big for the stack, and BG_Alloc is never freed: asked for on every call, this ran the pool dry
@@ -894,7 +894,7 @@ int Team_TouchEnemyFlag(gentity_t* ent, const gentity_t* other, const int team)
 {
 	gclient_t* cl = other->client;
 	vec3_t mins, maxs;
-	int ourFlag;
+	int ourFlag = 0;
 
 	// static: too big for the stack, and BG_Alloc is never freed: asked for on every call, this ran the pool dry
 	static int touch[MAX_GENTITIES];
@@ -975,7 +975,7 @@ int Team_TouchEnemyFlag(gentity_t* ent, const gentity_t* other, const int team)
 
 int Pickup_Team(gentity_t* ent, const gentity_t* other)
 {
-	int team;
+	int team = 0;
 	const gclient_t* cl = other->client;
 
 	// figure out what team this flag is
@@ -1085,9 +1085,9 @@ go to a random point that doesn't telefrag
 
 static gentity_t* SelectRandomTeamSpawnPoint(const int teamstate, const team_t team, const int siegeClass)
 {
-	int selection;
+	int selection = 0;
 	gentity_t* spots[MAX_TEAM_SPAWN_POINTS] = { 0 };
-	char* classname;
+	char* classname = NULL;
 	qboolean mustBeEnabled = qfalse;
 
 	if (G_SiegeMissionRules()) // SJE (2026-10-16): also siege missions in Team FFA
@@ -1722,7 +1722,7 @@ void TeamplayInfoMessage(const gentity_t* ent)
 		return;
 	}
 
-	int team;
+	int team = 0;
 
 	// Spectators follow the team of the client they are watching
 	if (ent->client->sess.sessionTeam == TEAM_SPECTATOR)
@@ -1801,7 +1801,7 @@ void TeamplayInfoMessage(const gentity_t* ent)
 		}
 
 		char entry[1024];
-		int h, a;
+		int h = 0, a = 0;
 
 		// -----------------------------------------------------
 		// Temp spectate: health/armor = 0
@@ -1884,8 +1884,8 @@ void CheckTeamStatus(void)
 {
 	if (level.time - level.lastTeamLocationTime > TEAM_LOCATION_UPDATE_TIME)
 	{
-		gentity_t* ent;
-		int i;
+		gentity_t* ent = NULL;
+		int i = 0;
 		level.lastTeamLocationTime = level.time;
 
 		for (i = 0; i < sv_maxclients.integer; i++)

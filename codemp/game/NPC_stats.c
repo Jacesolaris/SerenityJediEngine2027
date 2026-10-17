@@ -509,10 +509,10 @@ static void NPC_PrecacheWeapons(team_t playerTeam, int spawnflags, char* NPCtype
 void NPC_Precache(gentity_t* spawner)
 {
 	npcteam_t playerTeam = NPCTEAM_FREE;
-	const char* token;
-	const char* value;
-	const char* p;
-	char* patch;
+	const char* token = NULL;
+	const char* value = NULL;
+	const char* p = NULL;
+	char* patch = NULL;
 	qboolean md3Model = qfalse;
 	char playerModel[MAX_QPATH];
 	char customSkin[MAX_QPATH];
@@ -817,10 +817,10 @@ extern void SetupGameGhoul2Model(gentity_t* ent, char* modelname, char* skinName
 
 qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 {
-	const char* value;
-	const char* p;
-	int n;
-	float f;
+	const char* value = NULL;
+	const char* p = NULL;
+	int n = 0;
+	float f = 0.0f;
 	char playerModel[MAX_QPATH];
 	char customSkin[MAX_QPATH];
 	renderInfo_t* ri = &npc->client->renderInfo;
@@ -912,9 +912,9 @@ qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 	else
 	{
 		char session_name[MAX_QPATH + 17];
-		char* patch;
-		const char* token;
-		int fp;
+		char* patch = NULL;
+		const char* token = NULL;
+		int fp = 0;
 
 		p = NPCParms;
 		Com_sprintf(session_name, sizeof session_name, "NPC_ParseParms(%s)", npc_name);
@@ -2443,7 +2443,7 @@ qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 			//starting weapon
 			if (!Q_stricmp(token, "weapon"))
 			{
-				int weap;
+				int weap = 0;
 
 				if (COM_ParseString(&p, &value))
 				{
@@ -2588,7 +2588,7 @@ qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 			//saber name
 			if (!Q_stricmp(token, "saber"))
 			{
-				char* saber_name;
+				char* saber_name = NULL;
 
 				if (COM_ParseString(&p, &value))
 				{
@@ -3426,13 +3426,13 @@ qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 		{
 			//set up the playerModel to be the playerModel of the entity with the player script_targetname
 			gentity_t* player = G_Find(NULL, FOFS(script_targetname), "player");
-			char* s;
+			char* s = NULL;
 
 			if (!player)
 			{
 				//no players have spawned in yet.  As such, wing it by using jan
-				int scan, rgb[3] = { 255, 255, 255 };
-				char* s2;
+				int scan = 0, rgb[3] = { 255, 255, 255 };
+				char* s2 = NULL;
 				Q_strncpyz(playerModel, g_spmodel.string, sizeof playerModel);
 				s2 = va("%s", g_spmodelrgb.string);
 				scan = sscanf(s2, "%i %i %i", &rgb[0], &rgb[1], &rgb[2]);
@@ -3525,7 +3525,7 @@ char npcParseBuffer[MAX_NPC_DATA_SIZE];
 void NPC_LoadParms(void)
 {
 	int npcExtFNLen = 0;
-	fileHandle_t f;
+	fileHandle_t f = 0;
 	int len = 0;
 
 	// static: too big for the stack, and BG_Alloc is never freed: asked for on every call, this ran the pool dry

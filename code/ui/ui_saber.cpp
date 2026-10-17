@@ -217,9 +217,9 @@ static qboolean UI_ParseLiteral(const char** data, const char* string)
 
 static qboolean UI_SaberParseParm(const char* saber_name, const char* parmname, char* saberData)
 {
-	const char* token;
-	const char* value;
-	const char* p;
+	const char* token = nullptr;
+	const char* value = nullptr;
+	const char* p = nullptr;
 
 	if (!saber_name || !saber_name[0])
 	{
@@ -544,7 +544,7 @@ void UI_ParseScriptedSaber(char* script, int snum)
 
 static void rgb_adjust_scipted_saber_color(vec3_t color, const int n)
 {
-	int actual;
+	int actual = 0;
 	const int time = uiInfo.uiDC.realTime;
 
 	if (!ScriptedStartTime[n])
@@ -579,7 +579,7 @@ constexpr auto PIMP_MIN_INTESITY = 120;
 
 static void RGB_RandomRGB(vec3_t c)
 {
-	int i;
+	int i = 0;
 	for (i = 0; i < 3; i++)
 		c[i] = 0;
 
@@ -595,7 +595,7 @@ vec3_t PimpColorTo[2];
 
 static void RGB_AdjustPimpSaberColor(vec3_t color, int n)
 {
-	int time;
+	int time = 0;
 
 	if (!PimpStartTime[n])
 	{
@@ -627,8 +627,8 @@ static void UI_DoBattlefrontSaber(vec3_t blade_muz, vec3_t blade_dir, float leng
 	int whichSaber)
 {
 	vec3_t mid;
-	float radiusmult, effectradius, coreradius;
-	float blade_len;
+	float radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
+	float blade_len = 0.0f;
 
 	qhandle_t blade = 0, glow = 0;
 	refEntity_t saber;
@@ -773,8 +773,8 @@ static void UI_DoSFXSaber(vec3_t blade_muz, vec3_t blade_dir, float lengthMax, f
 	int whichSaber)
 {
 	vec3_t mid;
-	float radiusmult, effectradius, coreradius;
-	float blade_len;
+	float radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
+	float blade_len = 0.0f;
 
 	qhandle_t glow = 0, blade = 0;
 	refEntity_t saber;
@@ -919,8 +919,8 @@ static void UI_DoEp1Saber(vec3_t blade_muz, vec3_t blade_dir, float lengthMax, f
 	int whichSaber)
 {
 	vec3_t mid, rgb = { 1, 1, 1 };
-	float radiusmult, effectradius, coreradius;
-	float blade_len;
+	float radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
+	float blade_len = 0.0f;
 
 	qhandle_t glow = 0, blade = 0;
 	refEntity_t saber;
@@ -1074,8 +1074,8 @@ static void UI_DoEp2Saber(vec3_t blade_muz, vec3_t blade_dir, float lengthMax, f
 	int whichSaber)
 {
 	vec3_t mid, rgb = { 1, 1, 1 };
-	float radiusmult, effectradius, coreradius;
-	float blade_len;
+	float radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
+	float blade_len = 0.0f;
 
 	qhandle_t glow = 0, blade = 0;
 	refEntity_t saber;
@@ -1229,8 +1229,8 @@ static void UI_DoEp3Saber(vec3_t blade_muz, vec3_t blade_dir, float lengthMax, f
 	int whichSaber)
 {
 	vec3_t mid, rgb = { 1, 1, 1 };
-	float radiusmult, effectradius, coreradius;
-	float blade_len;
+	float radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
+	float blade_len = 0.0f;
 
 	qhandle_t glow = 0, blade = 0;
 	refEntity_t saber;
@@ -1384,8 +1384,8 @@ static void UI_DoOTSaber(vec3_t blade_muz, vec3_t blade_dir, float lengthMax, fl
 	int whichSaber)
 {
 	vec3_t mid, rgb = { 1, 1, 1 };
-	float radiusmult, effectradius, coreradius;
-	float blade_len;
+	float radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
+	float blade_len = 0.0f;
 
 	qhandle_t glow = 0, blade = 0;
 	refEntity_t saber;
@@ -1541,8 +1541,8 @@ static void UI_DoTFASaber(vec3_t blade_muz, vec3_t blade_dir, float lengthMax, f
 	int whichSaber)
 {
 	vec3_t mid, rgb = { 1, 1, 1 };
-	float radiusmult, effectradius, coreradius;
-	float blade_len;
+	float radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
+	float blade_len = 0.0f;
 
 	qhandle_t glow = 0, blade = 0;
 	refEntity_t saber;
@@ -1696,8 +1696,8 @@ static void UI_DoSaberUnstable(vec3_t blade_muz, vec3_t blade_dir, float lengthM
 	int whichSaber)
 {
 	vec3_t mid, rgb = { 1, 1, 1 };
-	float radiusmult, effectradius, coreradius;
-	float blade_len;
+	float radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
+	float blade_len = 0.0f;
 
 	qhandle_t glow = 0, blade = 0;
 	refEntity_t saber;
@@ -1835,8 +1835,8 @@ static void UI_DoCustomSaber(vec3_t blade_muz, vec3_t blade_dir, float lengthMax
 	int whichSaber)
 {
 	vec3_t mid;
-	float radiusmult, effectradius, coreradius;
-	float blade_len;
+	float radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
+	float blade_len = 0.0f;
 
 	qhandle_t glow = 0, blade = 0;
 	refEntity_t saber;
@@ -1983,9 +1983,9 @@ static void UI_DoSaber(vec3_t origin, vec3_t dir, float length, float lengthMax,
 	vec3_t mid, rgb = { 1, 1, 1 };
 	qhandle_t blade = 0, glow = 0;
 	refEntity_t saber;
-	float radiusmult;
-	float radiusRange;
-	float radiusStart;
+	float radiusmult = 0.0f;
+	float radiusRange = 0.0f;
+	float radiusStart = 0.0f;
 
 	if (length < 0.5f)
 	{
@@ -2035,7 +2035,7 @@ static void UI_DoSaber(vec3_t origin, vec3_t dir, float length, float lengthMax,
 		break;
 	case SABER_RGB:
 	{
-		int i;
+		int i = 0;
 		if (whichSaber == 0)
 			VectorSet(rgb, ui_rgb_saber_red.integer, ui_rgb_saber_green.integer, ui_rgb_saber_blue.integer);
 		else
@@ -2413,8 +2413,8 @@ static void UI_SaberDrawBlade(itemDef_t* item, const char* saber_name, int saber
 {
 	char bladeColorString[MAX_QPATH];
 	vec3_t angles = { 0 };
-	int whichSaber;
-	int snum;
+	int whichSaber = 0;
+	int snum = 0;
 
 	if (item->flags & (ITF_ISANYSABER) && item->flags & ITF_ISCHARACTER)
 	{
@@ -2840,7 +2840,7 @@ static void UI_GetSaberForMenu(char* saber, int saberNum)
 void UI_SaberDrawBlades(itemDef_t* item, vec3_t origin, float curYaw)
 {
 	//NOTE: only allows one saber type in view at a time
-	int saberModel;
+	int saberModel = 0;
 	int numSabers = 1;
 
 	if (item->flags & ITF_ISCHARACTER //hacked sabermoves sabers in character's hand
@@ -2938,7 +2938,7 @@ void UI_SaberAttachToChar(itemDef_t* item)
 				{
 					DC->g2_SetSkin(&item->ghoul2[g2Saber], -1, 0); //turn off custom skin
 				}
-				int boltNum;
+				int boltNum = 0;
 				if (saberNum == 0)
 				{
 					boltNum = DC->g2_AddBolt(&item->ghoul2[0], "*r_hand");

@@ -313,7 +313,7 @@ void Use_Target_Speaker(gentity_t* ent, gentity_t* other, gentity_t* activator)
 void SP_target_speaker(gentity_t* ent)
 {
 	char buffer[MAX_QPATH];
-	char* s;
+	char* s = NULL;
 
 	G_SpawnFloat("wait", "0", &ent->wait);
 	G_SpawnFloat("random", "0", &ent->random);
@@ -913,7 +913,7 @@ delay - how long to wait after use to run script
 */
 void SP_target_scriptrunner(gentity_t* self)
 {
-	float v;
+	float v = 0.0f;
 	if (self->spawnflags & 128)
 	{
 		self->flags |= FL_INACTIVE;
@@ -1021,7 +1021,7 @@ void target_level_change_use(gentity_t* self, gentity_t* other, gentity_t* activ
 */
 void SP_target_level_change(gentity_t* self)
 {
-	char* s;
+	char* s = NULL;
 	vmCvar_t mapname;
 
 	trap->Cvar_Register(&mapname, "mapname", "", CVAR_SERVERINFO | CVAR_ROM);
@@ -1075,7 +1075,7 @@ will play.
 */
 void SP_target_play_music(gentity_t* self)
 {
-	char* s;
+	char* s = NULL;
 
 	G_SetOrigin(self, self->s.origin);
 	if (!G_SpawnString("music", "", &s))

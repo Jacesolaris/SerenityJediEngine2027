@@ -175,8 +175,8 @@ SV_BotAllocateClient
 */
 int SV_BotAllocateClient(void)
 {
-	int i;
-	client_t* cl;
+	int i = 0;
+	client_t* cl = nullptr;
 
 	// find a client slot
 	for (i = 0, cl = svs.clients; i < sv_maxclients->integer; i++, cl++)
@@ -490,7 +490,7 @@ BotImport_DebugPolygonCreate
 */
 int BotImport_DebugPolygonCreate(const int color, const int numPoints, const vec3_t* points)
 {
-	int i;
+	int i = 0;
 
 	if (!debugpolygons)
 		return 0;

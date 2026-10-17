@@ -160,7 +160,7 @@ static qboolean BG_ParseVehWeaponParm(vehWeaponInfo_t* vehWeapon, const char* pa
 {
 	vec3_t vec = { 0 };
 	byte* b = (byte*)vehWeapon;
-	int i_fields_read;
+	int i_fields_read = 0;
 	vehicleType_t vehType;
 	char value[1024];
 
@@ -288,8 +288,8 @@ static qboolean BG_ParseVehWeaponParm(vehWeaponInfo_t* vehWeapon, const char* pa
 static int VEH_LoadVehWeapon(const char* vehWeaponName)
 {
 	//load up specified vehWeapon and save in array: g_vehWeaponInfo
-	const char* token;
-	const char* p;
+	const char* token = NULL;
+	const char* p = NULL;
 
 	//BG_VehWeaponSetDefaults( &g_vehWeaponInfo[0] );//set the first vehicle to default data
 
@@ -382,7 +382,7 @@ static int VEH_LoadVehWeapon(const char* vehWeaponName)
 
 static int VEH_Vehweapon_indexForName(const char* vehWeaponName)
 {
-	int vw;
+	int vw = 0;
 	if (!vehWeaponName || !vehWeaponName[0])
 	{
 		Com_Printf(S_COLOR_RED"ERROR: Trying to read Vehicle Weapon with no name!\n");
@@ -739,7 +739,7 @@ static qboolean BG_ParseVehicleParm(vehicleInfo_t* vehicle, const char* parmName
 {
 	vec3_t vec = { 0 };
 	byte* b = (byte*)vehicle;
-	int i_fields_read;
+	int i_fields_read = 0;
 	vehicleType_t vehType;
 	char value[1024];
 
@@ -869,7 +869,7 @@ static qboolean BG_ParseVehicleParm(vehicleInfo_t* vehicle, const char* parmName
 static int veh_load_vehicle(const char* vehicle_name)
 {
 	//load up specified vehicle and save in array: g_vehicleInfo
-	const char* token;
+	const char* token = NULL;
 	//we'll assume that no parm name is longer than 128
 	char parmName[128] = { 0 };
 	char weap1[128] = { 0 }, weap2[128] = { 0 };
@@ -883,7 +883,7 @@ static int veh_load_vehicle(const char* vehicle_name)
 	char weapMuzzle8[128] = { 0 };
 	char weapMuzzle9[128] = { 0 };
 	char weapMuzzle10[128] = { 0 };
-	const char* p;
+	const char* p = NULL;
 
 	// Load the vehicle parms if no vehicles have been loaded yet.
 	if (numVehicles == 0)
@@ -1226,7 +1226,7 @@ static int veh_load_vehicle(const char* vehicle_name)
 
 static int VEH_VehicleIndexForName(const char* vehicleName)
 {
-	int v;
+	int v = 0;
 	if (!vehicleName || !vehicleName[0])
 	{
 		Com_Printf(S_COLOR_RED"ERROR: Trying to read Vehicle with no name!\n");
@@ -1262,7 +1262,7 @@ static void BG_VehWeaponLoadParms(void)
 {
 	int vehExtFNLen = 0;
 	char vehWeaponExtensionListBuf[2048]; //	The list of file names read in
-	fileHandle_t f;
+	fileHandle_t f = 0;
 
 	int len = 0;
 
@@ -1326,7 +1326,7 @@ void BG_VehicleLoadParms(void)
 	//HMM... only do this if there's a vehicle on the level?
 	int vehExtFNLen = 0;
 	char vehExtensionListBuf[2048]; //	The list of file names read in
-	fileHandle_t f;
+	fileHandle_t f = 0;
 
 	int len = 0;
 

@@ -626,7 +626,7 @@ typedef struct wpobject_s
 #define MINUTE_HEIGHT	    8
 
 #define TINYCHAR_WIDTH		(SMALLCHAR_WIDTH)
-#define TINYCHAR_HEIGHT		(SMALLCHAR_HEIGHT/2)
+#define TINYCHAR_HEIGHT		(SMALLCHAR_HEIGHT >> 1) // half of SMALLCHAR_HEIGHT (a shift: no integer division warning where it is used as a float)
 
 #define SMALLCHAR_WIDTH		8
 #define SMALLCHAR_HEIGHT	16

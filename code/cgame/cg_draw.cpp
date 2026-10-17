@@ -132,7 +132,7 @@ static void CG_Draw_JKA_ForcePower(const centity_t* cent, const float hud_ratio)
 {
 	qboolean flash = qfalse;
 	vec4_t calc_color;
-	float extra = 0, percent;
+	float extra = 0, percent = 0.0f;
 
 	if (!cent->gent->client->ps.forcePowersKnown || G_IsRidingVehicle(cent->gent))
 	{
@@ -270,7 +270,7 @@ static void CG_Draw_JKA_ForcePower(const centity_t* cent, const float hud_ratio)
 static void CG_DrawJK2ForcePower(const centity_t* cent, const int x, const int y)
 {
 	vec4_t calc_color;
-	float extra = 0, percent;
+	float extra = 0, percent = 0.0f;
 
 	if (!cent->gent->client->ps.forcePowersKnown)
 	{
@@ -421,7 +421,7 @@ static void CG_SaberWearSetColor(const float* base)
 
 static void CG_DrawCusSaberStyle(const centity_t* cent, const float hud_ratio)
 {
-	int index;
+	int index = 0;
 
 	if (!cent->currentState.weapon) // We don't have a weapon right now
 	{
@@ -485,7 +485,7 @@ static void CG_DrawCusSaberStyle(const centity_t* cent, const float hud_ratio)
 
 static void CG_DrawJK2blockingMode(const centity_t* cent)
 {
-	int blockindex;
+	int blockindex = 0;
 
 	if (!cent->currentState.weapon) // We don't have a weapon right now
 	{
@@ -538,7 +538,7 @@ static void CG_DrawJK2blockingMode(const centity_t* cent)
 
 static void CG_DrawCusweapontype(const centity_t* cent, const float hud_ratio)
 {
-	int wp_index;
+	int wp_index = 0;
 
 	if (!cent->currentState.weapon) // We don't have a weapon right now
 	{
@@ -1137,7 +1137,7 @@ static void CG_DrawCusblockPoints(const int x, const int y, const float hud_rati
 		memcpy(calc_color, colorTable[CT_MAGENTA], sizeof(vec4_t));
 	}
 
-	const float hold = cg.snap->ps.blockPoints - BLOCK_POINTS_MAX / 2;
+	const float hold = cg.snap->ps.blockPoints - BLOCK_POINTS_MAX / 2.0f;
 	float block_percent = static_cast<float>(hold) / (static_cast<float>(BLOCK_POINTS_MAX) / 2);
 
 	// Make the hud flash by setting forceHUDTotalFlashTime above cg.time
@@ -1594,7 +1594,7 @@ static void CG_DrawCusAmmo(const centity_t* cent, const float hud_ratio)
 
 static void CG_DrawJK2Ammo(const centity_t* cent, const int x, const int y)
 {
-	int num_color_i;
+	int num_color_i = 0;
 	vec4_t calc_color;
 
 	const playerState_t* ps = &cg.snap->ps;
@@ -2105,7 +2105,7 @@ static void CG_DrawJK2blockPoints(const int x, const int y)
 		memcpy(calc_color, colorTable[CT_MAGENTA], sizeof(vec4_t));
 	}
 
-	const float hold = cg.snap->ps.blockPoints - BLOCK_POINTS_MAX / 2;
+	const float hold = cg.snap->ps.blockPoints - BLOCK_POINTS_MAX / 2.0f;
 	float block_percent = static_cast<float>(hold) / (static_cast<float>(BLOCK_POINTS_MAX) / 2);
 
 	// Make the hud flash by setting forceHUDTotalFlashTime above cg.time
@@ -2209,10 +2209,10 @@ constexpr auto MAX_VHUD_AMMO_TICS = 5;
 
 static void CG_DrawVehicleSheild(const Vehicle_t* p_veh)
 {
-	int x_pos, y_pos, width, height;
+	int x_pos = 0, y_pos = 0, width = 0, height = 0;
 	vec4_t color, calc_color;
-	qhandle_t background;
-	float curr_value, max_health;
+	qhandle_t background = 0;
+	float curr_value = 0.0f, max_health = 0.0f;
 
 	//riding some kind of living creature
 	if (p_veh->m_pVehicleInfo->type == VH_ANIMAL || p_veh->m_pVehicleInfo->type == VH_FLIER)
@@ -2285,8 +2285,8 @@ static void CG_DrawVehicleSheild(const Vehicle_t* p_veh)
 // The HUD.menu file has the graphic print with a negative height, so it will print from the bottom up.
 static void CG_DrawVehicleTurboRecharge(const Vehicle_t* p_veh)
 {
-	int x_pos, y_pos, width, height;
-	qhandle_t background;
+	int x_pos = 0, y_pos = 0, width = 0, height = 0;
+	qhandle_t background = 0;
 	vec4_t color;
 
 	if (cgi_UI_GetMenuItemInfo(
@@ -2299,7 +2299,7 @@ static void CG_DrawVehicleTurboRecharge(const Vehicle_t* p_veh)
 		color,
 		&background))
 	{
-		float percent;
+		float percent = 0.0f;
 		const int diff = cg.time - p_veh->m_iTurboTime;
 
 		// Calc max time
@@ -2327,8 +2327,8 @@ static void CG_DrawVehicleTurboRecharge(const Vehicle_t* p_veh)
 
 static void CG_DrawVehicleSpeed(const Vehicle_t* p_veh, const char* ent_hud)
 {
-	int x_pos, y_pos, width, height;
-	qhandle_t background;
+	int x_pos = 0, y_pos = 0, width = 0, height = 0;
+	qhandle_t background = 0;
 	const gentity_t* parent = p_veh->m_pParentEntity;
 	const playerState_t* parent_ps = &parent->client->ps;
 	vec4_t color, calc_color;
@@ -2421,8 +2421,8 @@ static void CG_DrawVehicleSpeed(const Vehicle_t* p_veh, const char* ent_hud)
 
 static void CG_DrawVehicleArmor(const Vehicle_t* p_veh)
 {
-	int x_pos, y_pos, width, height;
-	qhandle_t background;
+	int x_pos = 0, y_pos = 0, width = 0, height = 0;
+	qhandle_t background = 0;
 	vec4_t color, calc_color;
 
 	if (cgi_UI_GetMenuItemInfo(
@@ -2492,8 +2492,8 @@ int cg_vehicleAmmoWarningTime = 0;
 static void CG_DrawVehicleAmmoBar(const Vehicle_t* p_veh, const int weapon_num, const char* background_item,
 	const char* tic_item, const int num_tics)
 {
-	int x_pos, y_pos, width, height;
-	qhandle_t background;
+	int x_pos = 0, y_pos = 0, width = 0, height = 0;
+	qhandle_t background = 0;
 	vec4_t color, calc_color;
 
 	if (cgi_UI_GetMenuItemInfo(
@@ -2591,8 +2591,8 @@ static void CG_DrawVehicleWeaponsLinked(const Vehicle_t* p_veh)
 
 	if (draw_link)
 	{
-		int x_pos, y_pos, width, height;
-		qhandle_t background;
+		int x_pos = 0, y_pos = 0, width = 0, height = 0;
+		qhandle_t background = 0;
 		vec4_t color;
 
 		if (cgi_UI_GetMenuItemInfo("swoopvehiclehud", "weaponslinked", &x_pos, &y_pos, &width, &height, color,
@@ -2646,9 +2646,9 @@ static qhandle_t CG_VehicleHudShader(const char* shader_name)
 static void CG_DrawVehicleDamage(const Vehicle_t* p_veh, const int broken_limbs, const char* menu_name, const float alpha,
 	const int index)
 {
-	int x_pos, y_pos, width, height;
+	int x_pos = 0, y_pos = 0, width = 0, height = 0;
 	vec4_t color;
-	qhandle_t background;
+	qhandle_t background = 0;
 
 	if (!cgi_UI_GetMenuItemInfo(menu_name, vehDamageData[index].itemName, &x_pos, &y_pos, &width, &height, color,
 		&background))
@@ -2656,7 +2656,7 @@ static void CG_DrawVehicleDamage(const Vehicle_t* p_veh, const int broken_limbs,
 		return;
 	}
 
-	int color_i;
+	int color_i = 0;
 	if (broken_limbs & 1 << vehDamageData[index].heavyDamage)
 	{
 		color_i = CT_RED;
@@ -2707,9 +2707,9 @@ static void CG_DrawVehicleDamage(const Vehicle_t* p_veh, const int broken_limbs,
 static void CG_DrawVehicleDamageHUD(const Vehicle_t* p_veh, const float perc_shields, const char* menu_name,
 	const float alpha)
 {
-	int x_pos, y_pos, width, height;
+	int x_pos = 0, y_pos = 0, width = 0, height = 0;
 	vec4_t item_color, color;
-	qhandle_t background;
+	qhandle_t background = 0;
 	const gentity_t* veh = p_veh->m_pParentEntity;
 
 	if (!veh || !veh->client)
@@ -2850,9 +2850,9 @@ static const Vehicle_t* CG_CheckTargetVehicle(const Vehicle_t* my_veh, float* al
 
 static void CG_DrawVehicleHud(const Vehicle_t* p_veh)
 {
-	int x_pos, y_pos, width, height;
+	int x_pos = 0, y_pos = 0, width = 0, height = 0;
 	vec4_t color;
-	qhandle_t background;
+	qhandle_t background = 0;
 
 	CG_DrawVehicleTurboRecharge(p_veh);
 	CG_DrawVehicleWeaponsLinked(p_veh);
@@ -2897,7 +2897,7 @@ static void CG_DrawVehicleHud(const Vehicle_t* p_veh)
 	// If he's hidden, he must be in a ship
 	if (p_veh->m_pVehicleInfo->hideRider)
 	{
-		float alpha;
+		float alpha = 0.0f;
 
 		CG_DrawVehicleDamageHUD(p_veh, CG_VehicleShieldFraction(p_veh), "vehicledamagehud", 1.0f);
 
@@ -2912,9 +2912,9 @@ static void CG_DrawVehicleHud(const Vehicle_t* p_veh)
 
 static void CG_DrawTauntaunHud(const Vehicle_t* p_veh)
 {
-	int x_pos, y_pos, width, height;
+	int x_pos = 0, y_pos = 0, width = 0, height = 0;
 	vec4_t color;
-	qhandle_t background;
+	qhandle_t background = 0;
 
 	CG_DrawVehicleTurboRecharge(p_veh);
 
@@ -2954,9 +2954,9 @@ static void CG_DrawTauntaunHud(const Vehicle_t* p_veh)
 
 static void CG_DrawEmplacedGunHealth(const centity_t* cent)
 {
-	int x_pos, y_pos, width, height, health;
+	int x_pos = 0, y_pos = 0, width = 0, height = 0, health = 0;
 	vec4_t color, calc_color;
-	qhandle_t background;
+	qhandle_t background = 0;
 
 	if (cent->gent && cent->gent->owner)
 	{
@@ -3037,9 +3037,9 @@ static void CG_DrawEmplacedGunHealth(const centity_t* cent)
 
 static void CG_DrawEmplacedGunHud(const centity_t* cent)
 {
-	int x_pos, y_pos, width, height;
+	int x_pos = 0, y_pos = 0, width = 0, height = 0;
 	vec4_t color;
-	qhandle_t background;
+	qhandle_t background = 0;
 
 	// Draw frame
 	if (cgi_UI_GetMenuItemInfo(
@@ -3075,9 +3075,9 @@ static void CG_DrawEmplacedGunHud(const centity_t* cent)
 
 static void CG_DrawItemHealth(float curr_value, const float maxHealth)
 {
-	int x_pos, y_pos, width, height;
+	int x_pos = 0, y_pos = 0, width = 0, height = 0;
 	vec4_t color, calc_color;
-	qhandle_t background;
+	qhandle_t background = 0;
 
 	if (cgi_UI_GetMenuItemInfo(
 		"swoopvehiclehud",
@@ -3137,9 +3137,9 @@ static void CG_DrawItemHealth(float curr_value, const float maxHealth)
 
 static void CG_DrawPanelTurretHud()
 {
-	int x_pos, y_pos, width, height;
+	int x_pos = 0, y_pos = 0, width = 0, height = 0;
 	vec4_t color;
-	qhandle_t background;
+	qhandle_t background = 0;
 
 	// Draw frame
 	if (cgi_UI_GetMenuItemInfo(
@@ -3178,10 +3178,10 @@ static void CG_DrawPanelTurretHud()
 
 static void CG_DrawATSTHud()
 {
-	int x_pos, y_pos, width, height;
+	int x_pos = 0, y_pos = 0, width = 0, height = 0;
 	vec4_t color;
-	qhandle_t background;
-	float health;
+	qhandle_t background = 0;
+	float health = 0.0f;
 
 	if (!cg.snap
 		|| !g_entities[cg.snap->ps.viewEntity].activator)
@@ -3281,7 +3281,7 @@ static void CG_DrawATSTHud()
 //-----------------------------------------------------
 static qboolean CG_DrawCustomHealthHud(const centity_t* cent)
 {
-	Vehicle_t* p_veh;
+	Vehicle_t* p_veh = nullptr;
 
 	// In a Weapon?
 	if (cent->currentState.eFlags & EF_LOCKED_TO_WEAPON)
@@ -3350,7 +3350,7 @@ static void CG_DrawBatteryCharge()
 
 static void CG_DrawSimpleSaberStyle(const centity_t* cent)
 {
-	uint32_t calc_color;
+	uint32_t calc_color = 0;
 	char num[7] = { 0 };
 	int weap_x = 16;
 
@@ -3415,7 +3415,7 @@ static void CG_DrawSimpleSaberStyle(const centity_t* cent)
 
 static void CG_DrawSimpleAmmo(const centity_t* cent)
 {
-	uint32_t calc_color;
+	uint32_t calc_color = 0;
 	char num[16] = { 0 };
 
 	if (!cent->currentState.weapon) // We don't have a weapon right now
@@ -3563,11 +3563,11 @@ static void CG_DrawHUDJK2RightFrame2(const int x, const int y)
 
 static void CG_DrawHUD(const centity_t* cent)
 {
-	int section_x_pos, section_y_pos, section_width, section_height;
+	int section_x_pos = 0, section_y_pos = 0, section_width = 0, section_height = 0;
 	const float hud_ratio = cg_hudRatio.integer ? cgs.widthRatioCoef : 1.0f;
 
 	WorkshopDrawClientsideInformation();
-	const Vehicle_t* p_veh;
+	const Vehicle_t* p_veh = nullptr;
 
 	if (cent->gent->health < 1)
 	{
@@ -4082,7 +4082,7 @@ CG_DrawForcePower
 static void CG_DrawDatapadForcePower(const centity_t* cent, const int x, const int y)
 {
 	vec4_t calc_color;
-	float extra = 0, percent;
+	float extra = 0, percent = 0.0f;
 
 	if (!cent->gent->client->ps.forcePowersKnown)
 	{
@@ -4144,7 +4144,7 @@ CG_DrawAmmo
 */
 static void CG_DrawDataPadAmmo(const centity_t* cent, const int x, const int y)
 {
-	int num_color_i;
+	int num_color_i = 0;
 	vec4_t calc_color;
 
 	const playerState_t* ps = &cg.snap->ps;
@@ -4384,7 +4384,7 @@ extern float cg_zoomFov; //from cg_view.cpp
 static void CG_DrawZoomMask()
 {
 	vec4_t color1{};
-	float level;
+	float level = 0.0f;
 	static qboolean flip = qtrue;
 	const float charge = cg.snap->ps.batteryCharge / static_cast<float>(MAX_BATTERIES);
 	// convert charge to a percentage
@@ -5307,12 +5307,12 @@ CG_DrawCrosshair
 */
 static void CG_DrawCrosshair(vec3_t world_point)
 {
-	float w, h;
+	float w = 0.0f, h = 0.0f;
 	qboolean corona = qfalse;
 	vec4_t ecolor = { 0 };
-	float x, y;
+	float x = 0.0f, y = 0.0f;
 	qhandle_t hShader = 0;
-	float		chX, chY;
+	float		chX = 0.0f, chY = 0.0f;
 
 	const qboolean holding_block = ((cg.predictedPlayerState.ManualBlockingFlags & (1 << MBF_HOLDINGBLOCK)) != 0) ? qtrue : qfalse;
 	const qboolean holding_block_and_attack = ((cg.predictedPlayerState.ManualBlockingFlags & (1 << MBF_HOLDINGBLOCKANDATTACK)) != 0) ? qtrue : qfalse;
@@ -5745,7 +5745,7 @@ qboolean CG_WorldCoordToScreenCoordFloat(vec3_t world_coord, float* x, float* y)
 
 qboolean CG_WorldCoordToScreenCoord(vec3_t world_coord, int* x, int* y)
 {
-	float x_f, y_f;
+	float x_f = 0.0f, y_f = 0.0f;
 
 	if (CG_WorldCoordToScreenCoordFloat(world_coord, &x_f, &y_f))
 	{
@@ -5894,7 +5894,7 @@ static void CG_ScanForCrosshairEntity(const qboolean scanAll)
 	const gentity_t* traceEnt = nullptr;
 	vec3_t start, end;
 	int ignoreEnt = cg.snap->ps.clientNum;
-	const Vehicle_t* p_veh;
+	const Vehicle_t* p_veh = nullptr;
 	float range = 4096; //was 8192
 
 	cg_forceCrosshair = qfalse;
@@ -5958,7 +5958,7 @@ static void CG_ScanForCrosshairEntity(const qboolean scanAll)
 								->ps.forcePowerLevel[FP_PUSH])
 							{
 								//player has push or pull
-								float max_range;
+								float max_range = 0.0f;
 								if (cg_entities[0].gent->client->ps.forcePowerLevel[FP_PULL] > cg_entities[0].gent->
 									client->ps.forcePowerLevel[FP_PUSH])
 								{
@@ -5986,7 +5986,7 @@ static void CG_ScanForCrosshairEntity(const qboolean scanAll)
 						if (traceEnt->spawnflags & 1/*F_PUSH*/ && traceEnt->spawnflags & 2/*F_PULL*/)
 						{
 							//push or pullable
-							float max_range;
+							float max_range = 0.0f;
 							if (cg_entities[0].gent->client->ps.forcePowerLevel[FP_PULL] > cg_entities[0].gent->client->
 								ps.forcePowerLevel[FP_PUSH])
 							{
@@ -6264,7 +6264,7 @@ static void CG_DrawCrosshairBackupNames()
 	VectorCopy(cent->lerpOrigin, headPos);
 	headPos[2] += cent->gent->maxs[2] + 20;
 
-	float sx, sy;
+	float sx = 0.0f, sy = 0.0f;
 
 	if (CG_WorldCoordToScreenCoordFloat(headPos, &sx, &sy) == qfalse)
 	{
@@ -6953,7 +6953,7 @@ static void CG_DrawCrosshairNames(void)
 	VectorCopy(cent->lerpOrigin, headPos);
 	headPos[2] += cent->gent->maxs[2] + 20;
 
-	float sx, sy;
+	float sx = 0.0f, sy = 0.0f;
 
 	if (CG_WorldCoordToScreenCoordFloat(headPos, &sx, &sy) == qfalse)
 	{
@@ -7046,7 +7046,7 @@ static void CG_DrawRocketLocking(const int lock_ent_num)
 		return;
 	}
 
-	int cx, cy;
+	int cx = 0, cy = 0;
 	vec3_t org;
 
 	VectorCopy(gent->currentOrigin, org);
@@ -7296,10 +7296,10 @@ constexpr auto RADAR_MIN_ASTEROID_SURF_WARN_DIST = 1200.0f;
 static float cg_draw_radar(const float y)
 {
 	vec4_t color{};
-	float arrow_w;
-	float arrow_h;
-	float arrow_base_scale;
-	float z_scale;
+	float arrow_w = 0.0f;
+	float arrow_h = 0.0f;
+	float arrow_base_scale = 0.0f;
+	float z_scale = 0.0f;
 	constexpr int x_offset = 0;
 
 	if (!cg.snap)
@@ -7342,7 +7342,7 @@ static float cg_draw_radar(const float y)
 		// Get the distances first
 		VectorSubtract(cg.predictedPlayerState.origin, cent->lerpOrigin, dir_player);
 		dir_player[2] = 0;
-		float distance;
+		float distance = 0.0f;
 		float actual_dist = distance = VectorNormalize(dir_player);
 
 		if (distance > cg_radarRange * 0.8f)
@@ -7380,7 +7380,7 @@ static float cg_draw_radar(const float y)
 			const float ly = y + static_cast<float>(RADAR_RADIUS) + cos(angle) * distance;
 
 			arrow_base_scale = 6.0f;
-			qhandle_t shader;
+			qhandle_t shader = 0;
 			z_scale = 1.0f;
 
 			if (!far_away)
@@ -7579,7 +7579,7 @@ static float cg_draw_radar(const float y)
 						if (radarLockSoundDebounceTime < cg.time)
 						{
 							vec3_t sound_org;
-							int alarm_sound;
+							int alarm_sound = 0;
 							if (actual_dist > RADAR_MISSILE_RANGE * 0.66f)
 							{
 								radarLockSoundDebounceTime = cg.time + 1000;
@@ -7786,7 +7786,7 @@ static void CG_UseIcon()
 
 static void CG_Draw2DScreenTints()
 {
-	float rage_time, rage_rec_time, absorb_time, protect_time;
+	float rage_time = 0.0f, rage_rec_time = 0.0f, absorb_time = 0.0f, protect_time = 0.0f;
 	vec4_t hcolor{};
 	//force effects
 	if (cg.snap->ps.forcePowersActive & 1 << FP_RAGE)
@@ -8210,7 +8210,7 @@ static void CG_DrawVehicleTargets()
 				continue;
 			}
 		}
-		float x, y;
+		float x = 0.0f, y = 0.0f;
 		vec3_t org;
 		VectorCopy(cent->lerpOrigin, org);
 		if (!CG_WorldCoordToScreenCoordFloat(org, &x, &y))
@@ -8244,7 +8244,7 @@ static void CG_DrawVehicleTargets()
 			vec3_t lead_pos;
 			const float eta = Distance(cent->lerpOrigin, my_ship->currentOrigin) / shot_speed;
 			VectorMA(cent->lerpOrigin, eta, ship->client->ps.velocity, lead_pos);
-			float lead_x, lead_y;
+			float lead_x = 0.0f, lead_y = 0.0f;
 			const qboolean on_screen = CG_WorldCoordToScreenCoordFloat(lead_pos, &lead_x, &lead_y);
 			CG_VehDottedLine(x, y, lead_x, lead_y, 10, g_color_table[ColorIndex(COLOR_RED)]);
 			if (on_screen)
@@ -8507,7 +8507,7 @@ static void CG_DynamicHudEnd(const float alpha)
 static void CG_Draw2D()
 {
 	char text[1024] = { 0 };
-	int w, y_pos;
+	int w = 0, y_pos = 0;
 	const float scale = cg_textprintscale.value;
 	const centity_t* cent = &cg_entities[cg.snap->ps.clientNum];
 
@@ -8774,10 +8774,10 @@ closing the icon section of the HU
 */
 void CG_DrawIconBackground()
 {
-	int height, x_add, x2, y2;
-	int background_width, background_height;
-	qhandle_t background;
-	const Vehicle_t* p_veh;
+	int height = 0, x_add = 0, x2 = 0, y2 = 0;
+	int background_width = 0, background_height = 0;
+	qhandle_t background = 0;
+	const Vehicle_t* p_veh = nullptr;
 	const float hud_ratio = cg_hudRatio.integer ? cgs.widthRatioCoef : 1.0f;
 
 	if (cg.snap->ps.stats[STAT_HEALTH] <= 0)
@@ -8930,7 +8930,7 @@ Perform all drawing needed to completely fill the screen
 */
 void CG_DrawActive(const stereoFrame_t stereo_view)
 {
-	float separation;
+	float separation = 0.0f;
 	vec3_t base_org;
 
 	// optionally draw the info screen instead

@@ -230,11 +230,11 @@ qboolean NPC_UpdateAngles(const qboolean do_pitch, const qboolean do_yaw)
 {
 #if 1
 
-	float error;
-	float decay;
+	float error = 0.0f;
+	float decay = 0.0f;
 	float target_pitch = 0;
 	float target_yaw = 0;
-	float yaw_speed;
+	float yaw_speed = 0.0f;
 	qboolean exact = qtrue;
 
 	// if angle changes are locked; just keep the current angles
@@ -597,8 +597,8 @@ qboolean NPC_UpdateFiringAngles(const qboolean do_pitch, const qboolean do_yaw)
 
 #else
 
-	float error, diff;
-	float decay;
+	float error = 0.0f, diff = 0.0f;
+	float decay = 0.0f;
 	float target_pitch = 0;
 	float target_yaw = 0;
 	qboolean exact = qtrue;
@@ -731,8 +731,8 @@ Does update angles on shootAngles
 void NPC_UpdateShootAngles(vec3_t angles, const qboolean do_pitch, const qboolean do_yaw)
 {
 	//FIXME: shoot angles either not set right or not used!
-	float error;
-	float decay;
+	float error = 0.0f;
+	float decay = 0.0f;
 	float target_pitch = 0;
 	float target_yaw = 0;
 
@@ -808,7 +808,7 @@ FIXME: Don't include medics?
 */
 void SetTeamNumbers()
 {
-	int i;
+	int i = 0;
 
 	for (i = 0; i < TEAM_NUM_TEAMS; i++)
 	{
@@ -1031,7 +1031,7 @@ static int NPC_FindNearestEnemy(const gentity_t* ent)
 	int nearest_ent_id = -1;
 	float nearest_dist = static_cast<float>(WORLD_SIZE) * static_cast<float>(WORLD_SIZE);
 	int num_checks = 0;
-	int i;
+	int i = 0;
 
 	//Setup the bbox to search in
 	for (i = 0; i < 3; i++)

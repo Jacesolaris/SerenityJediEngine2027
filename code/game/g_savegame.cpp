@@ -844,7 +844,7 @@ static void ReadLevelLocals()
 static void WriteGEntities(const qboolean qbAutosave)
 {
 	int i_count = 0;
-	int i;
+	int i = 0;
 
 	for (i = 0; i < (qbAutosave ? 1 : globals.num_entities); i++)
 	{
@@ -1012,7 +1012,7 @@ static void ClearGrappleAndStunAfterLoad()
 static void ReadGEntities(const qboolean qbAutosave)
 {
 	int i_count = 0;
-	int i;
+	int i = 0;
 
 	ojk::SavedGameHelper saved_game(gi.saved_game);
 

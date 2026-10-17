@@ -392,7 +392,7 @@ bool CPrimitiveTemplate::ParseMax(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseLife(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -415,7 +415,7 @@ bool CPrimitiveTemplate::ParseLife(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseDelay(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -438,7 +438,7 @@ bool CPrimitiveTemplate::ParseDelay(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseCount(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -461,7 +461,7 @@ bool CPrimitiveTemplate::ParseCount(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseElasticity(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -538,7 +538,7 @@ bool CPrimitiveTemplate::ParseOrigin2(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseRadius(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -561,7 +561,7 @@ bool CPrimitiveTemplate::ParseRadius(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseHeight(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -584,7 +584,7 @@ bool CPrimitiveTemplate::ParseHeight(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseWindModifier(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -607,7 +607,7 @@ bool CPrimitiveTemplate::ParseWindModifier(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseRotation(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == qtrue)
 	{
@@ -630,7 +630,7 @@ bool CPrimitiveTemplate::ParseRotation(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseRotationDelta(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == qtrue)
 	{
@@ -907,7 +907,7 @@ bool CPrimitiveTemplate::ParseAcceleration(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseGravity(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -932,7 +932,7 @@ bool CPrimitiveTemplate::ParseGravity(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseDensity(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -958,7 +958,7 @@ bool CPrimitiveTemplate::ParseDensity(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseVariance(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -1031,7 +1031,7 @@ bool CPrimitiveTemplate::ParseRGBEnd(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseRGBParm(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -1054,7 +1054,7 @@ bool CPrimitiveTemplate::ParseRGBParm(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseRGBFlags(const char* val)
 {
-	int flags;
+	int flags = 0;
 
 	if (ParseGroupFlags(val, &flags) == true)
 	{
@@ -1078,7 +1078,7 @@ bool CPrimitiveTemplate::ParseRGBFlags(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseAlphaStart(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -1101,7 +1101,7 @@ bool CPrimitiveTemplate::ParseAlphaStart(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseAlphaEnd(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -1124,7 +1124,7 @@ bool CPrimitiveTemplate::ParseAlphaEnd(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseAlphaParm(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -1147,7 +1147,7 @@ bool CPrimitiveTemplate::ParseAlphaParm(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseAlphaFlags(const char* val)
 {
-	int flags;
+	int flags = 0;
 
 	if (ParseGroupFlags(val, &flags) == true)
 	{
@@ -1171,7 +1171,7 @@ bool CPrimitiveTemplate::ParseAlphaFlags(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseSizeStart(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -1194,7 +1194,7 @@ bool CPrimitiveTemplate::ParseSizeStart(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseSizeEnd(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -1217,7 +1217,7 @@ bool CPrimitiveTemplate::ParseSizeEnd(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseSizeParm(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -1240,7 +1240,7 @@ bool CPrimitiveTemplate::ParseSizeParm(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseSizeFlags(const char* val)
 {
-	int flags;
+	int flags = 0;
 
 	if (ParseGroupFlags(val, &flags) == true)
 	{
@@ -1264,7 +1264,7 @@ bool CPrimitiveTemplate::ParseSizeFlags(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseSize2Start(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -1287,7 +1287,7 @@ bool CPrimitiveTemplate::ParseSize2Start(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseSize2End(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -1310,7 +1310,7 @@ bool CPrimitiveTemplate::ParseSize2End(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseSize2Parm(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -1333,7 +1333,7 @@ bool CPrimitiveTemplate::ParseSize2Parm(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseSize2Flags(const char* val)
 {
-	int flags;
+	int flags = 0;
 
 	if (ParseGroupFlags(val, &flags) == true)
 	{
@@ -1357,7 +1357,7 @@ bool CPrimitiveTemplate::ParseSize2Flags(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseLengthStart(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -1380,7 +1380,7 @@ bool CPrimitiveTemplate::ParseLengthStart(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseLengthEnd(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -1403,7 +1403,7 @@ bool CPrimitiveTemplate::ParseLengthEnd(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseLengthParm(const char* val)
 {
-	float min, max;
+	float min = 0.0f, max = 0.0f;
 
 	if (ParseFloat(val, &min, &max) == true)
 	{
@@ -1426,7 +1426,7 @@ bool CPrimitiveTemplate::ParseLengthParm(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseLengthFlags(const char* val)
 {
-	int flags;
+	int flags = 0;
 
 	if (ParseGroupFlags(val, &flags) == true)
 	{
@@ -1450,8 +1450,8 @@ bool CPrimitiveTemplate::ParseLengthFlags(const char* val)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseShaders(const CGPValue* grp)
 {
-	const char* val;
-	int handle;
+	const char* val = nullptr;
+	int handle = 0;
 
 	if (grp->IsList())
 	{
@@ -1502,8 +1502,8 @@ bool CPrimitiveTemplate::ParseShaders(const CGPValue* grp)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseSounds(const CGPValue* grp)
 {
-	const char* val;
-	int handle;
+	const char* val = nullptr;
+	int handle = 0;
 
 	if (grp->IsList())
 	{
@@ -1554,8 +1554,8 @@ bool CPrimitiveTemplate::ParseSounds(const CGPValue* grp)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseModels(const CGPValue* grp)
 {
-	const char* val;
-	int handle;
+	const char* val = nullptr;
+	int handle = 0;
 
 	if (grp->IsList())
 	{
@@ -1608,8 +1608,8 @@ bool CPrimitiveTemplate::ParseModels(const CGPValue* grp)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseImpactFxStrings(const CGPValue* grp)
 {
-	const char* val;
-	int handle;
+	const char* val = nullptr;
+	int handle = 0;
 
 	if (grp->IsList())
 	{
@@ -1679,8 +1679,8 @@ bool CPrimitiveTemplate::ParseImpactFxStrings(const CGPValue* grp)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseDeathFxStrings(const CGPValue* grp)
 {
-	const char* val;
-	int handle;
+	const char* val = nullptr;
+	int handle = 0;
 
 	if (grp->IsList())
 	{
@@ -1750,8 +1750,8 @@ bool CPrimitiveTemplate::ParseDeathFxStrings(const CGPValue* grp)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParseEmitterFxStrings(const CGPValue* grp)
 {
-	const char* val;
-	int handle;
+	const char* val = nullptr;
+	int handle = 0;
 
 	if (grp->IsList())
 	{
@@ -1821,8 +1821,8 @@ bool CPrimitiveTemplate::ParseEmitterFxStrings(const CGPValue* grp)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParsePlayFxStrings(const CGPValue* grp)
 {
-	const char* val;
-	int handle;
+	const char* val = nullptr;
+	int handle = 0;
 
 	if (grp->IsList())
 	{
@@ -2083,7 +2083,7 @@ bool CPrimitiveTemplate::ParseLength(const CGPGroup* grp)
 //------------------------------------------------------
 bool CPrimitiveTemplate::ParsePrimitive(const CGPGroup* grp)
 {
-	const char* key;
+	const char* key = nullptr;
 
 	// Lets work with the pairs first
 	const CGPValue* pairs = grp->GetPairs();

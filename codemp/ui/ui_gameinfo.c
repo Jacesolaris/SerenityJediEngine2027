@@ -118,7 +118,7 @@ UI_LoadArenasFromFile
 ===============
 */
 static void UI_LoadArenasFromFile(char* filename) {
-	fileHandle_t	f;
+	fileHandle_t	f = 0;
 	static char	buf[BOTINFO_FILE_MAX];
 
 	const int len = trap->FS_Open(filename, &f, FS_READ);
@@ -380,7 +380,7 @@ UI_LoadBotsFromFile
 ===============
 */
 static void UI_LoadBotsFromFile(char* filename) {
-	fileHandle_t	f;
+	fileHandle_t	f = 0;
 	static char	buf[BOTINFO_FILE_MAX];
 
 	const int len = trap->FS_Open(filename, &f, FS_READ);

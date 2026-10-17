@@ -428,7 +428,7 @@ x, y, amd width are in pixels
 static void Field_VariableSizeDraw(field_t* edit, const int x, const int y, int width, const int size,
 	const qboolean showCursor, const qboolean noColorEscape)
 {
-	int prestep;
+	int prestep = 0;
 	char str[MAX_STRING_CHARS];
 
 	int drawLen = edit->widthInChars - 1; // - 1 so there is always a space for the cursor
@@ -486,7 +486,7 @@ static void Field_VariableSizeDraw(field_t* edit, const int x, const int y, int 
 	// draw the cursor
 	if (showCursor)
 	{
-		int cursorChar;
+		int cursorChar = 0;
 		if (cls.realtime >> 8 & 1)
 		{
 			return; // off blink
@@ -535,7 +535,7 @@ Field_Paste
 */
 static void Field_Paste(field_t* edit)
 {
-	char* cbd, * c;
+	char* cbd = nullptr, * c = nullptr;
 
 	c = cbd = Sys_GetClipboardData();
 
@@ -1285,7 +1285,7 @@ Key_CompleteBind
 */
 static void Key_CompleteBind(char* args, const int argNum)
 {
-	char* p;
+	char* p = nullptr;
 
 	if (argNum == 2)
 	{

@@ -2380,13 +2380,13 @@ static void g_roll_missile(gentity_t* ent)
 		return;
 	}
 
-	int     numplanes;
+	int     numplanes = 0;
 	vec3_t  planes[MAX_CLIP_PLANES];
 	vec3_t  primal_velocity;
 	vec3_t  end_velocity;
 	trace_t trace;
 	pml_t   obj_pml;
-	float   bounce_amt;
+	float   bounce_amt = 0.0f;
 
 	memset(&obj_pml, 0, sizeof(obj_pml));
 	memset(planes, 0, sizeof(planes));
@@ -2484,7 +2484,7 @@ static void g_roll_missile(gentity_t* ent)
 		}
 
 		// If this is the same plane we hit before, nudge velocity out along it
-		int i;
+		int i = 0;
 		for (i = 0; i < numplanes; i++)
 		{
 			if (DotProduct(trace.plane.normal, planes[i]) > 0.99f)

@@ -132,7 +132,7 @@ and whenever the server updates any serverinfo flagged cvars
 */
 void CG_ParseServerinfo(void)
 {
-	int i;
+	int i = 0;
 
 	const char* info = CG_ConfigString(CS_SERVERINFO);
 
@@ -153,8 +153,8 @@ void CG_ParseServerinfo(void)
 	const int value = atoi(Info_ValueForKey(info, "g_weaponDisable"));
 	if (cgs.wDisable != value)
 	{
-		gitem_t* item;
-		itemInfo_t* itemInfo;
+		gitem_t* item = NULL;
+		itemInfo_t* itemInfo = NULL;
 
 		cgs.wDisable = value;
 
@@ -419,7 +419,7 @@ static void SetCustomSoundForType(clientInfo_t* ci, const int setType, const int
 
 static void CG_RegisterCustomSounds(clientInfo_t* ci, const int setType, const char* psDir)
 {
-	int iTableEntries;
+	int iTableEntries = 0;
 
 	switch (setType)
 	{
@@ -1010,7 +1010,7 @@ static void CG_ConfigStringModified(void)
 //frees all ghoul2 stuff and npc stuff from a centity -rww
 void CG_KillCEntityG2(const int entNum)
 {
-	clientInfo_t* ci;
+	clientInfo_t* ci = NULL;
 	centity_t* cent = &cg_entities[entNum];
 
 	if (entNum < MAX_CLIENTS)
@@ -1365,8 +1365,8 @@ static void CG_BodyQueueCopy(centity_t* cent, const int clientNum, const int kno
 
 	if (!cent->ownerRagging)
 	{
-		animation_t* anim;
-		int aNum;
+		animation_t* anim = NULL;
+		int aNum = 0;
 		qboolean fallBack = qfalse;
 
 		//anim = &bgAllAnims[cent->localAnimIndex].anims[ cent->currentState.torsoAnim ];
@@ -1468,7 +1468,7 @@ static void CG_AdminMenu_f(void)
 
 static void CG_inGameCinematic_f(void)
 {
-	fileHandle_t file;
+	fileHandle_t file = 0;
 	char name[MAX_STRING_CHARS];
 	strcpy(name, va("video/%s.roq", CG_Argv(1)));
 
@@ -1664,7 +1664,7 @@ static void CG_Pazaak_f(void)
 {
 	char buf[MAX_STRING_CHARS];
 	const int argc = trap->Cmd_Argc();
-	int i;
+	int i = 0;
 
 	Q_strncpyz(buf, "uipzk", sizeof buf);
 	for (i = 1; i < argc; i++)

@@ -74,7 +74,7 @@ extern void ForceTelepathy(gentity_t* self);
 
 int G_FindConfigstringIndex(const char* name, const int start, const int max, const qboolean create)
 {
-	int i;
+	int i = 0;
 
 	if (!name || !name[0])
 	{
@@ -551,7 +551,7 @@ int G_RadiusList(vec3_t origin, float radius, const gentity_t* ignore,
 
 	vec3_t mins = { 0, 0, 0 }, maxs = { 0, 0, 0 };
 	vec3_t v = { 0, 0, 0 };
-	int i;
+	int i = 0;
 	int ent_count = 0;
 
 	if (radius < 1.0f)
@@ -659,7 +659,7 @@ void G_UseTargets2(gentity_t* ent, gentity_t* activator, const char* string)
 {
 	if (string)
 	{
-		gentity_t* t;
+		gentity_t* t = nullptr;
 		if (!Q_stricmp(string, "self"))
 		{
 			t = ent;
@@ -772,7 +772,7 @@ void G_SetMovedir(vec3_t angles, vec3_t movedir)
 
 float vectoyaw(const vec3_t vec)
 {
-	float yaw;
+	float yaw = 0.0f;
 
 	if (vec[YAW] == 0 && vec[PITCH] == 0)
 	{
@@ -844,8 +844,8 @@ angles and bad trails.
 
 static gentity_t* find_remove_able_gent(void)
 {
-	int i;
-	gentity_t* e;
+	int i = 0;
+	gentity_t* e = nullptr;
 
 	// 1. Harmless items first
 	e = &g_entities[MAX_CLIENTS];

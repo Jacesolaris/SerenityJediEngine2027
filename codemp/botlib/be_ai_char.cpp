@@ -375,7 +375,7 @@ int BotFindCachedCharacter(char* charfile, const float skill)
 //===========================================================================
 static int BotLoadCachedCharacter(char* charfile, const float skill, const int reload)
 {
-	int handle, cachedhandle, intskill;
+	int handle = 0, cachedhandle = 0, intskill = 0;
 	bot_character_t* ch = nullptr;
 #ifdef DEBUG
 	int starttime;
@@ -506,7 +506,7 @@ int BotLoadCharacterSkill(char* charfile, const float skill)
 //===========================================================================
 int BotInterpolateCharacters(const int handle1, const int handle2, const float desiredskill)
 {
-	int handle;
+	int handle = 0;
 
 	const bot_character_t* ch1 = BotCharacterFromHandle(handle1);
 	const bot_character_t* ch2 = BotCharacterFromHandle(handle2);
@@ -556,7 +556,7 @@ int BotInterpolateCharacters(const int handle1, const int handle2, const float d
 //===========================================================================
 int BotLoadCharacter(char* charfile, float skill)
 {
-	int firstskill, secondskill;
+	int firstskill = 0, secondskill = 0;
 
 	//make sure the skill is in the valid range
 	if (skill < 1.0) skill = 1.0;

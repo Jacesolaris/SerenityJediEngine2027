@@ -373,7 +373,7 @@ int G2_DecideTraceLod(CGhoul2Info& ghoul2, int useLod)
 
 static void R_TransformEachSurface(const mdxmSurface_t* surface, vec3_t scale, IHeapAllocator* G2VertSpace, size_t* TransformedVertsArray, CBoneCache* boneCache)
 {
-	int j, k;
+	int j = 0, k = 0;
 
 	//
 	// deform the vertexes by the lerped bones
@@ -528,7 +528,7 @@ void G2_TransformModel(CGhoul2Info_v& ghoul2, const int frameNum, vec3_t scale, 
 void G2_TransformModel(CGhoul2Info_v& ghoul2, const int frameNum, vec3_t scale, IHeapAllocator* G2VertSpace, int useLod)
 #endif
 {
-	int lod;
+	int lod = 0;
 	vec3_t correctScale;
 	qboolean firstModelOnly = qfalse;
 
@@ -773,7 +773,7 @@ int G2API_GetTime(int arg_time);
 // now we at poly level, check each model space transformed poly against the model world transfomed ray
 static void G2_GorePolys(const mdxmSurface_t* surface, CTraceSurface& TS, const mdxmSurfHierarchy_t* surfInfo)
 {
-	int j;
+	int j = 0;
 	vec3_t basis1;
 	vec3_t basis2{};
 	vec3_t taxis;
@@ -920,7 +920,7 @@ static void G2_GorePolys(const mdxmSurface_t* surface, CTraceSurface& TS, const 
 		return;
 	}
 
-	int newTag;
+	int newTag = 0;
 	const auto f = GoreTagsTemp.find(std::make_pair(goremodel_index, TS.surfaceNum));
 	if (f == GoreTagsTemp.end()) // need to generate a record
 	{
@@ -1056,7 +1056,7 @@ static bool G2_TracePolys(const mdxmSurface_t* surface, const mdxmSurfHierarchy_
 	const int numTris = surface->numTriangles;
 	for (int j = 0; j < numTris; j++)
 	{
-		float face;
+		float face = 0.0f;
 		vec3_t hitPoint, normal;
 		// determine actual coords for this triangle
 		const float* point1 = &verts[(tris[j].indexes[0] * 5)];
@@ -1066,7 +1066,7 @@ static bool G2_TracePolys(const mdxmSurface_t* surface, const mdxmSurfHierarchy_
 		if (G2_SegmentTriangleTest(TS.rayStart, TS.rayEnd, point1, point2, point3, qtrue, qtrue, hitPoint, normal,
 			&face))
 		{
-			int i;
+			int i = 0;
 			// find space in the collision records for this record
 			for (i = 0; i < MAX_G2_COLLISIONS; i++)
 			{
@@ -1183,7 +1183,7 @@ static bool G2_RadiusTracePolys(
 	CTraceSurface& TS
 )
 {
-	int j;
+	int j = 0;
 	vec3_t basis1;
 	vec3_t basis2{};
 	vec3_t taxis;
@@ -1291,7 +1291,7 @@ static bool G2_RadiusTracePolys(
 			GoreVerts[tris[j].indexes[0]].flags &
 			GoreVerts[tris[j].indexes[1]].flags &
 			GoreVerts[tris[j].indexes[2]].flags;
-		int i;
+		int i = 0;
 		if (flags)
 		{
 			continue;
@@ -1471,9 +1471,9 @@ void G2_TraceModels(CGhoul2Info_v& ghoul2, vec3_t rayStart, vec3_t rayEnd, Colli
 void G2_TraceModels(CGhoul2Info_v& ghoul2, vec3_t rayStart, vec3_t rayEnd, CollisionRecord_t* collRecMap, int entNum, int eG2TraceType, int useLod, float fRadius)
 #endif
 {
-	int lod;
-	skin_t* skin;
-	shader_t* cust_shader;
+	int lod = 0;
+	skin_t* skin = nullptr;
+	shader_t* cust_shader = nullptr;
 	qboolean firstModelOnly = qfalse;
 
 #ifdef _G2_GORE
@@ -1614,7 +1614,7 @@ void Create_Matrix(const float* angle, mdxaBone_t* matrix)
 // given a matrix, generate the inverse of that matrix
 void Inverse_Matrix(const mdxaBone_t* src, mdxaBone_t* dest)
 {
-	int i, j;
+	int i = 0, j = 0;
 
 	for (i = 0; i < 3; i++)
 	{
@@ -1695,7 +1695,7 @@ qboolean G2_SaveGhoul2Models(CGhoul2Info_v& ghoul2, char** buffer, int* size)
 	// add in count for number of ghoul2 models
 	*size += 4;
 	// start out working out the total size of the buffer we need to allocate
-	int i; // Linux GCC is forcing new scoping rules
+	int i = 0; // Linux GCC is forcing new scoping rules
 	for (i = 0; i < ghoul2.size(); i++)
 	{
 		*size += ghoul2BlockSize;

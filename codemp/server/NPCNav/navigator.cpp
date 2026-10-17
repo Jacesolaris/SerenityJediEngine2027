@@ -428,7 +428,7 @@ int CNode::Save(const int numNodes, const fileHandle_t file)
 	FS_Write(&header, sizeof header, file);
 
 	//Write out the basic information
-	int i;
+	int i = 0;
 	for (i = 0; i < 3; i++)
 		FS_Write(&m_position[i], sizeof(float), file);
 
@@ -464,7 +464,7 @@ Load
 
 int CNode::Load(int numNodes, const fileHandle_t file)
 {
-	unsigned int header;
+	unsigned int header = 0;
 	FS_Read(&header, sizeof header, file);
 
 	//Validate the header
@@ -472,7 +472,7 @@ int CNode::Load(int numNodes, const fileHandle_t file)
 		return false;
 
 	//Get the basic information
-	int i;
+	int i = 0;
 	for (i = 0; i < 3; i++)
 		FS_Read(&m_position[i], sizeof(float), file);
 
@@ -493,7 +493,7 @@ int CNode::Load(int numNodes, const fileHandle_t file)
 	}
 
 	//Read the node ranks
-	int numRanks;
+	int numRanks = 0;
 
 	FS_Read(&numRanks, sizeof numRanks, file);
 
@@ -551,7 +551,7 @@ GetChar
 
 char CNavigator::GetChar(const fileHandle_t file)
 {
-	char value;
+	char value = 0;
 
 	FS_Read(&value, sizeof value, file);
 
@@ -566,7 +566,7 @@ GetInt
 
 int CNavigator::GetInt(const fileHandle_t file)
 {
-	int value;
+	int value = 0;
 
 	FS_Read(&value, sizeof value, file);
 
@@ -581,7 +581,7 @@ GetFloat
 
 float CNavigator::GetFloat(const fileHandle_t file)
 {
-	float value;
+	float value = 0.0f;
 
 	FS_Read(&value, sizeof value, file);
 
@@ -596,7 +596,7 @@ GetLong
 
 long CNavigator::GetLong(const fileHandle_t file)
 {
-	int value;
+	int value = 0;
 
 	FS_Read(&value, sizeof value, file);
 
@@ -646,7 +646,7 @@ Load
 
 bool CNavigator::Load(const char* filename, const int checksum)
 {
-	fileHandle_t file;
+	fileHandle_t file = 0;
 
 	// Free previous map just in case. SerenityJediEngine2027-mpgame doesn't do this by default...
 	Free();
@@ -711,7 +711,7 @@ Save
 
 bool CNavigator::Save(const char* filename, const int checksum)
 {
-	fileHandle_t file;
+	fileHandle_t file = 0;
 
 	//Attempt to load the file
 	FS_FOpenFileByMode(va("maps/%s.nav", filename), &file, FS_WRITE);
@@ -874,7 +874,7 @@ void CNavigator::CalculatePath(CNode* node) const
 	node->AddRank(node->GetID(), curRank++);
 
 	//Add all initial nodes
-	int i;
+	int i = 0;
 	for (i = 0; i < node->GetNumEdges(); i++)
 	{
 		const CNode* nextNode = m_nodes[node->GetEdge(i)];
@@ -959,7 +959,7 @@ void CNavigator::ShowNodes(void)
 {
 	node_v::iterator ni;
 
-	float dist;
+	float dist = 0.0f;
 
 	STL_ITERATE(ni, m_nodes)
 	{
@@ -1364,10 +1364,10 @@ int CNavigator::GetBestPathBetweenEnts(sharedEntity_t* ent, sharedEntity_t* goal
 	CollectNearestNodes(ent->r.currentOrigin, NODE_COLLECT_RADIUS, NODE_COLLECT_MAX, nodeChain);
 	CollectNearestNodes(goal->r.currentOrigin, NODE_COLLECT_RADIUS, NODE_COLLECT_MAX, nodeChain2);
 
-	int radius;
-	int pathCost, bestCost = Q3_INFINITE;
+	int radius = 0;
+	int pathCost = 0, bestCost = Q3_INFINITE;
 	int nextNode = NODE_NONE, bestNode = NODE_NONE;
-	int nodeFlags;
+	int nodeFlags = 0;
 	//	bool				recalc = false;
 
 	ent->waypoint = NODE_NONE;
@@ -1805,7 +1805,7 @@ void CNavigator::CheckFailedNodes(sharedEntity_t* ent) const
 
 void CNavigator::AddFailedNode(sharedEntity_t* ent, const int nodeID)
 {
-	int j;
+	int j = 0;
 	for (j = 0; j < MAX_FAILED_NODES; j++)
 	{
 		if (ent->failedWaypoints[j] == 0)
@@ -1962,7 +1962,7 @@ int CNavigator::EdgeFailed(const int startID, const int endID)
 
 void CNavigator::AddFailedEdge(int entID, int startID, int endID)
 {
-	int j; //, nextID;
+	int j = 0; //, nextID;
 
 	//Must have nodes
 	if (m_nodes.size() == 0)
@@ -2107,10 +2107,10 @@ qboolean CNavigator::CheckFailedEdge(failedEdge_t* failedEdge) const
 		if (failedEdge->startID != WAYPOINT_NONE)
 		{
 			vec3_t start, end, mins, maxs;
-			int ignore, clipmask;
+			int ignore = 0, clipmask = 0;
 			const sharedEntity_t* ent = SV_GentityNum(failedEdge->entID);
 			//(failedEdge->entID<ENTITYNUM_WORLD)?&g_entities[failedEdge->entID]:NULL;
-			int hitEntNum;
+			int hitEntNum = 0;
 
 			if (!ent || /*!ent->inuse || !ent->client || ent->health <= 0*/ ent->s.eType != ET_PLAYER && ent->s.eType !=
 				ET_NPC ||
@@ -2401,7 +2401,7 @@ overloaded so you don't have to pass a pathCost int pointer in
 
 int CNavigator::GetBestNodeAltRoute(const int startID, const int endID, const int rejectID)
 {
-	int junk;
+	int junk = 0;
 	return GetBestNodeAltRoute(startID, endID, &junk, rejectID);
 }
 

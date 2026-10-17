@@ -238,7 +238,7 @@ int ReadString(source_t* source, fielddef_t* fd, void* p)
 int ReadStructure(source_t* source, structdef_t* def, char* structure)
 {
 	token_t token;
-	int num;
+	int num = 0;
 
 	if (!PC_ExpectTokenString(source, "{")) return 0;
 	while (true)
@@ -371,7 +371,7 @@ int WriteFloat(FILE* fp, const float value)
 //===========================================================================
 int WriteStructWithIndent(FILE* fp, structdef_t* def, char* structure, int indent)
 {
-	int num;
+	int num = 0;
 
 	if (!WriteIndent(fp, indent)) return qfalse;
 	if (fprintf(fp, "{\r\n") < 0) return qfalse;

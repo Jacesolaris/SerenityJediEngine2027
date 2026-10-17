@@ -151,7 +151,7 @@ static long generateHashValue(const char* fname, const int size) {
 void R_RemapShader(const char* shaderName, const char* newShaderName, const char* timeOffset)
 {
 	char		stripped_name[MAX_QPATH];
-	qhandle_t	h;
+	qhandle_t	h = 0;
 
 	shader_t* sh = R_FindShaderByName(shaderName);
 	if (sh == nullptr || sh == tr.defaultShader)
@@ -676,7 +676,7 @@ ParseSurfaceSprites
 static void ParseSurfaceSprites(const char* _text, shaderStage_t* stage)
 {
 	const char** text = &_text;
-	int sstype;
+	int sstype = 0;
 
 	//
 	// spritetype
@@ -832,9 +832,9 @@ ParseSurfaceSpritesOptional
 //
 static void ParseSurfaceSpritesOptional(const char* param, const char* _text, shaderStage_t* stage)
 {
-	const char* token;
+	const char* token = nullptr;
 	const char** text = &_text;
-	float	value;
+	float	value = 0.0f;
 
 	if (!stage->ss)
 	{
@@ -2401,7 +2401,7 @@ FIXME: I think modulated add + modulated add collapses incorrectly
 =================
 */
 static qboolean CollapseMultitexture() {
-	int i;
+	int i = 0;
 	if (!qglActiveTextureARB) {
 		return qfalse;
 	}
@@ -2546,12 +2546,12 @@ static void FixRenderCommandList(const int newShader)
 				}
 				case RC_DRAW_SURFS:
 				{
-					int i;
-					drawSurf_t* draw_surf;
-					shader_t* shader;
-					int			fog_num;
-					int			entityNum;
-					int			dlight_map;
+					int i = 0;
+					drawSurf_t* draw_surf = nullptr;
+					shader_t* shader = nullptr;
+					int			fog_num = 0;
+					int			entityNum = 0;
+					int			dlight_map = 0;
 					const auto ds_cmd = static_cast<const drawSurfsCommand_t*>(cur_cmd);
 
 					for (i = 0, draw_surf = ds_cmd->drawSurfs; i < ds_cmd->numDrawSurfs; i++, draw_surf++) {
@@ -2601,7 +2601,7 @@ Sets shader->sortedIndex
 */
 static void SortNewShader(void)
 {
-	int		i;
+	int		i = 0;
 
 	shader_t* newShader = tr.shaders[tr.numShaders - 1];
 	const float sort = newShader->sort;
@@ -2812,7 +2812,7 @@ from the current global working shader
 */
 static shader_t* FinishShader(void)
 {
-	int				stage, lm_stage; //rwwRMG - stageIndex for AGEN_BLEND
+	int				stage = 0, lm_stage = 0; //rwwRMG - stageIndex for AGEN_BLEND
 
 	qboolean has_lightmap_stage = qfalse;
 
@@ -2859,8 +2859,8 @@ static shader_t* FinishShader(void)
 
 	if (lm_stage < MAX_SHADER_STAGES)// && !r_fullbright->value)
 	{
-		int	numStyles;
-		int	i;
+		int	numStyles = 0;
+		int	i = 0;
 
 		for (numStyles = 0; numStyles < MAXLIGHTMAPS; numStyles++)
 		{
@@ -2928,7 +2928,7 @@ static shader_t* FinishShader(void)
 		// ditch this stage if it's detail and detail textures are disabled
 		//
 		if (pStage->isDetail && !r_detailTextures->integer) {
-			int index;
+			int index = 0;
 
 			for (index = stage + 1; index < MAX_SHADER_STAGES; index++) {
 				if (!stages[index].active)
@@ -3162,8 +3162,8 @@ If found, it will return a valid shader
 =====================
 */
 static const char* FindShaderInShaderText(const char* shadername) {
-	char* token;
-	const char* p;
+	char* token = nullptr;
+	const char* p = nullptr;
 
 	const int hash = generateHashValue(shadername, MAX_SHADERTEXT_HASH);
 
@@ -3321,8 +3321,8 @@ shader_t* R_FindShader(const char* name, const int* lightmapIndexes, const byte*
 {
 	char		stripped_name[MAX_QPATH];
 	char		fileName[MAX_QPATH];
-	const char* shader_text;
-	shader_t* sh;
+	const char* shader_text = nullptr;
+	shader_t* sh = nullptr;
 
 	if (name[0] == 0) {
 		return tr.defaultShader;
@@ -3484,7 +3484,7 @@ shader_t* R_FindServerShader(const char* name, const int* lightmapIndexes, const
 
 qhandle_t RE_RegisterShaderFromImage(const char* name, const int* lightmapIndexes, const byte* styles, image_t* image)
 {
-	shader_t* sh;
+	shader_t* sh = nullptr;
 
 	const int hash = generateHashValue(name, FILE_HASH_SIZE);
 
@@ -3707,7 +3707,7 @@ A second parameter will cause it to print in sorted order
 */
 void R_ShaderList_f(void)
 {
-	shader_t* shader;
+	shader_t* shader = nullptr;
 
 	ri.Printf(PRINT_ALL, "-----------------------\n");
 
@@ -3768,13 +3768,13 @@ void R_ShaderList_f(void)
 
 static int COM_CompressShader(char* data_p)
 {
-	char* out;
+	char* out = nullptr;
 	qboolean newline = qfalse, whitespace = qfalse;
 
 	char* in = out = data_p;
 	if (in)
 	{
-		int c;
+		int c = 0;
 		while ((c = *in) != 0)
 		{
 			// skip double slash comments
@@ -3880,10 +3880,10 @@ static void ScanAndLoadShaderFiles()
 	static char* buffers[MAX_SHADER_FILES];
 	static int shader_text_hash_table_sizes[MAX_SHADERTEXT_HASH];
 
-	const char* p;
-	int num_shader_files;
-	int i;
-	char* token;
+	const char* p = nullptr;
+	int num_shader_files = 0;
+	int i = 0;
+	char* token = nullptr;
 	long sum = 0;
 
 	// Clear static arrays

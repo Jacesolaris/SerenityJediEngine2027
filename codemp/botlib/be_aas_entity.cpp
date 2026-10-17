@@ -67,7 +67,7 @@ enum {
 //===========================================================================
 int AAS_UpdateEntity(const int entnum, const bot_entitystate_t* state)
 {
-	int relink;
+	int relink = 0;
 
 	if (!aasworld.loaded)
 	{

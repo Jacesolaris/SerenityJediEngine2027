@@ -252,7 +252,7 @@ static void turret_aim(const gentity_t* self)
 //-----------------------------------------------------
 {
 	vec3_t desiredAngles = { 0 }, setAngle;
-	float diff_yaw, diff_pitch;
+	float diff_yaw = 0.0f, diff_pitch = 0.0f;
 	const float pitchCap = 40.0f;
 	gentity_t* top = &g_entities[self->r.ownerNum];
 	if (!top)
@@ -363,7 +363,7 @@ static void turret_aim(const gentity_t* self)
 	VectorSet(setAngle, diff_pitch, diff_yaw, 0);
 
 	VectorCopy(top->r.currentAngles, top->s.apos.trBase);
-	VectorScale(setAngle, 1000 / FRAMETIME, top->s.apos.trDelta);
+	VectorScale(setAngle, 1000.0f / FRAMETIME, top->s.apos.trDelta);
 	top->s.apos.trTime = level.time;
 	top->s.apos.trType = TR_LINEAR_STOP;
 	top->s.apos.trDuration = FRAMETIME;
@@ -703,7 +703,7 @@ extern void SP_misc_turretG2(gentity_t* base);
 void SP_misc_turret(gentity_t* base)
 //-----------------------------------------------------
 {
-	char* s;
+	char* s = NULL;
 
 	//wahoo turret - actually a spawn flag of 5 spawns a huge space turbo turret
 	//and others spawn the normal g2 turret so fixed this if statement.  In sp, spawnflags
@@ -804,7 +804,7 @@ void SP_misc_panel_turret(gentity_t* self)
 qboolean turret_base_spawn_top(gentity_t* base)
 {
 	vec3_t org;
-	int t;
+	int t = 0;
 
 	gentity_t* top = G_Spawn();
 	if (!top)

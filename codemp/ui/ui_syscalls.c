@@ -485,7 +485,7 @@ NORETURN void QDECL UI_Error(int level, const char* error, ...) {
 void QDECL UI_Printf(const char* msg, ...) {
 	va_list argptr;
 	char text[4096] = { 0 };
-	int ret;
+	int ret = 0;
 
 	va_start(argptr, msg);
 	ret = Q_vsnprintf(text, sizeof(text), msg, argptr);

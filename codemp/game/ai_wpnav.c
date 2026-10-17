@@ -172,8 +172,8 @@ void SpawnPointRender();
 
 void BotWaypointRender(void)
 {
-	int i;
-	gentity_t* plum;
+	int i = 0;
+	gentity_t* plum = NULL;
 
 	if (!gBotEdit)
 	{
@@ -986,7 +986,7 @@ static int ConnectTrail(const int startindex, const int endindex, const qboolean
 {
 	static byte extendednodes[MAX_NODETABLE_SIZE];
 	//for storing checked nodes and not trying to extend them each a bazillion times
-	float branchDistance;
+	float branchDistance = 0.0f;
 	float maxDistFactor = 256;
 	vec3_t a;
 	vec3_t startplace, starttrace;
@@ -1532,7 +1532,7 @@ static int OrgVisibleCurve(vec3_t org1, vec3_t mins, vec3_t maxs, vec3_t org2, c
 
 static int CanForceJumpTo(const int baseindex, const int testingindex, const float distance)
 {
-	float heightdif;
+	float heightdif = 0.0f;
 	vec3_t xy_base, xy_test, v, mins = { 0 }, maxs = { 0 };
 	wpobject_t* wp_base = gWPArray[baseindex];
 	wpobject_t* wp_test = gWPArray[testingindex];
@@ -1996,7 +1996,7 @@ static void CalculateJumpRoutes(void)
 // ------------------------------------------------------------
 static int LoadPathData(const char* filename)
 {
-	fileHandle_t f;
+	fileHandle_t f = 0;
 	char routePath[MAX_QPATH];
 	wpobject_t thiswp;
 
@@ -2203,7 +2203,7 @@ static int LoadPathData(const char* filename)
 static void FlagObjects(void)
 {
 	int i = 0, bestindex = 0, found = 0;
-	float bestdist = 999999, tlen;
+	float bestdist = 999999, tlen = 0.0f;
 	vec3_t a, mins = { 0 }, maxs = { 0 };
 	trace_t tr;
 
@@ -2323,9 +2323,9 @@ static void FlagObjects(void)
 // ------------------------------------------------------------
 static int SavePathData(const char* filename)
 {
-	fileHandle_t f;
+	fileHandle_t f = 0;
 	vec3_t a;
-	float fl_len;
+	float fl_len = 0.0f;
 
 	int i = 0;
 
@@ -3087,10 +3087,10 @@ static qboolean G_BackwardAttachment(const int start, const int final_destinatio
 static void G_RMGPathing(void)
 {
 	//Generate waypoint information on-the-fly for the random mission.
-	float place_x, place_y, place_z;
+	float place_x = 0.0f, place_y = 0.0f, place_z = 0.0f;
 	int i = 0;
-	int nearest_index;
-	int nearest_index_for_next;
+	int nearest_index = 0;
+	int nearest_index_for_next = 0;
 #ifdef PATH_TIME_DEBUG
 	int startTime;
 	int endTime;
@@ -3435,7 +3435,7 @@ static gentity_t* GetNextSpawnInIndex(const gentity_t* current_spawn)
 	gentity_t* next_spawn = NULL;
 	int i = current_spawn->s.number + 1;
 
-	gentity_t* spawn;
+	gentity_t* spawn = NULL;
 
 	while (i < level.num_entities)
 	{
@@ -3687,7 +3687,7 @@ static int AG_SeedNode(const vec3_t point, const float spacing)
 {
 	trace_t tr;
 	vec3_t start, floorOrg, out;
-	int flags;
+	int flags = 0;
 
 	VectorCopy(point, start);
 	start[2] += 8.0f;
@@ -3721,7 +3721,7 @@ static int AG_Flood(const float spacing)
 		{
 			const int gx = agNodes[a].gx + dirs[d][0], gy = agNodes[a].gy + dirs[d][1];
 			vec3_t out;
-			int flags;
+			int flags = 0;
 
 			if (!AG_Move(agNodes[a].org, gx * spacing, gy * spacing, out, &flags))
 			{
@@ -3967,8 +3967,8 @@ int AcceptBotCommand(const char* cmd, const gentity_t* pl)
 	int i = 0;
 	int flags_from_argument = 0;
 
-	const char* optional_s_argument;
-	const char* required_s_argument;
+	const char* optional_s_argument = NULL;
+	const char* required_s_argument = NULL;
 
 	// Waypoint editing disables bots until bot_wp_save is executed.
 	if (!pl || !pl->client)

@@ -94,8 +94,8 @@ static void ProcessMoveCommands(Vehicle_t* p_veh)
 		return;
 	}
 
-	float speedInc, speedIdle, speedMin, speedMax;
-	int   curTime;
+	float speedInc = 0.0f, speedIdle = 0.0f, speedMin = 0.0f, speedMax = 0.0f;
+	int   curTime = 0;
 
 	playerState_t* parent_ps = p_veh->m_pParentEntity->playerState;
 
@@ -287,7 +287,7 @@ static void ProcessOrientCommands(const Vehicle_t* p_veh)
 	/********************************************************************************/
 	/*	BEGIN	Here is where make sure the vehicle is properly oriented.	BEGIN	*/
 	/********************************************************************************/
-	playerState_t* rider_ps;
+	playerState_t* rider_ps = NULL;
 
 	if (p_veh->m_pPilot)
 	{

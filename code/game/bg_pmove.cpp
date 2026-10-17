@@ -522,7 +522,7 @@ qboolean PM_CheckGrabWall(const trace_t* trace)
 
 	//grab it!
 	//Pick the proper anim
-	int anim;
+	int anim = 0;
 	vec3_t facing_angles, wall_dir, fwd_dir, rt_dir;
 	VectorSubtract(trace->endpos, pm->gent->lastOrigin, wall_dir);
 	wall_dir[2] = 0;
@@ -700,7 +700,7 @@ Handles both ground friction and water friction
 static void PM_Friction()
 {
 	vec3_t vec;
-	float control;
+	float control = 0.0f;
 	float friction = pm->ps->friction;
 
 	float* vel = pm->ps->velocity;
@@ -1214,7 +1214,7 @@ qboolean PM_ForceJumpingUp(const gentity_t* gent)
 
 static void PM_JumpForDir()
 {
-	int anim;
+	int anim = 0;
 	if (pm->cmd.forwardmove > 0)
 	{
 		if (pm->ps->weapon == WP_SABER && pm->ps->SaberActive()) //saber out
@@ -1754,14 +1754,14 @@ static qboolean PM_CheckJump()
 		{
 			if (pm->ps->weapon == WP_SABER)
 			{
-				VectorMA(pm->ps->velocity, JUMP_VELOCITY / 2, forward, pm->ps->velocity);
+				VectorMA(pm->ps->velocity, JUMP_VELOCITY >> 1, forward, pm->ps->velocity); // half (112, as before)
 				//FIXME: kicking off wall anim?  At least check what anim we're in?
 				PM_SetAnim(pm, SETANIM_LEGS, BOTH_FORCEJUMP2,
 					SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART);
 			}
 			else
 			{
-				VectorMA(pm->ps->velocity, JUMP_VELOCITY / 2, forward, pm->ps->velocity);
+				VectorMA(pm->ps->velocity, JUMP_VELOCITY >> 1, forward, pm->ps->velocity); // half (112, as before)
 				//FIXME: kicking off wall anim?  At least check what anim we're in?
 				PM_SetAnim(pm, SETANIM_LEGS, BOTH_FORCEJUMP1,
 					SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART);
@@ -2819,9 +2819,9 @@ PM_WaterMove
 static void PM_WaterMove()
 {
 	vec3_t wishvel{};
-	float wishspeed;
+	float wishspeed = 0.0f;
 	vec3_t wishdir;
-	float scale;
+	float scale = 0.0f;
 
 	if (PM_CheckWaterJump())
 	{
@@ -2978,9 +2978,9 @@ extern void G_SetWeapon(gentity_t* self, int wp);
 static void PM_LadderMove()
 {
 	vec3_t wishvel{};
-	float wishspeed;
+	float wishspeed = 0.0f;
 	vec3_t wishdir;
-	float scale;
+	float scale = 0.0f;
 
 	if (PM_CheckWaterJump())
 	{
@@ -3127,7 +3127,7 @@ PM_FlyVehicleMove
 static void PM_FlyVehicleMove()
 {
 	vec3_t wishvel;
-	float wishspeed;
+	float wishspeed = 0.0f;
 	vec3_t wishdir;
 
 	// We don't use these here because we pre-calculate the movedir in the vehicle update anyways, and if
@@ -3257,7 +3257,7 @@ static void PM_FlyMove()
 {
 	vec3_t wishvel{};
 	vec3_t wishdir;
-	float accel;
+	float accel = 0.0f;
 	qboolean low_grav_move = qfalse;
 	qboolean jet_pack_move = qfalse;
 
@@ -3773,13 +3773,13 @@ static void PM_CheckAirDashFlip()
 static void PM_AirMove()
 {
 	vec3_t wishvel;
-	float fmove, smove;
+	float fmove = 0.0f, smove = 0.0f;
 	vec3_t wishdir;
-	float wishspeed;
+	float wishspeed = 0.0f;
 	usercmd_t cmd;
 	float grav_mod = 1.0f;
 
-	float jumpMultiplier;
+	float jumpMultiplier = 0.0f;
 	PM_CheckLeapCancel(); // +back cancels the long leap / air dash
 
 	if (pm->ps->weapon == WP_MELEE)
@@ -3973,12 +3973,12 @@ qboolean PM_CrouchAnim(int anim);
 
 static void PM_WalkMove()
 {
-	int i;
+	int i = 0;
 	vec3_t wishvel{};
 	vec3_t wishdir;
-	float wishspeed;
+	float wishspeed = 0.0f;
 	usercmd_t cmd;
-	float accelerate;
+	float accelerate = 0.0f;
 
 	if (pm->ps->gravity < 0)
 	{
@@ -4183,7 +4183,7 @@ static void PM_WalkMove()
 				&& !PM_RollingAnim(pm->gent->client->ps.legsAnim)
 				&& !PM_InKnockDown(&pm->gent->client->ps))
 			{
-				int knock_anim; //default knockdown
+				int knock_anim = 0; //default knockdown
 				if (Q_irand(0, 3) > 2)
 				{
 					knock_anim = BOTH_KNOCKDOWN1;
@@ -5887,7 +5887,7 @@ static void PM_GroundTraceMissed()
 														bmodel)
 													{
 														//hit architecture, find impact force
-														float dmg;
+														float dmg = 0.0f;
 
 														VectorCopy(pm->ps->velocity, vel);
 														time = Distance(trace.endpos, pm->ps->origin) / VectorLength(
@@ -5897,7 +5897,7 @@ static void PM_GroundTraceMissed()
 														if (trace.plane.normal[2] > 0.5)
 														{
 															//use falling damage
-															int waterlevel, junk;
+															int waterlevel = 0, junk = 0;
 															pm_set_water_level_at_point(
 																trace.endpos, &waterlevel, &junk);
 															dmg = PM_CrashLandDelta(vel);
@@ -6072,7 +6072,7 @@ static void PM_GroundTraceMissed()
 									else
 									{
 										vec3_t moveDir, look_angles, look_dir, look_right;
-										int anim;
+										int anim = 0;
 
 										VectorCopy(pm->ps->velocity, moveDir);
 										moveDir[2] = 0;
@@ -6812,8 +6812,8 @@ Sets mins, maxs, and pm->ps->viewheight
 static void PM_CheckDuck()
 {
 	trace_t trace;
-	int standheight;
-	int crouchheight;
+	int standheight = 0;
+	int crouchheight = 0;
 
 	if (pm->gent && pm->gent->client)
 	{
@@ -7773,7 +7773,7 @@ static qboolean PM_CheckRollGetup(void)
 		if ((isPlayerOrControlled == qtrue && playerMoveInput == qtrue) || npcCanRoll == qtrue)
 		{
 			// roll away!
-			int anim;
+			int anim = 0;
 			qboolean force_get_up = qfalse;
 
 			const qboolean onFront =
@@ -9183,7 +9183,7 @@ static void PM_FootSlopeTrace(float* p_diff, float* p_interval)
 {
 	vec3_t foot_l_org, foot_r_org, foot_l_bot, foot_r_bot;
 	trace_t trace;
-	float diff, interval;
+	float diff = 0.0f, interval = 0.0f;
 	if (pm->gent->client->NPC_class == CLASS_ATST)
 	{
 		interval = 10;
@@ -9546,12 +9546,12 @@ static qboolean PM_AdjustStandAnimForSlope()
 		return qfalse;
 	}
 	//step 1: find the 2 foot tags
-	float diff;
-	float interval;
+	float diff = 0.0f;
+	float interval = 0.0f;
 	PM_FootSlopeTrace(&diff, &interval);
 
 	//step 4: based on difference, choose one of the left/right slope-match intervals
-	int dest_anim;
+	int dest_anim = 0;
 	if (diff >= interval * 5)
 	{
 		dest_anim = LEGS_LEFTUP5;
@@ -10370,8 +10370,8 @@ static void PM_RemoveSprintFlag(qboolean removeFlag)
 
 static void PM_Footsteps(void)
 {
-	float bobmove;
-	int old;
+	float bobmove = 0.0f;
+	int old = 0;
 	qboolean footstep = qfalse;
 	qboolean valid_npc = qfalse;
 	qboolean flipping = qfalse;
@@ -10481,7 +10481,7 @@ static void PM_Footsteps(void)
 						}
 					}
 					//going up or down it
-					int anim;
+					int anim = 0;
 					if (pm->ps->velocity[2] > 0)
 					{
 						anim = BOTH_LADDER_UP1;
@@ -10854,7 +10854,7 @@ static void PM_Footsteps(void)
 			{
 				if (!PM_AdjustStandAnimForSlope())
 				{
-					int legs_anim;
+					int legs_anim = 0;
 					if ((pm->ps->torsoAnim == BOTH_SPINATTACK6
 						|| pm->ps->torsoAnim == BOTH_SPINATTACK7
 						|| pm->ps->torsoAnim == BOTH_SPINATTACKGRIEVOUS
@@ -12776,7 +12776,7 @@ static int PM_ReadyPoseForSaberAnimLevelNPC()
 
 int PM_ReadyPoseForsaber_anim_level()
 {
-	int anim;
+	int anim = 0;
 
 	if (PM_RidingVehicle())
 	{
@@ -12814,7 +12814,7 @@ int PM_ReadyPoseForsaber_anim_level()
 
 int PM_IdlePoseForsaber_anim_level()
 {
-	int anim;
+	int anim = 0;
 
 	if (PM_RidingVehicle())
 	{
@@ -15195,7 +15195,7 @@ static void PM_SaberLockBreak(gentity_t* gent, gentity_t* genemy, const saberLoc
 		return;
 	}
 
-	int break_type;
+	int break_type = 0;
 	qboolean single_vs_single = qtrue;
 
 	pm->ps->userInt3 &= ~(1 << FLAG_SABERLOCK_ATTACKER);
@@ -15626,11 +15626,11 @@ static qboolean PM_SaberLocked()
 			if (!(pm->ps->pm_flags & PMF_ATTACK_HELD))
 			{
 				//tapping
-				int remaining;
+				int remaining = 0;
 				if (ValidAnimFileIndex(gent->client->clientInfo.animFileIndex))
 				{
-					float currentFrame, junk2;
-					int cur_frame, junk;
+					float currentFrame = 0.0f, junk2 = 0.0f;
+					int cur_frame = 0, junk = 0;
 					int strength = G_SaberLockStrength(gent);
 					const animation_t* anim = &level.knownAnimFileSets[gent->client->clientInfo.animFileIndex].animations[pm->ps->torsoAnim];
 #ifdef _DEBUG
@@ -17614,7 +17614,7 @@ static qboolean PM_SaberBlocking()
 				|| !PM_SaberInAttack(pm->ps->saberMove) && !PM_SaberInStart(pm->ps->saberMove))
 			{
 				//already in the bounce, go into an attack or transition to ready.. should never get here since can't be blocked in a bounce!
-				int next_move;
+				int next_move = 0;
 
 				if (pm->cmd.buttons & BUTTON_ATTACK)
 				{
@@ -18377,7 +18377,7 @@ static qboolean PM_KataEnemyDistance(float* dist, float* dz, float* dot)
 // (in front, roughly level). No enemy known: the old check (no enemy in the kata's arc).
 static qboolean PM_SmashdownBetterThanKata(void)
 {
-	float dist, dz, dot;
+	float dist = 0.0f, dz = 0.0f, dot = 0.0f;
 	if (!PM_KataEnemyDistance(&dist, &dz, &dot))
 	{
 		return PM_EnemyCloseEnoughForNormalKata() ? qfalse : qtrue;
@@ -18394,7 +18394,7 @@ static qboolean PM_CanDoSmashdown(const pmove_t* pm)
 
 	// Difficulty chance
 	int roll = Q_irand(0, 99);
-	int chanceThreshold;
+	int chanceThreshold = 0;
 
 	switch (pm->ps->saberAnimLevel)
 	{// chance based on saber style NPC is using.
@@ -19387,7 +19387,7 @@ static void PM_WeaponLightsaber(void)
 	if (!delayed_fire)
 	{
 		// Current saber move index (logical saber state).
-		int curmove;
+		int curmove = 0;
 
 		// Start with the current move, and cross-index it with the current control states.
 		if (pm->ps->saberMove > LS_NONE && pm->ps->saberMove < LS_MOVE_MAX)
@@ -20703,7 +20703,7 @@ Generates weapon events and modifes the weapon counter
 */
 static void PM_Weapon(void)
 {
-	int add_time, amount, true_count = 1;
+	int add_time = 0, amount = 0, true_count = 1;
 	qboolean delayed_fire = qfalse;
 
 	// Defensive: ensure pm and pm->ps exist before any dereference.
@@ -21303,7 +21303,7 @@ static void PM_Weapon(void)
 
 				if (pm->gent && pm->gent->client)
 				{
-					int anim;
+					int anim = 0;
 					int flags = SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART;
 					if (pm->ps->clientNum < MAX_CLIENTS || PM_ControlledByPlayer())
 					{
@@ -21355,7 +21355,7 @@ static void PM_Weapon(void)
 
 				if (pm->gent && pm->gent->client)
 				{
-					int anim;
+					int anim = 0;
 					if (pm->cmd.buttons & BUTTON_ATTACK)
 					{
 						anim = BOTH_ATTACK3;
@@ -22066,7 +22066,7 @@ extern float cg_zoomFov; //from cg_view.cpp
 static void PM_AdjustAttackStates(pmove_t* pm)
 //-------------------------------------------
 {
-	int amount;
+	int amount = 0;
 	const qboolean is_holding_block_button = ((pm->ps->ManualBlockingFlags & (1 << MBF_HOLDINGBLOCK)) != 0) ? qtrue : qfalse;
 
 	if (!g_saberAutoBlocking->integer

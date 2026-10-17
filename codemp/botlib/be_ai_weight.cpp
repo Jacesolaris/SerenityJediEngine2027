@@ -163,7 +163,7 @@ void FreeWeightConfig(weightconfig_t* config)
 static fuzzyseperator_t* ReadFuzzySeperators_r(source_t* source)
 {
 	token_t token;
-	fuzzyseperator_t* fs;
+	fuzzyseperator_t* fs = nullptr;
 
 	int founddefault = qfalse;
 	fuzzyseperator_t* firstfs = nullptr;
@@ -330,11 +330,11 @@ static fuzzyseperator_t* ReadFuzzySeperators_r(source_t* source)
 //===========================================================================
 weightconfig_t* ReadWeightConfig(char* filename)
 {
-	int newindent, avail = 0;
+	int newindent = 0, avail = 0;
 	token_t token;
-	source_t* source;
-	fuzzyseperator_t* fs;
-	weightconfig_t* config;
+	source_t* source = nullptr;
+	fuzzyseperator_t* fs = nullptr;
+	weightconfig_t* config = nullptr;
 #ifdef DEBUG
 	int starttime;
 
@@ -634,8 +634,8 @@ float FuzzyWeight_r(int* inventory, fuzzyseperator_t* fs)
 	{
 		if (inventory[fs->index] < fs->next->value)
 		{
-			float w2;
-			float w1;
+			float w2 = 0.0f;
+			float w1 = 0.0f;
 			//first weight
 			if (fs->child) w1 = FuzzyWeight_r(inventory, fs->child);
 			else w1 = fs->weight;
@@ -671,8 +671,8 @@ float FuzzyWeightUndecided_r(int* inventory, fuzzyseperator_t* fs)
 	{
 		if (inventory[fs->index] < fs->next->value)
 		{
-			float w2;
-			float w1;
+			float w2 = 0.0f;
+			float w1 = 0.0f;
 			//first weight
 			if (fs->child) w1 = FuzzyWeightUndecided_r(inventory, fs->child);
 			else w1 = fs->minweight + Q_flrand(0.0f, 1.0f) * (fs->maxweight - fs->minweight);

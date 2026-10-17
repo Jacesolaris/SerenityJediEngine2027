@@ -229,7 +229,7 @@ void CG_InitSiegeMode(void)
 	static char b[256];
 
 	char levelname[MAX_QPATH];
-	fileHandle_t f;
+	fileHandle_t f = 0;
 
 	// SJE (2026-10-16): siege missions in Team FFA (the server's g_siegeMissions) - the mission only
 	cg_siegeMissionsServer = atoi(Info_ValueForKey(CG_ConfigString(CS_SERVERINFO), "g_siegeMissions"));
@@ -474,7 +474,7 @@ void CG_InitSiegeMode(void)
 
 					if (cl->forcedSkin[0])
 					{
-						char* useSkinName;
+						char* useSkinName = NULL;
 
 						if (strchr(cl->forcedSkin, '|'))
 						{
@@ -665,7 +665,7 @@ void CG_ParseSiegeObjectiveStatus(const char* str)
 void CG_SiegeRoundOver(centity_t* ent, const int won)
 {
 	char teamstr[64];
-	const playerState_t* ps;
+	const playerState_t* ps = NULL;
 
 	if (!siege_valid)
 	{
@@ -709,7 +709,7 @@ void CG_SiegeRoundOver(centity_t* ent, const int won)
 	{
 		char soundstr[1024] = { 0 };
 		char appstring[1024] = { 0 };
-		int success;
+		int success = 0;
 		if (won == myTeam)
 		{
 			success = BG_SiegeGetPairedValue(cgParseObjectives, "wonround", appstring);
@@ -1203,7 +1203,7 @@ void CG_SetSiegeTimerCvar(const int msec)
 
 void CG_TrueViewInit(void)
 {
-	fileHandle_t f;
+	fileHandle_t f = 0;
 
 	const int len = trap->FS_Open("trueview.cfg", &f, FS_READ);
 
@@ -1284,7 +1284,7 @@ void CG_TrueViewSave_f(void)
 	char value[32];
 	int n = 0;
 	qboolean done = qfalse;
-	fileHandle_t f;
+	fileHandle_t f = 0;
 
 	if (!true_view_model[0] || !Q_stricmp(true_view_model, "-"))
 	{

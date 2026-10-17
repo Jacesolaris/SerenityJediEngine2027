@@ -195,7 +195,7 @@ ATST_Attack
 void ATST_Attack(void)
 {
 	qboolean altAttack = qfalse;
-	int blasterTest, chargerTest;
+	int blasterTest = 0, chargerTest = 0;
 
 	if (NPC_CheckEnemyExt(qfalse) == qfalse) //!NPC->enemy )//
 	{

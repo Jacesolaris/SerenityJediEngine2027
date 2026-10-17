@@ -394,7 +394,7 @@ static void RB_SurfaceCone()
 	static vec3_t points[NUM_CYLINDER_SEGMENTS];
 	vec3_t		vr, vu, midpoint;
 	vec3_t		tapered, base;
-	int			i;
+	int			i = 0;
 
 	const refEntity_t* e = &backEnd.currentEntity->e;
 
@@ -514,7 +514,7 @@ static void RB_SurfaceCylinder(void)
 {
 	static vec3_t lower_points[NUM_CYLINDER_SEGMENTS], upper_points[NUM_CYLINDER_SEGMENTS];
 	vec3_t		vr, vu, midpoint, v1;
-	int			i;
+	int			i = 0;
 
 	const refEntity_t* e = &backEnd.currentEntity->e;
 
@@ -702,7 +702,7 @@ static void DoBoltSeg(vec3_t start, vec3_t end, vec3_t right, const float radius
 	vec3_t fwd, old;
 	vec3_t off = { 10,10,10 };
 	vec3_t rt, up;
-	float oldPerc = 0.0f, perc, oldRadius;
+	float oldPerc = 0.0f, perc = 0.0f, oldRadius = 0.0f;
 
 	refEntity_t* e = &backEnd.currentEntity->e;
 
@@ -926,7 +926,7 @@ RB_SurfacePolychain
 */
 static void RB_SurfacePolychain(const srfPoly_t* p)
 {
-	int		i;
+	int		i = 0;
 
 	RB_CHECKOVERFLOW(p->numVerts, 3 * (p->numVerts - 2));
 
@@ -953,9 +953,9 @@ static void RB_SurfacePolychain(const srfPoly_t* p)
 }
 
 static uint32_t ComputeFinalVertexColor(const byte* colors) {
-	int k;
+	int k = 0;
 	byteAlias_t result{};
-	uint32_t g, b;
+	uint32_t g = 0, b = 0;
 
 	for (k = 0; k < 4; k++)
 		result.b[k] = colors[k];
@@ -996,7 +996,7 @@ RB_SurfaceTriangles
 =============
 */
 static void RB_SurfaceTriangles(const srfTriangles_t* srf) {
-	int			i;
+	int			i = 0;
 
 	const int dlightBits = srf->dlightBits;
 	tess.dlightBits |= dlightBits;
@@ -1067,7 +1067,7 @@ RB_SurfaceBeam
 static void RB_SurfaceBeam(void)
 {
 	constexpr auto NUM_BEAM_SEGS = 6;
-	int	i;
+	int	i = 0;
 	vec3_t perpvec;
 	vec3_t direction{}, normalized_direction{};
 	vec3_t	start_points[NUM_BEAM_SEGS]{}, end_points[NUM_BEAM_SEGS]{};
@@ -1180,8 +1180,8 @@ static void RB_SurfaceSaberGlow()
 */
 static void LerpMeshVertexes(md3Surface_t* surf, const float backlerp)
 {
-	int		vert_num;
-	unsigned lat, lng;
+	int		vert_num = 0;
+	unsigned lat = 0, lng = 0;
 
 	float* outXYZ = tess.xyz[tess.numVertexes];
 	float* out_normal = tess.normal[tess.numVertexes];
@@ -1275,8 +1275,8 @@ RB_SurfaceMesh
 =============
 */
 static void RB_SurfaceMesh(md3Surface_t* surface) {
-	int				j;
-	float			backlerp;
+	int				j = 0;
+	float			backlerp = 0.0f;
 
 	if (backEnd.currentEntity->e.oldframe == backEnd.currentEntity->e.frame) {
 		backlerp = 0;
@@ -1316,7 +1316,7 @@ RB_SurfaceFace
 ==============
 */
 static void RB_SurfaceFace(srfSurfaceFace_t* surf) {
-	int			i;
+	int			i = 0;
 
 	RB_CHECKOVERFLOW(surf->numPoints, surf->numIndices);
 
@@ -1333,9 +1333,9 @@ static void RB_SurfaceFace(srfSurfaceFace_t* surf) {
 
 	tess.numIndexes += surf->numIndices;
 
-	float* v;
+	float* v = nullptr;
 
-	int ndx;
+	int ndx = 0;
 
 	const int numPoints = surf->numPoints;
 
@@ -1410,8 +1410,8 @@ Just copy the grid of points and triangulate
 =============
 */
 static void RB_SurfaceGrid(srfGridMesh_t* cv) {
-	int		i, j;
-	int irows, vrows;
+	int		i = 0, j = 0;
+	int irows = 0, vrows = 0;
 	int		width_table[MAX_GRID_SIZE]{};
 	int		height_table[MAX_GRID_SIZE]{};
 
@@ -1556,7 +1556,7 @@ static void RB_SurfaceLathe()
 	vec2_t		pt, l_oldpt;
 	vec2_t		pt2, l_oldpt2{};
 	float d = 1.0f, pain = 0.0f;
-	int			i;
+	int			i = 0;
 
 	const refEntity_t* e = &backEnd.currentEntity->e;
 
@@ -1750,7 +1750,7 @@ static void RB_SurfaceClouds()
 
 	vec3_t		pt;
 	vec3_t		pt2;
-	float* strip_def, * alpha_def, * curve_def, ct;
+	float* strip_def = nullptr, * alpha_def = nullptr, * curve_def = nullptr, ct = 0.0f;
 
 	refEntity_t* e = &backEnd.currentEntity->e;
 
@@ -2120,7 +2120,7 @@ static bool RB_TestZFlare(srfFlare_t* surf) {
 			return surf->pboVisible != 0;
 		}
 
-		bool visible;
+		bool visible = false;
 		if (surf->pboQueued == frame)
 		{
 			// queued on the previous frame: that depth is ready by now

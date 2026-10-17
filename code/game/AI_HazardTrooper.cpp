@@ -813,7 +813,8 @@ private:
 			SetNPCGlobals(actor);
 
 			SActorOrder& Order = mOrders[actor_index];
-			const float  fwd_scale = static_cast<float>((actor_index + 1) / 2);
+			const int    fwd_pair = (actor_index + 1) / 2; // whole pairs: 1, 1, 2, 2, ...
+			const float  fwd_scale = static_cast<float>(fwd_pair);
 			const float  side_scale = (actor_index % 2 == 0) ? -1.0f : 1.0f;
 
 			if (actor->NPC->combatPoint != -1)

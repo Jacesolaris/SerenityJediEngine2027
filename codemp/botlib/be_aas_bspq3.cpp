@@ -361,7 +361,7 @@ int AAS_IntForBSPEpairKey(const int ent, const char* key, int* value)
 //===========================================================================
 void AAS_FreeBSPEntities()
 {
-	bsp_epair_t* nextepair;
+	bsp_epair_t* nextepair = nullptr;
 
 	for (int i = 1; i < bspworld.numentities; i++)
 	{

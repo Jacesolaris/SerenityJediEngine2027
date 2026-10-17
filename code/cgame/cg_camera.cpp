@@ -253,7 +253,7 @@ CGCam_Pan
 
 void CGCam_Pan(vec3_t dest, vec3_t panDirection, const float duration)
 {
-	float delta2;
+	float delta2 = 0.0f;
 
 	CGCam_FollowDisable();
 	CGCam_DistanceDisable();
@@ -640,7 +640,7 @@ void CGCam_Distance(const float distance, const float initLerp)
 static void CGCam_FollowUpdate()
 {
 	vec3_t center, dir, cameraAngles, vec; //No more than 16 subjects in a cameraGroup
-	int i;
+	int i = 0;
 
 	if (client_camera.cameraGroup[0])
 	{
@@ -1051,7 +1051,7 @@ static void CGCam_Roff();
 
 void CGCam_Update()
 {
-	int i;
+	int i = 0;
 	qboolean checkFollow = qfalse;
 	qboolean checkTrack = qfalse;
 
@@ -1129,7 +1129,7 @@ void CGCam_Update()
 	}
 	else if (client_camera.info_state & CAMERA_ZOOMING)
 	{
-		float actualFOV_X;
+		float actualFOV_X = 0.0f;
 
 		if (client_camera.FOV_time + client_camera.FOV_duration < cg.time)
 		{
@@ -1489,7 +1489,7 @@ static void CGCam_NotetrackProcessFov(const char* addlArg)
 static void CGCam_NotetrackProcessFovZoom(const char* addlArg)
 {
 	int a = 0;
-	float begin_fov;
+	float begin_fov = 0.0f;
 
 	if (!addlArg || !addlArg[0])
 	{
@@ -1526,7 +1526,7 @@ static void CGCam_NotetrackProcessFovZoom(const char* addlArg)
 	}
 	if (addlArg[a])
 	{
-		float fov_time;
+		float fov_time = 0.0f;
 		d = 0;
 		memset(t, 0, tsize * sizeof(char));
 		while (addlArg[a] && !isspace(addlArg[a]) && d < tsize)
@@ -1590,7 +1590,7 @@ static void CGCam_NotetrackProcessFovZoom(const char* addlArg)
 static void CGCam_NotetrackProcessFovAccel(const char* addlArg)
 {
 	int a = 0;
-	float begin_fov;
+	float begin_fov = 0.0f;
 
 	if (!addlArg || !addlArg[0])
 	{
@@ -1644,7 +1644,7 @@ static void CGCam_NotetrackProcessFovAccel(const char* addlArg)
 		}
 		if (addlArg[a])
 		{
-			float fov_time;
+			float fov_time = 0.0f;
 			d = 0;
 			memset(t, 0, tsize * sizeof(char));
 			while (addlArg[a] && !isspace(addlArg[a]) && d < tsize)

@@ -434,7 +434,7 @@ Just adds default parameters that cgame doesn't need to know about
 */
 static void CL_CM_LoadMap(const char* mapname, const qboolean subBSP)
 {
-	int checksum;
+	int checksum = 0;
 
 	CM_LoadMap(mapname, qtrue, &checksum, subBSP);
 }

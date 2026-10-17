@@ -611,7 +611,7 @@ NAV_Bypass
 
 static qboolean NAV_Bypass(gentity_t* self, gentity_t* blocker, vec3_t blocked_dir, const float blocked_dist, vec3_t movedir)
 {
-	float dot;
+	float dot = 0.0f;
 	vec3_t right;
 
 	//Draw debug info if requested
@@ -1772,7 +1772,7 @@ static int NAV_GetStoredWaypoint(const char* targetname)
 
 void NAV_CalculatePaths(const char* filename, int checksum)
 {
-	int target;
+	int target = 0;
 
 #ifdef _DISABLED
 	if (!tempWaypointList)

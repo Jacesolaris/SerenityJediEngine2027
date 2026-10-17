@@ -262,7 +262,7 @@ void UI_SaveForceTemplate()
 {
 	char* selectedName = UI_Cvar_VariableString("ui_SaveFCF");
 	char fcfString[512];
-	fileHandle_t f;
+	fileHandle_t f = 0;
 	int forcePlace = 0;
 	int i = 0;
 	qboolean foundFeederItem = qfalse;
@@ -1032,7 +1032,7 @@ qboolean UI_ForcePowerRank_HandleKey(int flags, float* special, int key, int num
 	if (key == A_MOUSE1 || key == A_MOUSE2 || key == A_ENTER || key == A_KP_ENTER || key == A_BACKSPACE)
 	{
 		qboolean raising;
-		int rank;
+		int rank = 0;
 
 		//this will give us the index as long as UI_FORCE_RANK is always one below the first force rank index
 		const int forcepower = UI_FORCE_RANK_INDEX(type);
@@ -1146,9 +1146,9 @@ UI_ForceConfigHandle
 */
 void UI_ForceConfigHandle(int oldindex, int newindex)
 {
-	fileHandle_t f;
-	int len;
-	int i;
+	fileHandle_t f = 0;
+	int len = 0;
+	int i = 0;
 	int c = 0;
 	char fcfBuffer[8192];
 	char singleBuf[64] = { 0 };

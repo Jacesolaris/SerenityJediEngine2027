@@ -57,8 +57,8 @@ Writes a delta update of an entityState_t list to the message.
 */
 static void SV_EmitPacketEntities(clientSnapshot_t* from, clientSnapshot_t* to, msg_t* msg)
 {
-	int oldnum, newnum;
-	int from_num_entities;
+	int oldnum = 0, newnum = 0;
+	int from_num_entities = 0;
 
 	// generate the delta update
 	if (!from)
@@ -137,8 +137,8 @@ SV_WriteSnapshotToClient
 */
 static void SV_WriteSnapshotToClient(client_t* client, msg_t* msg)
 {
-	clientSnapshot_t* oldframe;
-	int lastframe;
+	clientSnapshot_t* oldframe = nullptr;
+	int lastframe = 0;
 
 	// this is the snapshot we are creating
 	clientSnapshot_t* frame = &client->frames[client->netchan.outgoingSequence & PACKET_MASK];
@@ -319,7 +319,7 @@ SV_UpdateServerCommandsToClient
 */
 void SV_UpdateServerCommandsToClient(client_t* client, msg_t* msg)
 {
-	int reliableAcknowledge;
+	int reliableAcknowledge = 0;
 
 	if (client->demo.isBot && client->demo.demorecording)
 	{
@@ -411,7 +411,7 @@ float g_svCullDist = -1.0f;
 static void SV_AddEntitiesVisibleFromPoint(vec3_t origin, clientSnapshot_t* frame,
 	snapshotentity_numbers_t* eNums, qboolean portal)
 {
-	int i;
+	int i = 0;
 
 	// during an error shutdown message we may need to transmit
 	// the shutdown message after the server has shutdown, so
@@ -613,10 +613,10 @@ static void SV_BuildClientSnapshot(client_t* client)
 {
 	vec3_t org;
 	snapshotentity_numbers_t entity_numbers{};
-	int i;
-	sharedEntity_t* ent;
-	entityState_t* state;
-	svEntity_t* svEnt;
+	int i = 0;
+	sharedEntity_t* ent = nullptr;
+	entityState_t* state = nullptr;
+	svEntity_t* svEnt = nullptr;
 
 	// bump the counter used to prevent double adding
 	sv.snapshotCounter++;
@@ -957,8 +957,8 @@ SV_SendClientMessages
 */
 void SV_SendClientMessages(void)
 {
-	int i;
-	client_t* c;
+	int i = 0;
+	client_t* c = nullptr;
 
 	// send a message to each connected client
 	for (i = 0, c = svs.clients; i < sv_maxclients->integer; i++, c++)

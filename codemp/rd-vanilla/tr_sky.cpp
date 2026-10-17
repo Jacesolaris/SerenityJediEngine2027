@@ -25,7 +25,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "tr_local.h"
 
 #define SKY_SUBDIVISIONS		8
-#define HALF_SKY_SUBDIVISIONS	(SKY_SUBDIVISIONS/2)
+#define HALF_SKY_SUBDIVISIONS	(SKY_SUBDIVISIONS >> 1) // half of SKY_SUBDIVISIONS (a shift: no integer division in float maths)
 
 static float s_cloudTexCoords[6][SKY_SUBDIVISIONS + 1][SKY_SUBDIVISIONS + 1][2];
 static float s_cloudTexP[6][SKY_SUBDIVISIONS + 1][SKY_SUBDIVISIONS + 1];
@@ -60,11 +60,11 @@ AddSkyPolygon
 */
 static void AddSkyPolygon(const int nump, vec3_t vecs)
 {
-	int		i;
+	int		i = 0;
 	vec3_t	v, av{};
-	float	s, t, dv;
-	int		axis;
-	float* vp;
+	float	s = 0.0f, t = 0.0f, dv = 0.0f;
+	int		axis = 0;
+	float* vp = nullptr;
 	// s = [0]/[2], t = [1]/[2]
 	static int	floato_st[6][3] =
 	{
@@ -153,14 +153,14 @@ ClipSkyPolygon
 */
 static void ClipSkyPolygon(const int nump, vec3_t vecs, const int stage)
 {
-	float* v;
+	float* v = nullptr;
 	qboolean back;
-	float	d;
+	float	d = 0.0f;
 	float	dists[MAX_CLIP_VERTS]{};
 	int		sides[MAX_CLIP_VERTS]{};
 	vec3_t	newv[2][MAX_CLIP_VERTS]{};
 	int		newc[2]{};
-	int		i;
+	int		i = 0;
 
 	if (nump > MAX_CLIP_VERTS - 2)
 		Com_Error(ERR_DROP, "ClipSkyPolygon: MAX_CLIP_VERTS");
@@ -446,7 +446,7 @@ static void DrawSkyBox(const shader_t* shader)
 
 static void FillCloudySkySide(const int mins[2], const int maxs[2], const qboolean addIndexes)
 {
-	int s, t;
+	int s = 0, t = 0;
 	const int vertexStart = tess.numVertexes;
 
 	const int tHeight = maxs[1] - mins[1] + 1;
@@ -498,7 +498,7 @@ static void FillCloudBox(const int stage)
 	for (int i = 0; i < 6; i++)
 	{
 		int sky_mins_subd[2]{}, sky_maxs_subd[2]{};
-		float min_t;
+		float min_t = 0.0f;
 
 		if (true)
 		{

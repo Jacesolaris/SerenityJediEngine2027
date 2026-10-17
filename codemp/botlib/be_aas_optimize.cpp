@@ -275,7 +275,7 @@ void AAS_OptimizeStore(optimized_t* optimized)
 //===========================================================================
 void AAS_Optimize(void)
 {
-	int i;
+	int i = 0;
 	optimized_t optimized;
 
 	AAS_OptimizeAlloc(&optimized);

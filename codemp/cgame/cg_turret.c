@@ -29,8 +29,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 void CreepToPosition(vec3_t ideal, vec3_t current)
 {
 	const float max_degree_switch = 90;
-	int degrees_negative;
-	int degrees_positive;
+	int degrees_negative = 0;
+	int degrees_positive = 0;
 	int do_negative = 0;
 
 	int angle_ideal = (int)ideal[YAW];

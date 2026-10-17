@@ -145,7 +145,7 @@ enum
 
 void ST_AggressionAdjust(const gentity_t* self, const int change)
 {
-	int upper_threshold, lower_threshold;
+	int upper_threshold = 0, lower_threshold = 0;
 
 	self->NPC->stats.aggression += change;
 
@@ -881,8 +881,8 @@ static qboolean NPC_CheckEnemyStealth_Smart(gentity_t* target)
 		}
 
 		// Swamptroopers see better.
-		float realize;
-		float cautious;
+		float realize = 0.0f;
+		float cautious = 0.0f;
 		if (NPC->client->NPC_class == CLASS_SWAMPTROOPER)
 		{
 			realize = (float)CAUTIOUS_THRESHOLD;
@@ -1157,8 +1157,8 @@ static qboolean NPC_CheckEnemyStealth(gentity_t* target)
 		}
 
 		// If he's violated the threshold, then realize him.
-		float realize;
-		float cautious;
+		float realize = 0.0f;
+		float cautious = 0.0f;
 
 		if (NPC->client->NPC_class == CLASS_SWAMPTROOPER)
 		{
@@ -1225,7 +1225,7 @@ static qboolean NPC_CheckEnemyStealth(gentity_t* target)
 
 qboolean NPC_CheckPlayerTeamStealth()
 {
-	gentity_t* enemy;
+	gentity_t* enemy = nullptr;
 	const qboolean cairn_dock1 = (Q_stricmp(level.mapname, "cairn_dock1") == 0) ? qtrue : qfalse;
 	const qboolean isYavin1b = (Q_stricmp(level.mapname, "yavin1b") == 0) ? qtrue : qfalse;
 
@@ -2124,7 +2124,7 @@ static void ST_CheckMoveState()
 
 static void ST_ResolveBlockedShot(const int hit)
 {
-	int stuck_time;
+	int stuck_time = 0;
 	//figure out how long we intend to stand here, max
 	if (TIMER_Get(NPC, "roamTime") > TIMER_Get(NPC, "stick"))
 	{
@@ -2536,11 +2536,11 @@ static void ST_Commander(void)
 		return;
 	}
 
-	int i;
-	int j;
-	int cp;
-	int cp_flags;
-	int squad_state;
+	int i = 0;
+	int j = 0;
+	int cp = 0;
+	int cp_flags = 0;
+	int squad_state = 0;
 	AIGroupInfo_t* group = NPCInfo->group;
 	gentity_t* member = nullptr;
 
@@ -2652,8 +2652,8 @@ static void ST_Commander(void)
 	}
 
 	// Asynchronous group AI: process one member per frame if enabled
-	int cur_member_num;
-	int last_member_num;
+	int cur_member_num = 0;
+	int last_member_num = 0;
 
 	if (d_asynchronousGroupAI->integer)
 	{
@@ -4019,7 +4019,7 @@ void NPC_BSST_Attack(void)
 					if (TIMER_Done(NPC, "slapattackDelay"))
 					{
 						//animate me
-						int swing_anim;
+						int swing_anim = 0;
 						if (NPC->health > BLOCKPOINTS_THIRTY)
 						{
 							swing_anim = BOTH_TUSKENATTACK2;
@@ -4089,7 +4089,7 @@ void NPC_BSST_Attack(void)
 					if (TIMER_Done(NPC, "slapattackDelay"))
 					{
 						//animate me
-						int swing_anim;
+						int swing_anim = 0;
 						if (NPC->health > BLOCKPOINTS_THIRTY)
 						{
 							swing_anim = BOTH_TUSKENATTACK2;
@@ -4284,7 +4284,7 @@ void NPC_BSST_Attack(void)
 					if (TIMER_Done(NPC, "slapattackDelay"))
 					{
 						//animate me
-						int swing_anim;
+						int swing_anim = 0;
 						if (NPC->health > BLOCKPOINTS_THIRTY)
 						{
 							swing_anim = BOTH_A7_SLAP_R;
@@ -4353,7 +4353,7 @@ void NPC_BSST_Attack(void)
 					if (TIMER_Done(NPC, "slapattackDelay"))
 					{
 						//animate me
-						int swing_anim;
+						int swing_anim = 0;
 						if (NPC->health > BLOCKPOINTS_THIRTY)
 						{
 							swing_anim = BOTH_A7_SLAP_R;
@@ -4422,7 +4422,7 @@ void NPC_BSST_Attack(void)
 					if (TIMER_Done(NPC, "slapattackDelay"))
 					{
 						//animate me
-						int swing_anim;
+						int swing_anim = 0;
 						if (NPC->health > BLOCKPOINTS_THIRTY)
 						{
 							swing_anim = BOTH_TUSKENATTACK2;
@@ -4491,7 +4491,7 @@ void NPC_BSST_Attack(void)
 					if (TIMER_Done(NPC, "slapattackDelay"))
 					{
 						//animate me
-						int swing_anim;
+						int swing_anim = 0;
 						if (NPC->health > BLOCKPOINTS_THIRTY)
 						{
 							swing_anim = BOTH_TUSKENATTACK2;
@@ -4664,7 +4664,7 @@ void NPC_BSST_Attack(void)
 				if (TIMER_Done(NPC, "attackDelay"))
 				{
 					//animate me
-					int swing_anim;
+					int swing_anim = 0;
 					if (NPC->health > 50)
 					{
 						swing_anim = Q_irand(BOTH_MELEEUP, BOTH_MELEE3); //kick

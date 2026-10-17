@@ -717,7 +717,7 @@ qboolean Music_DynamicDataAvailable(const char* psDynamicMusicLabel)
 
 const char* Music_GetFileNameForState(MusicState_e eMusicState)
 {
-	MusicFile_t* pMusicFile;
+	MusicFile_t* pMusicFile = nullptr;
 	switch (eMusicState)
 	{
 	case eBGRNDTRACK_EXPLORE:

@@ -180,7 +180,7 @@ void AAS_DrawPermanentCross(vec3_t origin, const float size, const int color)
 //===========================================================================
 void AAS_DrawPlaneCross(vec3_t point, vec3_t normal, const float dist, const int type, const int color)
 {
-	int j, line;
+	int j = 0, line = 0;
 	int lines[2] = { -1, -1 };   // FIX: initialize to safe values
 	vec3_t start1, end1, start2, end2;
 
@@ -242,7 +242,7 @@ void AAS_ShowBoundingBox(vec3_t origin, vec3_t mins, vec3_t maxs)
 {
 	vec3_t bboxcorners[8] = { 0 };
 	int lines[3] = { -1, -1, -1 };
-	int i, j, line;
+	int i = 0, j = 0, line = 0;
 
 	// upper corners
 	bboxcorners[0][0] = origin[0] + maxs[0];
@@ -306,8 +306,8 @@ void AAS_ShowBoundingBox(vec3_t origin, vec3_t mins, vec3_t maxs)
 //===========================================================================
 void AAS_ShowFace(const int facenum)
 {
-	int edgenum;
-	aas_edge_t* edge;
+	int edgenum = 0;
+	aas_edge_t* edge = nullptr;
 	vec3_t start, end;
 
 	int color = LINECOLOR_YELLOW;
@@ -351,9 +351,9 @@ void AAS_ShowFace(const int facenum)
 //===========================================================================
 static void AAS_ShowFacePolygon(const int facenum, const int color, const int flip)
 {
-	int i, edgenum;
+	int i = 0, edgenum = 0;
 	vec3_t points[128];
-	aas_edge_t* edge;
+	aas_edge_t* edge = nullptr;
 
 	//check if face number is in range
 	if (facenum >= aasworld.numfaces)
@@ -396,7 +396,7 @@ static void AAS_ShowFacePolygon(const int facenum, const int color, const int fl
 void AAS_ShowArea(const int areanum, const int groundfacesonly)
 {
 	int areaedges[MAX_DEBUGLINES];
-	int n, color = 0, line;
+	int n = 0, color = 0, line = 0;
 
 	//
 	int numareaedges = 0;
@@ -598,7 +598,7 @@ void AAS_DrawArrow(vec3_t start, vec3_t end, const int linecolor, const int arro
 void AAS_ShowReachability(aas_reachability_t* reach)
 {
 	vec3_t dir, cmdmove, velocity;
-	float speed;
+	float speed = 0.0f;
 	aas_clientmove_t move;
 
 	AAS_ShowAreaPolygons(reach->areanum, 5, qtrue);
@@ -704,7 +704,7 @@ void AAS_ShowReachableAreas(const int areanum)
 
 void AAS_FloodAreas_r(const int areanum, const int cluster, int* done)
 {
-	int nextareanum, i;
+	int nextareanum = 0, i = 0;
 
 	AAS_ShowAreaPolygons(areanum, 1, qtrue);
 	//pointer to the convex area

@@ -84,7 +84,7 @@ void IN_Button6Up(void);
 static void IN_UseGivenForce(void)
 {
 	const char* c = Cmd_Argv(1);
-	int force_num;
+	int force_num = 0;
 	int genCmdNum = 0;
 
 	if (c)
@@ -419,7 +419,7 @@ static void IN_VoiceChatButton(void)
 
 static void IN_KeyDown(kbutton_t* b)
 {
-	int k;
+	int k = 0;
 
 	const char* c = Cmd_Argv(1);
 	if (c[0])
@@ -465,7 +465,7 @@ static void IN_KeyDown(kbutton_t* b)
 
 static void IN_KeyUp(kbutton_t* b)
 {
-	int k;
+	int k = 0;
 
 	const char* c = Cmd_Argv(1);
 	if (c[0])
@@ -523,7 +523,7 @@ Returns the fraction of the frame that the key was down
 */
 float CL_KeyState(kbutton_t* key)
 {
-	float val;
+	float val = 0.0f;
 
 	int msec = key->msec;
 	key->msec = 0;
@@ -962,7 +962,7 @@ static qboolean CL_VehicleStickLook(float* pitchScale, float* yawScale)
 
 static void CL_AdjustAngles(void)
 {
-	float speed;
+	float speed = 0.0f;
 
 	if (in_speed.active)
 	{
@@ -1047,7 +1047,7 @@ Sets the usercmd_t based on key states
 */
 static void CL_KeyMove(usercmd_t* cmd)
 {
-	int movespeed;
+	int movespeed = 0;
 
 	//
 	// adjust for speed key / running
@@ -1165,7 +1165,7 @@ extern cvar_t* j_sensitivity;
 
 static void CL_JoystickMove(usercmd_t* cmd)
 {
-	float	anglespeed;
+	float	anglespeed = 0.0f;
 
 	if (!in_joystick->integer)
 	{
@@ -1335,7 +1335,7 @@ static void CL_FighterPadStick(const float x, const float y, float* outX, float*
 static void CL_FighterPadMove(usercmd_t* cmd)
 {
 	float stick[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-	float sx, sy;
+	float sx = 0.0f, sy = 0.0f;
 
 	if (!CL_FighterPadActive())
 	{
@@ -1393,7 +1393,7 @@ CL_MouseMove
 */
 static void CL_MouseMove(usercmd_t* cmd)
 {
-	float mx, my;
+	float mx = 0.0f, my = 0.0f;
 	const float speed = static_cast<float>(frame_msec);
 
 	// allow mouse smoothing
@@ -1419,7 +1419,7 @@ static void CL_MouseMove(usercmd_t* cmd)
 	{
 		if (cl_mouseAccelStyle->integer == 0)
 		{
-			float accelSensitivity;
+			float accelSensitivity = 0.0f;
 
 			const float rate = SQRTFAST(mx * mx + my * my) / speed;
 
@@ -1615,7 +1615,7 @@ vec3_t cl_lastViewAngles = { 0 };
 
 static void CL_FinishMove(usercmd_t* cmd)
 {
-	int i;
+	int i = 0;
 
 	// copy the state that the cgame is currently sending
 	cmd->weapon = cl.cgameUserCmdValue;
@@ -1884,10 +1884,10 @@ During normal gameplay, a client packet will contain something like:
 void CL_WritePacket(void)
 {
 	msg_t      buf;
-	byte* data;
-	int        i;
+	byte* data = nullptr;
+	int        i = 0;
 	usercmd_t  nullcmd;
-	usercmd_t* oldcmd;
+	usercmd_t* oldcmd = nullptr;
 
 	// ---------------------------------------------------------
 	// Do not send anything if playing back a demo or in cinematic

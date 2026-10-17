@@ -170,8 +170,8 @@ Returns -1 if invalid
 */
 static int clientNumberFromString(const gentity_t* to, char* s)
 {
-	gclient_t* cl;
-	int idnum;
+	gclient_t* cl = nullptr;
+	int idnum = 0;
 	char s2[MAX_STRING_CHARS];
 
 	// numeric values are just slot numbers
@@ -549,7 +549,7 @@ argv(0) god
 */
 static void Cmd_God_f(gentity_t* ent)
 {
-	const char* msg;
+	const char* msg = nullptr;
 
 	if (!CheatsOk(ent))
 	{
@@ -576,7 +576,7 @@ argv(0) undying
 */
 static void Cmd_Undying_f(gentity_t* ent)
 {
-	const char* msg;
+	const char* msg = nullptr;
 
 	if (!CheatsOk(ent))
 	{
@@ -590,7 +590,7 @@ static void Cmd_Undying_f(gentity_t* ent)
 	}
 	else
 	{
-		int max;
+		int max = 0;
 
 		const char* cmd = gi.argv(1);
 		if (cmd && atoi(cmd))
@@ -626,7 +626,7 @@ argv(0) notarget
 */
 static void Cmd_Notarget_f(gentity_t* ent)
 {
-	const char* msg;
+	const char* msg = nullptr;
 
 	ent->flags ^= FL_NOTARGET;
 	if (!(ent->flags & FL_NOTARGET))
@@ -639,7 +639,7 @@ static void Cmd_Notarget_f(gentity_t* ent)
 
 static void Cmd_Noforce_f(gentity_t* ent)
 {
-	const char* msg;
+	const char* msg = nullptr;
 
 	ent->flags ^= FL_NOFORCE;
 	if (!(ent->flags & FL_NOFORCE))
@@ -659,7 +659,7 @@ argv(0) noclip
 */
 static void Cmd_Noclip_f(gentity_t* ent)
 {
-	const char* msg;
+	const char* msg = nullptr;
 
 	if (ent->client->noclip)
 	{
@@ -828,7 +828,7 @@ qboolean g_check_player_dark_side();
 
 static void Cmd_SetObjective_f(const gentity_t* ent)
 {
-	int objective_i;
+	int objective_i = 0;
 
 	if (gi.argc() == 2)
 	{
@@ -3022,7 +3022,7 @@ void ClientCommand(const int clientNum)
 	else if ((Q_stricmp(cmd, "weather") == 0) || (Q_stricmp(cmd, "r_weather") == 0))
 	{
 		char arg1[MAX_STRING_CHARS]{};
-		int num;
+		int num = 0;
 		CG_Argv(1);
 
 		if ((Q_stricmp(arg1, "snow") == 0) || (Q_stricmp(arg1, "1") == 0))

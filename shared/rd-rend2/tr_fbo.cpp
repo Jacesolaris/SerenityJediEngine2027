@@ -30,8 +30,8 @@ R_CheckFBO
 */
 static qboolean R_CheckFBO(const FBO_t* fbo)
 {
-	int             code;
-	int             id;
+	int             code = 0;
+	int             id = 0;
 
 	qglGetIntegerv(GL_FRAMEBUFFER_BINDING, &id);
 	qglBindFramebuffer(GL_FRAMEBUFFER, fbo->frameBuffer);
@@ -154,8 +154,8 @@ static FBO_t* FBO_Create(const char* name, int width, int height)
 
 static void FBO_CreateBuffer(FBO_t* fbo, int format, int index, int multisample)
 {
-	uint32_t* pRenderBuffer;
-	GLenum attachment;
+	uint32_t* pRenderBuffer = nullptr;
+	GLenum attachment = 0;
 	qboolean absent;
 
 	switch (format)
@@ -390,8 +390,8 @@ FBO_Init
 */
 void FBO_Init(void)
 {
-	int             i;
-	int             hdrFormat, multisample;
+	int             i = 0;
+	int             hdrFormat = 0, multisample = 0;
 
 	ri.Printf(PRINT_ALL, "------- FBO_Init -------\n");
 
@@ -799,8 +799,8 @@ FBO_Shutdown
 */
 void FBO_Shutdown(void)
 {
-	int             i, j;
-	FBO_t* fbo;
+	int             i = 0, j = 0;
+	FBO_t* fbo = nullptr;
 
 	ri.Printf(PRINT_ALL, "------- FBO_Shutdown -------\n");
 
@@ -837,8 +837,8 @@ R_FBOList_f
 */
 static void R_FBOList_f(void)
 {
-	int             i;
-	FBO_t* fbo;
+	int             i = 0;
+	FBO_t* fbo = nullptr;
 
 	ri.Printf(PRINT_ALL, "             size       name\n");
 	ri.Printf(PRINT_ALL, "----------------------------------------------------------\n");
@@ -884,7 +884,7 @@ void FBO_BlitFromTexture(struct image_s* src, vec4i_t inSrcBox, vec2_t inSrcTexS
 	vec2_t invTexRes{};
 	FBO_t* oldFbo = glState.currentFBO;
 	matrix_t projection;
-	int width, height;
+	int width = 0, height = 0;
 
 	if (!src)
 		return;
@@ -1026,7 +1026,7 @@ void FBO_Blit(FBO_t* src, vec4i_t inSrcBox, vec2_t srcTexScale, FBO_t* dst, vec4
 void FBO_FastBlit(FBO_t* src, vec4i_t srcBox, FBO_t* dst, vec4i_t dstBox, int buffers, int filter)
 {
 	vec4i_t srcBoxFinal{}, dstBoxFinal{};
-	GLuint srcFb, dstFb;
+	GLuint srcFb = 0, dstFb = 0;
 
 	// get to a neutral state first
 	//FBO_Bind(NULL);

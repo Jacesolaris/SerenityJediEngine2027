@@ -58,7 +58,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
  //===========================================================================
 void AAS_SwapAASData()
 {
-	int i, j;
+	int i = 0, j = 0;
 	//bounding boxes
 	for (i = 0; i < aasworld.numbboxes; i++)
 	{
@@ -344,9 +344,9 @@ void AAS_DData(unsigned char* data, const int size)
 //===========================================================================
 int AAS_LoadAASFile(char* filename)
 {
-	fileHandle_t fp;
+	fileHandle_t fp = 0;
 	aas_header_t header;
-	int lastoffset;
+	int lastoffset = 0;
 
 	botimport.Print(PRT_MESSAGE, "trying to load %s\n", filename);
 	//dump current loaded aas file
@@ -523,7 +523,7 @@ int AAS_WriteAASLump(const fileHandle_t fp, aas_header_t* h, const int lumpnum, 
 qboolean AAS_WriteAASFile(char* filename)
 {
 	aas_header_t header;
-	fileHandle_t fp;
+	fileHandle_t fp = 0;
 
 	botimport.Print(PRT_MESSAGE, "writing %s\n", filename);
 	//swap the aas data

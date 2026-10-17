@@ -104,7 +104,7 @@ CM_DistanceFromLineSquared
 float CM_DistanceFromLineSquared(vec3_t p, vec3_t lp1, vec3_t lp2, vec3_t dir)
 {
 	vec3_t proj, t;
-	int j;
+	int j = 0;
 
 	CM_ProjectPointOntoVector(p, lp1, dir, proj);
 	for (j = 0; j < 3; j++)
@@ -138,11 +138,11 @@ CM_TestBoxInBrush
 */
 void CM_TestBoxInBrush(traceWork_t* tw, trace_t& trace, cbrush_t* brush)
 {
-	int i;
-	cplane_t* plane;
-	float dist;
-	float d1;
-	cbrushside_t* side;
+	int i = 0;
+	cplane_t* plane = nullptr;
+	float dist = 0.0f;
+	float d1 = 0.0f;
+	cbrushside_t* side = nullptr;
 
 	if (!brush->numsides)
 	{
@@ -226,7 +226,7 @@ CM_TestInLeaf
 */
 void CM_TestInLeaf(traceWork_t* tw, trace_t& trace, cLeaf_t* leaf, clipMap_t* local)
 {
-	int k;
+	int k = 0;
 
 	// test box position against all brushes in the leaf
 	for (k = 0; k < leaf->numLeafBrushes; k++)
@@ -409,7 +409,7 @@ CM_PositionTest
 void CM_PositionTest(traceWork_t * tw, trace_t & trace)
 {
 	int leafs[MAX_POSITION_LEAFS]{};
-	int i;
+	int i = 0;
 	leafList_t ll{};
 
 	// identify the leafs we are touching
@@ -485,7 +485,7 @@ CM_PlaneCollision
 
 bool CM_PlaneCollision(traceWork_t * tw, cbrushside_t * side)
 {
-	float f;
+	float f = 0.0f;
 
 	cplane_t* plane = side->plane;
 
@@ -677,7 +677,7 @@ CM_TraceThroughLeaf
 */
 void CM_TraceThroughLeaf(traceWork_t * tw, trace_t & trace, clipMap_t * local, cLeaf_t * leaf)
 {
-	int k;
+	int k = 0;
 
 	// trace line against all brushes in the leaf
 	for (k = 0; k < leaf->numLeafBrushes; k++)
@@ -810,7 +810,7 @@ void CM_TraceThroughSphere(traceWork_t * tw, trace_t & trace, vec3_t origin, flo
 		if (fraction < trace.fraction)
 		{
 			vec3_t intersection;
-			float scale;
+			float scale = 0.0f;
 			trace.fraction = fraction;
 			VectorSubtract(end, start, dir);
 			VectorMA(start, fraction, dir, intersection);
@@ -848,7 +848,7 @@ the cylinder extends halfheight above and below the origin
 void CM_TraceThroughVerticalCylinder(traceWork_t * tw, trace_t & trace, vec3_t origin, float radius,
 	const float halfheight, vec3_t start, vec3_t end)
 {
-	float l1;
+	float l1 = 0.0f;
 	vec3_t v1, dir, start2d, end2d, org2d;
 
 	// 2d coordinates
@@ -926,7 +926,7 @@ void CM_TraceThroughVerticalCylinder(traceWork_t * tw, trace_t & trace, vec3_t o
 			if (intersection[2] <= origin[2] + halfheight &&
 				intersection[2] >= origin[2] - halfheight)
 			{
-				float scale;
+				float scale = 0.0f;
 				//
 				trace.fraction = fraction;
 				VectorSubtract(intersection, origin, dir);
@@ -1065,7 +1065,7 @@ CM_TraceToLeaf
 */
 void CM_TraceToLeaf(traceWork_t * tw, trace_t & trace, cLeaf_t * leaf, clipMap_t * local)
 {
-	int k;
+	int k = 0;
 
 	// trace line against all brushes in the leaf
 	for (k = 0; k < leaf->numLeafBrushes; k++)
@@ -1138,11 +1138,11 @@ a smaller intercept fraction.
 void CM_TraceThroughTree(traceWork_t * tw, trace_t & trace, clipMap_t * local, const int num, const float p1f,
 	const float p2f, vec3_t p1, vec3_t p2)
 {
-	float t1, t2, offset;
-	float frac, frac2;
-	float idist;
+	float t1 = 0.0f, t2 = 0.0f, offset = 0.0f;
+	float frac = 0.0f, frac2 = 0.0f;
+	float idist = 0.0f;
 	vec3_t mid{};
-	int side;
+	int side = 0;
 
 	if (trace.fraction <= p1f)
 	{
@@ -1295,7 +1295,7 @@ void CM_Trace(trace_t * trace, const vec3_t start, const vec3_t end,
 	const vec3_t mins, const vec3_t maxs,
 	clipHandle_t model, const vec3_t origin, const int brushmask, int capsule, sphere_t * sphere)
 {
-	int i;
+	int i = 0;
 	traceWork_t tw;
 	vec3_t offset{};
 	clipMap_t* local = nullptr;
@@ -1679,8 +1679,8 @@ Returns true if culled out
 
 bool CM_CullBox(const cplane_t * frustum, const vec3_t transformed[8])
 {
-	int i, j;
-	const cplane_t* frust;
+	int i = 0, j = 0;
+	const cplane_t* frust = nullptr;
 
 	// check against frustum planes
 	for (i = 0, frust = frustum; i < 4; i++, frust++)

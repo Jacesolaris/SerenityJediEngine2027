@@ -256,7 +256,7 @@ for any reason, no changes to the state will be made at all.
 */
 static void CL_ParseSnapshot(msg_t* msg)
 {
-	clSnapshot_t* old;
+	clSnapshot_t* old = nullptr;
 	clSnapshot_t newSnap;
 
 	// get the reliable sequence acknowledge number

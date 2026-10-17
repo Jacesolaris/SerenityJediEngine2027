@@ -321,7 +321,7 @@ qboolean BG_IsOwnSkeletonModel(const char* model)
 		qboolean	own;
 	} cache[BG_OWN_SKEL_CACHE];
 	static int numCached = 0;
-	char folder[MAX_QPATH];
+	char folder[MAX_QPATH] = { 0 };
 	char path[MAX_QPATH];
 	byte head[BG_MDXM_HEADER_SIZE];
 	int n = 0;

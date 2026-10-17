@@ -70,7 +70,7 @@ int numclusterareas;
 //===========================================================================
 void AAS_AltRoutingFloodCluster_r(const int areanum)
 {
-	int otherareanum;
+	int otherareanum = 0;
 
 	//add the current area to the areas of the current cluster
 	clusterareas[numclusterareas] = areanum;
@@ -106,10 +106,10 @@ int AAS_AlternativeRouteGoals(vec3_t start, const int startareanum, vec3_t goal,
 #ifndef ENABLE_ALTROUTING
 	return 0;
 #else
-	int i, j, bestareanum;
-	int numaltroutegoals, nummidrangeareas;
-	int starttime, goaltime, goaltraveltime;
-	float dist, bestdist;
+	int i = 0, j = 0, bestareanum = 0;
+	int numaltroutegoals = 0, nummidrangeareas = 0;
+	int starttime = 0, goaltime = 0, goaltraveltime = 0;
+	float dist = 0.0f, bestdist = 0.0f;
 #ifdef ALTROUTE_DEBUG
 	int startmillisecs;
 

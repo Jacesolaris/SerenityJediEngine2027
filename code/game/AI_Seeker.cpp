@@ -76,7 +76,7 @@ void NPC_Seeker_Pain(gentity_t* self, gentity_t* inflictor, gentity_t* other, co
 // Maintain vertical position and horizontal damping for seeker-type NPCs
 static void Seeker_MaintainHeight()
 {
-	float dif;
+	float dif = 0.0f;
 
 	// Update our angles regardless
 	NPC_UpdateAngles(qtrue, qtrue);
@@ -197,7 +197,7 @@ static void Seeker_MaintainHeight()
 //------------------------------------
 void Seeker_Strafe()
 {
-	int side;
+	int side = 0;
 	vec3_t end, right;
 	trace_t tr;
 

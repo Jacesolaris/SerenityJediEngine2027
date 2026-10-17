@@ -198,7 +198,7 @@ qboolean BG_IsOutside(const vec3_t pos, const int passEntityNum)
 {
 	trace_t tr;
 	vec3_t end;
-	int contents;
+	int contents = 0;
 
 #if defined(_GAME)
 	contents = trap->PointContents(pos, passEntityNum);

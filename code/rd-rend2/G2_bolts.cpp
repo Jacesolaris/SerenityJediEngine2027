@@ -114,11 +114,11 @@ int G2_Add_Bolt(const CGhoul2Info* ghlInfo, boltInfo_v& bltlist, surfaceInfo_v& 
 	assert(ghlInfo && ghlInfo->mValid);
 	model_t* mod_m = (model_t*)ghlInfo->currentModel;
 	model_t* mod_a = (model_t*)ghlInfo->animModel;
-	int x, surfNum = -1;
-	mdxaSkel_t* skel;
-	mdxaSkelOffsets_t* offsets;
+	int x = 0, surfNum = -1;
+	mdxaSkel_t* skel = nullptr;
+	mdxaSkelOffsets_t* offsets = nullptr;
 	boltInfo_t temp_bolt;
-	uint32_t flags;
+	uint32_t flags = 0;
 
 	// first up, we'll search for that which this bolt names in all the surfaces
 	surfNum = G2_IsSurfaceLegal(mod_m, boneName, &flags);

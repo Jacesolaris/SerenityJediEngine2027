@@ -201,7 +201,7 @@ resample / decimate to the current source rate
 */
 static void ResampleSfx(sfx_t* sfx, const int iInRate, const int iInWidth, byte* p_data)
 {
-	int		i_sample;
+	int		i_sample = 0;
 
 	const float f_step_scale = static_cast<float>(iInRate) / dma.speed;	// this is usually 0.5, 1, or 2
 
@@ -294,7 +294,7 @@ static void R_CheckMP3s(const char* psDir)
 {
 	Com_Printf("."); // stops useful info scrolling off screen
 
-	int numSysFiles, i, numdirs;
+	int numSysFiles = 0, i = 0, numdirs = 0;
 
 	char** dirFiles = FS_ListFiles(psDir, "/", &numdirs);
 	if (numdirs > 2)
@@ -322,7 +322,7 @@ static void R_CheckMP3s(const char* psDir)
 
 		if (pbData)
 		{
-			id3v1_1* pTAG;
+			id3v1_1* pTAG = nullptr;
 
 			const qboolean qbTagNeedsUpdating =
 				!MP3_ReadSpecialTagInfo(pbData, iSize, &pTAG) ? qtrue : qfalse;
@@ -567,7 +567,7 @@ static qboolean S_LoadSound_FileLoadAndNameAdjuster(char* psFilename, byte** pDa
 		//
 		if (com_buildScript->integer)
 		{
-			fileHandle_t hFile;
+			fileHandle_t hFile = 0;
 			//German
 			strncpy(psVoice, "chr_d", 5); // same number of letters as "chars"
 			FS_FOpenFileRead(psFilename, &hFile, qfalse); //cache the wav
@@ -711,9 +711,9 @@ qboolean gbInsideLoadSound = qfalse;
 
 static qboolean S_LoadSound_Actual(sfx_t* sfx)
 {
-	byte* data;
+	byte* data = nullptr;
 	wavinfo_t info{};
-	int size;
+	int size = 0;
 	char sLoadName[MAX_QPATH];
 
 	int len = strlen(sfx->sSoundName);

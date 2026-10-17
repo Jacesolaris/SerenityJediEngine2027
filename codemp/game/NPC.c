@@ -307,7 +307,7 @@ Determines when it's ok to ditch the corpse
 
 static int BodyRemovalPadTime(const gentity_t* ent)
 {
-	int time;
+	int time = 0;
 
 	if (!ent || !ent->client)
 		return 0;

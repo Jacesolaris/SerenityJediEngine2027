@@ -56,7 +56,7 @@ static constexpr float s_flipMatrix[16] = {
 ** GL_Bind
 */
 void GL_Bind(image_t* image) {
-	int texnum;
+	int texnum = 0;
 
 	if (!image) {
 		// (a shader whose image did not load, drawn every frame: named once, for developers)
@@ -244,8 +244,8 @@ void GL_State(const uint32_t stateBits)
 	{
 		if (stateBits & (GLS_SRCBLEND_BITS | GLS_DSTBLEND_BITS))
 		{
-			GLenum dstFactor;
-			GLenum srcFactor;
+			GLenum dstFactor = 0;
+			GLenum srcFactor = 0;
 			switch (stateBits & GLS_SRCBLEND_BITS)
 			{
 			case GLS_SRCBLEND_ZERO:
@@ -606,7 +606,7 @@ static bool R_WorldCoordToScreenCoordFloat(vec3_t worldCoord, float* x, float* y
 //used by RF_DISTORTION
 static bool R_WorldCoordToScreenCoord(vec3_t worldCoord, int* x, int* y)
 {
-	float	xF, yF;
+	float	xF = 0.0f, yF = 0.0f;
 	const bool retVal = R_WorldCoordToScreenCoordFloat(worldCoord, &xF, &yF);
 	*x = static_cast<int>(xF);
 	*y = static_cast<int>(yF);
@@ -638,13 +638,13 @@ static int g_numPostRenders = 0;
 
 static void RB_RenderDrawSurfList(drawSurf_t* drawSurfs, const int numDrawSurfs)
 {
-	shader_t* shader;
-	int				fogNum;
-	int				entityNum;
-	int				dlighted;
-	int				i;
-	drawSurf_t* drawSurf;
-	postRender_t* pRender;
+	shader_t* shader = nullptr;
+	int				fogNum = 0;
+	int				entityNum = 0;
+	int				dlighted = 0;
+	int				i = 0;
+	drawSurf_t* drawSurf = nullptr;
+	postRender_t* pRender = nullptr;
 	bool			didShadowPass = false;
 
 	if (g_bRenderGlowingObjects)
@@ -884,7 +884,7 @@ static void RB_RenderDrawSurfList(drawSurf_t* drawSurfs, const int numDrawSurfs)
 			if (backEnd.currentEntity->e.renderfx & RF_DISTORTION &&
 				lastPostEnt != pRender->entNum)
 			{ //do the capture now, we only need to do it once per ent
-				int x, y;
+				int x = 0, y = 0;
 				const int rad = backEnd.currentEntity->e.radius;
 				//We are going to just bind this, and then the CopyTexImage is going to
 				//stomp over this texture num in texture memory.
@@ -1446,7 +1446,7 @@ Also called by RE_EndRegistration
 ===============
 */
 void RB_ShowImages(void) {
-	image_t* image;
+	image_t* image = nullptr;
 	//int		start, end;
 
 	if (!backEnd.projection2D) {

@@ -48,7 +48,7 @@ TIMER_Clear
 
 void TIMER_Clear(void)
 {
-	int i;
+	int i = 0;
 	for (i = 0; i < MAX_GENTITIES; i++)
 	{
 		g_timers[i] = NULL;

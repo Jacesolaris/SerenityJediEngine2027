@@ -162,7 +162,7 @@ static void R_LoadLightmaps(const lump_t* l, const char* ps_map_name, world_t& w
 {
 	static byte image[LIGHTMAP_SIZE * LIGHTMAP_SIZE * 4]; // off the stack (C6262)
 	memset(image, 0, sizeof(image)); // cleared each time, as the {} on the stack was
-	int j;
+	int j = 0;
 	float maxIntensity = 0;
 	double sumIntensity = 0;
 
@@ -350,7 +350,7 @@ ParseFace
 ===============
 */
 static void ParseFace(const dsurface_t* ds, mapVert_t* verts, msurface_t* surf, int* indexes, const world_t& worldData, const int index) {
-	int					i, j, k;
+	int					i = 0, j = 0, k = 0;
 	int					lightmapNum[MAXLIGHTMAPS]{};
 
 	for (i = 0; i < MAXLIGHTMAPS; i++)
@@ -432,7 +432,7 @@ ParseMesh
 */
 static void ParseMesh(const dsurface_t* ds, mapVert_t* verts, msurface_t* surf, const world_t& worldData, const int index)
 {
-	int						i, j, k;
+	int						i = 0, j = 0, k = 0;
 	static drawVert_t points[MAX_PATCH_SIZE * MAX_PATCH_SIZE]; // off the stack (C6262)
 	memset(points, 0, sizeof(points)); // cleared each time, as the {} on the stack was
 	int						lightmapNum[MAXLIGHTMAPS]{};
@@ -511,7 +511,7 @@ ParseTriSurf
 ===============
 */
 static void ParseTriSurf(const dsurface_t* ds, mapVert_t* verts, msurface_t* surf, int* indexes, const world_t& worldData, const int index) {
-	int				i, j, k;
+	int				i = 0, j = 0, k = 0;
 
 	// get fog volume
 	surf->fogIndex = LittleLong ds->fogNum + 1;
@@ -660,7 +660,7 @@ FIXME: write generalized version that also avoids cracks between a patch and one
 =================
 */
 static void R_FixSharedVertexLodError_r(const int start, const srfGridMesh_t* grid1, world_t& worldData) {
-	int k, l, m, n, offset1, offset2;
+	int k = 0, l = 0, m = 0, n = 0, offset1 = 0, offset2 = 0;
 
 	for (int j = start; j < worldData.numsurfaces; j++) {
 		//
@@ -789,9 +789,9 @@ R_StitchPatches
 ===============
 */
 static int R_StitchPatches(int grid1_num, int grid2_num, world_t& worldData) {
-	int k, l, m, n, offset1, offset2, row, column;
-	srfGridMesh_t* grid1, * grid2;
-	float* v1, * v2;
+	int k = 0, l = 0, m = 0, n = 0, offset1 = 0, offset2 = 0, row = 0, column = 0;
+	srfGridMesh_t* grid1 = nullptr, * grid2 = nullptr;
+	float* v1 = nullptr, * v2 = nullptr;
 
 	grid1 = reinterpret_cast<srfGridMesh_t*>(worldData.surfaces[grid1_num].data);
 	grid2 = reinterpret_cast<srfGridMesh_t*>(worldData.surfaces[grid2_num].data);
@@ -1238,7 +1238,7 @@ R_StitchAllPatches
 ===============
 */
 static void R_StitchAllPatches(world_t& worldData) {
-	int stitched;
+	int stitched = 0;
 
 	int numstitches = 0;
 	do
@@ -1364,7 +1364,7 @@ R_LoadSubmodels
 =================
 */
 static void R_LoadSubmodels(const lump_t* l, world_t& worldData, const int index) {
-	bmodel_t* out;
+	bmodel_t* out = nullptr;
 
 	dmodel_t* in = reinterpret_cast<dmodel_t*>(fileBase + l->fileofs);
 	if (l->filelen % sizeof * in)
@@ -1433,7 +1433,7 @@ R_LoadNodesAndLeafs
 */
 static void R_LoadNodesAndLeafs(const lump_t* nodeLump, const lump_t* leafLump, world_t& worldData)
 {
-	int			i, j;
+	int			i = 0, j = 0;
 
 	dnode_t* in = reinterpret_cast<dnode_t*>(fileBase + nodeLump->fileofs);
 	if (nodeLump->filelen % sizeof(dnode_t) ||
@@ -1587,10 +1587,10 @@ R_LoadFogs
 */
 static void R_LoadFogs(const lump_t* l, const lump_t* brushesLump, const lump_t* sidesLump, world_t& worldData, const int index)
 {
-	fog_t* out;
-	int			side_num;
-	int			plane_num;
-	int			first_side;
+	fog_t* out = nullptr;
+	int			side_num = 0;
+	int			plane_num = 0;
+	int			first_side = 0;
 	constexpr int			lightmaps[MAXLIGHTMAPS] = { LIGHTMAP_NONE };
 
 	dfog_t* fogs = reinterpret_cast<dfog_t*>(fileBase + l->fileofs);
@@ -1732,7 +1732,7 @@ R_LoadLightGrid
 ================
 */
 static void R_LoadLightGrid(const lump_t* l, world_t& worldData) {
-	int		i;
+	int		i = 0;
 	vec3_t	maxs{};
 
 	world_t* w = &worldData;
@@ -1824,7 +1824,7 @@ R_LoadLightGridArray
 ================
 */
 static void R_LoadLightGridArray(const lump_t* l, world_t& worldData) {
-	world_t* w;
+	world_t* w = nullptr;
 #ifdef Q3_BIG_ENDIAN
 	int		i;
 #endif
@@ -1855,7 +1855,7 @@ R_LoadEntities
 ================
 */
 static void R_LoadEntities(const lump_t* l, world_t& worldData) {
-	const char* p;
+	const char* p = nullptr;
 	float ambient = 1;
 
 	world_t* w = &worldData;
@@ -1996,7 +1996,7 @@ Called directly from cgame
 */
 void RE_LoadWorldMap_Actual(const char* name, world_t& worldData, const int index)
 {
-	byte* buffer;
+	byte* buffer = nullptr;
 
 	if (tr.worldMapLoaded && !index) {
 		Com_Error(ERR_DROP, "ERROR: attempted to redundantly load world map\n");

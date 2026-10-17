@@ -37,8 +37,8 @@ If the ammo has gone low enough to generate the warning, play a sound
 */
 static void CG_CheckAmmo()
 {
-	int total;
-	int previous;
+	int total = 0;
+	int previous = 0;
 
 #if 0
 
@@ -98,7 +98,7 @@ CG_DamageFeedback
 */
 static void CG_DamageFeedback(const int yaw_byte, const int pitch_byte, const int damage)
 {
-	float scale;
+	float scale = 0.0f;
 
 	//FIXME: Based on MOD, do different kinds of damage effects,
 	//		for example, Borg damage could progressively tint screen green and raise FOV?
@@ -225,8 +225,8 @@ CG_CheckPlayerstateEvents
 */
 static void CG_CheckPlayerstateEvents(playerState_t* ps, playerState_t* ops)
 {
-	int event;
-	centity_t* cent;
+	int event = 0;
+	centity_t* cent = nullptr;
 
 #if 0
 	if (ps->externalEvent && ps->externalEvent != ops->externalEvent)

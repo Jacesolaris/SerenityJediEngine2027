@@ -407,7 +407,7 @@ Parses a user triggered run command
 int CSequencer::ParseRun(CBlock* block, CIcarus* icarus)
 {
 	IGameInterface* game = icarus->GetGame();
-	char* buffer;
+	char* buffer = nullptr;
 	char newname[CIcarus::MAX_STRING_SIZE];
 
 	//Get the name and format it
@@ -626,7 +626,7 @@ Adds a sequence that is saved until the affect is called by the parent
 int CSequencer::AddAffect(const bstream_t* bstream, const int retain, int* id, CIcarus* icarus)
 {
 	CSequence* sequence = AddSequence(icarus);
-	bstream_t new_stream;
+	bstream_t new_stream = { 0 };
 
 	sequence->SetFlag(CSequence::SQ_AFFECT | CSequence::SQ_PENDING);
 
@@ -664,7 +664,7 @@ int CSequencer::ParseAffect(CBlock* block, bstream_t* bstream, CIcarus* icarus)
 {
 	IGameInterface* game = icarus->GetGame();
 	CSequencer* stream_sequencer = nullptr;
-	int ret;
+	int ret = 0;
 
 	const auto entname = static_cast<char*>(block->GetMemberData(0));
 	int ent = game->GetByName(entname);
@@ -850,7 +850,7 @@ Properly handles and routes commands to the sequencer
 int CSequencer::Route(CSequence* sequence, bstream_t* bstream, CIcarus* icarus)
 {
 	IGameInterface* game = icarus->GetGame();
-	CBlock* block;
+	CBlock* block = nullptr;
 
 	//Take the stream as the current stream
 	m_curStream = bstream;
@@ -1122,12 +1122,12 @@ EvaluateConditional
 int CSequencer::EvaluateConditional(CBlock* block, CIcarus* icarus) const
 {
 	IGameInterface* game = icarus->GetGame();
-	CBlockMember* bm;
-	char tempString1[128], tempString2[128];
-	vec3_t vec;
-	int id, i, oper, memberNum = 0;
+	CBlockMember* bm = nullptr;
+	char tempString1[128] = { 0 }, tempString2[128] = { 0 };
+	vec3_t vec = { 0 };
+	int id = 0, i = 0, oper = 0, memberNum = 0;
 	char* p1 = nullptr, * p2 = nullptr;
-	int t1, t2;
+	int t1 = 0, t2 = 0;
 
 	//
 	//	Get the first parameter
@@ -1169,8 +1169,8 @@ int CSequencer::EvaluateConditional(CBlock* block, CIcarus* icarus) const
 
 	case CIcarus::ID_GET:
 	{
-		int type;
-		char* name;
+		int type = 0;
+		char* name = nullptr;
 
 		//get( TYPE, NAME )
 		type = static_cast<int>(*static_cast<float*>(block->GetMemberData(memberNum++)));
@@ -1183,7 +1183,7 @@ int CSequencer::EvaluateConditional(CBlock* block, CIcarus* icarus) const
 		{
 		case CIcarus::TK_FLOAT:
 		{
-			float fVal;
+			float fVal = 0.0f;
 
 			if (game->GetFloat(m_ownerID, name, &fVal) == false)
 				return false;
@@ -1196,7 +1196,7 @@ int CSequencer::EvaluateConditional(CBlock* block, CIcarus* icarus) const
 
 		case CIcarus::TK_INT:
 		{
-			float fVal;
+			float fVal = 0.0f;
 
 			if (game->GetFloat(m_ownerID, name, &fVal) == false)
 				return false;
@@ -1233,7 +1233,7 @@ int CSequencer::EvaluateConditional(CBlock* block, CIcarus* icarus) const
 
 	case CIcarus::ID_RANDOM:
 	{
-		float min, max;
+		float min = 0.0f, max = 0.0f;
 		//FIXME: This will not account for nested Q_flrand(0.0f, 1.0f) statements
 
 		min = *static_cast<float*>(block->GetMemberData(memberNum++));
@@ -1250,8 +1250,8 @@ int CSequencer::EvaluateConditional(CBlock* block, CIcarus* icarus) const
 
 	case CIcarus::ID_TAG:
 	{
-		char* name;
-		float type;
+		char* name = nullptr;
+		float type = 0.0f;
 
 		name = static_cast<char*>(block->GetMemberData(memberNum++));
 		type = *static_cast<float*>(block->GetMemberData(memberNum++));
@@ -1338,8 +1338,8 @@ int CSequencer::EvaluateConditional(CBlock* block, CIcarus* icarus) const
 
 	case CIcarus::ID_GET:
 	{
-		int type;
-		char* name;
+		int type = 0;
+		char* name = nullptr;
 
 		//get( TYPE, NAME )
 		type = static_cast<int>(*static_cast<float*>(block->GetMemberData(memberNum++)));
@@ -1352,7 +1352,7 @@ int CSequencer::EvaluateConditional(CBlock* block, CIcarus* icarus) const
 		{
 		case CIcarus::TK_FLOAT:
 		{
-			float fVal;
+			float fVal = 0.0f;
 
 			if (game->GetFloat(m_ownerID, name, &fVal) == false)
 				return false;
@@ -1365,7 +1365,7 @@ int CSequencer::EvaluateConditional(CBlock* block, CIcarus* icarus) const
 
 		case CIcarus::TK_INT:
 		{
-			float fVal;
+			float fVal = 0.0f;
 
 			if (game->GetFloat(m_ownerID, name, &fVal) == false)
 				return false;
@@ -1403,7 +1403,7 @@ int CSequencer::EvaluateConditional(CBlock* block, CIcarus* icarus) const
 	case CIcarus::ID_RANDOM:
 
 	{
-		float min, max;
+		float min = 0.0f, max = 0.0f;
 		//FIXME: This will not account for nested Q_flrand(0.0f, 1.0f) statements
 
 		min = *static_cast<float*>(block->GetMemberData(memberNum++));
@@ -1421,8 +1421,8 @@ int CSequencer::EvaluateConditional(CBlock* block, CIcarus* icarus) const
 	case CIcarus::ID_TAG:
 
 	{
-		char* name;
-		float type;
+		char* name = nullptr;
+		float type = 0.0f;
 
 		name = static_cast<char*>(block->GetMemberData(memberNum++));
 		type = *static_cast<float*>(block->GetMemberData(memberNum++));
@@ -1473,7 +1473,7 @@ void CSequencer::CheckIf(CBlock** command, CIcarus* icarus)
 
 		if (ret /*TRUE*/)
 		{
-			int success_id;
+			int success_id = 0;
 			if (block->HasFlag(BF_ELSE))
 			{
 				success_id = static_cast<int>(*static_cast<float*>(block->GetMemberData(block->GetNumMembers() - 2)));
@@ -1630,7 +1630,7 @@ void CSequencer::CheckLoop(CBlock** command, CIcarus* icarus)
 	if (block->GetBlockID() == CIcarus::ID_LOOP)
 	{
 		int member_num = 0;
-		int iterations;
+		int iterations = 0;
 		//Get the loop ID
 		const CBlockMember* bm = block->GetMember(member_num++);
 
@@ -2113,7 +2113,7 @@ Handles a completed task and returns a new task to be completed
 int CSequencer::Callback(CTaskManager* task_manager, CBlock* block, const int returnCode, CIcarus* icarus)
 {
 	IGameInterface* game = icarus->GetGame();
-	CBlock* command;
+	CBlock* command = nullptr;
 
 	if (returnCode == TASK_RETURN_COMPLETE)
 	{
@@ -2171,7 +2171,7 @@ Recall
 
 int CSequencer::Recall(const CIcarus* icarus)
 {
-	CBlock* block;
+	CBlock* block = nullptr;
 
 	while ((block = m_taskManager->RecallTask()) != nullptr)
 	{
@@ -2400,7 +2400,7 @@ Save
 int CSequencer::Save()
 {
 	taskSequence_m::iterator ti;
-	int num_sequences, id, numTasks;
+	int num_sequences = 0, id = 0, numTasks = 0;
 
 	// Data saved here.
 	//	Owner Sequence.
@@ -2496,8 +2496,8 @@ int CSequencer::Load(CIcarus* icarus, IGameInterface* game)
 	//Link the entity back to the sequencer
 	game->LinkGame(m_ownerID, m_id);
 
-	CSequence* seq;
-	int numSequences, seqID, taskID, numTasks;
+	CSequence* seq = nullptr;
+	int numSequences = 0, seqID = 0, taskID = 0, numTasks = 0;
 
 	//Get the number of sequences to read
 	pIcarus->BufferRead(&numSequences, sizeof numSequences);
@@ -2545,7 +2545,7 @@ int CSequencer::Load(CIcarus* icarus, IGameInterface* game)
 		m_taskSequences[taskGroup] = seq;
 	}
 
-	int curGroupID;
+	int curGroupID = 0;
 
 	//Get the current task group
 	pIcarus->BufferRead(&curGroupID, sizeof curGroupID);

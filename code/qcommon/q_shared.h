@@ -592,7 +592,7 @@ using trace_t = struct
 	}
 	void sg_import(ojk::SavedGameHelper& saved_game)
 	{
-		int32_t tmp;
+		int32_t tmp = 0;
 		saved_game.read<int32_t>(tmp); allsolid = static_cast<qboolean>(tmp);
 		saved_game.read<int32_t>(tmp); startsolid = static_cast<qboolean>(tmp);
 		saved_game.read<float>(fraction);

@@ -176,7 +176,7 @@ qboolean G2_SetSurfaceOnOff(CGhoul2Info* ghlInfo, surfaceInfo_v& slist, const ch
 		return qtrue;
 	}
 	// ok, not in the list already - in that case, lets verify this surface exists in the model mesh
-	int	flags;
+	int	flags = 0;
 	const int surfaceNum = G2_IsSurfaceLegal(mod, surfaceName, &flags);
 	if (surfaceNum != -1)
 	{
@@ -216,7 +216,7 @@ void G2_SetSurfaceOnOffFromSkin(CGhoul2Info* ghlInfo, const qhandle_t renderSkin
 		}
 		else
 		{
-			int flags;
+			int flags = 0;
 			const int surfaceNum = G2_IsSurfaceLegal((void*)ghlInfo->currentModel, skin->surfaces[j]->name, &flags);
 			if (surfaceNum != -1 && !(flags & G2SURFACEFLAG_OFF)) //only turn on if it's not an "_off" surface
 			{
@@ -334,7 +334,7 @@ void G2_RemoveRedundantGeneratedSurfaces(surfaceInfo_v& slist, const int* active
 
 qboolean G2_SetRootSurface(CGhoul2Info_v& ghoul2, const int modelIndex, const char* surfaceName)
 {
-	int flags;
+	int flags = 0;
 
 	assert(ghoul2[modelIndex].currentModel && ghoul2[modelIndex].animModel);
 
@@ -511,7 +511,7 @@ int G2_GetParentSurface(CGhoul2Info* ghlInfo, const int index)
 int G2_GetSurfaceIndex(CGhoul2Info* ghlInfo, const char* surfaceName)
 {
 	const auto mod = const_cast<model_t*>(ghlInfo->currentModel);
-	int flags;
+	int flags = 0;
 
 	return G2_IsSurfaceLegal(mod, surfaceName, &flags);
 }

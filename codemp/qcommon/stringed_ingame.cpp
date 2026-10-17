@@ -278,7 +278,7 @@ const char* CStringEdPackage::ConvertCRLiterals_Read(const char* psString)
 {
 	static std::string str;
 	str = psString;
-	int iLoc;
+	int iLoc = 0;
 	while ((iLoc = str.find("\\n")) != -1)
 	{
 		str[iLoc] = '\n';
@@ -293,7 +293,7 @@ const char* CStringEdPackage::ConvertCRLiterals_Read(const char* psString)
 void CStringEdPackage::REMKill(char* psBuffer) const
 {
 	char* psScanPos = psBuffer;
-	char* p;
+	char* p = nullptr;
 	int iDoubleQuotesSoFar = 0;
 
 	// scan forwards in case there are more than one (and the first is inside quotes)...
@@ -498,7 +498,7 @@ static char* CopeWithDumbStringData(const char* psSentence, const char* psThisLa
 		!Q_stricmp(psThisLanguage, "POLISH") ||
 		!Q_stricmp(psThisLanguage, "RUSSIAN"))
 	{
-		char* p;
+		char* p = nullptr;
 
 		//	strXLS_Speech.Replace(va("%c",0x92),va("%c",0x27));	// "'"
 		while ((p = strchr(psNewString, 0x92)) != nullptr) // "rich" (and illegal) apostrophe
@@ -755,7 +755,7 @@ const char* Leetify(const char* psString)
 				'#' // laziness because of strchr()
 		};
 
-		char* p;
+		char* p = nullptr;
 		for (size_t i = 0; i < sizeof cReplace; i += 2)
 		{
 			while ((p = const_cast<char*>(strchr(str.c_str(), cReplace[i]))) != nullptr)
@@ -1072,7 +1072,7 @@ int SE_GetNumLanguages(void)
 		);
 
 		std::set<std::string> strUniqueStrings; // laziness <g>
-		const char* p;
+		const char* p = nullptr;
 		while ((p = SE_GetFoundFile(strResults)) != nullptr)
 		{
 			const char* psLanguage = TheStringPackage.ExtractLanguageFromPath(p);
@@ -1201,7 +1201,7 @@ const char* SE_LoadLanguage(const char* psLanguage, SE_BOOL bLoadDebug /* = SE_T
 			, strResults
 		);
 
-		const char* p;
+		const char* p = nullptr;
 		while ((p = SE_GetFoundFile(strResults)) != nullptr && !psErrorMessage)
 		{
 			const char* psThisLang = TheStringPackage.ExtractLanguageFromPath(p);

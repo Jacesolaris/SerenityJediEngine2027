@@ -125,9 +125,9 @@ int G2_Add_Bolt(const CGhoul2Info* ghlInfo, boltInfo_v& bltlist, surfaceInfo_v& 
 	assert(ghlInfo && ghlInfo->mValid);
 	const auto mod_m = const_cast<model_t*>(ghlInfo->currentModel);
 	const model_t* mod_a = const_cast<model_t*>(ghlInfo->animModel);
-	int					x;
+	int					x = 0;
 	boltInfo_t			temp_bolt;
-	int					flags;
+	int					flags = 0;
 
 	// first up, we'll search for that which this bolt names in all the surfaces
 	const int surfNum = G2_IsSurfaceLegal(mod_m, boneName, &flags);

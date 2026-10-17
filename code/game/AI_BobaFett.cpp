@@ -1143,7 +1143,7 @@ void Boba_TacticsSelect()
 	// Don't Change Tactics For A Little While
 	//------------------------------------------
 	TIMER_Set(NPC, "Boba_TacticsSelect", Q_irand(8000, 15000));
-	int next_state;
+	int next_state = 0;
 
 	// Get Some Data That Will Help With The Selection Of The Next Tactic
 	//--------------------------------------------------------------------

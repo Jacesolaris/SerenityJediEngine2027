@@ -122,7 +122,7 @@ G_LoadArenasFromFile
 */
 static void G_LoadArenasFromFile(char* filename)
 {
-	fileHandle_t f;
+	fileHandle_t f = 0;
 	static char buf[BOTINFO_FILE_MAX];
 
 	const int len = trap->FS_Open(filename, &f, FS_READ);
@@ -212,7 +212,7 @@ static int G_GetMapTypeBits(const char* type)
 qboolean G_DoesMapSupportGametype(const char* mapname, const int gametype)
 {
 	int thisLevel = -1;
-	const char* type;
+	const char* type = NULL;
 
 	if (!level.arenas.infos[0])
 	{
@@ -262,8 +262,8 @@ qboolean G_DoesMapSupportGametype(const char* mapname, const int gametype)
 const char* G_RefreshNextMap(const int gametype, const qboolean forced)
 {
 	int thisLevel = 0;
-	int n;
-	char* type;
+	int n = 0;
+	char* type = NULL;
 	qboolean loopingUp = qfalse;
 	vmCvar_t mapname;
 
@@ -549,9 +549,9 @@ G_AddRandomBot
 // faction >= 0: only bots of that faction (team games: a random bot that belongs on that side); qfalse: none found
 static qboolean G_AddRandomBotOfFaction(const int team, const int faction)
 {
-	int i, n;
-	char* value, * teamstr;
-	gclient_t* cl;
+	int i = 0, n = 0;
+	char* value = NULL, * teamstr = NULL;
+	gclient_t* cl = NULL;
 
 	int num = 0;
 	for (n = 0; n < level.bots.num; n++)
@@ -1213,8 +1213,8 @@ Svcmd_AddBot_f
 */
 void Svcmd_AddBot_f(void)
 {
-	float skill;
-	int delay;
+	float skill = 0.0f;
+	int delay = 0;
 	char name[MAX_TOKEN_CHARS];
 	char altname[MAX_TOKEN_CHARS];
 	char string[MAX_TOKEN_CHARS];
@@ -1404,7 +1404,7 @@ G_LoadBotsFromFile
 */
 static void G_LoadBotsFromFile(char* filename)
 {
-	fileHandle_t f;
+	fileHandle_t f = 0;
 	static char buf[BOTINFO_FILE_MAX];
 
 	const int len = trap->FS_Open(filename, &f, FS_READ);

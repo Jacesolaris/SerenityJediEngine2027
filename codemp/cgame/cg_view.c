@@ -324,7 +324,7 @@ Sets the coordinates of the rendered window
 */
 void CG_CalcVrect(void)
 {
-	int size;
+	int size = 0;
 
 	// the intermission should allways be full screen
 	if (cg.snap->ps.pm_type == PM_INTERMISSION)
@@ -795,7 +795,7 @@ static void CG_UpdateThirdPersonTargetDamp(void)
 	}
 	else if (cg_thirdPersonTargetDamp.value >= 0.0)
 	{
-		float ratio;
+		float ratio = 0.0f;
 		vec3_t targetdiff;
 		// Calculate the difference from the current position to the new one.
 		VectorSubtract(cameraIdealTarget, cameraCurTarget, targetdiff);
@@ -860,7 +860,7 @@ static void CG_UpdateThirdPersonCameraDamp(void)
 	}
 	else if (cg_thirdPersonCameraDamp.value != 0.0)
 	{
-		float dFactor;
+		float dFactor = 0.0f;
 
 		if (!cg.predictedPlayerState.m_iVehicleNum)
 		{
@@ -910,7 +910,7 @@ static void CG_UpdateThirdPersonCameraDamp(void)
 	}
 	else if (dampfactor >= 0.0)
 	{
-		float ratio;
+		float ratio = 0.0f;
 		vec3_t locdiff;
 		// Calculate the difference from the current position to the new one.
 		VectorSubtract(cameraIdealLoc, cameraCurLoc, locdiff);
@@ -1215,12 +1215,12 @@ CG_OffsetFirstPersonView
 */
 static void CG_OffsetFirstPersonView(void)
 {
-	float bob;
-	float delta;
-	float speed;
-	float f;
+	float bob = 0.0f;
+	float delta = 0.0f;
+	float speed = 0.0f;
+	float f = 0.0f;
 	vec3_t predictedVelocity;
-	int timeDelta;
+	int timeDelta = 0;
 
 	if (cg.snap->ps.pm_type == PM_INTERMISSION)
 	{
@@ -1245,7 +1245,7 @@ static void CG_OffsetFirstPersonView(void)
 	if (kickTime < 800)
 	{
 		//kicks are always 1 second long.  Deal with it.
-		float kickPerc;
+		float kickPerc = 0.0f;
 		if (kickTime <= 200)
 		{
 			//winding up
@@ -1572,9 +1572,9 @@ float zoomFov; //this has to be global client-side
 
 static int CG_CalcFov(void)
 {
-	float fov_x;
-	int inwater;
-	float cgFov;
+	float fov_x = 0.0f;
+	int inwater = 0;
+	float cgFov = 0.0f;
 
 	float thirdPersonHorzOffset = cg_thirdPersonHorzOffset.value;
 	float thirdPersonPitchOffset = cg_thirdPersonPitchOffset.value;
@@ -2012,7 +2012,7 @@ static void CG_WalkerViewOrigin(const int walker_num, const vec3_t walker_org, c
 	else
 	{
 		const float frac = 1.0f - expf(-(float)elapsed / WALKER_VIEW_SMOOTH_MSEC);
-		int i;
+		int i = 0;
 
 		for (i = 0; i < 3; i++)
 		{
@@ -2367,7 +2367,7 @@ static void CG_DrawSkyBoxPortal(const char* cstr)
 	}
 	else
 	{
-		float f;
+		float f = 0.0f;
 		if (!cg.renderingThirdPerson && (cg_trueguns.integer || cg.predictedPlayerState.weapon == WP_SABER
 			|| cg.predictedPlayerState.weapon == WP_MELEE) && cg_truefov.value
 			&& cg.predictedPlayerState.pm_type != PM_SPECTATOR
@@ -2664,7 +2664,7 @@ int BG_EmplacedView(vec3_t base_angles, vec3_t angles, float* new_yaw, float con
 
 void CG_EmplacedView(vec3_t angles)
 {
-	float yaw;
+	float yaw = 0.0f;
 
 	int override = BG_EmplacedView(cg.refdef.viewangles, angles, &yaw,
 		cg_entities[cg.snap->ps.emplacedIndex].currentState.origin2[0]);
@@ -2768,7 +2768,7 @@ static void CG_DrawAutoMap(void)
 	refdef_t refdef;
 	trace_t tr;
 	vec3_t fwd;
-	int vWidth, vHeight;
+	int vWidth = 0, vHeight = 0;
 
 	if (!r_autoMap.integer)
 	{
@@ -3128,7 +3128,7 @@ void CG_ClearHeadBarEnts(void);
 
 void CG_DrawActiveFrame(const int serverTime, const stereoFrame_t stereoView, const qboolean demoPlayback)
 {
-	const char* cstr;
+	const char* cstr = NULL;
 	float mSensitivity = cg.zoomSensitivity;
 	static centity_t* veh = NULL;
 #ifdef VEH_CONTROL_SCHEME_4

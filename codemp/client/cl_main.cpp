@@ -198,7 +198,7 @@ Dumps the current net message, prefixed by the length
 */
 static void CL_WriteDemoMessage(const msg_t* msg, const int headerBytes)
 {
-	int swlen;
+	int swlen = 0;
 
 	// write the packet sequence
 	int len = clc.serverMessageSequence;
@@ -221,7 +221,7 @@ stop recording a demo
 */
 static void CL_StopRecord_f(void)
 {
-	int len;
+	int len = 0;
 
 	if (!clc.demorecording)
 	{
@@ -247,7 +247,7 @@ CL_DemoFilename
 */
 static void CL_DemoFilename(char* buf, const int bufSize)
 {
-	time_t rawtime;
+	time_t rawtime = 0;
 	char timeStr[32] = { 0 }; // should really only reach ~19 chars
 
 	time(&rawtime);
@@ -274,10 +274,10 @@ static void CL_Record_f(void)
 {
 	char           name[MAX_OSPATH];
 	msg_t          buf;
-	int            i;
-	int            len;
+	int            i = 0;
+	int            len = 0;
 	entityState_t  nullstate;
-	char* s;
+	char* s = nullptr;
 
 	if (Cmd_Argc() > 2)
 	{
@@ -463,7 +463,7 @@ void CL_ReadDemoMessage(void)
 {
 	msg_t buf;
 	byte* bufData = static_cast<byte*>(Z_Malloc(MAX_MSGLEN, TAG_TEMP_WORKSPACE, qfalse)); // Allocate on the heap to avoid large stack usage
-	int s;
+	int s = 0;
 
 	if (!clc.demofile)
 	{
@@ -787,7 +787,7 @@ static void CL_UpdateGUID(const char* prefix, const int prefix_len)
 {
 	if (cl_enableGuid->integer)
 	{
-		fileHandle_t f;
+		fileHandle_t f = 0;
 
 		const int len = FS_SV_FOpenFileRead(QKEY_FILE, &f);
 		FS_FCloseFile(f);
@@ -1630,7 +1630,7 @@ Resend a connect message if the last one has timed out
 */
 void CL_CheckForResend(void)
 {
-	int port;
+	int port = 0;
 	char info[MAX_INFO_STRING];
 	char data[MAX_INFO_STRING + 10];
 
@@ -1786,7 +1786,7 @@ CL_ServersResponsePacket
 */
 static void CL_ServersResponsePacket(const msg_t* msg)
 {
-	int i, j;
+	int i = 0, j = 0;
 	netadr_t addresses[MAX_SERVERSPERPACKET]{};
 
 	Com_Printf("CL_ServersResponsePacket\n");
@@ -2694,7 +2694,7 @@ CL_VideoFilename
 */
 static void CL_VideoFilename(char* buf, const int bufSize)
 {
-	time_t rawtime;
+	time_t rawtime = 0;
 	char timeStr[32] = { 0 }; // should really only reach ~19 chars
 
 	time(&rawtime);
@@ -2795,7 +2795,7 @@ static void CL_GenerateQKey(void)
 	if (cl_enableGuid->integer)
 	{
 		unsigned char buff[QKEY_SIZE];
-		fileHandle_t f;
+		fileHandle_t f = 0;
 
 		const int len = FS_SV_FOpenFileRead(QKEY_FILE, &f);
 		FS_FCloseFile(f);
@@ -3123,7 +3123,7 @@ static void CL_SetServerInfo(serverInfo_t* server, const char* info, const int p
 
 static void CL_SetServerInfoByAddress(const netadr_t from, const char* info, const int ping)
 {
-	int i;
+	int i = 0;
 
 	for (i = 0; i < MAX_OTHER_SERVERS; i++)
 	{
@@ -3157,7 +3157,7 @@ CL_ServerInfoPacket
 */
 void CL_ServerInfoPacket(netadr_t from, msg_t* msg)
 {
-	int i, type;
+	int i = 0, type = 0;
 	char info[MAX_INFO_STRING];
 
 	char* infoString = MSG_ReadString(msg);
@@ -3254,7 +3254,7 @@ CL_GetServerStatus
 */
 static serverStatus_t* CL_GetServerStatus(const netadr_t from)
 {
-	int i;
+	int i = 0;
 
 	for (i = 0; i < MAX_SERVERSTATUSREQUESTS; i++)
 	{
@@ -3365,7 +3365,7 @@ CL_ServerStatusResponse
 */
 void CL_ServerStatusResponse(const netadr_t from, msg_t* msg)
 {
-	int i, score, ping;
+	int i = 0, score = 0, ping = 0;
 
 	serverStatus_t* serverStatus = nullptr;
 	for (i = 0; i < MAX_SERVERSTATUSREQUESTS; i++)
@@ -3476,7 +3476,7 @@ CL_LocalServers_f
 */
 void CL_LocalServers_f(void)
 {
-	int i;
+	int i = 0;
 	netadr_t to;
 
 	Com_Printf("Scanning for servers on the local network...\n");
@@ -3522,8 +3522,8 @@ CL_GlobalServers_f
 void CL_GlobalServers_f(void)
 {
 	netadr_t to;
-	int count, i, masterNum;
-	char command[1024], * masteraddress;
+	int count = 0, i = 0, masterNum = 0;
+	char command[1024], * masteraddress = nullptr;
 
 	if ((count = Cmd_Argc()) < 3 || (masterNum = atoi(Cmd_Argv(1))) < 0 || masterNum > MAX_MASTER_SERVERS)
 	{
@@ -3695,7 +3695,7 @@ CL_GetFreePing
 */
 static ping_t* CL_GetFreePing(void)
 {
-	int i;
+	int i = 0;
 
 	ping_t* pingptr = cl_pinglist;
 	for (i = 0; i < MAX_PINGREQUESTS; i++, pingptr++)
@@ -3783,8 +3783,8 @@ CL_UpdateVisiblePings_f
 */
 qboolean CL_UpdateVisiblePings_f(const int source)
 {
-	int i;
-	int pingTime;
+	int i = 0;
+	int pingTime = 0;
 	qboolean status = qfalse;
 
 	if (source < 0 || source > AS_FAVORITES)
@@ -3797,8 +3797,8 @@ qboolean CL_UpdateVisiblePings_f(const int source)
 	int slots = CL_GetPingQueueCount();
 	if (slots < MAX_PINGREQUESTS)
 	{
-		int max;
-		serverInfo_t* server;
+		int max = 0;
+		serverInfo_t* server = nullptr;
 
 		switch (source)
 		{
@@ -3823,7 +3823,7 @@ qboolean CL_UpdateVisiblePings_f(const int source)
 			{
 				if (server[i].ping == -1)
 				{
-					int j;
+					int j = 0;
 
 					if (slots >= MAX_PINGREQUESTS)
 					{

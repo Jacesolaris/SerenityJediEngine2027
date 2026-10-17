@@ -51,7 +51,7 @@ Also sets the clipped hint bit in tess
 =================
 */
 static qboolean	R_CullGrid(const srfGridMesh_t* cv) {
-	int 	sphere_cull;
+	int 	sphere_cull = 0;
 
 	if (r_nocurves->integer) {
 		return qtrue;
@@ -370,9 +370,9 @@ static float GetQuadArea(vec3_t v1, vec3_t v2, vec3_t v3, vec3_t v4)
 
 void RE_GetBModelVerts(const int bmodelIndex, vec3_t* verts, vec3_t normal)
 {
-	msurface_t* surfs;
-	srfSurfaceFace_t* face;
-	int					i;
+	msurface_t* surfs = nullptr;
+	srfSurfaceFace_t* face = nullptr;
+	int					i = 0;
 	//	Not sure if we really need to track the best two candidates
 	int					max_dist[2] = { 0,0 };
 	int					max_indx[2] = { 0,0 };
@@ -466,7 +466,7 @@ static void R_RecursiveWorldNode(mnode_t* node, int plane_bits, int dlightBits) 
 		// inside can be visible OPTIMIZE: don't do this all the way to leafs?
 
 		if (r_nocull->integer != 1) {
-			int		r;
+			int		r = 0;
 
 			if (plane_bits & 1) {
 				r = BoxOnPlaneSide(node->mins, node->maxs, &tr.viewParms.frustum[0]);
@@ -670,7 +670,7 @@ cluster
 ===============
 */
 static void R_MarkLeaves(void) {
-	int		i;
+	int		i = 0;
 
 	// lockpvs lets designers walk around to determine the
 	// extent of the current pvs

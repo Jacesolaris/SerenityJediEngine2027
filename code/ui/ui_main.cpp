@@ -1144,7 +1144,7 @@ static qboolean UI_CustomSaberIconExists(const char* folder, const char* skinNam
 	const char* exts[] = { "jpg", "png", "tga" };
 	for (const auto ext : exts)
 	{
-		fileHandle_t f;
+		fileHandle_t f = 0;
 		ui.FS_FOpenFile(va("models/weapons2/%s/icon_%s.%s", folder, skinName, ext), &f, FS_READ);
 		if (f)
 		{
@@ -1171,7 +1171,7 @@ static void UI_BuildCustomSaber_List()
 	const char* holdChar = csabList;
 	for (int i = 0; i < fileCnt; i++, holdChar += strlen(holdChar) + 1)
 	{
-		fileHandle_t f;
+		fileHandle_t f = 0;
 		const int len = ui.FS_FOpenFile(va("ext_data/sabers/%s", holdChar), &f, FS_READ);
 		if (len <= 0 || !f)
 		{
@@ -1270,7 +1270,7 @@ static const char* UI_FeederItemText(const float feederID, const int index, cons
 
 	if (feederID >= FEEDER_SABER_SKIN_1 && feederID <= FEEDER_SABER2_SKIN_5)
 	{// the saber builder's part lists
-		int saberNum, part;
+		int saberNum = 0, part = 0;
 		const customSaberInfo_t* saber = UI_CustomSaberForFeeder(feederID, &saberNum, &part);
 		if (saber && index >= 0 && index < saber->Skin[part].count)
 		{
@@ -1366,7 +1366,7 @@ static qhandle_t UI_FeederItemImage(const float feederID, const int index)
 {
 	if (feederID >= FEEDER_SABER_SKIN_1 && feederID <= FEEDER_SABER2_SKIN_5)
 	{// the saber builder's part icons
-		int saberNum, part;
+		int saberNum = 0, part = 0;
 		const customSaberInfo_t* saber = UI_CustomSaberForFeeder(feederID, &saberNum, &part);
 		if (saber && index >= 0 && index < saber->Skin[part].count)
 		{
@@ -1498,7 +1498,7 @@ Return true if the menu script should be deferred for later
 */
 static qboolean UI_DeferMenuScript(const char** args)
 {
-	const char* name;
+	const char* name = nullptr;
 
 	// Whats the reason for being deferred?
 	if (!String_Parse(args, &name))
@@ -1509,7 +1509,7 @@ static qboolean UI_DeferMenuScript(const char** args)
 	// Handle the custom cases
 	if (!Q_stricmp(name, "VideoSetup"))
 	{
-		const char* warningMenuName;
+		const char* warningMenuName = nullptr;
 
 		// No warning menu specified
 		if (!String_Parse(args, &warningMenuName))
@@ -1539,7 +1539,7 @@ UI_RunMenuScript
 */
 static qboolean UI_RunMenuScript(const char** args)
 {
-	const char* name, * name2, * mapName, * menuName, * warningMenuName;
+	const char* name = nullptr, * name2 = nullptr, * mapName = nullptr, * menuName = nullptr, * warningMenuName = nullptr;
 
 	if (String_Parse(args, &name))
 	{
@@ -1894,7 +1894,7 @@ static qboolean UI_RunMenuScript(const char** args)
 
 			if (menu)
 			{
-				const char* itemName;
+				const char* itemName = nullptr;
 				String_Parse(args, &itemName);
 				itemDef_t* item = Menu_FindItemByName(menu, itemName);
 				if (item)
@@ -2061,14 +2061,14 @@ static qboolean UI_RunMenuScript(const char** args)
 		}
 		else if (Q_stricmp(name, "initallocforcepower") == 0)
 		{
-			const char* forceName;
+			const char* forceName = nullptr;
 			String_Parse(args, &forceName);
 
 			UI_InitAllocForcePowers(forceName);
 		}
 		else if (Q_stricmp(name, "affectforcepowerlevel") == 0)
 		{
-			const char* forceName;
+			const char* forceName = nullptr;
 			String_Parse(args, &forceName);
 
 			UI_AffectForcePowerLevel(forceName);
@@ -2101,7 +2101,7 @@ static qboolean UI_RunMenuScript(const char** args)
 		}
 		else if (Q_stricmp(name, "showforceleveldesc") == 0)
 		{
-			const char* forceName;
+			const char* forceName = nullptr;
 			String_Parse(args, &forceName);
 
 			UI_ShowForceLevelDesc(forceName);
@@ -2129,7 +2129,7 @@ static qboolean UI_RunMenuScript(const char** args)
 		}
 		else if (Q_stricmp(name, "loadmissionselectmenu") == 0)
 		{
-			const char* cvarName;
+			const char* cvarName = nullptr;
 			String_Parse(args, &cvarName);
 
 			if (cvarName)
@@ -2143,54 +2143,54 @@ static qboolean UI_RunMenuScript(const char** args)
 		}
 		else if (Q_stricmp(name, "giveweapon") == 0)
 		{
-			const char* weapon_index;
+			const char* weapon_index = nullptr;
 			String_Parse(args, &weapon_index);
 			UI_GiveWeapon(atoi(weapon_index));
 		}
 		else if (Q_stricmp(name, "equipweapon") == 0)
 		{
-			const char* weapon_index;
+			const char* weapon_index = nullptr;
 			String_Parse(args, &weapon_index);
 			UI_EquipWeapon(atoi(weapon_index));
 		}
 		else if (Q_stricmp(name, "addweaponselection") == 0)
 		{
-			const char* weapon_index;
+			const char* weapon_index = nullptr;
 			String_Parse(args, &weapon_index);
 			if (!weapon_index)
 			{
 				return qfalse;
 			}
 
-			const char* ammoIndex;
+			const char* ammoIndex = nullptr;
 			String_Parse(args, &ammoIndex);
 			if (!ammoIndex)
 			{
 				return qfalse;
 			}
 
-			const char* ammoAmount;
+			const char* ammoAmount = nullptr;
 			String_Parse(args, &ammoAmount);
 			if (!ammoAmount)
 			{
 				return qfalse;
 			}
 
-			const char* itemName;
+			const char* itemName = nullptr;
 			String_Parse(args, &itemName);
 			if (!itemName)
 			{
 				return qfalse;
 			}
 
-			const char* litItemName;
+			const char* litItemName = nullptr;
 			String_Parse(args, &litItemName);
 			if (!litItemName)
 			{
 				return qfalse;
 			}
 
-			const char* backgroundName;
+			const char* backgroundName = nullptr;
 			String_Parse(args, &backgroundName);
 			if (!backgroundName)
 			{
@@ -2205,49 +2205,49 @@ static qboolean UI_RunMenuScript(const char** args)
 		}
 		else if (Q_stricmp(name, "addthrowweaponselection") == 0)
 		{
-			const char* weapon_index;
+			const char* weapon_index = nullptr;
 			String_Parse(args, &weapon_index);
 			if (!weapon_index)
 			{
 				return qfalse;
 			}
 
-			const char* ammoIndex;
+			const char* ammoIndex = nullptr;
 			String_Parse(args, &ammoIndex);
 			if (!ammoIndex)
 			{
 				return qfalse;
 			}
 
-			const char* ammoAmount;
+			const char* ammoAmount = nullptr;
 			String_Parse(args, &ammoAmount);
 			if (!ammoAmount)
 			{
 				return qfalse;
 			}
 
-			const char* itemName;
+			const char* itemName = nullptr;
 			String_Parse(args, &itemName);
 			if (!itemName)
 			{
 				return qfalse;
 			}
 
-			const char* litItemName;
+			const char* litItemName = nullptr;
 			String_Parse(args, &litItemName);
 			if (!litItemName)
 			{
 				return qfalse;
 			}
 
-			const char* backgroundName;
+			const char* backgroundName = nullptr;
 			String_Parse(args, &backgroundName);
 			if (!backgroundName)
 			{
 				return qfalse;
 			}
 
-			const char* soundfile;
+			const char* soundfile = nullptr;
 			String_Parse(args, &soundfile);
 
 			UI_AddThrowWeaponSelection(atoi(weapon_index), atoi(ammoIndex), atoi(ammoAmount), itemName, litItemName,
@@ -2255,7 +2255,7 @@ static qboolean UI_RunMenuScript(const char** args)
 		}
 		else if (Q_stricmp(name, "removeweaponselection") == 0)
 		{
-			const char* weapon_index;
+			const char* weapon_index = nullptr;
 			String_Parse(args, &weapon_index);
 			if (weapon_index)
 			{
@@ -2276,7 +2276,7 @@ static qboolean UI_RunMenuScript(const char** args)
 		}
 		else if (Q_stricmp(name, "normalweaponselection") == 0)
 		{
-			const char* slotIndex;
+			const char* slotIndex = nullptr;
 			String_Parse(args, &slotIndex);
 			if (!slotIndex)
 			{
@@ -2287,7 +2287,7 @@ static qboolean UI_RunMenuScript(const char** args)
 		}
 		else if (Q_stricmp(name, "highlightweaponselection") == 0)
 		{
-			const char* slotIndex;
+			const char* slotIndex = nullptr;
 			String_Parse(args, &slotIndex);
 			if (!slotIndex)
 			{
@@ -2302,7 +2302,7 @@ static qboolean UI_RunMenuScript(const char** args)
 		}
 		else if (Q_stricmp(name, "giveinventory") == 0)
 		{
-			const char* inventoryIndex, * amount;
+			const char* inventoryIndex = nullptr, * amount = nullptr;
 			String_Parse(args, &inventoryIndex);
 			String_Parse(args, &amount);
 			UI_GiveInventory(atoi(inventoryIndex), atoi(amount));
@@ -2400,7 +2400,7 @@ const char* kyleForceStatusSounds[] =
 
 static void UI_CalcForceStatus()
 {
-	short index;
+	short index = 0;
 	qboolean lukeFlag = qtrue;
 	const client_t* cl = &svs.clients[0]; // 0 because only ever us as a player
 	char value[256];
@@ -2593,7 +2593,7 @@ static int UI_FeederCount(const float feederID)
 {
 	if (feederID >= FEEDER_SABER_SKIN_1 && feederID <= FEEDER_SABER2_SKIN_5)
 	{// the saber builder's part lists
-		int saberNum, part;
+		int saberNum = 0, part = 0;
 		const customSaberInfo_t* saber = UI_CustomSaberForFeeder(feederID, &saberNum, &part);
 		return saber ? saber->Skin[part].count : 0;
 	}
@@ -2669,7 +2669,7 @@ static void UI_FeederSelection(const float feederID, const int index, itemDef_t*
 {
 	if (feederID >= FEEDER_SABER_SKIN_1 && feederID <= FEEDER_SABER2_SKIN_5)
 	{// the saber builder: this part's skin, and the preview hilt with it
-		int saberNum, part;
+		int saberNum = 0, part = 0;
 		const customSaberInfo_t* saber = UI_CustomSaberForFeeder(feederID, &saberNum, &part);
 		if (saber && index >= 0 && index < saber->Skin[part].count)
 		{
@@ -2983,7 +2983,7 @@ static qboolean UI_ParseAnimFileSet(const char* animCFG, int* animFileIndex)
 	//Not going to bother parsing the sound config here.
 	char afilename[MAX_QPATH];
 	char strippedName[MAX_QPATH];
-	int i;
+	int i = 0;
 
 	Q_strncpyz(strippedName, animCFG, sizeof strippedName);
 	char* slash = strrchr(strippedName, '/');
@@ -3034,7 +3034,7 @@ static qboolean UI_ParseAnimFileSet(const char* animCFG, int* animFileIndex)
 
 static int UI_G2SetAnim(CGhoul2Info* ghlInfo, const char* boneName, const int animNum, const qboolean freeze)
 {
-	int animIndex;
+	int animIndex = 0;
 
 	const char* GLAName = re.G2API_GetGLAName(ghlInfo);
 
@@ -3181,7 +3181,7 @@ builds path and scans for valid image extentions
 static qboolean IsImageFile(const char* dirptr, const char* skinname, const qboolean building)
 {
 	char fpath[MAX_QPATH];
-	int f;
+	int f = 0;
 
 	Com_sprintf(fpath, MAX_QPATH, "models/players/%s/icon_%s.jpg", dirptr, skinname);
 	ui.FS_FOpenFile(fpath, &f, FS_READ);
@@ -3781,8 +3781,8 @@ UI_RegisterCvars
 */
 static void UI_RegisterCvars()
 {
-	size_t i;
-	const cvarTable_t* cv;
+	size_t i = 0;
+	const cvarTable_t* cv = nullptr;
 
 	for (i = 0, cv = cvarTable; i < cvarTableSize; i++, cv++)
 	{
@@ -3799,7 +3799,7 @@ UI_ParseMenu
 */
 void UI_ParseMenu(const char* menuFile)
 {
-	char* buffer, * holdBuffer;
+	char* buffer = nullptr, * holdBuffer = nullptr;
 	//	pc_token_t token;
 
 	//Com_DPrintf("Parsing menu file: %s\n", menuFile);
@@ -3903,7 +3903,7 @@ UI_LoadMenus
 void UI_LoadMenus(const char* menuFile, const qboolean reset)
 {
 	char* buffer = nullptr;
-	const char* holdBuffer;
+	const char* holdBuffer = nullptr;
 
 	const int start = Sys_Milliseconds();
 
@@ -3983,7 +3983,7 @@ UI_Load
 */
 void UI_Load()
 {
-	const char* menuSet;
+	const char* menuSet = nullptr;
 	char lastName[1024];
 	const menuDef_t* menu = Menu_GetFocused();
 
@@ -4062,8 +4062,8 @@ Asset_Parse
 */
 qboolean Asset_Parse(char** buffer)
 {
-	const char* tempStr;
-	int pointSize;
+	const char* tempStr = nullptr;
+	int pointSize = 0;
 
 	char* token = PC_ParseExt();
 
@@ -4467,7 +4467,7 @@ qboolean Asset_Parse(char** buffer)
 		{
 			if (PC_Script_Parse(&tempStr))
 			{
-				char* soundFile;
+				char* soundFile = nullptr;
 				do
 				{
 					soundFile = COM_ParseExt(&tempStr, qfalse);
@@ -4711,8 +4711,8 @@ UI_UpdateCvars
 */
 void UI_UpdateCvars()
 {
-	size_t i;
-	const cvarTable_t* cv;
+	size_t i = 0;
+	const cvarTable_t* cv = nullptr;
 
 	for (i = 0, cv = cvarTable; i < cvarTableSize; i++, cv++)
 	{
@@ -5509,7 +5509,7 @@ void UI_GetVideoSetup()
 
 static void UI_SetSexandSoundForModel(const char* char_model)
 {
-	int f;
+	int f = 0;
 	char sound_path[MAX_QPATH]{};
 	qboolean isFemale = qfalse;
 
@@ -5831,7 +5831,7 @@ static qboolean UI_GetForcePowerIndex(const char* forceName, short* forcePowerI)
 static void UI_InitAllocForcePowers(const char* forceName)
 {
 	short forcePowerI = 0;
-	int forcelevel;
+	int forcelevel = 0;
 
 	const menuDef_t* menu = Menu_GetFocused(); // Get current menu
 
@@ -5889,7 +5889,7 @@ static void UI_InitAllocForcePowers(const char* forceName)
 // Flip flop between being able to see the text showing the Force Point has or hasn't been allocated (Used by Force Power Allocation screen)
 static void UI_SetPowerTitleText(const qboolean showAllocated)
 {
-	itemDef_t* item;
+	itemDef_t* item = nullptr;
 
 	const menuDef_t* menu = Menu_GetFocused(); // Get current menu
 
@@ -6231,7 +6231,7 @@ static void UI_RecordWeapons()
 static void UI_ShutdownForceHelp()
 {
 	char itemName[128];
-	itemDef_t* item;
+	itemDef_t* item = nullptr;
 	vec4_t color = { 0.65f, 0.65f, 0.65f, 1.0f };
 
 	menuDef_t* menu = Menu_GetFocused(); // Get current menu
@@ -6334,7 +6334,7 @@ static void UI_ShutdownForceHelp()
 // Decrement force power level (Used by Force Power Allocation screen)
 static void UI_DecrementCurrentForcePower()
 {
-	itemDef_t* item;
+	itemDef_t* item = nullptr;
 	vec4_t color = { 0.65f, 0.65f, 0.65f, 1.0f };
 
 	const menuDef_t* menu = Menu_GetFocused(); // Get current menu
@@ -6347,7 +6347,7 @@ static void UI_DecrementCurrentForcePower()
 	// Get player state
 	const client_t* cl = &svs.clients[0]; // 0 because only ever us as a player
 	playerState_t* p_state = nullptr;
-	int forcelevel;
+	int forcelevel = 0;
 
 	if (cl)
 	{
@@ -6450,7 +6450,7 @@ static void UI_AffectForcePowerLevel(const char* forceName)
 	// Get player state
 	const client_t* cl = &svs.clients[0]; // 0 because only ever us as a player
 	playerState_t* p_state = nullptr;
-	int forcelevel;
+	int forcelevel = 0;
 	if (cl)
 	{
 		p_state = cl->gentity->client;
@@ -6491,7 +6491,7 @@ static void UI_AffectForcePowerLevel(const char* forceName)
 	// A field was updated, so make it so others can't be
 	if (uiInfo.forcePowerUpdated > FP_UPDATED_NONE)
 	{
-		itemDef_t* item;
+		itemDef_t* item = nullptr;
 		vec4_t color = { 0.25f, 0.25f, 0.25f, 1.0f };
 
 		// Make it so none of the other buttons can be clicked
@@ -6610,7 +6610,7 @@ static void UI_ResetForceLevels()
 		// Decrement that power
 		p_state->forcePowerLevel[powerEnums[uiInfo.forcePowerUpdated].powerEnum]--;
 
-		itemDef_t* item;
+		itemDef_t* item = nullptr;
 
 		const menuDef_t* menu = Menu_GetFocused(); // Get current menu
 
@@ -6651,7 +6651,7 @@ static void UI_ResetForceLevels()
 // Set the Players known saber style
 static void UI_UpdateFightingStyle()
 {
-	int saberStyle;
+	int saberStyle = 0;
 
 	const int fightingStyle = Cvar_VariableIntegerValue("ui_newfightingstyle");
 
@@ -6697,7 +6697,7 @@ static void UI_ResetCharacterListBoxes()
 
 	if (menu)
 	{
-		listBoxDef_t* listPtr;
+		listBoxDef_t* listPtr = nullptr;
 		itemDef_t* item = Menu_FindItemByName(menu, "headlistbox");
 		if (item)
 		{
@@ -6992,8 +6992,8 @@ static void UI_AddWeaponSelection(const int weapon_index,
 		return;
 	}
 
-	const char* chosenItemName;
-	const char* chosenButtonName;
+	const char* chosenItemName = nullptr;
+	const char* chosenButtonName = nullptr;
 
 	/* Prevent duplicate selection */
 	if (weapon_index == uiInfo.selectedWeapon1)
@@ -7105,8 +7105,8 @@ static void UI_AddWeaponSelection(const int weapon_index,
 // Update the player weapons with the chosen weapon
 static void UI_RemoveWeaponSelection(const int weapon_selection_index)
 {
-	const char* chosenItemName, * chosenButtonName, * background;
-	int ammoIndex, weapon_index;
+	const char* chosenItemName = nullptr, * chosenButtonName = nullptr, * background = nullptr;
+	int ammoIndex = 0, weapon_index = 0;
 
 	const menuDef_t* menu = Menu_GetFocused(); // Get current menu
 
@@ -7221,7 +7221,7 @@ static void UI_RemoveWeaponSelection(const int weapon_selection_index)
 
 static void UI_NormalWeaponSelection(const int selectionslot)
 {
-	itemDef_s* item;
+	itemDef_s* item = nullptr;
 
 	const menuDef_t* menu = Menu_GetFocused(); // Get current menu
 	if (!menu)
@@ -7250,7 +7250,7 @@ static void UI_NormalWeaponSelection(const int selectionslot)
 
 static void UI_HighLightWeaponSelection(const int selectionslot)
 {
-	itemDef_s* item;
+	itemDef_s* item = nullptr;
 
 	const menuDef_t* menu = Menu_GetFocused(); // Get current menu
 	if (!menu)
@@ -7649,8 +7649,8 @@ static void UI_UpdateSaberHilt(const qboolean second_saber)
 		return;
 	}
 
-	const char* itemName;
-	const char* saberCvarName;
+	const char* itemName = nullptr;
+	const char* saberCvarName = nullptr;
 	if (second_saber)
 	{
 		itemName = "saber2";
@@ -7884,9 +7884,9 @@ ReadSaveDirectory
 */
 void ReadSaveDirectory(void)
 {
-	char* holdChar;
-	int len;
-	int fileCnt;
+	char* holdChar = nullptr;
+	int len = 0;
+	int fileCnt = 0;
 
 	/* Clear save data */
 	memset(s_savedata, 0, sizeof s_savedata);
@@ -8017,7 +8017,7 @@ void ReadSaveDirectory(void)
 
 		if (Q_stricmp("current", holdChar) != 0)
 		{
-			time_t result;
+			time_t result = 0;
 
 			if (Q_stricmp("auto", holdChar) == 0)
 			{

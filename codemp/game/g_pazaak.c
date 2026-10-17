@@ -132,7 +132,7 @@ static void Pzk_StandUp(gentity_t* ent)
 static void Pzk_ReleaseBot(const int index)
 {
 	const int bot = pzkGameBot[index] - 1;
-	gentity_t* ent;
+	gentity_t* ent = NULL;
 
 	pzkGameBot[index] = 0;
 	pzkBotSitAt[index] = 0;
@@ -161,7 +161,7 @@ static void Pzk_HostSend(pzkGame_t* g, const int pid, const char* text)
 static void Pzk_HostFinish(pzkGame_t* g, const int winnerPid)
 {
 	char winnerName[64] = { 0 };
-	int pid;
+	int pid = 0;
 
 	winnerName[0] = 0;
 	if (winnerPid)
@@ -172,7 +172,7 @@ static void Pzk_HostFinish(pzkGame_t* g, const int winnerPid)
 	for (pid = 1; pid <= 2; pid++)
 	{
 		const int clientNum = g->hostData[pid - 1];
-		gentity_t* ent;
+		gentity_t* ent = NULL;
 		if (clientNum < 0 || clientNum >= MAX_CLIENTS)
 		{
 			continue;
@@ -201,7 +201,7 @@ static void Pzk_HostFinish(pzkGame_t* g, const int winnerPid)
 
 static int Pzk_FreeGame(void)
 {
-	int i;
+	int i = 0;
 	for (i = 0; i < MAX_CLIENTS; i++)
 	{
 		if (!pzkGames[i].inUse)
@@ -242,7 +242,7 @@ static qboolean Pzk_EnemyNear(const gentity_t* ent)
 	// static: too big for the stack (C6262); filled by EntitiesInBox before it is read
 	static int list[MAX_GENTITIES];
 	vec3_t mins = { 0 }, maxs = { 0 };
-	int i, num;
+	int i = 0, num = 0;
 
 	for (i = 0; i < 3; i++)
 	{
@@ -315,7 +315,7 @@ static const char* Pzk_BotBusy(const gentity_t* bot)
 static qboolean Pzk_BotFighting(const gentity_t* bot, const gentity_t* challenger)
 {
 	const int enemy = Bot_CurrentEnemy(bot->s.number);
-	const gentity_t* e;
+	const gentity_t* e = NULL;
 
 	if (enemy < 0 || enemy >= ENTITYNUM_MAX_NORMAL || enemy == challenger->s.number)
 	{
@@ -363,8 +363,8 @@ static void Pzk_StartMatch(gentity_t* p1, gentity_t* p2, const char* aiName, gen
 	int cards[PZK_NUM_SIDECARDS];
 	int aiDeck[PZK_SIDEDECK_SIZE];
 	const int index = Pzk_FreeGame();
-	pzkGame_t* g;
-	int sit;
+	pzkGame_t* g = NULL;
+	int sit = 0;
 
 	if (index < 0)
 	{
@@ -440,8 +440,8 @@ static void Pzk_Answer(gentity_t* ent, const qboolean accept);
 
 static void Pzk_Challenge(gentity_t* ent)
 {
-	gentity_t* target;
-	const char* busy;
+	gentity_t* target = NULL;
+	const char* busy = NULL;
 	const char* aiName = "AI";
 
 	if (!Pzk_CanPlay(ent, qtrue))
@@ -529,8 +529,8 @@ static void Pzk_Challenge(gentity_t* ent)
 static void Pzk_Answer(gentity_t* ent, const qboolean accept)
 {
 	const int challenger = pzkChallenger[ent->s.number] - 1;
-	gentity_t* other;
-	const char* busy;
+	gentity_t* other = NULL;
+	const char* busy = NULL;
 
 	if (!Pzk_HasChallenge(ent->s.number) || challenger < 0)
 	{
@@ -603,7 +603,7 @@ qboolean G_Pazaak_ClientCommand(gentity_t* ent, const char* cmd)
 		static char args[16][64];
 		const char* argv[16] = { 0 };
 		const int clientNum = ent->s.number;
-		int argc, i;
+		int argc = 0, i = 0;
 
 		if (!pzkClientGame[clientNum])
 		{
@@ -627,7 +627,7 @@ qboolean G_Pazaak_ClientCommand(gentity_t* ent, const char* cmd)
 
 void G_Pazaak_ClientDisconnect(const int clientNum)
 {
-	int i;
+	int i = 0;
 	if (clientNum < 0 || clientNum >= MAX_CLIENTS)
 	{
 		return;
@@ -667,7 +667,7 @@ void G_Pazaak_ClientDisconnect(const int clientNum)
 // Challenges nobody answered in time
 static void Pzk_ExpireChallenges(void)
 {
-	int i;
+	int i = 0;
 	for (i = 0; i < MAX_CLIENTS; i++)
 	{
 		const int challenger = pzkChallenger[i] - 1;
@@ -686,14 +686,14 @@ static void Pzk_ExpireChallenges(void)
 void G_Pazaak_RunFrame(void)
 {
 	const qboolean cutscene = Pzk_InCutscene();
-	int i;
+	int i = 0;
 
 	Pzk_ExpireChallenges();
 
 	for (i = 0; i < MAX_CLIENTS; i++)
 	{
 		pzkGame_t* g = &pzkGames[i];
-		int pid;
+		int pid = 0;
 		if (!g->inUse)
 		{
 			continue;
@@ -750,7 +750,7 @@ void G_Pazaak_RunFrame(void)
 			// Sitting down: the match starts (and the boards open) when the time is up
 			if (level.time >= pzkStartAt[i])
 			{
-				const char* err;
+				const char* err = NULL;
 				pzkStartAt[i] = 0;
 				err = Pzk_StartGame(g, level.time);
 				if (err)
@@ -781,7 +781,7 @@ void G_Pazaak_RunFrame(void)
 
 void G_Pazaak_Shutdown(void)
 {
-	int i;
+	int i = 0;
 	for (i = 0; i < MAX_CLIENTS; i++)
 	{
 		if (pzkGames[i].inUse)

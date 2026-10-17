@@ -87,7 +87,7 @@ int G2_Find_Bone(const CGhoul2Info* ghlInfo, const boneInfo_v& blist, const char
 // we need to add a bone to the list - find a free one and see if we can find a corresponding bone in the gla file
 int G2_Add_Bone(const model_t* mod, boneInfo_v& blist, const char* boneName)
 {
-	mdxaSkel_t* skel;
+	mdxaSkel_t* skel = nullptr;
 	boneInfo_t tempBone;
 
 	//rww - RAGDOLL_BEGIN
@@ -97,7 +97,7 @@ int G2_Add_Bone(const model_t* mod, boneInfo_v& blist, const char* boneName)
 	const mdxaSkelOffsets_t* offsets = reinterpret_cast<mdxaSkelOffsets_t*>(reinterpret_cast<byte*>(mod->mdxa) + sizeof(mdxaHeader_t));
 
 	// walk the entire list of bones in the gla file for this model and see if any match the name of the bone we want to find
-	int x;
+	int x = 0;
 	for (x = 0; x < mod->mdxa->numBones; x++)
 	{
 		skel = reinterpret_cast<mdxaSkel_t*>(reinterpret_cast<byte*>(mod->mdxa) + sizeof(mdxaHeader_t) + offsets->offsets[x]);
@@ -226,8 +226,8 @@ static qboolean G2_Stop_Bone_Index(boneInfo_v& blist, const int index, const int
 void G2_Generate_Matrix(const model_t* mod, boneInfo_v& blist, int index, const float* angles, int flags,
 	const Eorientations up, const Eorientations left, const Eorientations forward)
 {
-	mdxaSkel_t* skel;
-	mdxaSkelOffsets_t* offsets;
+	mdxaSkel_t* skel = nullptr;
+	mdxaSkelOffsets_t* offsets = nullptr;
 	mdxaBone_t		temp1;
 	mdxaBone_t		permutation;
 	mdxaBone_t* boneOverride = &blist[index].matrix;
@@ -937,8 +937,8 @@ qboolean G2_Get_Bone_Anim_Index(boneInfo_v& blist, const int index, const int cu
 		// are we an animating bone?
 		if (blist[index].flags & (BONE_ANIM_OVERRIDE_LOOP | BONE_ANIM_OVERRIDE))
 		{
-			int current_Frame, newFrame;
-			float lerp;
+			int current_Frame = 0, newFrame = 0;
+			float lerp = 0.0f;
 			G2_TimingModel(blist[index], currentTime, numFrames, current_Frame, newFrame, lerp);
 
 			if (currentFrame)
@@ -1016,8 +1016,8 @@ qboolean G2_Pause_Bone_Anim_Index(boneInfo_v& blist, const int boneIndex, const 
 		// are we pausing or un pausing?
 		if (blist[boneIndex].pauseTime)
 		{
-			int		startFrame, endFrame, flags;
-			float	currentFrame, animSpeed;
+			int		startFrame = 0, endFrame = 0, flags = 0;
+			float	currentFrame = 0.0f, animSpeed = 0.0f;
 
 			// figure out what frame we are on now
 			if (G2_Get_Bone_Anim_Index(blist, boneIndex, blist[boneIndex].pauseTime, &currentFrame, &startFrame, &endFrame, &flags, &animSpeed, numFrames))
@@ -1501,7 +1501,7 @@ static qboolean G2_Set_Bone_Anim_No_BS(const CGhoul2Info& ghoul2, const mdxaHead
 
 void G2_ResetRagDoll(CGhoul2Info_v& ghoul2_v)
 {
-	int model;
+	int model = 0;
 
 	for (model = 0; model < ghoul2_v.size(); model++)
 	{
@@ -1579,7 +1579,7 @@ void G2_SetRagDoll(CGhoul2Info_v& ghoul2_v, CRagDollParams* parms)
 	{
 		return;
 	}
-	int model;
+	int model = 0;
 	for (model = 0; model < ghoul2_v.size(); model++)
 	{
 		if (ghoul2_v[model].mModelindex != -1)
@@ -2694,7 +2694,7 @@ static bool G2_ApplyRealBonePhysics(boneInfo_t& bone, const SRagEffector& e, con
 	vec3_t v_norm;
 	vec3_t used_origin;
 	constexpr float vel_scaling = 0.1f;
-	bool bone_on_ground;
+	bool bone_on_ground = false;
 
 	assert(mass <= 1.0f && mass >= 0.01f);
 
@@ -3843,7 +3843,7 @@ static void G2_RagDollSolve(CGhoul2Info_v& ghoul2_v, const int g2_index, const f
 
 		Inverse_Matrix(&ragBones[i], &N);  // dest 2nd arg
 
-		int k;
+		int k = 0;
 		vec3_t t_angles;
 		VectorCopy(bone.currentAngles, t_angles);
 		Create_Matrix(t_angles, &cur_rot);  //dest 2nd arg
@@ -4101,7 +4101,7 @@ static void G2_IKSolve(CGhoul2Info_v& ghoul2_v, const int g2_index, const float 
 
 		Inverse_Matrix(&ragBones[i], &N);  // dest 2nd arg
 
-		int k;
+		int k = 0;
 		vec3_t t_angles;
 		VectorCopy(bone.currentAngles, t_angles);
 		Create_Matrix(t_angles, &cur_rot);  //dest 2nd arg
@@ -4370,7 +4370,7 @@ static void G2_InitIK(CGhoul2Info_v& ghoul2_v, sharedRagDollUpdateParams_t* parm
 	G2_ConstructGhoulSkeleton(ghoul2_v, curTime, false, parms->scale);
 
 	// new base anim, unconscious flop
-	int pcj_flags;
+	int pcj_flags = 0;
 #if 0
 	vec3_t pcjMin, pcjMax;
 	VectorClear(pcjMin);

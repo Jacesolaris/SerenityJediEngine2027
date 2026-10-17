@@ -35,8 +35,8 @@ LAN_LoadCachedServers
 */
 void LAN_LoadCachedServers()
 {
-	int size;
-	fileHandle_t fileIn;
+	int size = 0;
+	fileHandle_t fileIn = 0;
 	cls.numglobalservers = cls_nummplayerservers = cls.numfavoriteservers = 0;
 	cls.numGlobalServerAddresses = 0;
 	if (FS_SV_FOpenFileRead("servercache.dat", &fileIn))
@@ -67,7 +67,7 @@ LAN_SaveServersToCache
 */
 void LAN_SaveServersToCache()
 {
-	int size;
+	int size = 0;
 	const fileHandle_t fileOut = FS_SV_FOpenFileWrite("servercache.dat");
 	FS_Write(&cls.numglobalservers, sizeof(int), fileOut);
 	FS_Write(&cls_nummplayerservers, sizeof(int), fileOut);
@@ -148,7 +148,7 @@ int LAN_AddServer(const int source, const char* name, const char* address)
 	}
 	if (servers && *count < max)
 	{
-		int i;
+		int i = 0;
 		NET_StringToAdr(address, &adr);
 		for (i = 0; i < *count; i++)
 		{

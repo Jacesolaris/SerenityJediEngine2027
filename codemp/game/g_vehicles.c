@@ -625,7 +625,7 @@ static void G_EjectDroidUnit(Vehicle_t* p_veh, const qboolean kill)
 // Eject the pilot from the vehicle.
 static qboolean Eject(Vehicle_t* p_veh, bgEntity_t* pEnt, const qboolean forceEject)
 {
-	gentity_t* parent;
+	gentity_t* parent = NULL;
 	vec3_t vExitPos;
 	gentity_t* ent = (gentity_t*)pEnt;
 
@@ -780,7 +780,7 @@ getItOutOfMe:
 	}
 	else
 	{
-		int i;
+		int i = 0;
 		// Look for this guy in the passenger list.
 		for (i = 0; i < p_veh->m_pVehicleInfo->maxPassengers; i++)
 		{
@@ -1060,7 +1060,7 @@ extern void ChangeWeapon(const gentity_t* ent, int new_weapon);
 static qboolean Initialize(Vehicle_t* p_veh)
 {
 	gentity_t* parent = (gentity_t*)p_veh->m_pParentEntity;
-	int i;
+	int i = 0;
 
 	if (!parent || !parent->client)
 		return qfalse;
@@ -1183,13 +1183,13 @@ static qboolean Update(Vehicle_t* p_veh, const usercmd_t* pUmcd)
 
 	playerState_t* parent_ps = parent->playerState;
 
-	gentity_t* pilotEnt;
+	gentity_t* pilotEnt = NULL;
 	vec3_t vVehAngles;
-	int i;
-	int prevSpeed;
-	int nextSpeed;
-	int curTime;
-	int halfMaxSpeed;
+	int i = 0;
+	int prevSpeed = 0;
+	int nextSpeed = 0;
+	int curTime = 0;
+	int halfMaxSpeed = 0;
 	qboolean linkHeld = qfalse;
 
 #ifdef _GAME
@@ -2121,7 +2121,7 @@ int G_ShipSurfaceForSurfName(const char* surfaceName)
 
 void G_SetVehDamageFlags(gentity_t* veh, const int shipSurf, const int damageLevel)
 {
-	int dmgFlag;
+	int dmgFlag = 0;
 	switch (damageLevel)
 	{
 	case 3: //destroyed
@@ -2211,7 +2211,7 @@ void G_VehicleSetDamageLocFlags(gentity_t* veh, const int impactDir, int deathPo
 	{
 		return;
 	}
-	int heavyDamagePoint, lightDamagePoint;
+	int heavyDamagePoint = 0, lightDamagePoint = 0;
 	switch (impactDir)
 	{
 	case SHIPSURF_FRONT:

@@ -227,7 +227,7 @@ qboolean CROFFSystem::InitROFF2(unsigned char* data, CROFF* obj)
 
 	if (obj->mMoveRotateList != nullptr)
 	{
-		int i;
+		int i = 0;
 		// Step past the header to get to the goods
 		auto roff_data = reinterpret_cast<TROFF2Entry*>(&hdr[1]);
 
@@ -254,7 +254,7 @@ qboolean CROFFSystem::InitROFF2(unsigned char* data, CROFF* obj)
 		if (obj->mNumNoteTracks)
 		{
 			size_t size = 0;
-			char* start;
+			char* start = nullptr;
 
 			char* ptr = start = reinterpret_cast<char*>(&roff_data[i]);
 
@@ -339,7 +339,7 @@ int CROFFSystem::Cache(const char* file, const qboolean isClient)
 {
 	int id = GetID(file);
 	unsigned char* data = nullptr;
-	CROFF* cROFF;
+	CROFF* cROFF = nullptr;
 
 	if (id)
 	{

@@ -451,8 +451,8 @@ Chooses a player start, deathmatch start, etc
 */
 gentity_t* SelectSpawnPoint(vec3_t avoid_point, const team_t team, vec3_t origin, vec3_t angles)
 {
-	gentity_t* spot;
-	gentity_t* nearestSpot;
+	gentity_t* spot = nullptr;
+	gentity_t* nearestSpot = nullptr;
 
 	if (level.spawntarget[0])
 	{
@@ -1545,8 +1545,8 @@ qboolean G_SetG2PlayerModelInfo(gentity_t* ent, const char* modelName, const cha
 	{
 		// we found the model ok
 		constexpr vec3_t angles = { 0, 0, 0 };
-		const char* token;
-		const char* p;
+		const char* token = nullptr;
+		const char* p = nullptr;
 
 		//Now turn on/off any surfaces
 		if (surf_off && surf_off[0])
@@ -3283,9 +3283,9 @@ extern void g_kill_box(gentity_t* ent);
 
 qboolean ClientSpawn(gentity_t* ent, SavedGameJustLoaded_e e_saved_game_just_loaded)
 {
-	int index;
-	gclient_t* client;
-	int i;
+	int index = 0;
+	gclient_t* client = nullptr;
+	int i = 0;
 	clientInfo_t saved_ci;
 	usercmd_t ucmd;
 	qboolean beam_in_effect = qfalse;
@@ -3366,7 +3366,7 @@ qboolean ClientSpawn(gentity_t* ent, SavedGameJustLoaded_e e_saved_game_just_loa
 	}
 	else
 	{
-		gentity_t* spawnPoint;
+		gentity_t* spawnPoint = nullptr;
 		int persistant[MAX_PERSISTANT]{};
 		clientSession_t savedSess;
 		clientPersistant_t saved;

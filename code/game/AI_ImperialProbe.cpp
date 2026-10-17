@@ -69,7 +69,7 @@ constexpr auto VELOCITY_DECAY = 0.85f;
 
 static void ImperialProbe_MaintainHeight()
 {
-	float dif;
+	float dif = 0.0f;
 	//	vec3_t	endPos;
 	//	trace_t	trace;
 
@@ -95,7 +95,7 @@ static void ImperialProbe_MaintainHeight()
 	}
 	else
 	{
-		const gentity_t* goal;
+		const gentity_t* goal = nullptr;
 
 		if (NPCInfo->goalEntity) // Is there a goal?
 		{
@@ -315,8 +315,8 @@ static void ImperialProbe_Ranged(const qboolean visible, const qboolean advance)
 {
 	if (TIMER_Done(NPC, "attackDelay")) // Attack?
 	{
-		int delay_max;
-		int delay_min;
+		int delay_max = 0;
+		int delay_min = 0;
 		if (g_spskill->integer == 0)
 		{
 			delay_min = 500;

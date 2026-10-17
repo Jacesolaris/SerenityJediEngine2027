@@ -714,7 +714,7 @@ static void CG_UpdateThirdPersonTargetDamp()
 		}
 		else
 		{
-			float ratio;
+			float ratio = 0.0f;
 			vec3_t targetdiff;
 			// Calculate the difference from the current position to the new one.
 			VectorSubtract(cameraIdealTarget, cameraCurTarget, targetdiff);
@@ -741,7 +741,7 @@ static void CG_UpdateThirdPersonTargetDamp()
 	}
 	else if (cg_thirdPersonTargetDamp.value >= 0.0)
 	{
-		float ratio;
+		float ratio = 0.0f;
 		vec3_t targetdiff;
 		// Calculate the difference from the current position to the new one.
 		VectorSubtract(cameraIdealTarget, cameraCurTarget, targetdiff);
@@ -859,7 +859,7 @@ static void CG_UpdateThirdPersonCameraDamp()
 	}
 	else if (dampfactor >= 0.0)
 	{
-		float ratio;
+		float ratio = 0.0f;
 		vec3_t locdiff;
 		// Calculate the difference from the current position to the new one.
 		VectorSubtract(cameraIdealLoc, cameraCurLoc, locdiff);
@@ -1446,12 +1446,12 @@ extern int PM_AnimLength(const int index, const animNumber_t anim);
 
 static void CG_OffsetFirstPersonView(const qboolean firstPersonSaber)
 {
-	float bob;
-	float delta;
-	float speed;
-	float f;
+	float bob = 0.0f;
+	float delta = 0.0f;
+	float speed = 0.0f;
+	float f = 0.0f;
 	vec3_t predictedVelocity;
-	int timeDelta;
+	int timeDelta = 0;
 
 	if (cg.snap->ps.pm_type == PM_INTERMISSION)
 	{
@@ -1473,7 +1473,7 @@ static void CG_OffsetFirstPersonView(const qboolean firstPersonSaber)
 
 	if (g_entities[0].client && PM_InKnockDown(&g_entities[0].client->ps))
 	{
-		float perc;
+		float perc = 0.0f;
 		const float anim_len = static_cast<float>(PM_AnimLength(g_entities[0].client->clientInfo.animFileIndex,
 			static_cast<animNumber_t>(g_entities[0].client->ps.
 				legsAnim)));
@@ -1500,7 +1500,7 @@ static void CG_OffsetFirstPersonView(const qboolean firstPersonSaber)
 	if (kickTime < 800)
 	{
 		//kicks are always 1 second long.  Deal with it.
-		float kick_perc;
+		float kick_perc = 0.0f;
 		if (kickTime <= 200)
 		{
 			//winding up
@@ -1784,7 +1784,7 @@ qboolean CG_CalcFOVFromX(float fov_x)
 
 float CG_ForceSpeedFOV()
 {
-	float fov;
+	float fov = 0.0f;
 	const float time_left = player->client->ps.forcePowerDuration[FP_SPEED] - cg.time;
 	const float length = FORCE_SPEED_DURATION_FORCE_LEVEL_3 * forceSpeedValue[player->client->ps.forcePowerLevel[
 		FP_SPEED]];
@@ -1826,7 +1826,7 @@ Fixed fov at intermissions, otherwise account for fov variable and zooms.
 */
 static qboolean CG_CalcFov()
 {
-	float fov_x;
+	float fov_x = 0.0f;
 	const qboolean doing_dash_action = cg.predictedPlayerState.communicatingflags & 1 << CF_DASHING ? qtrue : qfalse;
 
 	if (cg.predictedPlayerState.pm_type == PM_INTERMISSION)
@@ -1930,7 +1930,7 @@ static qboolean CG_CalcFov()
 
 					if (zoomSoundTime < cg.time)
 					{
-						sfxHandle_t snd;
+						sfxHandle_t snd = 0;
 
 						if (cg.zoomMode == 1)
 						{
@@ -2051,7 +2051,7 @@ void CG_SaberClashFlare()
 	}
 
 	vec4_t color; // RGBA: R_SetColor reads 4 floats (was vec3_t: ASan stack overflow)
-	int x, y;
+	int x = 0, y = 0;
 	float len = VectorNormalize(dif);
 
 	// clamp to a known range
@@ -2102,7 +2102,7 @@ void CG_SaberBlockFlare()
 	}
 
 	vec4_t color; // RGBA: R_SetColor reads 4 floats (was vec3_t: ASan stack overflow)
-	int x, y;
+	int x = 0, y = 0;
 	float len = VectorNormalize(dif);
 
 	// clamp to a known range
@@ -2195,7 +2195,7 @@ Sets cg.refdef view values
 */
 static qboolean CG_CalcViewValues()
 {
-	playerState_t* ps;
+	playerState_t* ps = nullptr;
 	//qboolean		viewEntIsHumanoid = qfalse;
 	qboolean viewEntIsCam = qfalse;
 
@@ -2835,7 +2835,7 @@ void CG_DrawActiveFrame(const int serverTime, const stereoFrame_t stereoView)
 			mPitchOverride = 0.01f;
 			mYawOverride = 0.0075f;
 		}
-		const Vehicle_t* p_veh;
+		const Vehicle_t* p_veh = nullptr;
 
 		// Mouse turns slower.
 		// (2026-10-13) not with the responsive fighter flight (g_fighterArcade): the aim moves at the normal mouse / look

@@ -77,13 +77,13 @@ void LoadJPG(const char* filename, unsigned char** pic, int* width, int* height)
 	*/
 	jpeg_error_mgr jerr;
 	/* More stuff */
-	JSAMPARRAY buffer;		/* Output row buffer */
-	unsigned int row_stride;  /* physical row width in output buffer */
-	unsigned int pixelcount, memcount;
-	unsigned int sindex, dindex;
-	byte* out;
+	JSAMPARRAY buffer = nullptr;		/* Output row buffer */
+	unsigned int row_stride = 0;  /* physical row width in output buffer */
+	unsigned int pixelcount = 0, memcount = 0;
+	unsigned int sindex = 0, dindex = 0;
+	byte* out = nullptr;
 	fileBuffer_t fbuffer{};
-	byte* buf;
+	byte* buf = nullptr;
 	/* In this example we want to open the input file before doing anything else,
 	* so that the setjmp() error recovery below can assume the file is open.
 	* VERY IMPORTANT: use "b" option to fopen() if you are on a machine that
@@ -330,9 +330,9 @@ size_t RE_SaveJPGToBuffer(byte* buffer, size_t bufSize, int quality, int image_w
 	jpeg_compress_struct cinfo{};
 	jpeg_error_mgr jerr;
 	JSAMPROW row_pointer[1]{};	/* pointer to JSAMPLE row[s] */
-	my_dest_ptr dest;
-	int row_stride;		/* physical row width in image buffer */
-	size_t outcount;
+	my_dest_ptr dest = nullptr;
+	int row_stride = 0;		/* physical row width in image buffer */
+	size_t outcount = 0;
 
 	/* Step 1: allocate and initialize JPEG compression object */
 

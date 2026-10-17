@@ -214,7 +214,7 @@ void* RE_RegisterModels_Malloc(const int iSize, void* pvDiskBufferIfJustLoaded, 
 		ModelBin.pModelDiskImage = pvDiskBufferIfJustLoaded;
 		ModelBin.iAllocSize = iSize;
 
-		int iCheckSum;
+		int iCheckSum = 0;
 		if (ri.FS_FileIsInPAK(sModelName, &iCheckSum) == 1)
 		{
 			ModelBin.iPAKFileCheckSum = iCheckSum; // else ModelBin's constructor will leave it as -1
@@ -264,7 +264,7 @@ void* RE_RegisterServerModels_Malloc(const int iSize, void* pvDiskBufferIfJustLo
 		ModelBin.pModelDiskImage = pvDiskBufferIfJustLoaded;
 		ModelBin.iAllocSize = iSize;
 
-		int iCheckSum;
+		int iCheckSum = 0;
 		if (ri.FS_FileIsInPAK(sModelName, &iCheckSum) == 1)
 		{
 			ModelBin.iPAKFileCheckSum = iCheckSum; // else ModelBin's constructor will leave it as -1
@@ -631,9 +631,9 @@ ServerLoadMDXA - load a Ghoul 2 animation file
 */
 static qboolean ServerLoadMDXA(model_t* mod, void* buffer, const char* mod_name, qboolean& bAlreadyCached)
 {
-	mdxaHeader_t* pinmodel, * mdxa;
-	int version;
-	int size;
+	mdxaHeader_t* pinmodel = nullptr, * mdxa = nullptr;
+	int version = 0;
+	int size = 0;
 
 #if 0 //#ifndef _M_IX86
 	int					j, k, i;
@@ -945,13 +945,13 @@ extern int OldToNewRemapTable[72];
 
 static qboolean ServerLoadMDXM(model_t* mod, void* buffer, const char* mod_name, qboolean& bAlreadyCached)
 {
-	int i, j;
-	mdxmHeader_t* pinmodel, * mdxm;
-	mdxmLOD_t* lod;
-	mdxmSurface_t* surf;
-	int version;
-	int size;
-	mdxmSurfHierarchy_t* surfInfo;
+	int i = 0, j = 0;
+	mdxmHeader_t* pinmodel = nullptr, * mdxm = nullptr;
+	mdxmLOD_t* lod = nullptr;
+	mdxmSurface_t* surf = nullptr;
+	int version = 0;
+	int size = 0;
+	mdxmSurfHierarchy_t* surfInfo = nullptr;
 
 #if 0 //#ifndef _M_IX86
 	int					k;
@@ -1121,9 +1121,9 @@ Same as RE_RegisterModel, except used by the server to handle ghoul2 instance mo
 */
 qhandle_t RE_RegisterServerModel(const char* name)
 {
-	model_t* mod;
+	model_t* mod = nullptr;
 	unsigned* buf = nullptr;
-	int lod;
+	int lod = 0;
 	qboolean loaded;
 	/*
 	Ghoul2 Insert End
@@ -1288,11 +1288,11 @@ asked for again.
 */
 static qhandle_t RE_RegisterModel_Actual(const char* name)
 {
-	model_t* mod;
+	model_t* mod = nullptr;
 	unsigned* buf = nullptr;
-	int lod;
+	int lod = 0;
 	qboolean loaded;
-	modelHash_t* mh;
+	modelHash_t* mh = nullptr;
 	/*
 	Ghoul2 Insert End
 	*/
@@ -1521,11 +1521,11 @@ R_LoadMD3
 */
 static qboolean R_LoadMD3(model_t* mod, int lod, void* buffer, const char* name, qboolean& bAlreadyCached)
 {
-	int j;
-	md3Header_t* pinmodel;
-	md3Surface_t* surf;
-	int version;
-	int size;
+	int j = 0;
+	md3Header_t* pinmodel = nullptr;
+	md3Surface_t* surf = nullptr;
+	int version = 0;
+	int size = 0;
 
 #if 0 //#ifndef _M_IX86
 	md3Frame_t* frame;

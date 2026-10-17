@@ -739,7 +739,7 @@ static void Workshop_Set_Weapon_f(gentity_t* ent)
 		gi.Printf("usage: workshop_set_weapon <weapon name or 'me'>\n");
 		return;
 	}
-	int weaponNum;
+	int weaponNum = 0;
 	if (!Q_stricmp(gi.argv(1), "me"))
 	{
 		weaponNum = g_entities[0].s.weapon;
@@ -1202,7 +1202,7 @@ static void Workshop_Notarget_f(gentity_t* ent)
 static void Workshop_Undying_f(gentity_t* ent)
 {
 	gentity_t* selected = &g_entities[selectedAI];
-	const char* msg;
+	const char* msg = nullptr;
 	if (selected->flags & FL_UNDYING)
 	{
 		msg = "undead mode OFF\n";
@@ -1219,7 +1219,7 @@ static void Workshop_Undying_f(gentity_t* ent)
 static void Workshop_Shielding_f(gentity_t* ent)
 {
 	gentity_t* selected = &g_entities[selectedAI];
-	const char* msg;
+	const char* msg = nullptr;
 	if (selected->flags & FL_SHIELDED)
 	{
 		msg = "shielded mode OFF\n";

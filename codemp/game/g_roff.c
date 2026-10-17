@@ -401,9 +401,9 @@ int G_LoadRoffs(const char* fileName)
 	// FIX: move huge buffer off the stack
 	static char data[ROFF_INFO_SIZENEW];
 
-	fileHandle_t f;
-	roff_hdr2_t* header;
-	int len, roff_id = 0;
+	fileHandle_t f = 0;
+	roff_hdr2_t* header = NULL;
+	int len = 0, roff_id = 0;
 
 	// Before even bothering with all of this, make sure we have a place to store it.
 	if (num_roffs >= MAX_ROFFSNEW)

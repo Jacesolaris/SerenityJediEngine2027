@@ -145,8 +145,8 @@ static void ProcessMoveCommands(Vehicle_t* p_veh)
 	/************************************************************************************/
 
 	//Client sets ucmds and such for speed alterations
-	float speedInc, speedIdleDec, speedIdle, /*speedIdleAccel, */speedMin, speedMax;
-	float fWalkSpeedMax;
+	float speedInc = 0.0f, speedIdleDec = 0.0f, speedIdle = 0.0f, /*speedIdleAccel, */speedMin = 0.0f, speedMax = 0.0f;
+	float fWalkSpeedMax = 0.0f;
 	bgEntity_t* parent = p_veh->m_pParentEntity;
 
 	playerState_t* parent_ps = &parent->client->ps;
@@ -246,7 +246,7 @@ static void ProcessOrientCommands(Vehicle_t* p_veh)
 	/********************************************************************************/
 
 	bgEntity_t* parent = p_veh->m_pParentEntity;
-	playerState_t* parent_ps, * rider_ps;
+	playerState_t* parent_ps = nullptr, * rider_ps = nullptr;
 
 	gentity_t* rider = parent->owner;
 
@@ -311,7 +311,7 @@ static void ProcessOrientCommands(Vehicle_t* p_veh)
 static void AnimateVehicle(Vehicle_t* p_veh)
 {
 	animNumber_t Anim;
-	int iFlags, i_blend;
+	int iFlags = 0, i_blend = 0;
 	auto parent = p_veh->m_pParentEntity;
 
 	// We're dead (boarding is reused here so I don't have to make another variable :-).

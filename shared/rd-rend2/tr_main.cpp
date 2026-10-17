@@ -52,7 +52,7 @@ R_CompareVert
 */
 static qboolean R_CompareVert(srfVert_t* v1, srfVert_t* v2, qboolean checkST)
 {
-	int             i;
+	int             i = 0;
 
 	for (i = 0; i < 3; i++)
 	{
@@ -97,7 +97,7 @@ static void R_CalcTangentsForTriangle(vec3_t tangent, vec3_t bitangent,
 	const vec3_t v0, const vec3_t v1, const vec3_t v2,
 	const vec2_t t0, const vec2_t t1, const vec2_t t2)
 {
-	int             i;
+	int             i = 0;
 	vec3_t          planes[3]{};
 	vec3_t          u, v;
 
@@ -296,8 +296,8 @@ http://www.terathon.com/code/tangent.html
 void R_CalcTexDirs(vec3_t sdir, vec3_t tdir, const vec3_t v1, const vec3_t v2,
 	const vec3_t v3, const vec2_t w1, const vec2_t w2, const vec2_t w3)
 {
-	float			x1, x2, y1, y2, z1, z2;
-	float			s1, s2, t1, t2, r;
+	float			x1 = 0.0f, x2 = 0.0f, y1 = 0.0f, y2 = 0.0f, z1 = 0.0f, z2 = 0.0f;
+	float			s1 = 0.0f, s2 = 0.0f, t1 = 0.0f, t2 = 0.0f, r = 0.0f;
 
 	x1 = v2[0] - v1[0];
 	x2 = v3[0] - v1[0];
@@ -320,7 +320,7 @@ void R_CalcTexDirs(vec3_t sdir, vec3_t tdir, const vec3_t v1, const vec3_t v2,
 void R_CalcTbnFromNormalAndTexDirs(vec3_t tangent, vec3_t bitangent, vec3_t normal, vec3_t sdir, vec3_t tdir)
 {
 	vec3_t n_cross_t;
-	float n_dot_t, handedness;
+	float n_dot_t = 0.0f, handedness = 0.0f;
 
 	// Gram-Schmidt orthogonalize
 	n_dot_t = DotProduct(normal, sdir);
@@ -338,8 +338,8 @@ void R_CalcTbnFromNormalAndTexDirs(vec3_t tangent, vec3_t bitangent, vec3_t norm
 
 qboolean R_CalcTangentVectors(srfVert_t* dv[3])
 {
-	int             i;
-	float           bb, s, t;
+	int             i = 0;
+	float           bb = 0.0f, s = 0.0f, t = 0.0f;
 	vec3_t          bary{};
 
 	/* calculate barycentric basis for the triangle */
@@ -457,7 +457,7 @@ int R_CullLocalBox(const vec3_t bounds[2])
 
 	return CULL_CLIP;		// partially clipped
 #else
-	int             j;
+	int             j = 0;
 	vec3_t          transformed;
 	vec3_t          v{};
 	vec3_t          worldBounds[2]{};
@@ -493,10 +493,10 @@ Returns CULL_IN, CULL_CLIP, or CULL_OUT
 =================
 */
 int R_CullBox(vec3_t worldBounds[2]) {
-	int             i;
-	cplane_t* frust;
+	int             i = 0;
+	cplane_t* frust = nullptr;
 	qboolean        anyClip;
-	int             r, numPlanes;
+	int             r = 0, numPlanes = 0;
 
 	numPlanes = (tr.viewParms.flags & VPF_FARPLANEFRUSTUM) ? 5 : 4;
 
@@ -546,9 +546,9 @@ int R_CullLocalPointAndRadius(const vec3_t pt, const float radius)
 */
 int R_CullPointAndRadiusEx(const vec3_t pt, float radius, const cplane_t* frustum, int numPlanes)
 {
-	int		i;
-	float	dist;
-	const cplane_t* frust;
+	int		i = 0;
+	float	dist = 0.0f;
+	const cplane_t* frust = nullptr;
 	qboolean mightBeClipped = qfalse;
 
 	if (r_nocull->integer) {
@@ -631,7 +631,7 @@ R_TransformModelToClip
 */
 void R_TransformModelToClip(const vec3_t src, const float* modelMatrix, const float* projectionMatrix, vec4_t eye, vec4_t dst)
 {
-	int i;
+	int i = 0;
 
 	for (i = 0; i < 4; i++) {
 		eye[i] =
@@ -676,7 +676,7 @@ myGlMultMatrix
 ==========================
 */
 static void myGlMultMatrix(const float* a, const float* b, float* out) {
-	int		i, j;
+	int		i = 0, j = 0;
 
 	for (i = 0; i < 4; i++) {
 		for (j = 0; j < 4; j++) {
@@ -701,7 +701,7 @@ Called by both the front end and the back end
 void R_RotateForEntity(const trRefEntity_t* ent, const viewParms_t* viewParms, orientationr_t* ori)
 {
 	vec3_t	delta;
-	float	axisLength;
+	float	axisLength = 0.0f;
 
 	if (ent->e.reType != RT_MODEL || ent == &tr.worldEntity) {
 		*ori = viewParms->world;
@@ -810,7 +810,7 @@ static void R_RotateForViewer(orientationr_t* ori, viewParms_t* viewParms)
 static void R_SetFarClip(viewParms_t* viewParms, const trRefdef_t* refdef)
 {
 	float	farthestCornerDistance = 0;
-	int		i;
+	int		i = 0;
 
 	// if not rendering the world (icons, menus, etc)
 	// set a 2k far clip plane
@@ -834,7 +834,7 @@ static void R_SetFarClip(viewParms_t* viewParms, const trRefdef_t* refdef)
 	for (i = 0; i < 8; i++)
 	{
 		vec3_t v{};
-		float distance;
+		float distance = 0.0f;
 
 		if (i & 1)
 		{
@@ -888,8 +888,8 @@ the projection matrix.
 static void R_SetupFrustum(viewParms_t* dest, float xmin, float xmax, float ymax, float zProj, float zFar, float stereoSep)
 {
 	vec3_t ofsorigin;
-	float oppleg, adjleg, length;
-	int i;
+	float oppleg = 0.0f, adjleg = 0.0f, length = 0.0f;
+	int i = 0;
 
 	if (stereoSep == 0 && xmin == -xmax)
 	{
@@ -960,8 +960,8 @@ R_SetupProjection
 */
 void R_SetupProjection(viewParms_t* dest, float zProj, float zFar, qboolean computeFrustum)
 {
-	float	xmin, xmax, ymin, ymax;
-	float	width, height, stereoSep = r_stereoSeparation->value;
+	float	xmin = 0.0f, xmax = 0.0f, ymin = 0.0f, ymax = 0.0f;
+	float	width = 0.0f, height = 0.0f, stereoSep = r_stereoSeparation->value;
 
 	/*
 	 * offset the view origin of the viewer for stereo rendering
@@ -1016,7 +1016,7 @@ Sets the z-component transformation part in the projection matrix
 */
 static void R_SetupProjectionZ(viewParms_t* dest)
 {
-	float zNear, zFar, depth;
+	float zNear = 0.0f, zFar = 0.0f, depth = 0.0f;
 
 	zNear = dest->zNear;
 	zFar = dest->zFar;
@@ -1068,9 +1068,9 @@ R_SetupProjectionOrtho
 */
 static void R_SetupProjectionOrtho(viewParms_t* dest, const vec3_t viewBounds[2])
 {
-	float xmin, xmax, ymin, ymax, znear, zfar;
+	float xmin = 0.0f, xmax = 0.0f, ymin = 0.0f, ymax = 0.0f, znear = 0.0f, zfar = 0.0f;
 	//viewParms_t *dest = &tr.viewParms;
-	int i;
+	int i = 0;
 	vec3_t pop;
 
 	// Quake3:   Projection:
@@ -1144,10 +1144,10 @@ R_MirrorPoint
 */
 static void R_MirrorPoint(vec3_t in, const orientation_t* surface, const orientation_t* camera, vec3_t out)
 {
-	int		i;
+	int		i = 0;
 	vec3_t	local;
 	vec3_t	transformed;
-	float	d;
+	float	d = 0.0f;
 
 	VectorSubtract(in, surface->origin, local);
 
@@ -1162,8 +1162,8 @@ static void R_MirrorPoint(vec3_t in, const orientation_t* surface, const orienta
 
 static void R_MirrorVector(vec3_t in, const orientation_t* surface, const orientation_t* camera, vec3_t out)
 {
-	int		i;
-	float	d;
+	int		i = 0;
+	float	d = 0.0f;
 
 	VectorClear(out);
 	for (i = 0; i < 3; i++) {
@@ -1179,9 +1179,9 @@ R_PlaneForSurface
 */
 static void R_PlaneForSurface(surfaceType_t* surfType, cplane_t* plane)
 {
-	srfBspSurface_t* tri;
-	srfPoly_t* poly;
-	srfVert_t* v1, * v2, * v3;
+	srfBspSurface_t* tri = nullptr;
+	srfPoly_t* poly = nullptr;
+	srfVert_t* v1 = nullptr, * v2 = nullptr, * v3 = nullptr;
 	vec4_t			plane4;
 
 	if (!surfType) {
@@ -1227,10 +1227,10 @@ Returns qtrue if it should be mirrored
 */
 static qboolean R_GetPortalOrientations(const msurface_t* surf, const int entityNum, orientation_t* surface, orientation_t* camera, vec3_t pvsOrigin, qboolean* mirror)
 {
-	int			i;
+	int			i = 0;
 	cplane_t	originalPlane, plane{};
-	trRefEntity_t* e;
-	float		d;
+	trRefEntity_t* e = nullptr;
+	float		d = 0.0f;
 	vec3_t		transformed;
 
 	// create plane axis for the portal we are seeing
@@ -1346,10 +1346,10 @@ static qboolean R_GetPortalOrientations(const msurface_t* surf, const int entity
 
 static qboolean IsMirror(const msurface_t* surface, const int entityNum)
 {
-	int			i;
+	int			i = 0;
 	cplane_t	originalPlane, plane{};
-	trRefEntity_t* e;
-	float		d;
+	trRefEntity_t* e = nullptr;
+	float		d = 0.0f;
 
 	// create plane axis for the portal we are seeing
 	R_PlaneForSurface(surface->data, &originalPlane);
@@ -1406,9 +1406,9 @@ static qboolean IsMirror(const msurface_t* surface, const int entityNum)
 */
 static qboolean SurfIsOffscreen(const msurface_t* surface, int entityNum, vec4_t clipDest[128], int* numVertices) {
 	float shortest = 100000000;
-	int numTriangles;
+	int numTriangles = 0;
 	vec4_t clip, eye;
-	int i;
+	int i = 0;
 	unsigned int pointOr = 0;
 	unsigned int pointAnd = (unsigned int)~0;
 
@@ -1429,7 +1429,7 @@ static qboolean SurfIsOffscreen(const msurface_t* surface, int entityNum, vec4_t
 
 	for (i = 0; i < tess.numVertexes; i++)
 	{
-		int j;
+		int j = 0;
 		unsigned int pointFlags = 0;
 
 		R_TransformModelToClip(tess.xyz[i], tr.viewParms.world.modelViewMatrix, tr.viewParms.projectionMatrix, eye, clip);
@@ -1467,7 +1467,7 @@ static qboolean SurfIsOffscreen(const msurface_t* surface, int entityNum, vec4_t
 	{
 		vec3_t normal, tNormal;
 
-		float len;
+		float len = 0.0f;
 
 		VectorSubtract(tess.xyz[tess.indexes[i]], tr.viewParms.ori.origin, normal);
 
@@ -1513,7 +1513,7 @@ Returns qtrue if another view has been rendered
 */
 static qboolean R_MirrorViewBySurface(msurface_t* surface, int entityNum) {
 	vec4_t			clipDest[128];
-	int				numVertices;
+	int				numVertices = 0;
 	viewParms_t		newParms;
 	viewParms_t		oldParms;
 	orientation_t	surfaceOri, camera;
@@ -1656,9 +1656,9 @@ See if a sprite is inside a fog volume
 */
 static int R_SpriteFogNum(const trRefEntity_t* ent)
 {
-	int				i, j = 0;
-	float			frameRadius;
-	fog_t* fog;
+	int				i = 0, j = 0;
+	float			frameRadius = 0.0f;
+	fog_t* fog = nullptr;
 	vec3_t			localOrigin;
 
 	if (tr.refdef.rdflags & RDF_NOWORLDMODEL) {
@@ -1729,7 +1729,7 @@ static QINLINE void R_Radix(const int byte, const int size, drawSurf_t* source, 
 {
 	int           count[256] = { 0 };
 	int           index[256]{};
-	int           i;
+	int           i = 0;
 	unsigned char* sortKey = NULL;
 	unsigned char* end = NULL;
 
@@ -1814,8 +1814,8 @@ R_AddDrawSurf
 */
 void R_AddDrawSurf(surfaceType_t* surface, int entityNum, const shader_t* shader, int fogIndex, const int dlightMap, int postRender, int cubemap)
 {
-	int index;
-	drawSurf_t* surf;
+	int index = 0;
+	drawSurf_t* surf = nullptr;
 	const shader_t* drawShader = (shader->remappedShader) ? shader->remappedShader : shader;
 
 	if (tr.refdef.rdflags & RDF_NOFOG)
@@ -1884,7 +1884,7 @@ void R_SortAndSubmitDrawSurfs(drawSurf_t* drawSurfs, int numDrawSurfs) {
 
 static void R_AddEntitySurface(const trRefdef_t* refdef, trRefEntity_t* ent, int entityNum)
 {
-	shader_t* shader;
+	shader_t* shader = nullptr;
 
 	ent->needDlights = qfalse;
 
@@ -2082,7 +2082,7 @@ R_DebugPolygon
 */
 static void R_DebugPolygon(const int color, const int numPoints, const float* points)
 {
-	int		i;
+	int		i = 0;
 
 	GL_State(GLS_DEPTHMASK_TRUE | GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE);
 
@@ -2161,12 +2161,12 @@ void R_RenderView(const viewParms_t* parms)
 
 void R_RenderDlightCubemaps()
 {
-	int i;
+	int i = 0;
 
 	for (i = 0; i < tr.refdef.num_dlights; i++)
 	{
 		viewParms_t		shadowParms;
-		int j;
+		int j = 0;
 
 		Com_Memset(&shadowParms, 0, sizeof(shadowParms));
 
@@ -2294,7 +2294,7 @@ void R_SetupViewParmsForOrthoRendering(
 
 void R_SetupPshadowMaps(trRefdef_t* refdef)
 {
-	int i;
+	int i = 0;
 
 	// first, make a list of shadows
 	for (i = 0; i < refdef->num_entities; i++)
@@ -2314,7 +2314,7 @@ void R_SetupPshadowMaps(trRefdef_t* refdef)
 			float radius = 0.0f;
 			float scale = 1.0f;
 			vec3_t diff;
-			int j;
+			int j = 0;
 
 			if (!model)
 				continue;
@@ -2726,7 +2726,7 @@ void R_GatherFrameViews(trRefdef_t* refdef)
 			for (int i = 0; i < refdef->num_dlights; i++)
 			{
 				viewParms_t		shadowParms;
-				int j;
+				int j = 0;
 
 				Com_Memset(&shadowParms, 0, sizeof(shadowParms));
 
@@ -2853,7 +2853,7 @@ void R_GatherFrameViews(trRefdef_t* refdef)
 					R_RotateForViewer(&tr.viewParms.world, &tr.viewParms);
 
 					{
-						float xmin, xmax, ymin, ymax, znear, zfar;
+						float xmin = 0.0f, xmax = 0.0f, ymin = 0.0f, ymax = 0.0f, znear = 0.0f, zfar = 0.0f;
 						viewParms_t* dest = &tr.viewParms;
 						vec3_t pop;
 
@@ -2926,8 +2926,8 @@ void R_GatherFrameViews(trRefdef_t* refdef)
 		{
 			vec3_t lightViewAxis[3]{};
 			vec3_t lightOrigin;
-			float splitZNear, splitZFar, splitBias;
-			float viewZNear, viewZFar;
+			float splitZNear = 0.0f, splitZFar = 0.0f, splitBias = 0.0f;
+			float viewZNear = 0.0f, viewZFar = 0.0f;
 			vec3_t lightviewBounds[2]{};
 
 			viewZNear = r_shadowCascadeZNear->value;
@@ -2976,7 +2976,7 @@ void R_GatherFrameViews(trRefdef_t* refdef)
 					ClearBounds(lightviewBounds[0], lightviewBounds[1]);
 
 					vec3_t point, base;
-					float lx, ly, radius;
+					float lx = 0.0f, ly = 0.0f, radius = 0.0f;
 					vec3_t splitCenter, frustrumPoint0, frustrumPoint7;
 
 					VectorSet(splitCenter, 0.f, 0.f, 0.f);

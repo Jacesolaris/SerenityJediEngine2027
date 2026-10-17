@@ -53,7 +53,7 @@ surfaceInfo_t* G2_FindOverrideSurface(int surfaceNum, surfaceInfo_v& surfaceList
 int G2_IsSurfaceLegal(void* mod, const char* surfaceName, int* flags)
 {
 	// damn include file dependancies
-	mdxmSurfHierarchy_t* surf;
+	mdxmSurfHierarchy_t* surf = nullptr;
 	model_t* mod_m = (model_t*)mod;
 	mdxmHeader_t* mdxm = mod_m->data.glm->header;
 	surf = (mdxmSurfHierarchy_t*)((byte*)mdxm + mdxm->ofsSurfHierarchy);
@@ -89,7 +89,7 @@ mdxmSurface_t* G2_FindSurface(CGhoul2Info* ghlInfo, surfaceInfo_v& slist, const 
 	// find the model we want
 	model_t* mod = (model_t*)ghlInfo->currentModel;
 	mdxmHierarchyOffsets_t* surfIndexes = (mdxmHierarchyOffsets_t*)((byte*)mod->data.glm->header + sizeof(mdxmHeader_t));
-	mdxmSurfHierarchy_t* surfInfo;
+	mdxmSurfHierarchy_t* surfInfo = nullptr;
 
 	// did we find a ghoul 2 model or not?
 	if (!mod->data.glm || !mod->data.glm->header)
@@ -136,7 +136,7 @@ qboolean G2_SetSurfaceOnOff(CGhoul2Info* ghlInfo, surfaceInfo_v& slist, const ch
 {
 	int					surfIndex = -1;
 	surfaceInfo_t		temp_slist_entry;
-	mdxmSurface_t* surf;
+	mdxmSurface_t* surf = nullptr;
 	// find the model we want
 	model_t* mod = (model_t*)ghlInfo->currentModel;
 
@@ -163,7 +163,7 @@ qboolean G2_SetSurfaceOnOff(CGhoul2Info* ghlInfo, surfaceInfo_v& slist, const ch
 	else
 	{
 		// ok, not in the list already - in that case, lets verify this surface exists in the model mesh
-		int	flags;
+		int	flags = 0;
 		int surfaceNum = G2_IsSurfaceLegal((void*)mod, surfaceName, &flags);
 		if (surfaceNum != -1)
 		{
@@ -187,7 +187,7 @@ qboolean G2_SetSurfaceOnOff(CGhoul2Info* ghlInfo, surfaceInfo_v& slist, const ch
 
 void G2_SetSurfaceOnOffFromSkin(CGhoul2Info* ghlInfo, qhandle_t renderSkin)
 {
-	int j;
+	int j = 0;
 	const skin_t* skin = R_GetSkinByHandle(renderSkin);
 
 	ghlInfo->mSlist.clear();	//remove any overrides we had before.
@@ -202,7 +202,7 @@ void G2_SetSurfaceOnOffFromSkin(CGhoul2Info* ghlInfo, qhandle_t renderSkin)
 		}
 		else
 		{
-			int	flags;
+			int	flags = 0;
 			int surfaceNum = G2_IsSurfaceLegal((void*)ghlInfo->currentModel, skin->surfaces[j]->name, &flags);
 			if ((surfaceNum != -1) && (!(flags & G2SURFACEFLAG_OFF)))	//only turn on if it's not an "_off" surface
 			{
@@ -253,7 +253,7 @@ int G2_IsSurfaceOff(CGhoul2Info* ghlInfo, surfaceInfo_v& slist, const char* surf
 
 static void G2_FindRecursiveSurface(model_t* currentModel, int surfaceNum, surfaceInfo_v& rootList, int* activeSurfaces)
 {
-	int						i;
+	int						i = 0;
 	mdxmSurface_t* surface = (mdxmSurface_t*)G2_FindSurface((void*)currentModel, surfaceNum, 0);
 	mdxmHierarchyOffsets_t* surfIndexes = (mdxmHierarchyOffsets_t*)((byte*)currentModel->data.glm->header + sizeof(mdxmHeader_t));
 	mdxmSurfHierarchy_t* surfInfo = (mdxmSurfHierarchy_t*)((byte*)surfIndexes + surfIndexes->offsets[surface->thisSurfaceIndex]);
@@ -321,9 +321,9 @@ static void G2_RemoveRedundantGeneratedSurfaces(surfaceInfo_v& slist, int* activ
 
 qboolean G2_SetRootSurface(CGhoul2Info_v& ghoul2, const int modelIndex, const char* surfaceName)
 {
-	int					surf;
-	int					flags;
-	int* activeSurfaces, * activeBones;
+	int					surf = 0;
+	int					flags = 0;
+	int* activeSurfaces = nullptr, * activeBones = nullptr;
 
 	assert(ghoul2[modelIndex].currentModel && ghoul2[modelIndex].animModel);
 
@@ -501,7 +501,7 @@ int G2_GetParentSurface(CGhoul2Info* ghlInfo, const int index)
 int G2_GetSurfaceIndex(CGhoul2Info* ghlInfo, const char* surfaceName)
 {
 	model_t* mod = (model_t*)ghlInfo->currentModel;
-	int			flags;
+	int			flags = 0;
 
 	return G2_IsSurfaceLegal(mod, surfaceName, &flags);
 }
@@ -529,9 +529,9 @@ int G2_IsSurfaceRendered(CGhoul2Info* ghlInfo, const char* surfaceName, surfaceI
 		// walk the surface hierarchy up until we hit the root
 		while (surfNum != -1)
 		{
-			const mdxmSurface_t* parentSurf;
+			const mdxmSurface_t* parentSurf = nullptr;
 			int						parentFlags = 0;
-			const mdxmSurfHierarchy_t* parentSurfInfo;
+			const mdxmSurfHierarchy_t* parentSurfInfo = nullptr;
 
 			parentSurfInfo = (mdxmSurfHierarchy_t*)((byte*)surfIndexes + surfIndexes->offsets[surfNum]);
 

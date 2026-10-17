@@ -402,7 +402,7 @@ void UI_ParseScriptedSaber(char* script, int snum)
 
 static void rgb_adjust_scipted_saber_color(vec3_t color, const int n)
 {
-	int actual;
+	int actual = 0;
 	const int time = uiInfo.uiDC.realTime;
 
 	if (!ScriptedStartTime[n])
@@ -436,7 +436,7 @@ static void rgb_adjust_scipted_saber_color(vec3_t color, const int n)
 
 static void RGB_RandomRGB(vec3_t c)
 {
-	int i;
+	int i = 0;
 	for (i = 0; i < 3; i++)
 		c[i] = 0;
 
@@ -452,7 +452,7 @@ vec3_t PimpColorTo[2];
 
 static void RGB_AdjustPimpSaberColor(vec3_t color, int n)
 {
-	int time;
+	int time = 0;
 
 	if (!PimpStartTime[n])
 	{
@@ -484,7 +484,7 @@ static void UI_DoSaber(vec3_t origin, vec3_t dir, float length, float lengthMax,
 	vec3_t		mid, rgb = { 1,1,1 };
 	qhandle_t	blade = 0, glow = 0;
 	refEntity_t saber;
-	float radiusmult;
+	float radiusmult = 0.0f;
 
 	if (length < 0.5f)
 	{
@@ -534,7 +534,7 @@ static void UI_DoSaber(vec3_t origin, vec3_t dir, float length, float lengthMax,
 		break;
 	case SABER_RGB:
 	{
-		int i;
+		int i = 0;
 		if (snum == 0)
 			VectorSet(rgb, ui_sab1_r.value, ui_sab1_g.value, ui_sab1_b.value);
 		else
@@ -663,7 +663,7 @@ static void UI_DobattlefrontSaber(vec3_t origin, vec3_t dir, float length, float
 	vec3_t	    mid, rgb = { 1,1,1 };
 	qhandle_t	glow = 0, blade = 0;
 	refEntity_t saber;
-	float	    radiusmult, effectradius, coreradius;
+	float	    radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
 
 	if (length < 0.5f)
 	{
@@ -712,7 +712,7 @@ static void UI_DobattlefrontSaber(vec3_t origin, vec3_t dir, float length, float
 		break;
 	case SABER_RGB:
 	{
-		int i;
+		int i = 0;
 		if (snum == 0)
 			VectorSet(rgb, ui_sab1_r.value, ui_sab1_g.value, ui_sab1_b.value);
 		else
@@ -791,7 +791,7 @@ static void UI_DobattlefrontSaber(vec3_t origin, vec3_t dir, float length, float
 				saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 			else
 			{
-				int i1;
+				int i1 = 0;
 				for (i1 = 0; i1 < 3; i1++)
 					saber.shaderRGBA[i1] = rgb[i1] * 255;
 				saber.shaderRGBA[3] = 255;
@@ -819,7 +819,7 @@ static void UI_DoSFXSaber(vec3_t origin, vec3_t dir, float length, float lengthM
 	vec3_t	    mid, rgb = { 1,1,1 };
 	qhandle_t	glow = 0, blade = 0;
 	refEntity_t saber;
-	float	    radiusmult, effectradius, coreradius;
+	float	    radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
 
 	if (length < 0.5f)
 	{
@@ -868,7 +868,7 @@ static void UI_DoSFXSaber(vec3_t origin, vec3_t dir, float length, float lengthM
 		break;
 	case SABER_RGB:
 	{
-		int i;
+		int i = 0;
 		if (snum == 0)
 			VectorSet(rgb, ui_sab1_r.value, ui_sab1_g.value, ui_sab1_b.value);
 		else
@@ -945,7 +945,7 @@ static void UI_DoSFXSaber(vec3_t origin, vec3_t dir, float length, float lengthM
 				saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 			else
 			{
-				int i1;
+				int i1 = 0;
 				for (i1 = 0; i1 < 3; i1++)
 					saber.shaderRGBA[i1] = rgb[i1] * 255;
 				saber.shaderRGBA[3] = 255;
@@ -973,7 +973,7 @@ static void UI_DoEp1Saber(vec3_t origin, vec3_t dir, float length, float lengthM
 	vec3_t	    mid, rgb = { 1,1,1 };
 	qhandle_t	glow = 0, blade = 0;
 	refEntity_t saber;
-	float	    radiusmult, effectradius, coreradius;
+	float	    radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
 
 	if (length < 0.5f)
 	{
@@ -1022,7 +1022,7 @@ static void UI_DoEp1Saber(vec3_t origin, vec3_t dir, float length, float lengthM
 		break;
 	case SABER_RGB:
 	{
-		int i;
+		int i = 0;
 		if (snum == 0)
 			VectorSet(rgb, ui_sab1_r.value, ui_sab1_g.value, ui_sab1_b.value);
 		else
@@ -1100,7 +1100,7 @@ static void UI_DoEp1Saber(vec3_t origin, vec3_t dir, float length, float lengthM
 				saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 			else
 			{
-				int i1;
+				int i1 = 0;
 				for (i1 = 0; i1 < 3; i1++)
 					saber.shaderRGBA[i1] = rgb[i1] * 255;
 				saber.shaderRGBA[3] = 255;
@@ -1128,7 +1128,7 @@ static void UI_DoEp2Saber(vec3_t origin, vec3_t dir, float length, float lengthM
 	vec3_t	    mid, rgb = { 1,1,1 };
 	qhandle_t	glow = 0, blade = 0;
 	refEntity_t saber;
-	float	    radiusmult, effectradius, coreradius;
+	float	    radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
 
 	if (length < 0.5f)
 	{
@@ -1177,7 +1177,7 @@ static void UI_DoEp2Saber(vec3_t origin, vec3_t dir, float length, float lengthM
 		break;
 	case SABER_RGB:
 	{
-		int i;
+		int i = 0;
 		if (snum == 0)
 			VectorSet(rgb, ui_sab1_r.value, ui_sab1_g.value, ui_sab1_b.value);
 		else
@@ -1255,7 +1255,7 @@ static void UI_DoEp2Saber(vec3_t origin, vec3_t dir, float length, float lengthM
 				saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 			else
 			{
-				int i1;
+				int i1 = 0;
 				for (i1 = 0; i1 < 3; i1++)
 					saber.shaderRGBA[i1] = rgb[i1] * 255;
 				saber.shaderRGBA[3] = 255;
@@ -1283,7 +1283,7 @@ static void UI_DoEp3Saber(vec3_t origin, vec3_t dir, float length, float lengthM
 	vec3_t	    mid, rgb = { 1,1,1 };
 	qhandle_t	glow = 0, blade = 0;
 	refEntity_t saber;
-	float	    radiusmult, effectradius, coreradius;
+	float	    radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
 
 	if (length < 0.5f)
 	{
@@ -1332,7 +1332,7 @@ static void UI_DoEp3Saber(vec3_t origin, vec3_t dir, float length, float lengthM
 		break;
 	case SABER_RGB:
 	{
-		int i;
+		int i = 0;
 		if (snum == 0)
 			VectorSet(rgb, ui_sab1_r.value, ui_sab1_g.value, ui_sab1_b.value);
 		else
@@ -1410,7 +1410,7 @@ static void UI_DoEp3Saber(vec3_t origin, vec3_t dir, float length, float lengthM
 				saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 			else
 			{
-				int i1;
+				int i1 = 0;
 				for (i1 = 0; i1 < 3; i1++)
 					saber.shaderRGBA[i1] = rgb[i1] * 255;
 				saber.shaderRGBA[3] = 255;
@@ -1438,7 +1438,7 @@ static void UI_DoOTSaber(vec3_t origin, vec3_t dir, float length, float lengthMa
 	vec3_t	    mid, rgb = { 1,1,1 };
 	qhandle_t	glow = 0, blade = 0;
 	refEntity_t saber;
-	float	    radiusmult, effectradius, coreradius;
+	float	    radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
 
 	if (length < 0.5f)
 	{
@@ -1487,7 +1487,7 @@ static void UI_DoOTSaber(vec3_t origin, vec3_t dir, float length, float lengthMa
 		break;
 	case SABER_RGB:
 	{
-		int i;
+		int i = 0;
 		if (snum == 0)
 			VectorSet(rgb, ui_sab1_r.value, ui_sab1_g.value, ui_sab1_b.value);
 		else
@@ -1564,7 +1564,7 @@ static void UI_DoOTSaber(vec3_t origin, vec3_t dir, float length, float lengthMa
 				saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff * effectalpha;
 			else
 			{
-				int i1;
+				int i1 = 0;
 				for (i1 = 0; i1 < 3; i1++)
 					saber.shaderRGBA[i1] = rgb[i1] * 255;
 				saber.shaderRGBA[3] = 255;
@@ -1592,7 +1592,7 @@ static void UI_DoTFASaber(vec3_t origin, vec3_t dir, float length, float lengthM
 	vec3_t	    mid, rgb = { 1,1,1 };
 	qhandle_t	glow = 0, blade = 0;
 	refEntity_t saber;
-	float	    radiusmult, effectradius, coreradius;
+	float	    radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
 
 	if (length < 0.5f)
 	{
@@ -1641,7 +1641,7 @@ static void UI_DoTFASaber(vec3_t origin, vec3_t dir, float length, float lengthM
 		break;
 	case SABER_RGB:
 	{
-		int i;
+		int i = 0;
 		if (snum == 0)
 			VectorSet(rgb, ui_sab1_r.value, ui_sab1_g.value, ui_sab1_b.value);
 		else
@@ -1719,7 +1719,7 @@ static void UI_DoTFASaber(vec3_t origin, vec3_t dir, float length, float lengthM
 				saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 			else
 			{
-				int i1;
+				int i1 = 0;
 				for (i1 = 0; i1 < 3; i1++)
 					saber.shaderRGBA[i1] = rgb[i1] * 255;
 				saber.shaderRGBA[3] = 255;
@@ -1747,7 +1747,7 @@ static void UI_DoSaberUnstable(vec3_t origin, vec3_t dir, float length, float le
 	vec3_t	    mid, rgb = { 1,1,1 };
 	qhandle_t	glow = 0, blade = 0;
 	refEntity_t saber;
-	float	    radiusmult, effectradius, coreradius;
+	float	    radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
 
 	if (length < 0.5f)
 	{
@@ -1796,7 +1796,7 @@ static void UI_DoSaberUnstable(vec3_t origin, vec3_t dir, float length, float le
 		break;
 	case SABER_RGB:
 	{
-		int i;
+		int i = 0;
 		if (snum == 0)
 			VectorSet(rgb, ui_sab1_r.value, ui_sab1_g.value, ui_sab1_b.value);
 		else
@@ -1874,7 +1874,7 @@ static void UI_DoSaberUnstable(vec3_t origin, vec3_t dir, float length, float le
 				saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 			else
 			{
-				int i1;
+				int i1 = 0;
 				for (i1 = 0; i1 < 3; i1++)
 					saber.shaderRGBA[i1] = rgb[i1] * 255;
 				saber.shaderRGBA[3] = 255;
@@ -1902,7 +1902,7 @@ static void UI_DoCustomSaber(vec3_t origin, vec3_t dir, float length, float leng
 	vec3_t	    mid, rgb = { 1,1,1 };
 	qhandle_t	glow = 0, blade = 0;
 	refEntity_t saber;
-	float	    radiusmult, effectradius, coreradius;
+	float	    radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
 
 	if (length < 0.5f)
 	{
@@ -1951,7 +1951,7 @@ static void UI_DoCustomSaber(vec3_t origin, vec3_t dir, float length, float leng
 		break;
 	case SABER_RGB:
 	{
-		int i;
+		int i = 0;
 		if (snum == 0)
 			VectorSet(rgb, ui_sab1_r.value, ui_sab1_g.value, ui_sab1_b.value);
 		else
@@ -2029,7 +2029,7 @@ static void UI_DoCustomSaber(vec3_t origin, vec3_t dir, float length, float leng
 				saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 			else
 			{
-				int i1;
+				int i1 = 0;
 				for (i1 = 0; i1 < 3; i1++)
 					saber.shaderRGBA[i1] = rgb[i1] * 255;
 				saber.shaderRGBA[3] = 255;
@@ -2059,7 +2059,7 @@ static void UI_SaberDrawBlade(itemDef_t* item, const char* saber_name, int saber
 	matrix3_t	axis;
 	mdxaBone_t	boltMatrix;
 	qboolean tagHack = qfalse;
-	int snum;
+	int snum = 0;
 
 	memset(axis, 0, sizeof axis);
 
@@ -2482,7 +2482,7 @@ static void UI_GetSaberForMenu(char* saber, int saberNum)
 void UI_SaberDrawBlades(itemDef_t* item, vec3_t origin, vec3_t angles)
 {
 	//NOTE: only allows one saber type in view at a time
-	int saberModel;
+	int saberModel = 0;
 	int	numSabers = 1;
 
 	if (item->flags & ITF_ISCHARACTER//hacked sabermoves sabers in character's hand
@@ -2579,7 +2579,7 @@ void UI_SaberAttachToChar(itemDef_t* item)
 			if (g2Saber)
 			{
 				char skin_path[MAX_QPATH];
-				int boltNum;
+				int boltNum = 0;
 				//get the customSkin, if any (a built hilt's parts first - the saber builder)
 				if (UI_CustomSaberSkin(saber, skin_path, saberNum) || UI_SaberSkinForSaber(saber, skin_path))
 				{

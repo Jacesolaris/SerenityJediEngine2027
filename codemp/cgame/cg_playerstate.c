@@ -108,7 +108,7 @@ CG_DamageFeedback
 */
 static void CG_DamageFeedback(const int yaw_byte, const int pitch_byte, const int damage)
 {
-	float scale;
+	float scale = 0.0f;
 
 	// show the attacking player's head and name in corner
 	cg.attackerTime = cg.time;
@@ -233,7 +233,7 @@ CG_CheckPlayerstateEvents
 */
 static void CG_CheckPlayerstateEvents(const playerState_t* ps, const playerState_t* ops)
 {
-	centity_t* cent;
+	centity_t* cent = NULL;
 
 	if (ps->externalEvent && ps->externalEvent != ops->externalEvent)
 	{

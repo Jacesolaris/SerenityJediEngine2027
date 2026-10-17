@@ -37,7 +37,7 @@ Also sets the clipped hint bit in tess
 =================
 */
 static qboolean	R_CullTriSurf(const srfTriangles_t* cv) {
-	int 	boxCull;
+	int 	boxCull = 0;
 
 	boxCull = R_CullLocalBox(cv->bounds);
 
@@ -56,8 +56,8 @@ Also sets the clipped hint bit in tess
 =================
 */
 static qboolean	R_CullGrid(const srfGridMesh_t* cv) {
-	int 	boxCull;
-	int 	sphereCull;
+	int 	boxCull = 0;
+	int 	sphereCull = 0;
 
 	if (r_nocurves->integer) {
 		return qtrue;
@@ -118,8 +118,8 @@ This will also allow mirrors on both sides of a model without recursion.
 */
 static qboolean	R_CullSurface(surfaceType_t* surface, const shader_t* shader)
 {
-	srfSurfaceFace_t* sface;
-	float			d;
+	srfSurfaceFace_t* sface = nullptr;
+	float			d = 0.0f;
 
 	if (r_nocull->integer) {
 		return qfalse;
@@ -430,10 +430,10 @@ R_AddBrushModelSurfaces
 =================
 */
 void R_AddBrushModelSurfaces(trRefEntity_t* ent) {
-	bmodel_t* bmodel;
-	int			clip;
-	model_t* pModel;
-	int			i;
+	bmodel_t* bmodel = nullptr;
+	int			clip = 0;
+	model_t* pModel = nullptr;
+	int			i = 0;
 
 	pModel = R_GetModelByHandle(ent->e.hModel);
 
@@ -479,16 +479,16 @@ static float GetQuadArea(vec3_t v1, vec3_t v2, vec3_t v3, vec3_t v4)
 
 void RE_GetBModelVerts(const int bmodelIndex, vec3_t* verts, vec3_t normal)
 {
-	msurface_t* surfs;
-	srfSurfaceFace_t* face;
-	bmodel_t* bmodel;
-	model_t* pModel;
-	int					i;
+	msurface_t* surfs = nullptr;
+	srfSurfaceFace_t* face = nullptr;
+	bmodel_t* bmodel = nullptr;
+	model_t* pModel = nullptr;
+	int					i = 0;
 	//	Not sure if we really need to track the best two candidates
 	int					maxDist[2] = { 0,0 };
 	int					maxIndx[2] = { 0,0 };
 	int					dist = 0;
-	float				dot1, dot2;
+	float				dot1 = 0.0f, dot2 = 0.0f;
 
 	pModel = R_GetModelByHandle(bmodelIndex);
 	bmodel = pModel->bmodel;
@@ -739,8 +739,8 @@ static inline bool R_NodeHasOppositeFaces(mnode_t* node)
 //node and generate the wireframe map. -rww
 static inline void R_RecursiveWireframeSurf(mnode_t* node)
 {
-	int c;
-	msurface_t* surf, ** mark;
+	int c = 0;
+	msurface_t* surf = nullptr, ** mark = nullptr;
 
 	if (!node)
 	{
@@ -781,7 +781,7 @@ static inline void R_RecursiveWireframeSurf(mnode_t* node)
 //generates a wireframe model of the map for the automap view -rww
 static void R_GenerateWireframeMap(mnode_t* baseNode)
 {
-	int i;
+	int i = 0;
 
 	//initialize data to all 0
 	memset(&g_autoMapFrame, 0, sizeof(g_autoMapFrame));
@@ -809,8 +809,8 @@ static void R_GenerateWireframeMap(mnode_t* baseNode)
 //clear out the wireframe map data -rww
 static void R_DestroyWireframeMap(void)
 {
-	wireframeMapSurf_t* next;
-	wireframeMapSurf_t* last;
+	wireframeMapSurf_t* next = nullptr;
+	wireframeMapSurf_t* last = nullptr;
 
 	if (!g_autoMapValid)
 	{ //not valid to begin with
@@ -840,10 +840,10 @@ static void R_DestroyWireframeMap(void)
 //save 3d automap data to file -rww
 static qboolean R_WriteWireframeMapToFile(void)
 {
-	fileHandle_t f;
+	fileHandle_t f = 0;
 	int requiredSize = 0;
 	wireframeMapSurf_t* surf = g_autoMapFrame.surfs;
-	byte* out, * rOut;
+	byte* out = nullptr, * rOut = nullptr;
 
 	//let's go through and see how much space we're going to need to stuff all this
 	//data into
@@ -899,12 +899,12 @@ static qboolean R_WriteWireframeMapToFile(void)
 //load 3d automap data from file -rww
 static qboolean R_GetWireframeMapFromFile(void)
 {
-	wireframeMapSurf_t* surfs, * rSurfs;
-	wireframeMapSurf_t* newSurf;
-	fileHandle_t f;
+	wireframeMapSurf_t* surfs = nullptr, * rSurfs = nullptr;
+	wireframeMapSurf_t* newSurf = nullptr;
+	fileHandle_t f = 0;
 	int i = 0;
-	int len;
-	int stepBytes;
+	int len = 0;
+	int stepBytes = 0;
 
 	len = ri.FS_FOpenFileRead("blahblah.bla", &f, qfalse);
 	if (!f || len <= 0)
@@ -1000,10 +1000,10 @@ const void* R_DrawWireframeAutomap(const void* data)
 {
 	const drawBufferCommand_t* cmd = (const drawBufferCommand_t*)data;
 	float e = 0.0f;
-	float alpha;
+	float alpha = 0.0f;
 	wireframeMapSurf_t* s = g_autoMapFrame.surfs;
 #ifndef _ALT_AUTOMAP_METHOD
-	int i;
+	int i = 0;
 #endif
 
 	if (!r_autoMap || !r_autoMap->integer)
@@ -1258,7 +1258,7 @@ static void R_RecursiveWorldNode(mnode_t* node, int planeBits, int dlightBits)
 		if (r_nocull->integer != 1)
 #endif
 		{
-			int		r;
+			int		r = 0;
 
 			if (planeBits & 1) {
 				r = BoxOnPlaneSide(node->mins, node->maxs, &tr.viewParms.frustum[0]);
@@ -1315,11 +1315,11 @@ static void R_RecursiveWorldNode(mnode_t* node, int planeBits, int dlightBits)
 			newDlights[1] = 0;
 			if (dlightBits)
 			{
-				int	i;
+				int	i = 0;
 				for (i = 0; i < tr.refdef.num_dlights; i++)
 				{
-					dlight_t* dl;
-					float		dist;
+					dlight_t* dl = nullptr;
+					float		dist = 0.0f;
 
 					if (dlightBits & (1 << i)) {
 						dl = &tr.refdef.dlights[i];
@@ -1350,8 +1350,8 @@ static void R_RecursiveWorldNode(mnode_t* node, int planeBits, int dlightBits)
 	} while (true);
 	{
 		// leaf node, so add mark surfaces
-		int			c;
-		msurface_t* surf, ** mark;
+		int			c = 0;
+		msurface_t* surf = nullptr, ** mark = nullptr;
 
 		tr.pc.c_leafs++;
 
@@ -1395,9 +1395,9 @@ R_PointInLeaf
 ===============
 */
 static mnode_t* R_PointInLeaf(const vec3_t p) {
-	mnode_t* node;
-	float		d;
-	cplane_t* plane;
+	mnode_t* node = nullptr;
+	float		d = 0.0f;
+	cplane_t* plane = nullptr;
 
 	if (!tr.world) {
 		Com_Error(ERR_DROP, "R_PointInLeaf: bad model");
@@ -1444,8 +1444,8 @@ R_inPVS
 */
 qboolean R_inPVS(const vec3_t p1, const vec3_t p2, byte* mask)
 {
-	int		leafnum;
-	int		cluster;
+	int		leafnum = 0;
+	int		cluster = 0;
 
 	leafnum = ri.CM_PointLeafnum(p1);
 	cluster = ri.CM_LeafCluster(leafnum);
@@ -1470,10 +1470,10 @@ cluster
 ===============
 */
 static void R_MarkLeaves(void) {
-	const byte* vis;
-	mnode_t* leaf, * parent;
-	int		i;
-	int		cluster;
+	const byte* vis = nullptr;
+	mnode_t* leaf = nullptr, * parent = nullptr;
+	int		i = 0;
+	int		cluster = 0;
 
 	// lockpvs lets designers walk around to determine the
 	// extent of the current pvs

@@ -570,7 +570,7 @@ static void PM_VehicleImpact(bgEntity_t* pEnt, trace_t* trace)
 				hitEnt->takedamage)
 			{
 				float pmult = 1.0f;
-				gentity_t* attackEnt;
+				gentity_t* attackEnt = NULL;
 
 				if ((hitEnt->s.eType == ET_PLAYER && hitEnt->s.number < MAX_CLIENTS) ||
 					(hitEnt->s.eType == ET_NPC && hitEnt->s.NPC_class != CLASS_VEHICLE))
@@ -751,11 +751,11 @@ Returns qtrue if the velocity was clipped in some way
 
 qboolean PM_SlideMove(const qboolean gravity)
 {
-	int bumpcount;
-	int numplanes;
+	int bumpcount = 0;
+	int numplanes = 0;
 	vec3_t normal, planes[MAX_CLIP_PLANES] = { 0 };
 	vec3_t primal_velocity;
-	int i;
+	int i = 0;
 	trace_t trace;
 	vec3_t end_velocity;
 #ifdef _GAME

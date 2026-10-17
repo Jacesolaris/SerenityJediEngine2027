@@ -215,7 +215,7 @@ static void LoadTips(void)
 	// Pick a new tip every 3.5 seconds
 	if (SCREENTIP_NEXT_UPDATE_TIME == 0 || SCREENTIP_NEXT_UPDATE_TIME < time)
 	{
-		int newIndex;
+		int newIndex = 0;
 
 		// Prevent repeating the same tip
 		do {
@@ -242,7 +242,7 @@ static void LoadTips(void)
 
 void CG_DrawInformation(void)
 {
-	int value;
+	int value = 0;
 	char buf[1024];
 	const int i_prop_height = 18; // I know, this is total crap, but as a post release asian-hack....  -Ste
 

@@ -216,7 +216,7 @@ Q3_CheckStringCounterIncrement
 */
 static float Q3_CheckStringCounterIncrement(const char* string)
 {
-	char* numString;
+	char* numString = nullptr;
 	float val = 0.0f;
 
 	if (string[0] == '+')
@@ -317,11 +317,11 @@ Q3_SetVar
 void Q3_SetVar(int taskID, int entID, const char* type_name, const char* data)
 {
 	const int vret = Q3_VariableDeclared(type_name);
-	float float_data;
+	float float_data = 0.0f;
 
 	if (vret != VTYPE_NONE)
 	{
-		float val;
+		float val = 0.0f;
 		switch (vret)
 		{
 		case VTYPE_FLOAT:

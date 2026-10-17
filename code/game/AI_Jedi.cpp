@@ -984,7 +984,7 @@ static void Tavion_ScepterSlam()
 		gentity_t* radius_ents[128];
 		constexpr float radius = 300.0f;
 		constexpr float half_rad = radius / 2;
-		int i;
+		int i = 0;
 		vec3_t mins{};
 		vec3_t maxs{};
 		vec3_t ent_dir;
@@ -1062,7 +1062,7 @@ static void Tavion_ScepterSlam()
 					&& radius_ents[i]->client->NPC_class != CLASS_RANCOR
 					&& radius_ents[i]->client->NPC_class != CLASS_ATST)
 				{
-					float throw_str;
+					float throw_str = 0.0f;
 					if (g_spskill->integer > 1)
 					{
 						throw_str = 10.0f + (radius - dist) / 2.0f;
@@ -1336,7 +1336,7 @@ AGGRESSION
 */
 static void Jedi_Aggression(const gentity_t* self, const int change)
 {
-	int upper_threshold, lower_threshold;
+	int upper_threshold = 0, lower_threshold = 0;
 
 	self->NPC->stats.aggression += change;
 
@@ -1403,8 +1403,8 @@ static void Jedi_AggressionErosion(const int amt)
 
 void NPC_Jedi_RateNewEnemy(const gentity_t* self, const gentity_t* enemy)
 {
-	float health_aggression;
-	float weapon_aggression;
+	float health_aggression = 0.0f;
+	float weapon_aggression = 0.0f;
 
 	switch (enemy->s.weapon)
 	{
@@ -1540,7 +1540,7 @@ static qboolean Jedi_ClearPathToSpot(vec3_t dest, const int impact_ent_num)
 {
 	trace_t trace;
 	vec3_t mins, end, dir;
-	float drop;
+	float drop = 0.0f;
 
 	//Offset the step height
 	VectorSet(mins, NPC->mins[0], NPC->mins[1], NPC->mins[2] + STEPSIZE);
@@ -4421,9 +4421,9 @@ static evasionType_t jedi_check_flip_evasions(gentity_t* self, const float right
 		AngleVectors(fwdAngles, fwd, right, nullptr);
 
 		int parts = SETANIM_BOTH;
-		int anim;
-		float speed;
-		float check_dist;
+		int anim = 0;
+		float speed = 0.0f;
+		float check_dist = 0.0f;
 		qboolean allow_cart_wheels = qtrue;
 
 		if (self->client->ps.weapon == WP_SABER)
@@ -4649,7 +4649,7 @@ int Jedi_ReCalcParryTime(const gentity_t* self, const evasionType_t evasion_type
 	}
 	else if (self->NPC)
 	{
-		int base_time;
+		int base_time = 0;
 
 		if (evasion_type == EVASION_DODGE)
 		{
@@ -5925,8 +5925,8 @@ static qboolean Jedi_SaberBlock()
 	vec3_t point_dir, base_dir, tip_dir;
 	constexpr vec3_t saber_maxs = { 4, 4, 4 };
 	constexpr vec3_t saber_mins = { -4, -4, -4 };
-	float base_dir_perc;
-	float dist, best_dist = Q3_INFINITE;
+	float base_dir_perc = 0.0f;
+	float dist = 0.0f, best_dist = Q3_INFINITE;
 	int closest_saber_num = 0, closest_blade_num = 0;
 
 	if (!TIMER_Done(NPC, "parryReCalcTime"))
@@ -6439,7 +6439,7 @@ static void Jedi_EvasionSaber(vec3_t enemy_movedir, const float enemy_dist, vec3
 	if (Q_irand(0, 100) < evasion_chance)
 	{
 		//check to see if he's coming at me
-		float facing_amt;
+		float facing_amt = 0.0f;
 		if (VectorCompare(enemy_movedir, vec3_origin) || shooting_lightning || throwing_saber)
 		{
 			//he's not moving (or he's using a ranged attack), see if he's facing me
@@ -6924,7 +6924,7 @@ void jedi_set_enemy_info(vec3_t enemy_dest, vec3_t enemy_dir, float* enemy_dist,
 		if (*enemy_dist >= 64.0f)
 		{
 			//we have to be approaching each other
-			float v_dot;
+			float v_dot = 0.0f;
 
 			if (!VectorCompare(NPC->client->ps.velocity, vec3_origin))
 			{
@@ -6963,7 +6963,7 @@ void NPC_EvasionSaber()
 	{
 		//see if we need to avoid their saber
 		vec3_t enemy_dir, enemy_movedir, enemy_dest;
-		float enemy_dist, enemy_movespeed;
+		float enemy_dist = 0.0f, enemy_movespeed = 0.0f;
 		//set enemy
 		jedi_set_enemy_info(enemy_dest, enemy_dir, &enemy_dist, enemy_movedir, &enemy_movespeed, 300);
 		Jedi_EvasionSaber(enemy_movedir, enemy_dist, enemy_dir);
@@ -7819,7 +7819,7 @@ static qboolean Jedi_AttackDecide(const int enemy_dist)
 	if (NPC->client->ps.saberEventFlags & SEF_LOCK_WON)
 	{
 		//we won a saber lock, press the advantage with an attack!
-		int chance;
+		int chance = 0;
 		if (NPCInfo->aiFlags & NPCAI_BOSS_CHARACTER)
 		{
 			//desann and luke
@@ -8281,7 +8281,7 @@ static qboolean Jedi_TryJump(const gentity_t* goal)
 							if (Jedi_Jump(dest, goal->s.number))
 							{
 								{
-									int jump_anim;
+									int jump_anim = 0;
 									if ((NPC->client->NPC_class == CLASS_BOBAFETT ||
 										NPC->client->NPC_class == CLASS_MANDO)
 										|| (NPCInfo->rank != RANK_CREWMAN && NPCInfo->rank <= RANK_LT_JG))
@@ -8757,7 +8757,7 @@ extern qboolean NPC_Should_Block(const gentity_t* npc);
 static void Jedi_Combat()
 {
 	vec3_t enemy_dir, enemy_movedir, enemy_dest;
-	float enemy_dist, enemy_movespeed;
+	float enemy_dist = 0.0f, enemy_movespeed = 0.0f;
 
 	// See where enemy will be 300 ms from now
 	jedi_set_enemy_info(enemy_dest, enemy_dir, &enemy_dist, enemy_movedir, &enemy_movespeed, 300);
@@ -11014,7 +11014,7 @@ static void Jedi_Attack(void)
 		}
 		else
 		{
-			float chance;
+			float chance = 0.0f;
 
 			// Strong pushers
 			if (NPC->client->NPC_class == CLASS_DESANN ||
@@ -11108,7 +11108,7 @@ static void Jedi_Attack(void)
 						{
 							// Continue evasion while retrieving saber
 							vec3_t enemy_dir, enemy_movedir, enemy_dest;
-							float enemy_dist, enemy_movespeed;
+							float enemy_dist = 0.0f, enemy_movespeed = 0.0f;
 
 							jedi_set_enemy_info(
 								enemy_dest,
@@ -11131,7 +11131,7 @@ static void Jedi_Attack(void)
 						{
 							//be sure to continue evasion even if can't pull back saber yet
 							vec3_t enemy_dir, enemy_movedir, enemy_dest;
-							float enemy_dist, enemy_movespeed;
+							float enemy_dist = 0.0f, enemy_movespeed = 0.0f;
 							jedi_set_enemy_info(enemy_dest, enemy_dir, &enemy_dist, enemy_movedir, &enemy_movespeed, 300);
 							Jedi_EvasionSaber(enemy_movedir, enemy_dist, enemy_dir);
 						}
@@ -11144,7 +11144,7 @@ static void Jedi_Attack(void)
 				{
 					//be sure to continue evasion even if can't pull back saber yet
 					vec3_t enemy_dir, enemy_movedir, enemy_dest;
-					float enemy_dist, enemy_movespeed;
+					float enemy_dist = 0.0f, enemy_movespeed = 0.0f;
 					jedi_set_enemy_info(enemy_dest, enemy_dir, &enemy_dist, enemy_movedir, &enemy_movespeed, 300);
 					Jedi_EvasionSaber(enemy_movedir, enemy_dist, enemy_dir);
 				}

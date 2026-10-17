@@ -133,7 +133,7 @@ void SV_AddServerCommand(client_t* client, const char* cmd)
 	// doesn't cause a recursive drop client
 	if (client->reliableSequence - client->reliableAcknowledge == MAX_RELIABLE_COMMANDS + 1)
 	{
-		int i;
+		int i = 0;
 		Com_Printf("===== pending server commands =====\n");
 		for (i = client->reliableAcknowledge + 1; i <= client->reliableSequence; i++)
 		{
@@ -160,8 +160,8 @@ void QDECL SV_SendServerCommand(client_t* cl, const char* fmt, ...)
 {
 	va_list argptr;
 	char* message = NULL;
-	client_t* client;
-	int j;
+	client_t* client = nullptr;
+	int j = 0;
 
 	if (fmt == NULL)
 	{
@@ -411,7 +411,7 @@ Find or allocate a bucket for an address
 */
 static leakyBucket_t* SVC_BucketForAddress(const netadr_t address, const int burst, const int period)
 {
-	leakyBucket_t* bucket;
+	leakyBucket_t* bucket = nullptr;
 	const long hash = SVC_HashForAddress(address);
 	const int now = Sys_Milliseconds();
 
@@ -663,7 +663,7 @@ if a user is interested in a server to do a full status
 */
 static void SVC_Info(const netadr_t from)
 {
-	int humans, wDisable;
+	int humans = 0, wDisable = 0;
 	char infostring[MAX_INFO_STRING]{};
 
 	// ignore if we are in single player
@@ -942,8 +942,8 @@ SV_ReadPackets
 */
 void SV_PacketEvent(const netadr_t from, msg_t* msg)
 {
-	int i;
-	client_t* cl;
+	int i = 0;
+	client_t* cl = nullptr;
 
 	// check for connectionless packet (0xffffffff) first
 	if (msg->cursize >= 4 && *reinterpret_cast<int*>(msg->data) == -1)
@@ -1079,8 +1079,8 @@ if necessary
 */
 static void SV_CheckTimeouts(void)
 {
-	int i;
-	client_t* cl;
+	int i = 0;
+	client_t* cl = nullptr;
 
 	const int droppoint = svs.time - 1000 * sv_timeout->integer;
 	const int zombiepoint = svs.time - 1000 * sv_zombietime->integer;
@@ -1124,8 +1124,8 @@ SV_CheckPaused
 */
 static qboolean SV_CheckPaused(void)
 {
-	client_t* cl;
-	int i;
+	client_t* cl = nullptr;
+	int i = 0;
 
 	if (!cl_paused->integer)
 	{
@@ -1203,8 +1203,8 @@ static void SV_CheckCvars(void)
 		if (sv_ratePolicy->integer == 1)
 		{
 			// NOTE: what if server sets some dumb sv_clientRate value?
-			client_t* cl;
-			int i;
+			client_t* cl = nullptr;
+			int i = 0;
 
 			for (i = 0, cl = svs.clients; i < sv_maxclients->integer; i++, cl++)
 			{
@@ -1228,8 +1228,8 @@ static void SV_CheckCvars(void)
 		else if (sv_ratePolicy->integer == 2)
 		{
 			// NOTE: what if server sets some dumb sv_clientRate value?
-			client_t* cl;
-			int i;
+			client_t* cl = nullptr;
+			int i = 0;
 
 			for (i = 0, cl = svs.clients; i < sv_maxclients->integer; i++, cl++)
 			{
@@ -1271,8 +1271,8 @@ static void SV_CheckCvars(void)
 
 		if (sv_snapsPolicy->integer == 1)
 		{
-			client_t* cl;
-			int i;
+			client_t* cl = nullptr;
+			int i = 0;
 
 			for (i = 0, cl = svs.clients; i < sv_maxclients->integer; i++, cl++)
 			{
@@ -1287,8 +1287,8 @@ static void SV_CheckCvars(void)
 		}
 		else if (sv_snapsPolicy->integer == 2)
 		{
-			client_t* cl;
-			int i;
+			client_t* cl = nullptr;
+			int i = 0;
 			const int min_snaps = Com_Clampi(1, sv_snapsMax->integer, sv_snapsMin->integer);
 			// between 1 and sv_snapsMax ( 1 <-> 40 )
 			const int max_snaps = Q_min(sv_fps->integer, sv_snapsMax->integer);
@@ -1337,7 +1337,7 @@ happen before SV_Frame is called
 */
 void SV_Frame(const int msec)
 {
-	int startTime;
+	int startTime = 0;
 
 	// the menu kills the server with this cvar
 	if (sv_killserver->integer)

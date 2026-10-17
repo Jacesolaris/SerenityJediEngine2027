@@ -232,7 +232,7 @@ void WP_FireRocket(gentity_t* ent, const qboolean alt_fire)
 
 	if (alt_fire)
 	{
-		int lock_ent_num, lock_time;
+		int lock_ent_num = 0, lock_time = 0;
 		if (ent->NPC && ent->enemy)
 		{
 			lock_ent_num = ent->enemy->s.number;

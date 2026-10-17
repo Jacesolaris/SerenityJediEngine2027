@@ -88,7 +88,7 @@ extern cvar_t* j_sensitivity;
 static void IN_UseGivenForce()
 {
 	const char* c = Cmd_Argv(1);
-	int forceNum;
+	int forceNum = 0;
 	int genCmdNum = 0;
 
 	if (c)
@@ -198,7 +198,7 @@ static void IN_MLookUp()
 
 static void IN_KeyDown(kbutton_t* b)
 {
-	int k;
+	int k = 0;
 
 	const char* c = Cmd_Argv(1);
 	if (c[0])
@@ -244,7 +244,7 @@ static void IN_KeyDown(kbutton_t* b)
 
 static void IN_KeyUp(kbutton_t* b)
 {
-	int k;
+	int k = 0;
 
 	const char* c = Cmd_Argv(1);
 	if (c[0])
@@ -302,7 +302,7 @@ Returns the fraction of the frame that the key was down
 */
 float CL_KeyState(kbutton_t* key)
 {
-	float val;
+	float val = 0.0f;
 
 	int msec = key->msec;
 	key->msec = 0;
@@ -437,7 +437,7 @@ Moves the local angle positions
 */
 static void CL_AdjustAngles()
 {
-	float speed;
+	float speed = 0.0f;
 
 	if (in_speed.active)
 	{
@@ -494,7 +494,7 @@ Sets the usercmd_t based on key states
 */
 static void CL_KeyMove(usercmd_t* cmd)
 {
-	int movespeed;
+	int movespeed = 0;
 
 	//
 	// adjust for speed key / running
@@ -584,7 +584,7 @@ CL_JoystickMove
 
 static void CL_JoystickMove(usercmd_t* cmd)
 {
-	float	anglespeed;
+	float	anglespeed = 0.0f;
 
 	if (!in_joystick->integer)
 	{
@@ -755,7 +755,7 @@ static void CL_FighterPadStick(const float x, const float y, float* outX, float*
 static void CL_FighterPadMove(usercmd_t* cmd)
 {
 	float stick[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-	float sx, sy;
+	float sx = 0.0f, sy = 0.0f;
 
 	if (!CL_FighterPadActive())
 	{
@@ -813,7 +813,7 @@ CL_MouseMove
 */
 static void CL_MouseMove(usercmd_t* cmd)
 {
-	float mx, my;
+	float mx = 0.0f, my = 0.0f;
 	const float speed = static_cast<float>(frame_msec);
 	const float pitch = m_pitch->value;
 

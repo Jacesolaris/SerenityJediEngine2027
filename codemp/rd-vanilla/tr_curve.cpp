@@ -74,7 +74,7 @@ Transpose
 */
 static void Transpose(const int width, const int height, drawVert_t ctrl[MAX_GRID_SIZE][MAX_GRID_SIZE])
 {
-	int i, j;
+	int i = 0, j = 0;
 	drawVert_t temp;
 
 	if (width > height)
@@ -130,10 +130,10 @@ Handles all the complicated wrapping and degenerate cases
 */
 static void MakeMeshNormals(const int width, const int height, drawVert_t ctrl[MAX_GRID_SIZE][MAX_GRID_SIZE])
 {
-	int i, k;
+	int i = 0, k = 0;
 	vec3_t delta;
 	qboolean good[8]{};
-	float len;
+	float len = 0.0f;
 	static int neighbors[8][2] = {
 		{ 0, 1 },{ 1, 1 },{ 1, 0 },{ 1, -1 },{ 0, -1 },{ -1, -1 },{ -1, 0 },{ -1, 1 }
 	};
@@ -277,7 +277,7 @@ InvertErrorTable
 */
 static void InvertErrorTable(float errorTable[2][MAX_GRID_SIZE], const int width, const int height)
 {
-	int i;
+	int i = 0;
 	float copy[2][MAX_GRID_SIZE];
 
 	memcpy(copy, errorTable, sizeof copy);
@@ -301,7 +301,7 @@ PutPointsOnCurve
 static void PutPointsOnCurve(drawVert_t ctrl[MAX_GRID_SIZE][MAX_GRID_SIZE],
 	const int width, const int height)
 {
-	int i, j;
+	int i = 0, j = 0;
 	drawVert_t prev, next;
 
 	for (i = 0; i < width; i++)
@@ -332,9 +332,9 @@ R_CreateSurfaceGridMesh
 */
 static srfGridMesh_t* R_CreateSurfaceGridMesh(int width, int height, drawVert_t ctrl[MAX_GRID_SIZE][MAX_GRID_SIZE], float errorTable[2][MAX_GRID_SIZE])
 {
-	drawVert_t* vert;
+	drawVert_t* vert = nullptr;
 	vec3_t tmpVec;
-	srfGridMesh_t* grid;
+	srfGridMesh_t* grid = nullptr;
 
 	// copy the results out to a grid
 	int size = (width * height - 1) * sizeof(drawVert_t) + sizeof * grid;
@@ -394,9 +394,9 @@ R_SubdividePatchToGrid
 srfGridMesh_t* R_SubdividePatchToGrid(int width, int height,
 	drawVert_t points[MAX_PATCH_SIZE * MAX_PATCH_SIZE])
 {
-	int i, j, k;
+	int i = 0, j = 0, k = 0;
 	drawVert_t prev, next, mid;
-	int t;
+	int t = 0;
 	// static: this grid is ~330 KB, too big for the 1 MB main-thread stack (map load only, never re-entered)
 	static drawVert_t ctrl[MAX_GRID_SIZE][MAX_GRID_SIZE];
 	float errorTable[2][MAX_GRID_SIZE]{};
@@ -574,7 +574,7 @@ R_GridInsertColumn
 */
 srfGridMesh_t* R_GridInsertColumn(srfGridMesh_t* grid, const int column, const int row, vec3_t point, const float loderror)
 {
-	int j;
+	int j = 0;
 	// static: this grid is ~330 KB, too big for the 1 MB main-thread stack (map load only, never re-entered)
 	static drawVert_t ctrl[MAX_GRID_SIZE][MAX_GRID_SIZE];
 	float errorTable[2][MAX_GRID_SIZE]{};
@@ -634,7 +634,7 @@ R_GridInsertRow
 */
 srfGridMesh_t* R_GridInsertRow(srfGridMesh_t* grid, const int row, const int column, vec3_t point, const float loderror)
 {
-	int j;
+	int j = 0;
 	// static: this grid is ~330 KB, too big for the 1 MB main-thread stack (map load only, never re-entered)
 	static drawVert_t ctrl[MAX_GRID_SIZE][MAX_GRID_SIZE];
 	float errorTable[2][MAX_GRID_SIZE]{};

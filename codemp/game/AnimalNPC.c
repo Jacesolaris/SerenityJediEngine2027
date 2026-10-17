@@ -76,9 +76,9 @@ static void ProcessMoveCommands(Vehicle_t* p_veh)
 	/************************************************************************************/
 
 	//Client sets ucmds and such for speed alterations
-	float speedInc, speedIdleDec, speedIdle, speedMin, speedMax;
-	float fWalkSpeedMax;
-	int curTime;
+	float speedInc = 0.0f, speedIdleDec = 0.0f, speedIdle = 0.0f, speedMin = 0.0f, speedMax = 0.0f;
+	float fWalkSpeedMax = 0.0f;
+	int curTime = 0;
 	const bgEntity_t* parent = p_veh->m_pParentEntity;
 	playerState_t* parent_ps = parent->playerState;
 
@@ -394,7 +394,7 @@ static void AnimateVehicle(Vehicle_t* p_veh)
 static void AnimateRiders(Vehicle_t* p_veh)
 {
 	animNumber_t Anim = BOTH_VT_IDLE;
-	int iFlags, i_blend;
+	int iFlags = 0, i_blend = 0;
 	gentity_t* pilot = (gentity_t*)p_veh->m_pPilot;
 	const gentity_t* parent = (gentity_t*)p_veh->m_pParentEntity;
 

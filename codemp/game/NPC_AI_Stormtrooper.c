@@ -131,7 +131,7 @@ enum
 
 void ST_AggressionAdjust(const gentity_t* self, const int change)
 {
-	int upper_threshold, lower_threshold;
+	int upper_threshold = 0, lower_threshold = 0;
 
 	self->NPC->stats.aggression += change;
 
@@ -658,7 +658,7 @@ static qboolean NPC_CheckEnemyStealth(gentity_t* target)
 	if (clearLOS)
 	{
 		vec3_t targ_org;
-		float realize, cautious;
+		float realize = 0.0f, cautious = 0.0f;
 
 		if (target->client->NPC_class == CLASS_ATST)
 		{
@@ -691,7 +691,7 @@ static qboolean NPC_CheckEnemyStealth(gentity_t* target)
 		float speed_rating = target_speed / MAX_VIEW_SPEED;
 		const float turning_rating = 5.0f;
 		//AngleDelta( target->client->ps.viewangles[PITCH], target->lastAngles[PITCH] )/180.0f + AngleDelta( target->client->ps.viewangles[YAW], target->lastAngles[YAW] )/180.0f;
-		const float light_level = 255 / MAX_LIGHT_INTENSITY; //( target->lightLevel / MAX_LIGHT_INTENSITY );
+		const float light_level = 255.0f / MAX_LIGHT_INTENSITY; //( target->lightLevel / MAX_LIGHT_INTENSITY );
 		const float FOV_perc = 1.0f - (hAngle_perc + vAngle_perc) * 0.5f; //FIXME: Dunno about the average...
 		float vis_rating = 0.0f;
 
@@ -1698,7 +1698,7 @@ static void ST_CheckMoveState(void)
 
 static void ST_ResolveBlockedShot(const int hit)
 {
-	int stuck_time;
+	int stuck_time = 0;
 
 	//figure out how long we intend to stand here, max
 	if (TIMER_Get(NPCS.NPC, "roamTime") > TIMER_Get(NPCS.NPC, "stick"))
@@ -2125,17 +2125,17 @@ extern qboolean AI_RefreshGroup(AIGroupInfo_t* group);
 
 static void ST_Commander(void)
 {
-	int i, j;
-	int cp, cpFlags_org, cpFlags;
+	int i = 0, j = 0;
+	int cp = 0, cpFlags_org = 0, cpFlags = 0;
 	AIGroupInfo_t* group = NPCS.NPCInfo->group;
-	gentity_t* member; //, *buddy;
+	gentity_t* member = NULL; //, *buddy;
 	qboolean runner = qfalse;
 	qboolean enemyLost = qfalse;
 	qboolean enemyProtected = qfalse;
 	qboolean scouting = qfalse;
-	int squadState;
-	int curMemberNum, lastMemberNum;
-	float avoidDist;
+	int squadState = 0;
+	int curMemberNum = 0, lastMemberNum = 0;
+	float avoidDist = 0.0f;
 
 	group->processed = qtrue;
 
@@ -2638,12 +2638,12 @@ static void ST_Commander(void)
 		//---------------------------------------------------------------------
 		if (TIMER_Done(NPCS.NPC, "checkGrenadeTooCloseDebouncer"))
 		{
-			int i1, e;
+			int i1 = 0, e = 0;
 			vec3_t mins;
 			vec3_t maxs;
-			int num_listed_entities;
+			int num_listed_entities = 0;
 			qboolean fled = qfalse;
-			gentity_t* ent;
+			gentity_t* ent = NULL;
 			// static: too big for the stack (C6262); filled by EntitiesInBox before it is read
 			static int entity_list[MAX_GENTITIES];
 
@@ -2708,7 +2708,7 @@ static void ST_Commander(void)
 		{
 			if (TIMER_Done(NPCS.NPC, "checkEnemyTooCloseDebouncer"))
 			{
-				float distThreshold;
+				float distThreshold = 0.0f;
 				TIMER_Set(NPCS.NPC, "checkEnemyTooCloseDebouncer", Q_irand(1000, 6000));
 
 				distThreshold = 16384/*128*128*/; //default
@@ -3595,7 +3595,7 @@ void NPC_BSST_Attack(void)
 			if (TIMER_Done(NPCS.NPC, "attackDelay"))
 			{
 				//animate me
-				int swing_anim;
+				int swing_anim = 0;
 				if (NPCS.NPC->health > 70)
 				{
 					swing_anim = Q_irand(BOTH_MELEE_L, BOTH_MELEE_R); //smackdown or uppercut
@@ -3824,7 +3824,7 @@ void NPC_BSST_Attack(void)
 			if (TIMER_Done(NPCS.NPC, "attackDelay"))
 			{
 				//animate me
-				int swing_anim;
+				int swing_anim = 0;
 				if (NPCS.NPC->health > 50)
 				{
 					swing_anim = Q_irand(BOTH_MELEEUP, BOTH_MELEE3); //kick

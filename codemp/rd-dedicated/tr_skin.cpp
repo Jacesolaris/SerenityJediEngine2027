@@ -89,7 +89,7 @@ static bool RE_SplitSkins(const char* INname, char* skinhead, char* skintorso, c
 // given a name, go get the skin we want and return
 static qhandle_t RE_RegisterIndividualSkin(const char* name, const qhandle_t hSkin)
 {
-	char* text = nullptr, * text_p;
+	char* text = nullptr, * text_p = nullptr;
 	char surfName[MAX_QPATH];
 
 	// load and parse the skin file
@@ -171,8 +171,8 @@ static qhandle_t RE_RegisterIndividualSkin(const char* name, const qhandle_t hSk
 
 qhandle_t RE_RegisterSkin(const char* name)
 {
-	qhandle_t hSkin;
-	skin_t* skin;
+	qhandle_t hSkin = 0;
+	skin_t* skin = nullptr;
 
 	if (!name || !name[0])
 	{
@@ -235,7 +235,7 @@ qhandle_t RE_RegisterSkin(const char* name)
 		{
 			// Very ugly way of doing this, need to stop the game from registering the last listed "model_" skin in the menu as the lower skin can get cut off.
 			// If using a model_ skin, we'll register the head (which shouldn't be cut off). Otherwise, keep the original behavior for the custom skins.
-			char* skin;
+			char* skin = nullptr;
 			skin = strrchr(skinhead, '/');
 			if (!strncmp(skin, "/model_", 7))
 			{
@@ -264,7 +264,7 @@ compatible with our normal parsing rules.
 */
 static char* CommaParse(char** data_p)
 {
-	int c;
+	int c = 0;
 	static char com_token[MAX_TOKEN_CHARS];
 
 	char* data = *data_p;

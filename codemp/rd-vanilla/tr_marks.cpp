@@ -45,8 +45,8 @@ static void R_ChopPolyBehindPlane(const int numInPoints, vec3_t inPoints[MAX_VER
 	float		dists[MAX_VERTS_ON_POLY + 4] = { 0 };
 	int			sides[MAX_VERTS_ON_POLY + 4] = { 0 };
 	int			counts[3]{};
-	float		dot;
-	int			i;
+	float		dot = 0.0f;
+	int			i = 0;
 
 	// don't clip if it might overflow
 	if (numInPoints >= MAX_VERTS_ON_POLY - 2) {
@@ -135,7 +135,7 @@ R_BoxSurfaces_r
 */
 static void R_BoxSurfaces_r(const mnode_t* node, vec3_t mins, vec3_t maxs, surfaceType_t** list, const int listsize, int* listlength, vec3_t dir)
 {
-	int			s;
+	int			s = 0;
 
 	// do the tail recursion in a loop
 	while (node->contents == -1) {
@@ -238,15 +238,15 @@ R_MarkFragments
 */
 int R_MarkFragments(int numPoints, const vec3_t* points, const vec3_t projection, const int maxPoints, vec3_t pointBuffer, const int maxFragments, markFragment_t* fragmentBuffer)
 {
-	int				numsurfaces;
-	int				i, j, k;
+	int				numsurfaces = 0;
+	int				i = 0, j = 0, k = 0;
 	surfaceType_t* surfaces[64];
 	vec3_t			mins, maxs;
-	int				returnedFragments;
-	int				returnedPoints;
+	int				returnedFragments = 0;
+	int				returnedPoints = 0;
 	vec3_t			normals[MAX_VERTS_ON_POLY + 2]{};
 	float			dists[MAX_VERTS_ON_POLY + 2]{};
-	float* v;
+	float* v = nullptr;
 	vec3_t			projection_dir;
 	vec3_t			v1, v2;
 

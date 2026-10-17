@@ -559,7 +559,7 @@ Resend a connect message if the last one has timed out
 */
 void CL_CheckForResend()
 {
-	int port;
+	int port = 0;
 	char info[MAX_INFO_STRING];
 
 	//	if ( cls.state == CA_CINEMATIC )

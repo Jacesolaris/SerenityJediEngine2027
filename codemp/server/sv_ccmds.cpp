@@ -57,8 +57,8 @@ Returns the player with player id or name from Cmd_Argv(1)
 */
 static client_t* SV_GetPlayerByHandle()
 {
-	client_t* cl;
-	int i;
+	client_t* cl = nullptr;
+	int i = 0;
 
 	// make sure server is running
 	if (!com_sv_running->integer)
@@ -253,9 +253,9 @@ This allows fair starts with variable load times.
 */
 static void SV_MapRestart_f(void)
 {
-	int i;
+	int i = 0;
 	qboolean isBot;
-	int delay;
+	int delay = 0;
 
 	// make sure we aren't restarting twice in the same frame
 	if (com_frameTime == sv.serverId)
@@ -410,8 +410,8 @@ SV_KickBlankPlayers
 */
 static void SV_KickBlankPlayers(void)
 {
-	client_t* cl;
-	int i;
+	client_t* cl = nullptr;
+	int i = 0;
 
 	// make sure server is running
 	if (!com_sv_running->integer)
@@ -480,7 +480,7 @@ static void SV_Kick_f(void)
 	client_t* cl = SV_GetPlayerByHandle();
 	if (!cl)
 	{
-		int i;
+		int i = 0;
 		if (!Q_stricmp(Cmd_Argv(1), "all"))
 		{
 			for (i = 0, cl = svs.clients; i < sv_maxclients->integer; i++, cl++)
@@ -534,8 +534,8 @@ Kick all bots off of the server
 */
 static void SV_KickBots_f(void)
 {
-	client_t* cl;
-	int i;
+	client_t* cl = nullptr;
+	int i = 0;
 
 	// make sure server is running
 	if (!com_sv_running->integer)
@@ -570,8 +570,8 @@ Kick all users off of the server
 */
 static void SV_KickAll_f(void)
 {
-	client_t* cl;
-	int i;
+	client_t* cl = nullptr;
+	int i = 0;
 
 	// make sure server is running
 	if (!com_sv_running->integer)
@@ -643,8 +643,8 @@ Load saved bans from file.
 */
 static void SV_RehashBans_f(void)
 {
-	int filelen;
-	fileHandle_t readfrom;
+	int filelen = 0;
+	fileHandle_t readfrom = 0;
 	char filepath[MAX_QPATH];
 
 	// make sure server is running
@@ -662,10 +662,10 @@ static void SV_RehashBans_f(void)
 
 	if ((filelen = FS_SV_FOpenFileRead(filepath, &readfrom)) >= 0)
 	{
-		char* newlinepos;
-		char* maskpos;
-		char* textbuf;
-		int index;
+		char* newlinepos = nullptr;
+		char* maskpos = nullptr;
+		char* textbuf = nullptr;
+		int index = 0;
 		if (filelen < 2)
 		{
 			// Don't bother if file is too short.
@@ -729,7 +729,7 @@ Save bans to file.
 */
 static void SV_WriteBans(void)
 {
-	fileHandle_t writeto;
+	fileHandle_t writeto = 0;
 	char filepath[MAX_QPATH];
 
 	if (!sv_banFile->string || !*sv_banFile->string)
@@ -827,8 +827,8 @@ Ban a user from being able to play on this server based on his ip address.
 static void SV_AddBanToList(const qboolean isexception)
 {
 	netadr_t ip;
-	int index, mask;
-	serverBan_t* curban;
+	int index = 0, mask = 0;
+	serverBan_t* curban = nullptr;
 
 	// make sure server is running
 	if (!com_sv_running->integer)
@@ -966,7 +966,7 @@ Remove a ban or an exception from the list.
 
 static void SV_DelBanFromList(const qboolean isexception)
 {
-	int index, mask;
+	int index = 0, mask = 0;
 	netadr_t ip;
 
 	// make sure server is running
@@ -1056,8 +1056,8 @@ List all bans and exceptions on console
 
 static void SV_ListBans_f(void)
 {
-	int index, count;
-	serverBan_t* ban;
+	int index = 0, count = 0;
+	serverBan_t* ban = nullptr;
 
 	// make sure server is running
 	if (!com_sv_running->integer)
@@ -1141,7 +1141,7 @@ static const char* SV_CalcUptime(void)
 {
 	static char buf[MAX_STRING_CHARS / 4] = { '\0' };
 	char tmp[64] = { '\0' };
-	time_t currTime;
+	time_t currTime = 0;
 
 	time(&currTime);
 
@@ -1175,11 +1175,11 @@ SV_Status_f
 */
 static void SV_Status_f()
 {
-	int i, bots;
-	client_t* cl;
-	playerState_t* ps;
-	const char* s;
-	int ping;
+	int i = 0, bots = 0;
+	client_t* cl = nullptr;
+	playerState_t* ps = nullptr;
+	const char* s = nullptr;
+	int ping = 0;
 	qboolean avoidTruncation = qfalse;
 
 	// make sure server is running
@@ -1404,7 +1404,7 @@ const char* forceToggleNamePrints[NUM_FORCE_POWERS] = {
 static void SV_ForceToggle_f(void)
 {
 	int bits = Cvar_VariableIntegerValue("g_forcePowerDisable");
-	int i;
+	int i = 0;
 
 	// make sure server is running
 	if (!com_sv_running->integer)
@@ -1480,9 +1480,9 @@ const char* weaponToggleNamePrints[WP_NUM_WEAPONS] = {
 
 static void SV_WeaponToggle_f(void)
 {
-	int bits;
-	int i;
-	const char* cvar_str;
+	int bits = 0;
+	int i = 0;
+	const char* cvar_str = nullptr;
 
 	if (sv_gametype->integer == GT_DUEL || sv_gametype->integer == GT_POWERDUEL)
 	{
@@ -1642,7 +1642,7 @@ static void SV_KillServer_f(void)
 
 void SV_WriteDemoMessage(client_t* cl, msg_t* msg, const int headerBytes)
 {
-	int swlen;
+	int swlen = 0;
 
 	// write the packet sequence
 	int len = cl->netchan.outgoingSequence;
@@ -1658,7 +1658,7 @@ void SV_WriteDemoMessage(client_t* cl, msg_t* msg, const int headerBytes)
 
 void SV_StopRecordDemo(client_t* cl)
 {
-	int len;
+	int len = 0;
 
 	if (!cl->demo.demorecording)
 	{
@@ -1737,7 +1737,7 @@ SV_DemoFilename
 */
 void SV_DemoFilename(char* buf, const int bufSize)
 {
-	time_t rawtime;
+	time_t rawtime = 0;
 	char timeStr[32] = { 0 }; // should really only reach ~19 chars
 
 	time(&rawtime);
@@ -1753,7 +1753,7 @@ void SV_RecordDemo(client_t* cl, char* demoName)
 {
 	char name[MAX_OSPATH];
 	msg_t msg;
-	int len;
+	int len = 0;
 
 	// ----------------------------------------------------------------------
 	// Prevent duplicate recording
@@ -1851,7 +1851,7 @@ void SV_AutoRecordDemo(client_t* cl)
 	char folderDate[MAX_OSPATH];
 	char folderTreeDate[MAX_OSPATH];
 	char demoPlayerName[MAX_NAME_LENGTH];
-	time_t rawtime;
+	time_t rawtime = 0;
 	time(&rawtime);
 	const tm* timeinfo = localtime(&rawtime);
 	strftime(date, sizeof date, "%Y-%m-%d_%H-%M-%S", timeinfo);
@@ -2092,7 +2092,7 @@ static void SV_Record_f(void)
 {
 	char demoName[MAX_OSPATH];
 	char name[MAX_OSPATH];
-	client_t* cl;
+	client_t* cl = nullptr;
 
 	if (svs.clients == nullptr)
 	{
@@ -2118,7 +2118,7 @@ static void SV_Record_f(void)
 	}
 	else
 	{
-		int i;
+		int i = 0;
 		for (i = 0, cl = svs.clients; i < sv_maxclients->integer; i++, cl++)
 		{
 			if (!cl->state)

@@ -233,7 +233,7 @@ static qboolean Sys_StringToSockaddr(const char* s, sockaddr_in* sadr)
 	}
 	else
 	{
-		hostent* h;
+		hostent* h = nullptr;
 		if ((h = gethostbyname(s)) == nullptr)
 			return qfalse;
 		sadr->sin_addr.s_addr = *reinterpret_cast<uint32_t*>(h->h_addr_list[0]);
@@ -275,8 +275,8 @@ int recvfromCount;
 
 static qboolean NET_GetPacket(netadr_t* net_from, msg_t* net_message, fd_set* fdr)
 {
-	int ret;
-	socklen_t fromlen;
+	int ret = 0;
+	socklen_t fromlen = 0;
 	sockaddr_in from{};
 
 	if (ip_socket == INVALID_SOCKET || !FD_ISSET(ip_socket, fdr))
@@ -345,7 +345,7 @@ Sys_SendPacket
 */
 void Sys_SendPacket(const int length, const void* data, netadr_t to)
 {
-	int ret;
+	int ret = 0;
 	sockaddr_in addr;
 
 	if (to.type != NA_BROADCAST && to.type != NA_IP)
@@ -464,7 +464,7 @@ NET_IPSocket
 */
 static SOCKET NET_IPSocket(char* net_interface, const int port, int* err)
 {
-	SOCKET newsocket;
+	SOCKET newsocket = 0;
 	sockaddr_in address;
 	u_long _true = 1;
 	int i = 1;
@@ -545,7 +545,7 @@ NET_OpenSocks
 static void NET_OpenSocks(const int port)
 {
 	sockaddr_in address;
-	int len;
+	int len = 0;
 	qboolean rfc1929;
 	unsigned char buf[64]{};
 
@@ -847,7 +847,7 @@ static void NET_GetLocalAddress(void) {
 static void NET_GetLocalAddress(void)
 {
 	char hostname[256];
-	char* p;
+	char* p = nullptr;
 
 	// Set this early so we can just return if there is an error
 	numIP = 0;
@@ -896,7 +896,7 @@ NET_OpenIP
 static void NET_OpenIP(void)
 {
 	const int port = net_port->integer;
-	int err;
+	int err = 0;
 
 	NET_GetLocalAddress();
 
@@ -1162,7 +1162,7 @@ void NET_Sleep(int msec)
 {
 	timeval timeout{};
 	fd_set fdset{};
-	int retval;
+	int retval = 0;
 	SOCKET highestfd = INVALID_SOCKET;
 
 	if (msec < 0)

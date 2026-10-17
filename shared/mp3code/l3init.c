@@ -79,7 +79,7 @@ int L3table_init()
 
 	if (!iOnceOnly++)
 	{
-		int i;
+		int i = 0;
 		/*================ quant ===============================*/
 
 		/* 8 bit plus 2 lookup x = pow(2.0, 0.25*(global_gain-210)) */
@@ -157,7 +157,7 @@ void hwin_init()
 
 	if (!iOnceOnly++)
 	{
-		int i;
+		int i = 0;
 		ARRAY36* win = hwin_init_addr();
 
 		const double pi = 4.0 * atan(1.0);
@@ -219,8 +219,8 @@ void imdct_init()
 
 	if (!iOnceOnly++)
 	{
-		int p;
-		int k;
+		int p = 0;
+		int k = 0;
 		/*--- 18 point --*/
 		const IMDCT_INIT_BLOCK* addr = imdct_init_addr_18();
 		float* w = addr->w;
@@ -279,7 +279,7 @@ void msis_init()
 
 	if (!iOnceOnly++)
 	{
-		int i;
+		int i = 0;
 		ARRAY8_2* lr = msis_init_addr();
 
 		const double pi = 4.0 * atan(1.0);
@@ -352,14 +352,14 @@ void msis_init_MPEG2()
 						else if (sf & 1)
 						{
 							lr2[intensity_scale][ms_mode][k][0] =
-								(float)(ms_factor[ms_mode] * pow(t, (sf + 1) / 2));
+								(float)(ms_factor[ms_mode] * pow(t, (sf + 1) >> 1));
 							lr2[intensity_scale][ms_mode][k][1] = ms_factor[ms_mode] * 1.0f;
 						}
 						else
 						{
 							lr2[intensity_scale][ms_mode][k][0] = ms_factor[ms_mode] * 1.0f;
 							lr2[intensity_scale][ms_mode][k][1] =
-								(float)(ms_factor[ms_mode] * pow(t, sf / 2));
+								(float)(ms_factor[ms_mode] * pow(t, sf >> 1));
 						}
 					}
 

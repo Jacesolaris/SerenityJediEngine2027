@@ -538,7 +538,7 @@ int G2_GetBoneDependents(CGhoul2Info& ghoul2, const int boneNum, int* tempDepend
 	const CBoneCache& boneCache = *ghoul2.mBoneCache;
 	const auto offsets = (mdxaSkelOffsets_t*)((byte*)boneCache.header + sizeof(mdxaHeader_t));
 	const auto skel = (mdxaSkel_t*)((byte*)boneCache.header + sizeof(mdxaHeader_t) + offsets->offsets[boneNum]);
-	int i;
+	int i = 0;
 	int ret = 0;
 	for (i = 0; i < skel->numChildren; i++)
 	{
@@ -920,7 +920,7 @@ R_AComputeFogNum
 */
 static int R_GComputeFogNum(const trRefEntity_t* ent)
 {
-	int j;
+	int j = 0;
 
 	if (tr.refdef.rdflags & RDF_NOWORLDMODEL)
 	{
@@ -953,8 +953,8 @@ static int R_GComputeFogNum(const trRefEntity_t* ent)
 // work out lod for this entity.
 static int G2_ComputeLOD(trRefEntity_t* ent, const model_t* currentModel, int lodBias)
 {
-	float flod;
-	float projectedRadius;
+	float flod = 0.0f;
+	float projectedRadius = 0.0f;
 
 	if (currentModel->numLods < 2)
 	{
@@ -1032,7 +1032,7 @@ static void G2_CreateQuaterion(const mdxaBone_t* mat, vec4_t quat)
 {
 	// this is revised for the 3x4 matrix we use in G2.
 	const float t = 1 + mat->matrix[0][0] + mat->matrix[1][1] + mat->matrix[2][2];
-	float s;
+	float s = 0.0f;
 
 	//If the trace of the matrix is greater than zero, then
 	//perform an "instant" calculation.
@@ -1269,7 +1269,7 @@ void G2_TimingModel(
 	// Compute time in "frames" based on animSpeed and startTime
 	// --------------------------------------------------------
 	const float animSpeed = bone.animSpeed;
-	float       time;
+	float       time = 0.0f;
 
 	if (bone.pauseTime != 0)
 	{
@@ -1683,10 +1683,10 @@ int G2_Find_Bone(const model_t* mod, const boneInfo_v& blist, const char* boneNa
 void G2_RagGetAnimMatrix(CGhoul2Info& ghoul2, const int boneNum, mdxaBone_t& matrix, const int frame)
 {
 	mdxaBone_t animMatrix{};
-	mdxaSkel_t* skel;
-	mdxaSkelOffsets_t* offsets;
-	int parent;
-	int bListIndex;
+	mdxaSkel_t* skel = nullptr;
+	mdxaSkelOffsets_t* offsets = nullptr;
+	int parent = 0;
+	int bListIndex = 0;
 #ifdef _RAG_PRINT_TEST
 	bool actuallySet = false;
 #endif
@@ -1731,7 +1731,7 @@ void G2_RagGetAnimMatrix(CGhoul2Info& ghoul2, const int boneNum, mdxaBone_t& mat
 	parent = skel->parent;
 	if (boneNum > 0 && parent > -1)
 	{
-		int parentBlistIndex;
+		int parentBlistIndex = 0;
 		//recursively call to assure all parent matrices are set up
 		G2_RagGetAnimMatrix(ghoul2, parent, matrix, frame);
 
@@ -2484,7 +2484,7 @@ static void G2_ProcessSurfaceBolt(const mdxaBone_v& bonePtr, mdxmSurface_t* surf
 	const surfaceInfo_t* surfInfo, model_t* mod)
 {
 	float pTri[3][3]{};
-	int k;
+	int k = 0;
 
 	// now there are two types of tag surface - model ones and procedural generated types - lets decide which one we have here.
 	if (surfInfo && surfInfo->offFlags == G2SURFACEFLAG_GENERATED)
@@ -2621,7 +2621,7 @@ static void G2_ProcessSurfaceBolt(const mdxaBone_v& bonePtr, mdxmSurface_t* surf
 	// no, we are looking at a normal model tag
 	else
 	{
-		int j;
+		int j = 0;
 		matrix3_t sides;
 		matrix3_t axes;
 		const int* piBoneRefs = (int*)((byte*)surface + surface->ofsBoneReferences);
@@ -2729,7 +2729,7 @@ static void RenderSurfaces(CRenderSurface& RS) //also ended up just ripping righ
 #ifdef G2_PERFORMANCE_ANALYSIS
 	G2PerformanceTimer_RenderSurfaces.Start();
 #endif
-	int offFlags;
+	int offFlags = 0;
 #ifdef _G2_GORE
 	constexpr bool drawGore = true;
 #endif
@@ -2757,7 +2757,7 @@ static void RenderSurfaces(CRenderSurface& RS) //also ended up just ripping righ
 	// if this surface is not off, add it to the shader render list
 	if (!offFlags)
 	{
-		const shader_t* shader;
+		const shader_t* shader = nullptr;
 		if (RS.cust_shader)
 		{
 			shader = RS.cust_shader;
@@ -2901,7 +2901,7 @@ static void RenderSurfaces(CRenderSurface& RS) //also ended up just ripping righ
 								newSurf2->scale = 1.0f;
 							}
 						}
-						shader_t* gshader;
+						shader_t* gshader = nullptr;
 						if ((*kcur).second.shader)
 						{
 							gshader = R_GetShaderByHandle((*kcur).second.shader);
@@ -3017,7 +3017,7 @@ static void ProcessModelBoltSurfaces(const int surfaceNum, surfaceInfo_v& rootSL
 // build the used bone list so when doing bone transforms we can determine if we need to do it or not
 void G2_ConstructUsedBoneList(CConstructBoneList& CBL)
 {
-	int i;
+	int i = 0;
 
 	// back track and get the surfinfo struct for this surface
 	const mdxmSurface_t* surface = static_cast<mdxmSurface_t*>(G2_FindSurface(
@@ -3105,7 +3105,7 @@ void G2_ConstructUsedBoneList(CConstructBoneList& CBL)
 // NOTE!! This assumes at least one model will NOT have a parent. If it does - we are screwed
 static void G2_Sort_Models(CGhoul2Info_v& ghoul2, int* const modelList, int* const modelCount)
 {
-	int i;
+	int i = 0;
 
 	*modelCount = 0;
 
@@ -3206,7 +3206,7 @@ static void* G2_FindSurface_BC(const model_s* mod, const int index, const int lo
 static void G2_ProcessSurfaceBolt2(CBoneCache& boneCache, const mdxmSurface_t* surface, int boltNum, boltInfo_v& boltList, const surfaceInfo_t* surfInfo, const model_t* mod, mdxaBone_t& retMatrix)
 {
 	float pTri[3][3]{};
-	int k;
+	int k = 0;
 
 	// now there are two types of tag surface - model ones and procedural generated types - lets decide which one we have here.
 	if (surfInfo && surfInfo->offFlags == G2SURFACEFLAG_GENERATED)
@@ -3352,7 +3352,7 @@ static void G2_ProcessSurfaceBolt2(CBoneCache& boneCache, const mdxmSurface_t* s
 	// no, we are looking at a normal model tag
 	else
 	{
-		int j;
+		int j = 0;
 		matrix3_t sides;
 		matrix3_t axes;
 		// whip through and actually transform each vertex
@@ -3594,12 +3594,12 @@ void R_AddGhoulSurfaces(trRefEntity_t* ent)
 #ifdef G2_PERFORMANCE_ANALYSIS
 	G2PerformanceTimer_R_AddGHOULSurfaces.Start();
 #endif
-	shader_t* cust_shader;
+	shader_t* cust_shader = nullptr;
 #ifdef _G2_GORE
 #endif
-	int i, whichLod;
-	skin_t* skin;
-	int modelCount;
+	int i = 0, whichLod = 0;
+	skin_t* skin = nullptr;
+	int modelCount = 0;
 	mdxaBone_t rootMatrix;
 	CGhoul2Info_v& ghoul2 = *static_cast<CGhoul2Info_v*>(ent->e.ghoul2);
 
@@ -3774,7 +3774,7 @@ void G2_ConstructGhoulSkeleton(CGhoul2Info_v& ghoul2, const int frameNum, const 
 #ifdef G2_PERFORMANCE_ANALYSIS
 	G2PerformanceTimer_G2_ConstructGhoulSkeleton.Start();
 #endif
-	int modelCount;
+	int modelCount = 0;
 	mdxaBone_t rootMatrix;
 
 	int modelList[256]{};
@@ -4264,13 +4264,13 @@ qhandle_t R_SJE_ChooseAnimGLA(const char* meshName, const mdxmHeader_t* mdxm, qb
 
 qboolean R_LoadMDXM(model_t* mod, void* buffer, const char* mod_name, qboolean& bAlreadyCached)
 {
-	int i, j;
-	mdxmHeader_t* pinmodel, * mdxm;
-	mdxmLOD_t* lod;
-	mdxmSurface_t* surf;
-	int version;
-	int size;
-	mdxmSurfHierarchy_t* surfInfo;
+	int i = 0, j = 0;
+	mdxmHeader_t* pinmodel = nullptr, * mdxm = nullptr;
+	mdxmLOD_t* lod = nullptr;
+	mdxmSurface_t* surf = nullptr;
+	int version = 0;
+	int size = 0;
+	mdxmSurfHierarchy_t* surfInfo = nullptr;
 
 #ifdef Q3_BIG_ENDIAN
 	int					k;
@@ -4715,9 +4715,9 @@ R_LoadMDXA - load a Ghoul 2 animation file
 */
 qboolean R_LoadMDXA(model_t* mod, void* buffer, const char* mod_name, qboolean& bAlreadyCached)
 {
-	mdxaHeader_t* pinmodel, * mdxa;
-	int version;
-	int size;
+	mdxaHeader_t* pinmodel = nullptr, * mdxa = nullptr;
+	int version = 0;
+	int size = 0;
 #ifdef CREATE_LIMB_HIERARCHY
 	int					oSize = 0;
 	byte* sizeMarker;

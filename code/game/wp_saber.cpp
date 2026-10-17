@@ -965,7 +965,7 @@ static int WP_SaberHolsterAvoidGuns(gentity_t* ent, const int saberNum, const in
 	}
 
 	CGhoul2Info* g2 = &ent->ghoul2[ent->playerModel];
-	int side;
+	int side = 0;
 	if (handBolt == gi.G2API_AddBolt(g2, "*hip_r") || handBolt == gi.G2API_AddBolt(g2, "*hip_br"))
 	{
 		side = 1;
@@ -1423,7 +1423,7 @@ void G_Throw(gentity_t* targ, const vec3_t new_dir, const float push)
 //----------------------------------------------------------
 {
 	vec3_t kvel;
-	float mass;
+	float mass = 0.0f;
 
 	if (!targ)
 		return;
@@ -1497,7 +1497,7 @@ void G_Kick_Throw(gentity_t* targ, const vec3_t new_dir, const float push)
 //----------------------------------------------------------
 {
 	vec3_t kvel;
-	float mass;
+	float mass = 0.0f;
 
 	if (!targ)
 		return;
@@ -1615,7 +1615,7 @@ int WP_SetSaberModel(gclient_t* client, const class_t npc_class)
 
 void wp_set_saber_ent_model_skin(const gentity_t* ent, gentity_t* saberent)
 {
-	int saber_model;
+	int saber_model = 0;
 	qboolean new_model = qfalse;
 
 	if (!ent->client->ps.saber[0].model)
@@ -2256,7 +2256,7 @@ static int g_saber_attack_power(const gentity_t* ent, const qboolean attacking)
 		base_level++;
 
 		vec3_t v_sub;
-		int tolerance_amt;
+		int tolerance_amt = 0;
 
 		//We want different "tolerance" levels for adding in the distance of the last swing
 		//to the base power level depending on which stance we are using. Otherwise fast
@@ -2583,7 +2583,7 @@ void WP_SaberClearDamageForEntNum(gentity_t* attacker, const int entityNum, cons
 				if (victim && victim->client)
 				{
 					vec3_t center, dir_to_center;
-					float knock_down_thresh_hold;
+					float knock_down_thresh_hold = 0.0f;
 					const float knockback = knock_back_scale * totalDmg[i] * 0.5f;
 
 					VectorAdd(victim->absmin, victim->absmax, center);
@@ -2733,7 +2733,7 @@ static qboolean WP_SaberApplyDamage(gentity_t* ent, const float base_damage, con
 {
 	qboolean did_damage = qfalse;
 	const saberType_t saber_type = ent->client->ps.saber[saberNum].type;
-	float max_dmg;
+	float max_dmg = 0.0f;
 
 	const qboolean is_holding_block_button_and_attack = ((ent->client->ps.ManualBlockingFlags & 1 << MBF_HOLDINGBLOCKANDATTACK) != 0) ? qtrue : qfalse;
 	const qboolean is_holding_block_button = ((ent->client->ps.ManualBlockingFlags & 1 << MBF_HOLDINGBLOCK) != 0) ? qtrue : qfalse;
@@ -3445,7 +3445,7 @@ static qboolean WP_SaberApplyDamage(gentity_t* ent, const float base_damage, con
 						{
 							inflictor = &g_entities[ent->client->ps.saberEntityNum];
 						}
-						int damage;
+						int damage = 0;
 						if (!WP_SaberBladeUseSecondBladeStyle(&ent->client->ps.saber[saberNum], bladeNum)
 							&& ent->client->ps.saber[saberNum].damageScale != 1.0f)
 						{
@@ -3555,7 +3555,7 @@ static void WP_SaberDamageAdd(const float tr_dmg, const int tr_victim_entity_num
 
 	if (tr_dmg)
 	{
-		int i;
+		int i = 0;
 		int cur_victim = 0;
 		//did some damage to something
 		for (i = 0; i < numVictims; i++)
@@ -3878,10 +3878,10 @@ static qboolean wp_saber_damage_effects(trace_t* tr, const float length, const f
 	int tr_hit_loc[MAX_G2_COLLISIONS] = { HL_NONE }; //same as 0
 	int tr_dismember_loc[MAX_G2_COLLISIONS] = { HL_NONE }; //same as 0
 	qboolean tr_dismember[MAX_G2_COLLISIONS] = { qfalse }; //same as 0
-	int i;
+	int i = 0;
 	int num_hit_ents = 0;
-	int hit_effect;
-	gentity_t* hitEnt;
+	int hit_effect = 0;
+	gentity_t* hitEnt = nullptr;
 
 	VectorNormalize2(blade_vec, blade_dir);
 
@@ -4632,7 +4632,7 @@ static qboolean WP_SaberDamageForTrace(const int ignore, vec3_t start, vec3_t en
 				sabersCrossed = sabers_dist;
 			}
 
-			float collision_dist;
+			float collision_dist = 0.0f;
 
 			if (g_saberRealisticCombat->integer > 1)
 			{ // realistic combat, so use the radius of the blades to determine if they intersect
@@ -4807,8 +4807,8 @@ static qboolean WP_SaberDamageForTrace(const int ignore, vec3_t start, vec3_t en
 							gi.Printf(S_COLOR_GREEN"Hit ent, but no ghoul collisions\n");
 						}
 					}
-					float tr_frac;
-					float dmg_frac;
+					float tr_frac = 0.0f;
+					float dmg_frac = 0.0f;
 					if (tr.allsolid)
 					{
 						//totally inside them
@@ -5144,8 +5144,8 @@ qboolean BG_CheckIncrementLockAnim(const int anim, const int win_or_lose)
 
 qboolean WP_SabersCheckLock2(gentity_t* attacker, gentity_t* defender, sabersLockMode_t lockMode)
 {
-	animation_t* anim;
-	int attAnim, defAnim, advance = 0;
+	animation_t* anim = nullptr;
+	int attAnim = 0, defAnim = 0, advance = 0;
 	float attStart = 0.5f, defStart = 0.5f;
 	float ideal_dist = 48.0f;
 
@@ -5644,7 +5644,7 @@ qboolean WP_SabersCheckLock2(gentity_t* attacker, gentity_t* defender, sabersLoc
 
 qboolean WP_SabersCheckLock(gentity_t* ent1, gentity_t* ent2)
 {
-	int lock_quad;
+	int lock_quad = 0;
 
 	if (ent1->client->playerTeam == ent2->client->playerTeam)
 	{
@@ -6433,7 +6433,7 @@ static void WP_SaberRadiusDamage(gentity_t* ent, vec3_t point, const float radiu
 	}
 	vec3_t mins{}, maxs{}, entDir;
 	gentity_t* radius_ents[128];
-	int i;
+	int i = 0;
 
 	//Setup the bbox to search in
 	for (i = 0; i < 3; i++)
@@ -7130,7 +7130,7 @@ static void WP_SaberDamageTrace(gentity_t* ent, int saberNum, int bladeNum)
 	vec3_t base_new;
 	vec3_t end_old;
 	vec3_t end_new;
-	float base_damage;
+	float base_damage = 0.0f;
 	int base_d_flags = 0;
 	qboolean saber_hit_wall = qfalse;
 	qboolean broken_parry = qfalse;
@@ -7639,9 +7639,9 @@ static void WP_SaberDamageTrace(gentity_t* ent, int saberNum, int bladeNum)
 	{
 		float tip_dmg_mod = 1.0f;
 		vec3_t base_diff;
-		float ave_length, step = 8, stepsize = 8;
+		float ave_length = 0.0f, step = 8, stepsize = 8;
 		vec3_t ma1, ma2, md2_ang{}, cur_base2;
-		int xx;
+		int xx = 0;
 		//do the trace at the base first
 		saber_hit_wall = WP_SaberDamageForTrace(ent->s.number, base_old, base_new, base_damage, md2, qfalse,
 			ent->client->ps.saber[saberNum].type,
@@ -7665,7 +7665,7 @@ static void WP_SaberDamageTrace(gentity_t* ent, int saberNum, int bladeNum)
 		}
 
 		//If the angle diff in the blade is high, need to do it in chunks of 33 to avoid flattening of the arc
-		float dir_inc, cur_dir_frac;
+		float dir_inc = 0.0f, cur_dir_frac = 0.0f;
 		if (PM_SaberInAttack(ent->client->ps.saberMove)
 			|| PM_SaberInSpecialAttack(ent->client->ps.torsoAnim)
 			|| PM_SpinningSaberAnim(ent->client->ps.torsoAnim)
@@ -15168,7 +15168,7 @@ void wp_saber_start_missile_block_check(gentity_t* self, const usercmd_t* ucmd)
 			}
 		}
 
-		float dot1;
+		float dot1 = 0.0f;
 		//see if they're in front of me
 		VectorSubtract(ent->currentOrigin, self->currentOrigin, dir);
 		const float dist = VectorNormalize(dir);
@@ -15315,7 +15315,7 @@ void wp_saber_start_missile_block_check(gentity_t* self, const usercmd_t* ucmd)
 		if (!swing_block)
 		{
 			vec3_t missile_dir;
-			float dot2;
+			float dot2 = 0.0f;
 			VectorCopy(ent->s.pos.trDelta, missile_dir);
 			VectorNormalize(missile_dir);
 			if ((dot2 = DotProduct(dir, missile_dir)) > 0)
@@ -15893,7 +15893,7 @@ void wp_saber_update(gentity_t* self, const usercmd_t* ucmd)
 			inSuperBreakLose ||
 			badVehicle)
 		{
-			int i, j;
+			int i = 0, j = 0;
 			for (i = 0; i < MAX_SABERS; i++)
 			{
 				if (i > 0 && !self->client->ps.dualSabers)
@@ -15990,7 +15990,7 @@ void wp_saber_update(gentity_t* self, const usercmd_t* ucmd)
 			else
 			{
 				int num_sabers = self->client->ps.dualSabers ? 2 : 1;
-				int saberNum, bladeNum, i;
+				int saberNum = 0, bladeNum = 0, i = 0;
 
 				VectorClear(saberent->mins);
 				VectorClear(saberent->maxs);
@@ -16302,7 +16302,7 @@ static void WP_ForceThrowHazardTrooper(gentity_t* self, gentity_t* trooper, cons
 		{
 			//level 3: they actually play a pushed anim and stumble a bit
 			vec3_t haz_angles = { 0, trooper->currentAngles[YAW], 0 };
-			int anim;
+			int anim = 0;
 			if (InFront(self->currentOrigin, trooper->currentOrigin, haz_angles))
 			{
 				//I'm on front of him
@@ -16374,7 +16374,7 @@ static void WP_ForceThrowHazardTrooper(gentity_t* self, gentity_t* trooper, cons
 
 void WP_ResistForcePush(gentity_t* self, const gentity_t* pusher, const qboolean no_penalty)
 {
-	int parts;
+	int parts = 0;
 	qboolean running_resist = qfalse;
 
 	if (!self || self->health <= 0 || !self->client || !pusher || !pusher->client)
@@ -16557,7 +16557,7 @@ static void WP_ForceKnockdown(gentity_t* self, gentity_t* pusher, const qboolean
 		if (!PM_RollingAnim(self->client->ps.legsAnim)
 			&& !PM_InKnockDown(&self->client->ps))
 		{
-			int knock_anim; //default knockdown
+			int knock_anim = 0; //default knockdown
 			if (pusher->client->NPC_class == CLASS_DESANN || pusher->client->NPC_class == CLASS_SITHLORD || pusher->
 				client->NPC_class == CLASS_VADER && self->client->NPC_class != CLASS_LUKE)
 			{
@@ -16629,7 +16629,7 @@ static void WP_ForceKnockdown(gentity_t* self, gentity_t* pusher, const qboolean
 			if (self->s.number >= MAX_CLIENTS)
 			{
 				//randomize getup times - but not for boba
-				int add_time;
+				int add_time = 0;
 				if (self->client->NPC_class == CLASS_BOBAFETT)
 				{
 					add_time = Q_irand(-500, 0);
@@ -17199,8 +17199,8 @@ static void PushDamage(gentity_t* self, gentity_t* enemy, vec3_t location, const
 void ForceThrow(gentity_t* self, qboolean pull, qboolean fake)
 {
 	//shove things in front of you away
-	float dist;
-	gentity_t* ent, * forward_ent = nullptr;
+	float dist = 0.0f;
+	gentity_t* ent = nullptr, * forward_ent = nullptr;
 	//on the heap: two 64 KB lists are too big for the stack. Not static: a pushed entity's use function runs
 	//inside the loop below, and a push started from there must not share these lists.
 	std::vector<gentity_t*> entity_list_mem(MAX_GENTITIES), push_target_mem(MAX_GENTITIES);
@@ -17209,14 +17209,14 @@ void ForceThrow(gentity_t* self, qboolean pull, qboolean fake)
 	int num_listed_entities = 0;
 	vec3_t mins{}, maxs{};
 	vec3_t v{};
-	int i, e;
+	int i = 0, e = 0;
 	int ent_count = 0;
-	int radius;
+	int radius = 0;
 	vec3_t center, ent_org, size, forward, right, end, dir, fwdangles = { 0 };
-	float dot1;
-	float cone;
+	float dot1 = 0.0f;
+	float cone = 0.0f;
 	trace_t tr;
-	int anim, hold, sound_index, cost;
+	int anim = 0, hold = 0, sound_index = 0, cost = 0;
 	qboolean no_resist = qfalse;
 	int damage_level = FORCE_LEVEL_0;
 	qboolean i_grip = qfalse;
@@ -17952,7 +17952,7 @@ void ForceThrow(gentity_t* self, qboolean pull, qboolean fake)
 
 	if (ent_count)
 	{
-		int actualCost;
+		int actualCost = 0;
 		for (int x = 0; x < ent_count; x++)
 		{
 			if (push_target[x]->client)
@@ -17992,7 +17992,7 @@ void ForceThrow(gentity_t* self, qboolean pull, qboolean fake)
 					WP_ResistForcePush(push_target[x], self, qfalse);
 					continue;
 				}
-				int power_level, powerUse;
+				int power_level = 0, powerUse = 0;
 				if (pull)
 				{
 					power_level = self->client->ps.forcePowerLevel[FP_PULL];
@@ -19279,10 +19279,10 @@ static void ForceRepulseThrow(gentity_t* self, int charge_time, const qboolean b
 	gentity_t** const push_target = push_target_mem.data();
 	int num_listed_entities = 0;
 	int ent_count = 0;
-	int radius;
+	int radius = 0;
 	vec3_t center, forward, right, fwdangles = { 0 };
 	trace_t tr;
-	int anim, hold, sound_index, cost;
+	int anim = 0, hold = 0, sound_index = 0, cost = 0;
 	int damage_level = FORCE_LEVEL_0;
 
 	if (self->health <= 0)
@@ -19441,12 +19441,12 @@ static void ForceRepulseThrow(gentity_t* self, int charge_time, const qboolean b
 		vec3_t mins{};
 		vec3_t maxs{};
 		vec3_t v{};
-		int i;
-		int e;
+		int i = 0;
+		int e = 0;
 		std::vector<gentity_t*> entity_list_mem(MAX_GENTITIES); //on the heap: 64 KB is too big for the stack
 		gentity_t** const entity_list = entity_list_mem.data();
-		gentity_t* ent;
-		float dist;
+		gentity_t* ent = nullptr;
+		float dist = 0.0f;
 		for (i = 0; i < 3; i++)
 		{
 			mins[i] = center[i] - radius;
@@ -19571,7 +19571,7 @@ static void ForceRepulseThrow(gentity_t* self, int charge_time, const qboolean b
 				continue;
 			}
 
-			int power_level, powerUse;
+			int power_level = 0, powerUse = 0;
 			power_level = self->client->ps.forcePowerLevel[FP_REPULSE];
 			powerUse = FP_REPULSE;
 
@@ -20378,7 +20378,7 @@ static qboolean G_IsFireEffectName(const char* name)
 {
 	static const char* fire_words[] = { "fire", "flame", "burn", "torch", "lava", "inferno", "blaze" };
 	char lower[MAX_QPATH]{};
-	int i;
+	int i = 0;
 
 	if (!name || !name[0])
 	{
@@ -20408,7 +20408,7 @@ qboolean G_FxRunnerIsFire(const gentity_t* ent)
 // a fire fx_runner inside (or within 48 units of) this trigger's box: a trigger_hurt there is a fire
 qboolean G_NearFireEffect(const gentity_t* area)
 {
-	int i, a;
+	int i = 0, a = 0;
 
 	for (i = MAX_CLIENTS; i < globals.num_entities; i++)
 	{
@@ -21125,7 +21125,7 @@ static void ForceGripWide(gentity_t* self, gentity_t* traceEnt)
 	self->client->ps.forceGripentity_num = traceEnt->s.number;
 	if (traceEnt->client)
 	{
-		Vehicle_t* p_veh;
+		Vehicle_t* p_veh = nullptr;
 		if ((p_veh = G_IsRidingVehicle(traceEnt)) != nullptr)
 		{
 			//riding vehicle? pull him off!
@@ -21339,7 +21339,7 @@ void ForceGripAdvanced(gentity_t* self)
 			vec3_t center, mins = { 0 }, maxs = { 0 }, v = { 0 };
 			constexpr float radius = 512;
 			static gentity_t* entity_list[MAX_GENTITIES]; //static: too big for the stack (64 KB)
-			int i;
+			int i = 0;
 
 			VectorCopy(self->currentOrigin, center);
 			for (i = 0; i < 3; i++)
@@ -21351,7 +21351,7 @@ void ForceGripAdvanced(gentity_t* self)
 
 			for (int e = 0; e < num_listed_entities; e++)
 			{
-				float dot;
+				float dot = 0.0f;
 				vec3_t size;
 				vec3_t ent_org;
 				vec3_t dir;
@@ -21750,7 +21750,7 @@ void ForceGripAdvanced(gentity_t* self)
 	self->client->ps.forceGripentity_num = traceEnt->s.number;
 	if (traceEnt->client)
 	{
-		Vehicle_t* p_veh;
+		Vehicle_t* p_veh = nullptr;
 		if ((p_veh = G_IsRidingVehicle(traceEnt)) != nullptr)
 		{
 			//riding vehicle? pull him off!
@@ -22212,7 +22212,7 @@ void ForceGripBasic(gentity_t* self)
 	self->client->ps.forceGripentity_num = traceEnt->s.number;
 	if (traceEnt->client)
 	{
-		Vehicle_t* p_veh;
+		Vehicle_t* p_veh = nullptr;
 		if ((p_veh = G_IsRidingVehicle(traceEnt)) != nullptr)
 		{
 			//riding vehicle? pull him off!
@@ -23133,7 +23133,7 @@ static void ForceShootstrike(gentity_t* self)
 {
 	trace_t tr;
 	vec3_t end, forward, right, up, dir, fx_dir{}; // fx_dir: the fizz effect's direction (it was built in forward, which the next target's cone check then used)
-	gentity_t* traceEnt;
+	gentity_t* traceEnt = nullptr;
 	constexpr int damage_low = STRIKE_DAMAGELOW;
 	constexpr int damage_medium = STRIKE_DAMAGEMEDIUM;
 	constexpr int damage_high = STRIKE_DAMAGEHIGH;
@@ -23142,10 +23142,10 @@ static void ForceShootstrike(gentity_t* self)
 	const float chanceOfFizz = Q_flrand(0.0f, 1.0f);
 	constexpr int npc_saber_num = 0;
 	constexpr int npc_blade_num = 0;
-	float dot;
-	float dist;
+	float dot = 0.0f;
+	float dist = 0.0f;
 	static gentity_t* entity_list[MAX_GENTITIES];
-	int e, num_listed_entities, i;
+	int e = 0, num_listed_entities = 0, i = 0;
 
 	constexpr int hit_loc = HL_NONE; // tr is not traced yet here: G_Damage works the location out per target
 
@@ -24359,9 +24359,9 @@ static void force_lightning_damage(gentity_t* self, gentity_t* traceEnt, vec3_t 
 			||
 			traceEnt->enemy == self)
 		{
-			int npc_lfp_block_cost;
+			int npc_lfp_block_cost = 0;
 			//an enemy or object
-			int dmg;
+			int dmg = 0;
 
 			if (self->client->ps.forcePowerLevel[FP_LIGHTNING] > FORCE_LEVEL_2)
 			{
@@ -24973,7 +24973,7 @@ static void force_shoot_lightning(gentity_t* self)
 {
 	trace_t tr;
 	vec3_t forward;
-	gentity_t* traceEnt;
+	gentity_t* traceEnt = nullptr;
 
 	if (self == NULL || self->client == NULL)
 	{
@@ -25005,7 +25005,7 @@ static void force_shoot_lightning(gentity_t* self)
 		vec3_t mins{}, maxs{};
 		vec3_t v{};
 		const float radius = FORCE_LIGHTNING_RADIUS_WIDE;
-		float dot;
+		float dot = 0.0f;
 
 		// FIX: Move large array off the stack (removes C6262)
 		static gentity_t* entity_list[MAX_GENTITIES];
@@ -25764,7 +25764,7 @@ void ForceShootDrain(gentity_t* self)
 
 	if (self->client->ps.forcePowerDebounce[FP_DRAIN] <= level.time)
 	{
-		gentity_t* traceEnt;
+		gentity_t* traceEnt = nullptr;
 		vec3_t forward;
 		AngleVectors(self->client->ps.viewangles, forward, NULL, NULL);
 		VectorNormalize(forward);
@@ -25793,7 +25793,7 @@ void ForceShootDrain(gentity_t* self)
 				vec3_t size;
 				vec3_t ent_org;
 				vec3_t dir;
-				float dot;
+				float dot = 0.0f;
 
 				traceEnt = entity_list[e];
 
@@ -26575,7 +26575,7 @@ void ForceJump(gentity_t* self, const usercmd_t* ucmd)
 	const float force_jump_charge_interval = forceJumpStrength[self->client->ps.forcePowerLevel[FP_LEVITATION]] / (
 		FORCE_JUMP_CHARGE_TIME / FRAMETIME);
 
-	int anim;
+	int anim = 0;
 	vec3_t jump_vel{};
 
 	switch (WP_GetVelocityForForceJump(self, jump_vel, ucmd))
@@ -26775,7 +26775,7 @@ static void WP_FireDestruction(gentity_t* ent, const int force_level)
 
 void ForceDestruction(gentity_t* self)
 {
-	int anim;
+	int anim = 0;
 	if (self->health <= 0)
 	{
 		return;
@@ -26923,8 +26923,8 @@ extern void PM_SetTorsoAnimTimer(gentity_t* ent, int* torsoAnimTimer, int time);
 
 static void ForceStasisWide(const gentity_t* self, gentity_t* traceEnt)
 {
-	float currentFrame, animSpeed;
-	int junk;
+	float currentFrame = 0.0f, animSpeed = 0.0f;
+	int junk = 0;
 	trace_t tr;
 
 	if (self == NULL || self->client == NULL)
@@ -27044,7 +27044,7 @@ static void ForceStasisWide(const gentity_t* self, gentity_t* traceEnt)
 			self->enemy == traceEnt ||
 			traceEnt->enemy == self)
 		{
-			int actual_time;
+			int actual_time = 0;
 
 			if (traceEnt->health > 0 &&
 				traceEnt->s.weapon != WP_SABER &&
@@ -27201,7 +27201,7 @@ static void ForceStasisWide(const gentity_t* self, gentity_t* traceEnt)
 // The caster's side of force stasis: the push anim and hand effect, the sound, the force cost and the debounce.
 static void forcestasis_anim(gentity_t* self)
 {
-	int anim, sound_index;
+	int anim = 0, sound_index = 0;
 
 	if (self->s.weapon == WP_MELEE ||
 		self->s.weapon == WP_NONE ||
@@ -27297,10 +27297,10 @@ void ForceStasis(gentity_t* self)
 	trace_t tr;
 	vec3_t forward;
 	gentity_t* traceEnt = nullptr;
-	float currentFrame, animSpeed;
-	int radius;
-	int junk;
-	int actual_time;
+	float currentFrame = 0.0f, animSpeed = 0.0f;
+	int radius = 0;
+	int junk = 0;
+	int actual_time = 0;
 
 	if (self->health <= 0)
 	{
@@ -27355,9 +27355,9 @@ void ForceStasis(gentity_t* self)
 		traceEnt = &g_entities[tr.entityNum];
 
 		vec3_t center, mins{}, maxs{}, v{};
-		float reach = radius, dist;
+		float reach = radius, dist = 0.0f;
 		static gentity_t* entity_list[MAX_GENTITIES]; //static: too big for the stack (64 KB)
-		int e, num_listed_entities, i;
+		int e = 0, num_listed_entities = 0, i = 0;
 
 		VectorCopy(self->currentOrigin, center);
 		for (i = 0; i < 3; i++)
@@ -27369,7 +27369,7 @@ void ForceStasis(gentity_t* self)
 
 		for (e = 0; e < num_listed_entities; e++)
 		{
-			float dot;
+			float dot = 0.0f;
 			vec3_t size;
 			vec3_t ent_org;
 			vec3_t dir;
@@ -27606,7 +27606,7 @@ void ForceStasis(gentity_t* self)
 			FP_STASIS,
 			self->client->ps.forcePowerLevel[FP_STASIS],
 			force_power_needed[FP_STASIS]);
-		int actual_power_level;
+		int actual_power_level = 0;
 		if (mod_power_level == -1)
 		{
 			actual_power_level = self->client->ps.forcePowerLevel[FP_STASIS];
@@ -27669,7 +27669,7 @@ void ForceStasis(gentity_t* self)
 			FP_STASIS,
 			self->client->ps.forcePowerLevel[FP_STASIS],
 			force_power_needed[FP_STASIS]);
-		int actual_power_level;
+		int actual_power_level = 0;
 		if (mod_power_level == -1)
 		{
 			actual_power_level = self->client->ps.forcePowerLevel[FP_STASIS];
@@ -28048,7 +28048,7 @@ void ForceGrasp(gentity_t* self)
 	self->client->ps.forceGripentity_num = traceEnt->s.number;
 	if (traceEnt->client)
 	{
-		Vehicle_t* p_veh;
+		Vehicle_t* p_veh = nullptr;
 		if ((p_veh = G_IsRidingVehicle(traceEnt)) != nullptr)
 		{
 			//riding vehicle? pull him off!
@@ -28161,7 +28161,7 @@ extern void WP_FireBlast(gentity_t* ent, int force_level);
 
 void ForceBlast(gentity_t* self)
 {
-	int anim;
+	int anim = 0;
 	if (self->health <= 0)
 	{
 		return;
@@ -28914,7 +28914,7 @@ qboolean WP_ForcePowerUsable(const gentity_t* self, const forcePowers_t force_po
 		//Doh!  No force powers in an AT-ST!
 		return qfalse;
 	}
-	const Vehicle_t* p_veh;
+	const Vehicle_t* p_veh = nullptr;
 	if ((p_veh = G_IsRidingVehicle(self)) != nullptr)
 	{
 		//Doh!  No force powers when flying a vehicle!
@@ -29016,7 +29016,7 @@ qboolean WP_ForcePowerUsable(const gentity_t* self, const forcePowers_t force_po
 
 void WP_ForcePowerStop(gentity_t* self, const forcePowers_t force_power)
 {
-	gentity_t* grip_ent;
+	gentity_t* grip_ent = nullptr;
 
 	if (!(self->client->ps.forcePowersActive & 1 << force_power))
 	{
@@ -29116,7 +29116,7 @@ void WP_ForcePowerStop(gentity_t* self, const forcePowers_t force_power)
 #endif
 					//rww - RAGDOLL_END
 					{
-						int hold_time;
+						int hold_time = 0;
 						if (grip_ent->health > 0)
 						{
 							G_AddEvent(grip_ent, EV_WATER_CLEAR, 0);
@@ -29421,7 +29421,7 @@ void WP_ForcePowerStop(gentity_t* self, const forcePowers_t force_power)
 #endif
 					//rww - RAGDOLL_END
 					{
-						int hold_time;
+						int hold_time = 0;
 						if (grip_ent->health > 0)
 						{
 							G_AddEvent(grip_ent, EV_WATER_CLEAR, 0);
@@ -29597,10 +29597,10 @@ extern qboolean PM_ForceJumpingUp(const gentity_t* gent);
 
 static void wp_force_power_run(gentity_t* self, forcePowers_t force_power, usercmd_t* cmd)
 {
-	float speed;
-	gentity_t* grip_ent;
+	float speed = 0.0f;
+	gentity_t* grip_ent = nullptr;
 	vec3_t angles, dir, grip_org, grip_ent_org;
-	float dist;
+	float dist = 0.0f;
 	extern usercmd_t ucmd;
 
 	switch (static_cast<int>(force_power))
@@ -29834,7 +29834,7 @@ static void wp_force_power_run(gentity_t* self, forcePowers_t force_power, userc
 				gi.cvar_set("timescale", va("%4.2f", speed));
 				if (g_timescale->value > speed)
 				{
-					float newSpeed;
+					float newSpeed = 0.0f;
 					newSpeed = g_timescale->value - 0.05;
 					if (newSpeed < speed)
 					{
@@ -30385,7 +30385,7 @@ static void wp_force_power_run(gentity_t* self, forcePowers_t force_power, userc
 		}
 		else if (self->client->ps.forceDrainentity_num >= 0 && self->client->ps.forceDrainentity_num < ENTITYNUM_WORLD)
 		{
-			gentity_t* drain_ent;
+			gentity_t* drain_ent = nullptr;
 			//holding someone
 			if (!WP_ForcePowerAvailable(self, FP_DRAIN, 0)
 				|| self->client->ps.forcePowerLevel[FP_DRAIN] > FORCE_LEVEL_1
@@ -31090,7 +31090,7 @@ static void wp_force_power_run(gentity_t* self, forcePowers_t force_power, userc
 		if (self->client->ps.deadlySightLastChecked < level.time)
 		{
 			vec3_t forward, mins{}, maxs{};
-			int e, num_listed_entities;
+			int e = 0, num_listed_entities = 0;
 			static gentity_t* entity_list[MAX_GENTITIES]; //static: too big for the stack (64 KB)
 			gentity_t* check = nullptr;
 			trace_t tr;
@@ -31127,7 +31127,7 @@ static void wp_force_power_run(gentity_t* self, forcePowers_t force_power, userc
 			for (e = 0; e < num_listed_entities; e++)
 			{
 				float minDot = 0.5f;
-				float dist1;
+				float dist1 = 0.0f;
 				check = entity_list[e];
 				if (check == self)
 				{
@@ -31344,7 +31344,7 @@ static void WP_CheckForcedPowers(gentity_t* self, usercmd_t* ucmd)
 void WP_ForcePowersUpdate(gentity_t* self, usercmd_t* ucmd)
 {
 	qboolean using_force = qfalse;
-	int i;
+	int i = 0;
 
 	if (self == NULL || self->client == NULL)
 	{
