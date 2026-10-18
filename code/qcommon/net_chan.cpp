@@ -507,6 +507,7 @@ qboolean NET_GetLoopPacket(const netsrc_t sock, netadr_t* net_from, msg_t* net_m
 	{
 		Com_Printf(S_COLOR_RED "ERROR: You just tried to crash the game! Shame on you!" S_COLOR_WHITE "\n");
 	}
+	return qfalse; // SJE: catch path fell off the end of a non-void function (undefined behaviour)
 }
 
 static void NET_SendLoopPacket(const netsrc_t sock, const int length, const void* data, netadr_t to)

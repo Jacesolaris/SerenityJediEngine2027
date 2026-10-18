@@ -1446,7 +1446,7 @@ extern int navTime;
 qboolean NPC_MoveToGoal(const qboolean tryStraight)
 {
 	float distance = 0.0f;
-	vec3_t dir;
+	vec3_t dir = { 0.0f, 0.0f, 0.0f }; // SJE: not every path of the move-direction call sets it
 
 #if	AI_TIMERS
 	int	startTime = GetTime(0);

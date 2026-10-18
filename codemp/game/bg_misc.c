@@ -4439,6 +4439,12 @@ char* G_NewString(const char* string)
 
 	const int len = strlen(string) + 1;
 	char* newb = (char*)BG_Alloc(len);
+	if (!newb)
+	{
+		// SJE: the BG pool is full - drop to the menu with a clear message instead of writing through NULL
+		Com_Error(ERR_DROP, "G_NewString: out of BG pool memory (increase MAX_POOL_SIZE)");
+		return NULL;
+	}
 	char* out_p = newb;
 
 	for (int i = 0; i < len; i++)

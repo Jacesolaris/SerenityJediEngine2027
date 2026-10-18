@@ -6738,7 +6738,8 @@ static bool TorsoAgainstWindTest(gentity_t* ent)
 				{
 					if (ent->client->ps.weapon != WP_SABER &&
 						!(pm->ps->PlayerEffectFlags & 1 << PEF_SPRINTING) &&
-						!(pm->ps->PlayerEffectFlags & 1 << PEF_WEAPONSPRINTING))
+						!(pm->ps->PlayerEffectFlags & 1 << PEF_WEAPONSPRINTING) &&
+						!(pm->ps->communicatingflags & (1 << CF_AIMINGGUN)))
 					{
 						if (ent->client && ent->client->ps.torsoAnim != BOTH_WIND)
 						{

@@ -1363,7 +1363,13 @@ static void R_CreateBuiltinImages(void)
 	if (glConfigExt.doGammaCorrectionWithShaders)
 	{
 		qglEnable(GL_TEXTURE_3D);
-		tr.gammaCorrectLUTImage = 1024 + giTextureBindNum++;
+		// SJE: own GL name (not from the image counter, which restarts at 1024 when images are cleared and
+		// could hand the same name to a 2D image, then delete it with that image)
+		if (tr.gammaCorrectLUTImage)
+		{
+			qglDeleteTextures(1, &tr.gammaCorrectLUTImage);
+		}
+		qglGenTextures(1, &tr.gammaCorrectLUTImage);
 		qglBindTexture(GL_TEXTURE_3D, tr.gammaCorrectLUTImage);
 		qglTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA8, 64, 64, 64, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 		qglTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -1420,8 +1426,8 @@ void R_SetColorMappings()
 		tr.overbrightBits = 0; // need hardware gamma for overbright
 	}
 
-	// never overbright in windowed mode
-	if (!glConfig.isFullscreen)
+	// never overbright in windowed mode (SJE: unless gamma is done with shaders, which does not touch the desktop)
+	if (!glConfig.isFullscreen && !glConfigExt.doGammaCorrectionWithShaders)
 	{
 		tr.overbrightBits = 0;
 	}
@@ -1540,6 +1546,7 @@ void R_SetGammaCorrectionLUT()
 		qglBindTexture(GL_TEXTURE_3D, tr.gammaCorrectLUTImage);
 		qglPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 		qglTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, 0, 64, 64, 64, GL_RGB, GL_UNSIGNED_BYTE, lut_table);
+		qglPixelStorei(GL_UNPACK_ALIGNMENT, 4); // SJE: restore the GL default - fonts and other textures uploaded later assume it
 
 		ri.Hunk_FreeTempMemory(lut_table);
 	}

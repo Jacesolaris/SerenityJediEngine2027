@@ -10627,7 +10627,9 @@ powersetcheck:
 	}
 }
 
-void WP_BlockPointsUpdate(const gentity_t* self)
+extern qboolean WP_BlockMasterClass(const gentity_t* self);
+
+static void WP_BlockPointsUpdate_Base(const gentity_t* self)
 {
 	const qboolean is_holding_block_button = ((self->client->ps.ManualBlockingFlags & 1 << MBF_HOLDINGBLOCK) != 0) ? qtrue : qfalse;
 	//Normal Blocking
@@ -10729,6 +10731,23 @@ void WP_BlockPointsUpdate(const gentity_t* self)
 				}
 			}
 		}
+	}
+}
+
+// SJE: the block master classes (WP_BlockMasterClass) regenerate block points 25% faster - every regen wait the
+// update above sets is cut to 80% of its length (1 / 1.25)
+void WP_BlockPointsUpdate(const gentity_t* self)
+{
+	const int prev_debounce = self->client->ps.fd.BlockPointsRegenDebounceTime;
+
+	WP_BlockPointsUpdate_Base(self);
+
+	if (self->client->ps.fd.BlockPointsRegenDebounceTime != prev_debounce
+		&& self->client->ps.fd.BlockPointsRegenDebounceTime > level.time
+		&& WP_BlockMasterClass(self))
+	{
+		const int wait = self->client->ps.fd.BlockPointsRegenDebounceTime - level.time;
+		self->client->ps.fd.BlockPointsRegenDebounceTime = level.time + wait * 4 / 5;
 	}
 }
 

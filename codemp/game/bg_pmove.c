@@ -2158,7 +2158,7 @@ int PM_BlockingPoseForsaber_anim_levelDual(void)
 	{
 		//
 	}
-	else if (!pm->ps->fd.saberAnimLevel == SS_DUAL)
+	else if (pm->ps->fd.saberAnimLevel != SS_DUAL) // SJE: was "!level == SS_DUAL" (always false)
 	{
 		anim = PM_BlockingPoseForsaber_anim_levelSingle();
 	}
@@ -2335,7 +2335,7 @@ int PM_BlockingPoseForsaber_anim_levelStaff(void)
 	{
 		//
 	}
-	else if (!pm->ps->fd.saberAnimLevel == SS_STAFF)
+	else if (pm->ps->fd.saberAnimLevel != SS_STAFF) // SJE: was "!level == SS_STAFF" (always false)
 	{
 		anim = PM_BlockingPoseForsaber_anim_levelSingle();
 	}

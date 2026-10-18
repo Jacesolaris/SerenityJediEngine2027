@@ -994,6 +994,9 @@ using trGlobals_t = struct trGlobals_s {
 	GLuint					gammaCorrectVtxShader;
 	GLuint					gammaCorrectPxShader;
 
+	// SJE: bloom bright-pass pixel program (r_dynamicGlowBloom)
+	GLuint					bloomPShader;
+
 	shader_t* defaultShader;
 	shader_t* shadowShader;
 	shader_t* distortionShader;
@@ -1067,6 +1070,8 @@ struct glconfigExt_t
 
 	qboolean textureFilterAnisotropicAvailable;
 	qboolean doGammaCorrectionWithShaders;
+	qboolean doBloomWithShaders;		// SJE: r_dynamicGlowBloom
+	qboolean doAlphaToCoverage;			// SJE: r_ext_alpha_to_coverage (multisampled framebuffer)
 	qboolean doStencilShadowsInOneDrawcall;
 
 	const char* originalExtensionString;
@@ -1183,6 +1188,9 @@ extern cvar_t* r_DynamicGlowSoft;
 extern cvar_t* r_DynamicGlowWidth;
 extern cvar_t* r_DynamicGlowHeight;
 extern cvar_t* r_dynamicGlowBloom;
+extern cvar_t* r_dynamicGlowBloomThreshold;
+extern cvar_t* r_ext_alpha_to_coverage;
+extern cvar_t* r_gammaShaders;
 
 extern	cvar_t* r_nobind;						// turns off binding to appropriate textures
 extern	cvar_t* r_singleShader;				// make most world faces use default shader
@@ -1317,6 +1325,14 @@ void	GL_Cull(int cullType);
 #define GLS_ATEST_GE_80							0x40000000
 #define GLS_ATEST_GE_C0							0x80000000
 #define		GLS_ATEST_BITS						0xF0000000
+
+// SJE: alpha-to-coverage / multisample constants (not in the GL 1.1 headers)
+#ifndef GL_SAMPLE_ALPHA_TO_COVERAGE_ARB
+#define GL_SAMPLE_ALPHA_TO_COVERAGE_ARB			0x809E
+#endif
+#ifndef GL_SAMPLE_BUFFERS_ARB
+#define GL_SAMPLE_BUFFERS_ARB					0x80A8
+#endif
 
 #define GLS_DEFAULT			GLS_DEPTHMASK_TRUE
 #define GLS_ALPHA			(GLS_SRCBLEND_SRC_ALPHA | GLS_DSTBLEND_ONE_MINUS_SRC_ALPHA)

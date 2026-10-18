@@ -3598,6 +3598,7 @@ static qboolean AG_Move(const vec3_t from, const float tx, const float ty, vec3_
 {
 	trace_t tr;
 	vec3_t pos, up, next;
+	memset(&tr, 0, sizeof(tr)); // SJE: with 0 steps the loop below never traces - AG_SpotOk then read garbage
 	const float dx = tx - from[0], dy = ty - from[1];
 	const float dist = sqrtf(dx * dx + dy * dy);
 	const int steps = (int)ceilf(dist / AG_SUBSTEP);

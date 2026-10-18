@@ -7704,7 +7704,7 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, vec3_t
 	if ((mod == MOD_SLIME || mod == MOD_LAVA) && targ->client)
 	{
 		// Hazard Troopers Don't Mind Acid Rain
-		if (targ->client->NPC_class == CLASS_HAZARD_TROOPER && !(dflags & DAMAGE_NO_PROTECTION))
+		if (targ->client && targ->client->NPC_class == CLASS_HAZARD_TROOPER && !(dflags & DAMAGE_NO_PROTECTION)) // SJE: slime/lava can hit non-clients
 		{
 			take = 0;
 		}
@@ -7825,7 +7825,8 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, vec3_t
 		}
 	}
 
-	if (targ->client && attacker->client && targ->health > 0 && g_standard_humanoid(targ))
+	// SJE: point can be NULL (e.g. G_KillBox telefrag damage) - the head shot code below reads point[2] (SP already guards this)
+	if (point && targ->client && attacker->client && targ->health > 0 && g_standard_humanoid(targ))
 	{
 		//do head shots
 		if (inflictor->s.weapon == WP_BLASTER
@@ -7845,16 +7846,16 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, vec3_t
 			// handling crouching
 			if (targ->client->ps.pm_flags & PMF_DUCKED)
 			{
-				height = (abs(targ->mins[2]) + targ_maxs2) * 0.75;
+				height = (fabs(targ->mins[2]) + targ_maxs2) * 0.75;
 			}
 			else
 			{
-				height = abs(targ->mins[2]) + targ_maxs2;
+				height = fabs(targ->mins[2]) + targ_maxs2;
 			}
 			// project the z component of point
 			// onto the z component of the model's origin
 			// this results in the z component from the origin at 0
-			z_rel = point[2] - targ->r.currentOrigin[2] + abs(targ->mins[2]);
+			z_rel = point[2] - targ->r.currentOrigin[2] + fabs(targ->mins[2]);
 			z_ratio = z_rel / height;
 
 			if (z_ratio > 0.90)

@@ -9599,6 +9599,11 @@ static void Item_TextScroll_BuildLines(itemDef_t* item)
 	const char* psReadPosAtLineStart = psCurrentTextReadPos;
 	const char* psBestLineBreakSrcPos = psCurrentTextReadPos;
 
+	if (!scrollPtr)
+	{
+		return; // SJE: typeData alloc can fail
+	}
+
 	scrollPtr->iLineCount = 0;
 	memset((char*)scrollPtr->pLines, 0, sizeof scrollPtr->pLines);
 
@@ -10262,6 +10267,11 @@ static qboolean MenuParse_itemDef(itemDef_t* item, const int handle)
 	if (menu->itemCount < MAX_MENUITEMS)
 	{
 		itemDef_t* newItem = menu->items[menu->itemCount] = (itemDef_t*)UI_Alloc(sizeof(itemDef_t));
+		if (!newItem)
+		{
+			// SJE: UI memory pool exhausted - fail the parse instead of writing through NULL
+			return qfalse;
+		}
 		Item_Init(newItem);
 		if (!Item_Parse(handle, newItem))
 		{

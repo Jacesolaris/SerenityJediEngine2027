@@ -16751,7 +16751,7 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 					}
 
 					//secondary saber
-					if (ci->saber[1].model && ci->ghoul2Weapons[1])
+					if (ci->saber[1].model[0] && ci->ghoul2Weapons[1]) // SJE: model is an array - test its first char
 					{
 						//have a second saber
 						if (ci->holster_saber2 != -1)
@@ -20106,7 +20106,7 @@ stillDoSaber:
 				}
 
 				//racc - set render for the second saber's blade as needed
-				if (ci->saber[1].model //dual sabers
+				if (ci->saber[1].model[0] //dual sabers (SJE: was the array itself = always true)
 					&& cent->currentState.saberHolstered == 1) //second one off
 				{
 					BG_SI_SetDesiredLength(&ci->saber[1], 0, -1);
@@ -20209,7 +20209,7 @@ stillDoSaber:
 				{
 					BG_SI_SetDesiredLength(&ci->saber[0], -1, -1);
 				}
-				if (ci->saber[1].model //dual sabers
+				if (ci->saber[1].model[0] //dual sabers (SJE: was the array itself = always true)
 					&& cent->currentState.saberHolstered == 1) //second one off
 				{
 					if (cent->currentState.saberInFlight && !cent->currentState.saberEntityNum)

@@ -141,10 +141,10 @@ constexpr auto FLAG_ATTACKFATIGUE = 19;
 constexpr auto FLAG_MBLOCKBOUNCE = 20;
 constexpr auto FLAG_PERFECTBLOCK = 21;
 
-constexpr auto DODGE_BOLTBLOCK = 3; //standard DP cost to block a missile bolt;
-constexpr auto DODGE_BOWCASTERBLOCK = 5;
-constexpr auto DODGE_TUSKENBLOCK = 4;
-constexpr auto DODGE_REPEATERBLOCK = 2;
+constexpr auto DODGE_BOLTBLOCK = 1; //standard DP cost to block a missile bolt;
+constexpr auto DODGE_BOWCASTERBLOCK = 2;
+constexpr auto DODGE_TUSKENBLOCK = 3;
+constexpr auto DODGE_REPEATERBLOCK = 1;
 //the cost of blocking repeater shots is lower since the repeater shoots much faster.;
 constexpr auto BLASTERMISHAPLEVEL_MAX = 16;
 constexpr auto BLASTERMISHAPLEVEL_FULL = 15;

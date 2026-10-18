@@ -1476,9 +1476,10 @@ qboolean NPC_CheckSurrender(void)
 				if (NPCS.NPC->s.weapon == WP_NONE
 					//NPC has a weapon
 					|| NPCS.NPC->enemy && NPCS.NPC->enemy->s.number < MAX_CLIENTS
-					|| NPCS.NPC->enemy->s.weapon == WP_SABER && NPCS.NPC->enemy->client && NPCS.NPC->enemy->client->ps.
+					// SJE: enemy can be NULL here (it is tested on the line above) - guard the two lines below
+					|| NPCS.NPC->enemy && NPCS.NPC->enemy->s.weapon == WP_SABER && NPCS.NPC->enemy->client && NPCS.NPC->enemy->client->ps.
 					saberHolstered < 2
-					|| NPCS.NPC->enemy->NPC && NPCS.NPC->enemy->NPC->group && NPCS.NPC->enemy->NPC->group->numGroup > 2)
+					|| NPCS.NPC->enemy && NPCS.NPC->enemy->NPC && NPCS.NPC->enemy->NPC->group && NPCS.NPC->enemy->NPC->group->numGroup > 2)
 				{
 					//surrender only if have no weapon or fighting a player or jedi or if we are outnumbered at least 3 to 1
 					if (NPCS.NPC->enemy && NPCS.NPC->enemy->s.number < MAX_CLIENTS)

@@ -92,6 +92,7 @@ extern qboolean WP_SaberBlockBolt(gentity_t* self, vec3_t hitloc, qboolean missi
 extern qboolean WP_BrokenBoltBlockKnockBack(gentity_t* victim);
 extern int WP_SaberBlockCost(gentity_t* defender, const gentity_t* attacker, vec3_t hit_locs);
 extern void WP_BlockPointsDrain(const gentity_t* self, int fatigue);
+extern int WP_ClassBlockPointCost(const gentity_t* blocker, int cost, qboolean vs_blaster);
 extern void CGCam_BlockShakeSP(float intensity, int duration);
 extern void G_KnockOver(gentity_t* self, gentity_t* attacker, const vec3_t push_dir, float strength, const qboolean breakSaberLock);
 extern qboolean WP_SaberFatiguedParryDirection(gentity_t* self, vec3_t hitloc, qboolean missileBlock);
@@ -992,7 +993,7 @@ static void WP_HandleBoltBlock(gentity_t* ent, gentity_t* missile, vec3_t forwar
 		}
 		else
 		{
-			WP_BlockPointsDrain(blocker, cost);
+			WP_BlockPointsDrain(blocker, WP_ClassBlockPointCost(blocker, cost, qtrue));
 		}
 
 		reflected = qtrue;
@@ -1067,7 +1068,7 @@ static void WP_HandleBoltBlock(gentity_t* ent, gentity_t* missile, vec3_t forwar
 			}
 			else
 			{
-				WP_BlockPointsDrain(blocker, cost);
+				WP_BlockPointsDrain(blocker, WP_ClassBlockPointCost(blocker, cost, qtrue));
 			}
 
 			reflected = qtrue;
@@ -1140,7 +1141,7 @@ static void WP_HandleBoltBlock(gentity_t* ent, gentity_t* missile, vec3_t forwar
 			}
 			else
 			{
-				WP_BlockPointsDrain(blocker, cost);
+				WP_BlockPointsDrain(blocker, WP_ClassBlockPointCost(blocker, cost, qtrue));
 			}
 
 			reflected = qtrue;
@@ -1160,7 +1161,7 @@ static void WP_HandleBoltBlock(gentity_t* ent, gentity_t* missile, vec3_t forwar
 
 		// Punish the failed/weak block
 		WP_BrokenBoltBlockKnockBack(blocker);
-		PM_AddBlockFatigue(&blocker->client->ps, punish);
+		PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, punish, qtrue));
 
 		if (d_blockinfo->integer != 0 || g_DebugSaberCombat->integer != 0)
 		{

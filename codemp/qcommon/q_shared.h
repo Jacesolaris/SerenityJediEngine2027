@@ -1548,10 +1548,10 @@ typedef struct siegePers_s
 #define FLAG_SLIGHTFATIGUE  22
 #define FLAG_DOUBLEJUMPFLIP 23	// the double jump's flip is playing (twice as fast: PM_SaberStartTransAnim)
 
-#define DODGE_BOLTBLOCK			3	//standard DP cost to block a missile bolt
-#define DODGE_BOWCASTERBLOCK	5
-#define DODGE_TUSKENBLOCK	    4
-#define DODGE_REPEATERBLOCK		2  //the cost of blocking repeater shots is lower since the repeater shoots much faster.
+#define DODGE_BOLTBLOCK			1	//standard DP cost to block a missile bolt
+#define DODGE_BOWCASTERBLOCK	2
+#define DODGE_TUSKENBLOCK	    3
+#define DODGE_REPEATERBLOCK		1  //the cost of blocking repeater shots is lower since the repeater shoots much faster.
 
 #define FATIGUE_JUMP			1
 #define FATIGUE_SABERBLOCK		1

@@ -432,6 +432,7 @@ void RE_BeginFrame(const stereoFrame_t stereoFrame) {
 
 		R_IssuePendingRenderCommands();
 		R_SetColorMappings();
+		R_SetGammaCorrectionLUT(); // SJE
 	}
 
 	// check for errors

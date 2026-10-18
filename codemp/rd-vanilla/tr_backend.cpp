@@ -216,6 +216,9 @@ void GL_TexEnv(const int env)
 ** This routine is responsible for setting the most commonly changed state
 ** in Q3.
 */
+// SJE: alpha-to-coverage currently switched on (see the end of GL_State)
+static bool s_alpha_to_coverage_on = false;
+
 void GL_State(const uint32_t stateBits)
 {
 	const uint32_t diff = stateBits ^ glState.glStateBits;
@@ -397,6 +400,39 @@ void GL_State(const uint32_t stateBits)
 		default:
 			assert(0);
 			break;
+		}
+	}
+
+	//
+	// SJE: alpha-to-coverage (r_ext_alpha_to_coverage). With multisampling on, cut-out textures
+	// (alphaFunc GE128 / GE192 on non-blended stages: foliage, fences, grates, hair) get their alpha
+	// turned into sample coverage, so their edges are anti-aliased instead of jagged. The alpha test
+	// is kept at half its normal value so fully empty texels still cost nothing.
+	//
+	if (glConfigExt.doAlphaToCoverage && diff & (GLS_ATEST_BITS | GLS_SRCBLEND_BITS | GLS_DSTBLEND_BITS))
+	{
+		const uint32_t atest = stateBits & GLS_ATEST_BITS;
+		const bool want = r_ext_alpha_to_coverage->integer && (atest == GLS_ATEST_GE_80 || atest == GLS_ATEST_GE_C0)
+			&& !(stateBits & (GLS_SRCBLEND_BITS | GLS_DSTBLEND_BITS));
+
+		if (want)
+		{
+			qglEnable(GL_SAMPLE_ALPHA_TO_COVERAGE_ARB);
+			qglAlphaFunc(GL_GEQUAL, atest == GLS_ATEST_GE_80 ? 0.25f : 0.375f);
+			s_alpha_to_coverage_on = true;
+		}
+		else if (s_alpha_to_coverage_on)
+		{
+			qglDisable(GL_SAMPLE_ALPHA_TO_COVERAGE_ARB);
+			if (atest == GLS_ATEST_GE_80)
+			{
+				qglAlphaFunc(GL_GEQUAL, 0.5f);
+			}
+			else if (atest == GLS_ATEST_GE_C0)
+			{
+				qglAlphaFunc(GL_GEQUAL, 0.75f);
+			}
+			s_alpha_to_coverage_on = false;
 		}
 	}
 
@@ -1444,6 +1480,72 @@ static const void* RB_RotatePic2(const void* data)
 	return cmd + 1;
 }
 
+// SJE: bloom (r_dynamicGlowBloom 0-2, r_dynamicGlowBloomThreshold). The bright part of the normal scene is
+// added into the glow buffer, so the existing glow blur and overlay spread it over the screen.
+// Costs one extra full-screen quad; with r_dynamicglow 0 it runs the glow path for bloom alone.
+static bool RB_BloomActive()
+{
+	return glConfigExt.doBloomWithShaders && tr.bloomPShader && r_dynamicGlowBloom->value > 0.0f;
+}
+
+static void RB_BloomBrightPass(const int src_x, const int src_y)
+{
+	const int w = backEnd.viewParms.viewportWidth;
+	const int h = backEnd.viewParms.viewportHeight;
+
+	float threshold = r_dynamicGlowBloomThreshold->value;
+	if (threshold < 0.0f)
+	{
+		threshold = 0.0f;
+	}
+	else if (threshold > 0.95f)
+	{
+		threshold = 0.95f;
+	}
+
+	qglDisable(GL_CLIP_PLANE0);
+	GL_Cull(CT_TWO_SIDED);
+	GL_State(GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE | GLS_DEPTHTEST_DISABLE);
+
+	qglMatrixMode(GL_PROJECTION);
+	qglPushMatrix();
+	qglLoadIdentity();
+	qglOrtho(0, w, h, 0, -1, 1);
+	qglMatrixMode(GL_MODELVIEW);
+	qglPushMatrix();
+	qglLoadIdentity();
+
+	GL_SelectTexture(0);
+	qglDisable(GL_TEXTURE_2D);
+	qglEnable(GL_TEXTURE_RECTANGLE_ARB);
+	qglBindTexture(GL_TEXTURE_RECTANGLE_ARB, tr.sceneImage);
+
+	qglEnable(GL_FRAGMENT_PROGRAM_ARB);
+	qglBindProgramARB(GL_FRAGMENT_PROGRAM_ARB, tr.bloomPShader);
+	qglProgramEnvParameter4fARB(GL_FRAGMENT_PROGRAM_ARB, 1, threshold, r_dynamicGlowBloom->value, 1.0f / (1.0f - threshold), 0.0f);
+
+	qglColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+	qglBegin(GL_QUADS);
+	qglTexCoord2f(static_cast<float>(src_x), static_cast<float>(src_y + h));
+	qglVertex2f(0.0f, 0.0f);
+	qglTexCoord2f(static_cast<float>(src_x), static_cast<float>(src_y));
+	qglVertex2f(0.0f, static_cast<float>(h));
+	qglTexCoord2f(static_cast<float>(src_x + w), static_cast<float>(src_y));
+	qglVertex2f(static_cast<float>(w), static_cast<float>(h));
+	qglTexCoord2f(static_cast<float>(src_x + w), static_cast<float>(src_y + h));
+	qglVertex2f(static_cast<float>(w), 0.0f);
+	qglEnd();
+
+	qglDisable(GL_FRAGMENT_PROGRAM_ARB);
+	qglDisable(GL_TEXTURE_RECTANGLE_ARB);
+	qglEnable(GL_TEXTURE_2D);
+
+	qglMatrixMode(GL_PROJECTION);
+	qglPopMatrix();
+	qglMatrixMode(GL_MODELVIEW);
+	qglPopMatrix();
+}
+
 /*
 =============
 RB_DrawSurfs
@@ -1473,7 +1575,7 @@ static const void* RB_DrawSurfs(const void* data) {
 	*/
 
 	// Render dynamic glowing/flaring objects.
-	if (!(backEnd.refdef.rdflags & RDF_NOWORLDMODEL) && g_bDynamicGlowSupported && r_DynamicGlow->integer)
+	if (!(backEnd.refdef.rdflags & RDF_NOWORLDMODEL) && g_bDynamicGlowSupported && (r_DynamicGlow->integer || RB_BloomActive()))
 	{
 		// Copy the normal scene to texture.
 		qglDisable(GL_TEXTURE_2D);
@@ -1489,8 +1591,17 @@ static const void* RB_DrawSurfs(const void* data) {
 
 		// Render the glowing objects.
 		g_bRenderGlowingObjects = true;
-		RB_RenderDrawSurfList(cmd->drawSurfs, cmd->numDrawSurfs);
+		if (r_DynamicGlow->integer) // SJE: bloom alone skips the glow objects
+		{
+			RB_RenderDrawSurfList(cmd->drawSurfs, cmd->numDrawSurfs);
+		}
 		g_bRenderGlowingObjects = false;
+
+		// SJE: add the bright part of the scene (MP copies the whole screen into sceneImage)
+		if (RB_BloomActive())
+		{
+			RB_BloomBrightPass(backEnd.viewParms.viewportX, backEnd.viewParms.viewportY);
+		}
 
 		qglFinish();
 
@@ -1543,6 +1654,22 @@ static const void* RB_DrawBuffer(const void* data) {
 	const auto cmd = static_cast<const drawBufferCommand_t*>(data);
 
 	qglDrawBuffer(cmd->buffer);
+
+	// SJE: with r_gammaShaders the gamma pass writes its corrected picture back into the frame. Anything that is
+	// only blended over the old frame (menu fades, loading screens) then got the gamma applied again every frame
+	// and burned out to white. Start every frame from black so the gamma is only ever applied once.
+	if (glConfigExt.doGammaCorrectionWithShaders)
+	{
+		// the scissor test stays on in this renderer and glClear obeys it - clear the whole window,
+		// not just whatever rectangle the last 2D/3D draw left set
+		qglScissor(0, 0, glConfig.vidWidth, glConfig.vidHeight);
+		// colour only - the framebuffer alpha is left exactly as it was without the gamma pass, because
+		// some 2D shaders (menu fonts) blend against destination alpha
+		qglColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
+		qglClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		qglClear(GL_COLOR_BUFFER_BIT);
+		qglColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+	}
 
 	// clear screen for debugging
 	if (tr.world && tr.world->globalFog != -1)
@@ -1655,18 +1782,32 @@ void RB_ShowImages(void) {
 
 static void RB_GammaCorrectRender()
 {
+	// SJE: GL_CLIENT_ALL_ATTRIB_BITS is 0xFFFFFFFF, so this pushes (and qglPopAttrib below restores) ALL server
+	// state - blend, alpha test, enables, texture bindings, active unit. RB_SetGL2D/GL_State/GL_SelectTexture
+	// below update the renderer's state cache, so the cache has to be put back too, or it no longer matches GL
+	// after the pop: the next frame then skipped re-enabling blending for the menu font (lettering drawn as solid
+	// blocks), unless something else (the console) happened to leave matching state.
+	const uint32_t saved_state_bits = glState.glStateBits;
+	const int saved_tmu = glState.currenttmu;
+	const int saved_textures[2] = { glState.currenttextures[0], glState.currenttextures[1] };
+	const bool saved_alpha_to_coverage = s_alpha_to_coverage_on;
+	const qboolean saved_projection_2d = backEnd.projection2D;
+
 	qglPushAttrib(GL_CLIENT_ALL_ATTRIB_BITS);
 
 	RB_SetGL2D();
 
 	// All this fixed-function texture type enabling/disabling is ludicrous :(
-	qglEnable(GL_TEXTURE_RECTANGLE_ARB);
+	// SJE: enable each target on its own unit and switch them off again afterwards - the old code left
+	// GL_TEXTURE_3D and GL_TEXTURE_RECTANGLE_ARB enabled on unit 0, and those outrank GL_TEXTURE_2D, so
+	// every normal texture drawn after the first gamma pass sampled the wrong texture (garbled screen).
 	GL_SelectTexture(0);
+	qglEnable(GL_TEXTURE_RECTANGLE_ARB);
 	qglBindTexture(GL_TEXTURE_RECTANGLE_ARB, tr.sceneImage);
 	qglCopyTexImage2D(GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA, 0, 0, glConfig.vidWidth, glConfig.vidHeight, 0);
 
-	qglEnable(GL_TEXTURE_3D);
 	GL_SelectTexture(1);
+	qglEnable(GL_TEXTURE_3D);
 	qglBindTexture(GL_TEXTURE_3D, tr.gammaCorrectLUTImage);
 
 	qglBindProgramARB(GL_VERTEX_PROGRAM_ARB, tr.gammaCorrectVtxShader);
@@ -1674,6 +1815,10 @@ static void RB_GammaCorrectRender()
 
 	qglEnable(GL_VERTEX_PROGRAM_ARB);
 	qglEnable(GL_FRAGMENT_PROGRAM_ARB);
+
+	// SJE: write colour only - the lookup texture's alpha is 1, which used to overwrite the frame's alpha
+	// and broke 2D shaders that blend against destination alpha (menu lettering)
+	qglColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
 
 	qglBegin(GL_QUADS);
 	qglTexCoord2f(0.0f, 0.0f);
@@ -1689,13 +1834,25 @@ static void RB_GammaCorrectRender()
 	qglVertex2f(1.0f, -1.0f);
 	qglEnd();
 
+	qglColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
 	qglDisable(GL_VERTEX_PROGRAM_ARB);
 	qglDisable(GL_FRAGMENT_PROGRAM_ARB);
 
 	qglDisable(GL_TEXTURE_3D);
 	GL_SelectTexture(0);
+	qglDisable(GL_TEXTURE_RECTANGLE_ARB);
+	qglEnable(GL_TEXTURE_2D);
 
 	qglPopAttrib();
+
+	// SJE: the pop put GL back as it was - make the state cache say the same
+	glState.glStateBits = saved_state_bits;
+	glState.currenttmu = saved_tmu;
+	glState.currenttextures[0] = saved_textures[0];
+	glState.currenttextures[1] = saved_textures[1];
+	s_alpha_to_coverage_on = saved_alpha_to_coverage;
+	backEnd.projection2D = saved_projection_2d;
 }
 
 /*

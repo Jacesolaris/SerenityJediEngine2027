@@ -4682,7 +4682,7 @@ int Jedi_ReCalcParryTime(const gentity_t* self, const evasionType_t evasion_type
 				}
 			}
 
-			base_time = base_time += 400 * Q_irand(1, 2);
+			base_time += 400 * Q_irand(1, 2);
 
 			if (evasion_type == EVASION_DUCK || evasion_type == EVASION_DUCK_PARRY)
 			{

@@ -125,6 +125,8 @@ cvar_t* r_DynamicGlowSoft;
 cvar_t* r_DynamicGlowWidth;
 cvar_t* r_DynamicGlowHeight;
 cvar_t* r_dynamicGlowBloom;
+cvar_t* r_dynamicGlowBloomThreshold;	// SJE: bloom bright-pass threshold (0-0.95)
+cvar_t* r_ext_alpha_to_coverage;		// SJE: anti-aliased cut-out textures when multisampling
 
 cvar_t* r_ignoreGLErrors;
 cvar_t* r_logFile;
@@ -480,6 +482,11 @@ extern bool g_bDynamicGlowSupported;
 extern bool g_bARBShadersAvailable;
 static void GLimp_InitExtensions()
 {
+	// SJE: start with the extra post-process features off; detected below
+	glConfigExt.doGammaCorrectionWithShaders = qfalse;
+	glConfigExt.doBloomWithShaders = qfalse;
+	glConfigExt.doAlphaToCoverage = qfalse;
+
 	if (!r_allowExtensions->integer)
 	{
 		Com_Printf("*** IGNORING OPENGL EXTENSIONS ***\n");
@@ -759,6 +766,14 @@ static void GLimp_InitExtensions()
 #endif
 	}
 
+	// SJE: alpha-to-coverage needs a multisampled framebuffer (r_ext_multisample)
+	{
+		GLint sample_buffers = 0;
+		qglGetIntegerv(GL_SAMPLE_BUFFERS_ARB, &sample_buffers);
+		glConfigExt.doAlphaToCoverage = sample_buffers > 0 ? qtrue : qfalse;
+		qglGetError(); // GL_SAMPLE_BUFFERS is unknown on GL 1.1-only drivers - ignore that
+	}
+
 	// Only allow dynamic glows/flares if they have the hardware
 	if (b_tex_rect_supported && b_arb_vertex_program && qglActiveTextureARB && glConfig.maxActiveTextures >= 4 &&
 		(b_nv_register_combiners && i_num_general_combiners >= 2 || b_arb_fragment_program))
@@ -770,6 +785,9 @@ static void GLimp_InitExtensions()
 		g_bDynamicGlowSupported = false;
 		ri.Cvar_Set("r_dynamicglow", "0");
 	}
+
+	// SJE: bloom rides on the dynamic glow path and needs ARB fragment programs
+	glConfigExt.doBloomWithShaders = g_bDynamicGlowSupported && b_tex_rect_supported && b_arb_fragment_program ? qtrue : qfalse;
 
 #if !defined(__APPLE__)
 	qglStencilOpSeparate = static_cast<PFNGLSTENCILOPSEPARATEPROC>(ri.GL_GetProcAddress("glStencilOpSeparate"));
@@ -1601,7 +1619,7 @@ static void R_Register()
 	r_ext_texture_filter_anisotropic = ri.Cvar_Get("r_ext_texture_filter_anisotropic", "16", CVAR_ARCHIVE_ND, "");
 	// 6e3d3eaa: MSAA shall be computed on OpenGL's default framebuffer
 	ri.Cvar_Set("r_ext_multisample_default_fb", "1");
-	r_gammaShaders = ri.Cvar_Get("r_gammaShaders", "0", CVAR_ARCHIVE_ND | CVAR_LATCH, "");
+	r_gammaShaders = ri.Cvar_Get("r_gammaShaders", "1", CVAR_ARCHIVE_ND | CVAR_LATCH, "Do gamma/overbright as a post-process (works in windowed mode)");
 	r_environmentMapping = ri.Cvar_Get("r_environmentMapping", "1", CVAR_ARCHIVE_ND, "");
 	r_DynamicGlow = ri.Cvar_Get("r_dynamicglow", "1", CVAR_ARCHIVE_ND, "");
 	r_DynamicGlowPasses = ri.Cvar_Get("r_DynamicGlowPasses", "5", CVAR_ARCHIVE_ND, "");
@@ -1610,8 +1628,11 @@ static void R_Register()
 	r_DynamicGlowSoft = ri.Cvar_Get("r_DynamicGlowSoft", "1", CVAR_ARCHIVE_ND, "");
 	r_DynamicGlowWidth = ri.Cvar_Get("r_DynamicGlowWidth", "320", CVAR_ARCHIVE_ND | CVAR_LATCH, "");
 	r_DynamicGlowHeight = ri.Cvar_Get("r_DynamicGlowHeight", "240", CVAR_ARCHIVE_ND | CVAR_LATCH, "");
-	r_dynamicGlowBloom = ri.Cvar_Get("r_dynamicGlowBloom", "0.0", CVAR_ARCHIVE, "");
+	r_dynamicGlowBloom = ri.Cvar_Get("r_dynamicGlowBloom", "0.0", CVAR_ARCHIVE, "Bloom: bright parts of the scene glow (0 = off, up to 2)");
 	ri.Cvar_CheckRange(r_dynamicGlowBloom, 0.f, 2.f, qfalse);
+	r_dynamicGlowBloomThreshold = ri.Cvar_Get("r_dynamicGlowBloomThreshold", "0.65", CVAR_ARCHIVE_ND, "Bloom: brightness (0-0.95) above which the scene blooms");
+	ri.Cvar_CheckRange(r_dynamicGlowBloomThreshold, 0.f, 0.95f, qfalse);
+	r_ext_alpha_to_coverage = ri.Cvar_Get("r_ext_alpha_to_coverage", "1", CVAR_ARCHIVE_ND, "Anti-alias cut-out textures (foliage, fences) when multisampling is on");
 
 	r_picmip = ri.Cvar_Get("r_picmip", "0", CVAR_ARCHIVE | CVAR_LATCH, "");
 	ri.Cvar_CheckRange(r_picmip, 0, 16, qtrue);
@@ -1905,6 +1926,13 @@ void RE_Shutdown(qboolean destroyWindow, qboolean restarting)
 
 		// Release the blur texture.
 		qglDeleteTextures(1, &tr.blurImage);
+	}
+
+	// SJE: release the bloom program (created whatever r_dynamicglow is set to)
+	if (tr.bloomPShader && qglDeleteProgramsARB)
+	{
+		qglDeleteProgramsARB(1, &tr.bloomPShader);
+		tr.bloomPShader = 0;
 	}
 
 	R_ShutdownWorldEffects();

@@ -61,6 +61,7 @@ extern qboolean PM_InForceGetUp(const playerState_t* ps);
 extern qboolean G_ControlledByPlayer(const gentity_t* self);
 extern void WP_BlockPointsRegenerate(const gentity_t* self, const int override_amt);
 extern void PM_AddBlockFatigue(playerState_t* ps, int fatigue);
+extern int WP_ClassBlockPointCost(const gentity_t* blocker, int cost, qboolean vs_blaster);
 extern saberMoveName_t pm_block_the_attack(int move);
 extern int g_block_the_attack(int move);
 extern saberMoveName_t PM_SaberBounceForAttack(int move);
@@ -676,7 +677,7 @@ static qboolean sab_beh_attack_vs_attack(gentity_t* attacker, gentity_t* blocker
 		{
 			//Low points = bad blocks
 			G_Stagger(blocker);
-			PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_TEN);
+			PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_TEN, qfalse));
 		}
 	}
 	else if (PM_SaberInKata(blocker->client->ps.saberMove))
@@ -972,7 +973,7 @@ qboolean sab_beh_block_vs_attack(
 			else
 			{
 				g_fatigue_bp_knockaway(blocker);
-				PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_DANGER);
+				PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_DANGER, qfalse));
 
 				if ((d_blockinfo.integer || g_DebugSaberCombat.integer) &&
 					!(blocker->r.svFlags & SVF_BOT))
@@ -1079,7 +1080,7 @@ qboolean sab_beh_block_vs_attack(
 						sab_beh_add_balance(attacker, MPCOST_MBLOCKED); //SAC Punish attacker
 					}
 
-					PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_FIVE);
+					PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_FIVE, qfalse));
 
 					if (!(blocker->r.svFlags & SVF_BOT))
 					{
@@ -1124,7 +1125,7 @@ qboolean sab_beh_block_vs_attack(
 
 				if (!(blocker->r.svFlags & SVF_BOT))
 				{
-					PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_FIVE);
+					PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_FIVE, qfalse));
 				} // SS_BLASTER (2026-10-14)
 
 				if (attacker->NPC && !G_ControlledByPlayer(attacker)) //NPC only
@@ -1175,7 +1176,7 @@ qboolean sab_beh_block_vs_attack(
 							Com_Printf(S_COLOR_CYAN "NPC Fatigued Parry\n");
 						}
 
-						PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_FAIL);
+						PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_FAIL, qfalse));
 					}
 					else
 					{
@@ -1187,7 +1188,7 @@ qboolean sab_beh_block_vs_attack(
 							Com_Printf(S_COLOR_CYAN "NPC normal Parry\n");
 						}
 
-						PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_THREE);
+						PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_THREE, qfalse));
 					}
 				}
 				else
@@ -1214,7 +1215,7 @@ qboolean sab_beh_block_vs_attack(
 					}
 					else
 					{
-						PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_THREE);
+						PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_THREE, qfalse));
 					}
 				}
 
@@ -1244,7 +1245,7 @@ qboolean sab_beh_block_vs_attack(
 
 				if (!(blocker->r.svFlags & SVF_BOT))
 				{
-					PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_TEN);
+					PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_TEN, qfalse));
 				}
 
 				if ((d_blockinfo.integer || g_DebugSaberCombat.integer) &&
@@ -1305,7 +1306,7 @@ qboolean sab_beh_block_vs_attack(
 			else
 			{
 				g_fatigue_bp_knockaway(blocker);
-				PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_TEN);
+				PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_TEN, qfalse));
 			}
 
 			if (d_blockinfo.integer || g_DebugSaberCombat.integer)

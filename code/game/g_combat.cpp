@@ -1561,7 +1561,7 @@ qboolean G_GetHitLocFromSurfName(gentity_t* ent, const char* surfName, int* hit_
 	{
 		dismember = qtrue;
 	}
-	else if (g_dismemberProbabilities->value > 0.0f && !in_camera || !ent->client->dismembered)
+	else if (g_dismemberProbabilities->value > 0.0f && !in_camera || ent->client && !ent->client->dismembered) // SJE: client can be NULL here
 	{
 		if (dir && (dir[0] || dir[1] || dir[2]) &&
 			blade_dir && (blade_dir[0] || blade_dir[1] || blade_dir[2]))
@@ -8469,14 +8469,14 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const 
 			// handling crouching
 			if (targ->client->ps.pm_flags & PMF_DUCKED)
 			{
-				height = (abs(targ->mins[2]) + targ_maxs2) * 0.75f;
+				height = (fabs(targ->mins[2]) + targ_maxs2) * 0.75f;
 			}
 			else
 			{
-				height = abs(targ->mins[2]) + targ_maxs2;
+				height = fabs(targ->mins[2]) + targ_maxs2;
 			}
 
-			z_rel = point[2] - targ->currentOrigin[2] + abs(targ->mins[2]);
+			z_rel = point[2] - targ->currentOrigin[2] + fabs(targ->mins[2]);
 			z_ratio = z_rel / height;
 
 			// -----------------------------------------

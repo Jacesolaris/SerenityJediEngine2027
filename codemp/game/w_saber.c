@@ -117,6 +117,8 @@ extern qboolean G_ControlledByPlayer(const gentity_t* self);
 extern saberMoveName_t pm_block_the_attack(int move);
 extern int g_block_the_attack(int move);
 void WP_BlockPointsDrain(const gentity_t* self, int fatigue);
+qboolean WP_BlockMasterClass(const gentity_t* self);
+int WP_ClassBlockPointCost(const gentity_t* blocker, int cost, qboolean vs_blaster);
 extern int Jedi_ReCalcParryTime(const gentity_t* self, evasionType_t evasion_type);
 extern qboolean PM_SaberInnonblockableAttack(int anim);
 extern qboolean NPC_IsAlive(const gentity_t* self, const gentity_t* npc);
@@ -16608,6 +16610,42 @@ void WP_BlockPointsDrain(const gentity_t* self, const int fatigue)
 		//Pop the Fatigued flag
 		self->client->ps.userInt3 |= 1 << FLAG_BLOCKDRAINED;
 	}
+}
+
+// SJE: the master-level saber classes - they pay fewer block points (WP_ClassBlockPointCost) and
+// regenerate them 25% faster (WP_BlockPointsUpdate)
+qboolean WP_BlockMasterClass(const gentity_t* self)
+{
+	if (!self || !self->client)
+	{
+		return qfalse;
+	}
+
+	switch (self->client->pers.botclass)
+	{
+	case BCLASS_SITHLORD:
+	case BCLASS_DESANN:
+	case BCLASS_VADER:
+	case BCLASS_KYLE:
+	case BCLASS_TAVION:
+	case BCLASS_YODA:
+	case BCLASS_LUKE:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+int WP_ClassBlockPointCost(const gentity_t* blocker, const int cost, const qboolean vs_blaster)
+{
+	if (cost <= 0 || !WP_BlockMasterClass(blocker))
+	{
+		return cost;
+	}
+
+	const int percent = vs_blaster ? 60 : 80; // pay 60% / 80% of the normal cost
+	const int reduced = (cost * percent + 50) / 100; // rounded
+	return reduced < 1 ? 1 : reduced;
 }
 
 void G_Beskar_Attack_Bounce(const gentity_t* self, gentity_t* other)

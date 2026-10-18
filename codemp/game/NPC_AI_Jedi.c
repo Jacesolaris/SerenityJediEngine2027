@@ -1509,7 +1509,7 @@ void Boba_TacticsSelect()
 
 	// Enemy Is Really Close
 	//-----------------------
-	if (!NPCS.NPC->enemy->health > 0)
+	if (NPCS.NPC->enemy->health <= 0) // SJE: was "!health > 0" - only true at exactly 0 health (SP: !enemy_alive)
 	{
 		nextState = BTS_RIFLE;
 	}
@@ -1537,7 +1537,7 @@ void Boba_TacticsSelect()
 		// At First, Boba will prefer to use his blaster against the player, but
 		//  the more times he is driven away (NPC->count), he will be less likely to
 		//  choose the blaster, and more likely to go for the missile launcher
-		nextState = !enemyDistance > BOBA_ROCKETRANGEMIN && enemyDistance < BOBA_ROCKETRANGEMAX ||
+		nextState = !(enemyDistance > BOBA_ROCKETRANGEMIN && enemyDistance < BOBA_ROCKETRANGEMAX) || // SJE: was "!enemyDistance > MIN" (always false) - SP: !enemy_in_rocket_range ||
 			Q_irand(0, NPCS.NPC->count) < 1
 			? BTS_RIFLE
 			: BTS_MISSILE;
@@ -1572,7 +1572,7 @@ void Boba_TacticsSelect()
 		}
 		else
 		{
-			nextState = !enemyDistance > BOBA_ROCKETRANGEMIN && enemyDistance < BOBA_ROCKETRANGEMAX ||
+			nextState = !(enemyDistance > BOBA_ROCKETRANGEMIN && enemyDistance < BOBA_ROCKETRANGEMAX) || // SJE: was "!enemyDistance > MIN" (always false) - SP: !enemy_in_rocket_range ||
 				Q_irand(0, NPCS.NPC->count) < 1
 				? BTS_RIFLE
 				: BTS_MISSILE;
@@ -4882,7 +4882,7 @@ int Jedi_ReCalcParryTime(const gentity_t* self, const evasionType_t evasion_type
 				break;
 			}
 
-			base_time = base_time += 400 * Q_irand(1, 2);
+			base_time += 400 * Q_irand(1, 2);
 
 			if (evasion_type == EVASION_DUCK || evasion_type == EVASION_DUCK_PARRY)
 			{

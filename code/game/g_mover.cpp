@@ -2240,7 +2240,9 @@ void SP_func_train(gentity_t* self)
 	self->nextthink = level.time + START_TIME_LINK_ENTS;
 	self->e_ThinkFunc = thinkF_Think_SetupTrainTargets;
 
-	if (self->playerModel >= 0 && self->spawnflags & 32)
+	// SJE: only when a .glm model2 was actually loaded - playerModel is 0 (not -1) on a train without one, and
+	// indexing the empty ghoul2 list then asserts (debug) / reads garbage (release) on maps with spawnflag 32
+	if (self->playerModel >= 0 && self->playerModel < self->ghoul2.size() && self->spawnflags & 32)
 		// loop...dunno, could support it on other things, but for now I need it for the glider...so...kill the flag
 	{
 		self->spawnflags &= ~32; // once only

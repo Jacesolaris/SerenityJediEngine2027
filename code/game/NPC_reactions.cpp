@@ -692,7 +692,7 @@ void NPC_Touch(gentity_t* self, gentity_t* other, trace_t* trace)
 		}
 	}
 
-	if (other->client)
+	if (other && other->client) // SJE: other is NULL-checked above
 	{
 		if (other->health > 0)
 		{
@@ -727,7 +727,7 @@ void NPC_Touch(gentity_t* self, gentity_t* other, trace_t* trace)
 			}
 		}
 	}
-	else
+	else if (other) // SJE: other can be NULL here (tested above)
 	{
 		//FIXME: check for SVF_NONNPC_ENEMY flag here?
 		if (other->health > 0)

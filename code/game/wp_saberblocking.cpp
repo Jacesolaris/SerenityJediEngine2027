@@ -68,6 +68,7 @@ extern void PM_AddFatigue(playerState_t* ps, int fatigue);
 extern qboolean WP_SaberBlockNonRandom(gentity_t* self, vec3_t hitloc, qboolean missileBlock);
 extern saberMoveName_t PM_BrokenParryForParry(int move);
 extern void PM_AddBlockFatigue(playerState_t* ps, int fatigue);
+extern int WP_ClassBlockPointCost(const gentity_t* blocker, int cost, qboolean vs_blaster);
 extern void G_Stagger(gentity_t* hitEnt);
 extern void g_fatigue_bp_knockaway(gentity_t* blocker);
 extern void G_StaggerAttacker(gentity_t* atk);
@@ -701,7 +702,7 @@ static qboolean sab_beh_attack_vs_attack(gentity_t* attacker, gentity_t* blocker
 		{
 			//Low points = bad blocks
 			G_Stagger(blocker);
-			PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_TEN);
+			PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_TEN, qfalse));
 		}
 	}
 	else if (PM_SaberInKata(static_cast<saberMoveName_t>(blocker->client->ps.saberMove)))
@@ -1002,7 +1003,7 @@ qboolean sab_beh_block_vs_attack(gentity_t* blocker, gentity_t* attacker, const 
 				//Low points = bad blocks
 				g_fatigue_bp_knockaway(blocker);
 
-				PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_DANGER);
+				PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_DANGER, qfalse));
 
 				if ((d_blockinfo->integer || g_DebugSaberCombat->integer) && (blocker->s.number < MAX_CLIENTS || G_ControlledByPlayer(blocker)))
 				{
@@ -1106,7 +1107,7 @@ qboolean sab_beh_block_vs_attack(gentity_t* blocker, gentity_t* attacker, const 
 						sab_beh_add_balance(attacker, MPCOST_MBLOCKED); //SAC Punish attacker
 					}
 
-					PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_FIVE);
+					PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_FIVE, qfalse));
 
 					if (blocker->s.number < MAX_CLIENTS || G_ControlledByPlayer(blocker))
 					{
@@ -1150,7 +1151,7 @@ qboolean sab_beh_block_vs_attack(gentity_t* blocker, gentity_t* attacker, const 
 				}
 				else
 				{
-					PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_FIVE);
+					PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_FIVE, qfalse));
 				}
 
 				if (attacker->NPC && !G_ControlledByPlayer(attacker)) //NPC only
@@ -1202,7 +1203,7 @@ qboolean sab_beh_block_vs_attack(gentity_t* blocker, gentity_t* attacker, const 
 							gi.Printf(S_COLOR_CYAN"NPC Fatigued Parry\n");
 						}
 
-						PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_FAIL);
+						PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_FAIL, qfalse));
 					}
 					else
 					{
@@ -1214,7 +1215,7 @@ qboolean sab_beh_block_vs_attack(gentity_t* blocker, gentity_t* attacker, const 
 							gi.Printf(S_COLOR_CYAN"NPC normal Parry\n");
 						}
 
-						PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_THREE);
+						PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_THREE, qfalse));
 					}
 				}
 				else
@@ -1224,11 +1225,11 @@ qboolean sab_beh_block_vs_attack(gentity_t* blocker, gentity_t* attacker, const 
 					if (blocker->NPC && !G_ControlledByPlayer(blocker)) //NPC only
 					{
 						g_do_m_block_response(blocker);
-						PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_TEN);
+						PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_TEN, qfalse));
 					}
 					else
 					{
-						PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_THREE);
+						PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_THREE, qfalse));
 					}
 
 					if ((d_blockinfo->integer || g_DebugSaberCombat->integer) && (blocker->NPC && !
@@ -1257,7 +1258,7 @@ qboolean sab_beh_block_vs_attack(gentity_t* blocker, gentity_t* attacker, const 
 				}
 				else
 				{
-					PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_TEN);
+					PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_TEN, qfalse));
 				}
 				if ((d_blockinfo->integer || g_DebugSaberCombat->integer) && blocker->s.number < MAX_CLIENTS ||
 					G_ControlledByPlayer(blocker))
@@ -1309,7 +1310,7 @@ qboolean sab_beh_block_vs_attack(gentity_t* blocker, gentity_t* attacker, const 
 			else
 			{
 				g_fatigue_bp_knockaway(blocker);
-				PM_AddBlockFatigue(&blocker->client->ps, BLOCKPOINTS_TEN);
+				PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_TEN, qfalse));
 			}
 			if (d_blockinfo->integer || g_DebugSaberCombat->integer)
 			{

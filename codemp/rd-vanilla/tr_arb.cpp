@@ -120,6 +120,24 @@ TEMP r0;\
 TEX r0, fragment.texcoord[0], texture[0], RECT;\
 TEX result.color, r0, texture[1], 3D;\
 END";
+
+// SJE: bloom bright-pass (r_dynamicGlowBloom). Keeps only the bright part of the normal scene,
+// scaled by intensity, so the existing glow blur spreads it. env[1] = threshold, intensity, 1/(1-threshold).
+static const char* bloomBrightPassPxShader =
+"!!ARBfp1.0\n"
+"OPTION ARB_precision_hint_fastest;\n"
+"PARAM Bloom = program.env[1];\n"
+"PARAM LumW = { 0.2126, 0.7152, 0.0722, 1.0 };\n"
+"TEMP c;\n"
+"TEMP l;\n"
+"TEX c, fragment.texcoord[0], texture[0], RECT;\n"
+"DP3 l.x, c, LumW;\n"
+"SUB l.x, l.x, Bloom.x;\n"
+"MUL_SAT l.x, l.x, Bloom.z;\n"
+"MUL l.x, l.x, Bloom.y;\n"
+"MUL result.color.xyz, c, l.x;\n"
+"MOV result.color.w, LumW.w;\n"
+"END\n";
 /***********************************************************************************************************/
 
 #define GL_PROGRAM_ERROR_STRING_ARB						0x8874
@@ -229,4 +247,22 @@ void ARB_InitGPUShaders() {
 			glConfigExt.doGammaCorrectionWithShaders = qfalse;
 		}
 	}
+	// SJE: bloom bright-pass program (only when the hardware can do it - see GLimp_InitExtensions)
+	tr.bloomPShader = 0;
+	if (glConfigExt.doBloomWithShaders)
+	{
+		int bloom_err = -1;
+		qglGenProgramsARB(1, &tr.bloomPShader);
+		qglBindProgramARB(GL_FRAGMENT_PROGRAM_ARB, tr.bloomPShader);
+		qglProgramStringARB(GL_FRAGMENT_PROGRAM_ARB, GL_PROGRAM_FORMAT_ASCII_ARB, static_cast<GLsizei>(strlen(bloomBrightPassPxShader)), bloomBrightPassPxShader);
+		qglGetIntegerv(GL_PROGRAM_ERROR_POSITION_ARB, &bloom_err);
+		if (bloom_err != -1)
+		{
+			Com_Printf(S_COLOR_RED "ERROR: Failed to compile bloom pixel shader. Error at character %d\n", bloom_err);
+			qglDeleteProgramsARB(1, &tr.bloomPShader);
+			tr.bloomPShader = 0;
+			glConfigExt.doBloomWithShaders = qfalse;
+		}
+	}
+
 }

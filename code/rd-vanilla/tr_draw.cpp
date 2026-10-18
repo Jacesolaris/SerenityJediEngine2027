@@ -178,7 +178,7 @@ void RE_GetScreenShot(byte* buffer, int w, int h)
 	memcount = (static_cast<size_t>(glConfig.vidWidth) * 3 + padlen) * glConfig.vidHeight;
 
 	// gamma correct
-	if (glConfig.deviceSupportsGamma)
+	if (glConfig.deviceSupportsGamma && !glConfigExt.doGammaCorrectionWithShaders)
 		R_GammaCorrect(source + offset, memcount);
 
 	// resample from source

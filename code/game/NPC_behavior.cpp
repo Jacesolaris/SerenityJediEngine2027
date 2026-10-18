@@ -1431,8 +1431,9 @@ qboolean NPC_CheckSurrender()
 				if (NPC->s.weapon == WP_NONE
 					//NPC has a weapon
 					|| NPC->enemy == player
-					|| NPC->enemy->s.weapon == WP_SABER && NPC->enemy->client && NPC->enemy->client->ps.SaberActive()
-					|| NPC->enemy->NPC && NPC->enemy->NPC->group && NPC->enemy->NPC->group->numGroup > 2)
+					// SJE: enemy can be NULL here - guard the two lines below
+					|| NPC->enemy && NPC->enemy->s.weapon == WP_SABER && NPC->enemy->client && NPC->enemy->client->ps.SaberActive()
+					|| NPC->enemy && NPC->enemy->NPC && NPC->enemy->NPC->group && NPC->enemy->NPC->group->numGroup > 2)
 				{
 					//surrender only if have no weapon or fighting a player or jedi or if we are outnumbered at least 3 to 1
 					if (NPC->enemy == player)

@@ -83,6 +83,7 @@ extern qboolean WP_SaberBlockBolt(gentity_t* self, vec3_t hitloc, qboolean missi
 void WP_HandleBoltBlock(gentity_t* bolt, gentity_t* blocker, trace_t* trace, vec3_t fwd);
 extern int WP_SaberBlockCost(gentity_t* defender, const gentity_t* attacker, vec3_t hit_locs);
 extern void WP_BlockPointsDrain(const gentity_t* self, int fatigue);
+extern int WP_ClassBlockPointCost(const gentity_t* blocker, int cost, qboolean vs_blaster);
 extern void G_KnockOver(gentity_t* self, const gentity_t* attacker, const vec3_t push_dir, float strength, qboolean breakSaberLock);
 extern float manual_running_and_saberblocking(const gentity_t* defender);
 extern qboolean WP_SaberFatiguedParryDirection(gentity_t* self, vec3_t hitloc, qboolean missileBlock);
@@ -1778,7 +1779,7 @@ killProj:
 	//
 	// Grapple / Hook projectile
 	//
-	if (strcmp(ent->classname, "hook") == 0)
+	if (ent->classname && strcmp(ent->classname, "hook") == 0) // SJE: classname is NULL-checked above
 	{
 		vec3_t v = { 0 };
 		gentity_t* nent = G_Spawn();
@@ -2423,7 +2424,7 @@ void WP_HandleBoltBlock(gentity_t* bolt, gentity_t* blocker, trace_t* trace, vec
 		}
 
 		WP_BrokenBoltBlockKnockBack(blocker);
-		PM_AddBlockFatigue(&blocker->client->ps, punish);
+		PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, punish, qtrue));
 	}
 	else
 	{
@@ -2471,7 +2472,7 @@ void WP_HandleBoltBlock(gentity_t* bolt, gentity_t* blocker, trace_t* trace, vec
 			}
 			else
 			{
-				WP_BlockPointsDrain(blocker, cost);
+				WP_BlockPointsDrain(blocker, WP_ClassBlockPointCost(blocker, cost, qtrue));
 			}
 		}
 		//
@@ -2520,7 +2521,7 @@ void WP_HandleBoltBlock(gentity_t* bolt, gentity_t* blocker, trace_t* trace, vec
 			}
 			else
 			{
-				WP_BlockPointsDrain(blocker, block_points_used);
+				WP_BlockPointsDrain(blocker, WP_ClassBlockPointCost(blocker, block_points_used, qtrue));
 			}
 		}
 		else if (saber_block_reflection)
@@ -2586,7 +2587,7 @@ void WP_HandleBoltBlock(gentity_t* bolt, gentity_t* blocker, trace_t* trace, vec
 			}
 			else
 			{
-				WP_BlockPointsDrain(blocker, cost);
+				WP_BlockPointsDrain(blocker, WP_ClassBlockPointCost(blocker, cost, qtrue));
 			}
 
 			// Save the original speed
@@ -2683,7 +2684,7 @@ void WP_HandleBoltBlock(gentity_t* bolt, gentity_t* blocker, trace_t* trace, vec
 			}
 			else
 			{
-				WP_BlockPointsDrain(blocker, block_points_used);
+				WP_BlockPointsDrain(blocker, WP_ClassBlockPointCost(blocker, block_points_used, qtrue));
 			}
 
 			// Save the original speed

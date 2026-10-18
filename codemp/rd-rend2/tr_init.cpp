@@ -111,6 +111,7 @@ cvar_t* r_ext_multi_draw_arrays;
 cvar_t* r_ext_texture_float;
 cvar_t* r_arb_half_float_pixel;
 cvar_t* r_ext_framebuffer_multisample;
+cvar_t* r_ext_alpha_to_coverage;	// SJE: anti-aliased cut-out textures with MSAA
 cvar_t* r_arb_seamless_cube_map;
 cvar_t* r_arb_vertex_type_2_10_10_10_rev;
 cvar_t* r_arb_buffer_storage;
@@ -1510,6 +1511,7 @@ static void R_Register(void)
 	r_ext_texture_float = ri.Cvar_Get("r_ext_texture_float", "1", CVAR_ARCHIVE | CVAR_LATCH, "Disable/enable floating-point textures");
 	r_arb_half_float_pixel = ri.Cvar_Get("r_arb_half_float_pixel", "1", CVAR_ARCHIVE | CVAR_LATCH, "Disable/enable ARB_half_float GL extension");
 	r_ext_framebuffer_multisample = ri.Cvar_Get("r_ext_multisample", "8", CVAR_ARCHIVE | CVAR_LATCH, "Disable/enable framebuffer MSAA");
+	r_ext_alpha_to_coverage = ri.Cvar_Get("r_ext_alpha_to_coverage", "1", CVAR_ARCHIVE, "Anti-alias cut-out textures (foliage, fences) when MSAA is on");
 	// rend2 6e3d3eaa: we do MSAA resolving manually in rend2, so don't bother with the default framebuffer
 	ri.Cvar_Set("r_ext_multisample_default_fb", "0");
 	r_arb_seamless_cube_map = ri.Cvar_Get("r_arb_seamless_cube_map", "0", CVAR_ARCHIVE | CVAR_LATCH, "Disable/enable seamless cube map filtering GL extension");
