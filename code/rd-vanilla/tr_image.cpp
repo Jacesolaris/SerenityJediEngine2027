@@ -922,6 +922,61 @@ static image_t* R_FindImageFile_NoLoad(const char* name, const qboolean mipmap, 
 	return nullptr;
 }
 
+static int R_NearestPowerOf2(const int v)
+{
+	int p = 1;
+	while (p < v) p <<= 1;
+	// pick the closer of p and p/2
+	if (p > 1 && (p - v) > (v - (p >> 1))) p >>= 1;
+	return p < 1 ? 1 : p;
+}
+
+// Bilinear resize of a 32-bit RGBA image to power-of-2 dimensions. Frees the
+// input and returns a new buffer (same allocator as the image loaders).
+static byte* R_ResampleToPowerOf2(const char* name, byte* in, int* width, int* height)
+{
+	const int ow = *width, oh = *height;
+	const int nw = R_NearestPowerOf2(ow), nh = R_NearestPowerOf2(oh);
+	ri.Printf(PRINT_WARNING, "WARNING: %s is %i x %i, not a power of 2; rescaled to %i x %i\n", name, ow, oh, nw, nh);
+	byte* out = static_cast<byte*>(R_Malloc(nw * nh * 4, TAG_TEMP_WORKSPACE, qfalse));
+	for (int y = 0; y < nh; y++)
+	{
+		const float fy = (nh > 1) ? (y + 0.5f) * oh / nh - 0.5f : 0.0f;
+		int y0 = static_cast<int>(floorf(fy));
+		const float ty = fy - y0;
+		int y1 = y0 + 1;
+		if (y0 < 0) y0 = 0;
+		if (y1 > oh - 1) y1 = oh - 1;
+		if (y0 > oh - 1) y0 = oh - 1;
+		for (int x = 0; x < nw; x++)
+		{
+			const float fx = (nw > 1) ? (x + 0.5f) * ow / nw - 0.5f : 0.0f;
+			int x0 = static_cast<int>(floorf(fx));
+			const float tx = fx - x0;
+			int x1 = x0 + 1;
+			if (x0 < 0) x0 = 0;
+			if (x1 > ow - 1) x1 = ow - 1;
+			if (x0 > ow - 1) x0 = ow - 1;
+			const byte* a = in + (y0 * ow + x0) * 4;
+			const byte* b = in + (y0 * ow + x1) * 4;
+			const byte* c = in + (y1 * ow + x0) * 4;
+			const byte* d = in + (y1 * ow + x1) * 4;
+			byte* o = out + (y * nw + x) * 4;
+			for (int k = 0; k < 4; k++)
+			{
+				const float top = a[k] + (b[k] - a[k]) * tx;
+				const float bot = c[k] + (d[k] - c[k]) * tx;
+				const float v = top + (bot - top) * ty;
+				o[k] = static_cast<byte>(v < 0.0f ? 0.0f : (v > 255.0f ? 255.0f : v + 0.5f));
+			}
+		}
+	}
+	R_Free(in);
+	*width = nw;
+	*height = nh;
+	return out;
+}
+
 /*
 ================
 R_CreateImage
@@ -1040,6 +1095,14 @@ image_t* R_FindImageFile(const char* name, const qboolean mipmap, const qboolean
 	}
 
 	image = R_CreateImage(name, pic, width, height, GL_RGBA, mipmap, allow_picmip, allow_tc, gl_wrap_clamp_mode);
+	// This renderer needs power-of-2 textures. Instead of a fatal error
+	// (rend2 accepts any size, so many mod textures aren't), rescale to the
+	// nearest power of 2.
+	if ((width & (width - 1)) || (height & (height - 1)))
+	{
+		pic = R_ResampleToPowerOf2(name, pic, &width, &height);
+	}
+
 	R_Free(pic);
 	return image;
 }

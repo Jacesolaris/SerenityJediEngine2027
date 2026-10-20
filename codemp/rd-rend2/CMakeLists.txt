@@ -41,6 +41,8 @@ set(MPRend2Files
 	"${SharedDir}/rd-rend2/tr_fbo.cpp"
 	"${SharedDir}/rd-rend2/tr_fbo.h"
 	"${SharedDir}/rd-rend2/tr_flares.cpp"
+	"${MPDir}/rd-vanilla/tr_meshcloth.cpp"
+	"${MPDir}/rd-vanilla/tr_meshcloth.h"
 	"${SharedDir}/rd-rend2/tr_ghoul2.cpp"
 	"${SharedDir}/rd-rend2/tr_glsl.cpp"
 	"${SharedDir}/rd-rend2/tr_glsl_parse.cpp"

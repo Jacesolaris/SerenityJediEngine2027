@@ -42,6 +42,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "tr_stl.h"
 #include "../rd-common/tr_font.h"
 #include "tr_WorldEffects.h"
+#include "tr_meshcloth.h"
 
 glconfig_t	glConfig;
 glstate_t	glState;
@@ -132,6 +133,16 @@ cvar_t* r_vertexLight;
 cvar_t* r_shadows;
 cvar_t* r_shadowRange;
 cvar_t* r_flares;
+cvar_t* r_meshCloth;
+cvar_t* r_meshClothGravity;
+cvar_t* r_meshClothDrag;
+cvar_t* r_meshClothIter;
+cvar_t* r_meshClothShape;
+cvar_t* r_meshClothInertia;
+cvar_t* r_meshClothMaxAccel;
+cvar_t* r_meshClothAirDrag;
+cvar_t* r_meshClothWind;
+cvar_t* r_meshClothGust;
 cvar_t* r_nobind;
 cvar_t* r_singleShader;
 cvar_t* r_colorMipLevels;
@@ -1614,6 +1625,15 @@ using consoleCommand_t = struct consoleCommand_s {
 
 void R_ReloadFonts_f();
 
+// meshcloth_blast [strength] [radius]: test explosion 96 units in front of the camera
+static void R_MeshClothBlast_f(void) {
+	const float strength = ri.Cmd_Argc() > 1 ? (float)atof(ri.Cmd_Argv(1)) : 600.0f;
+	const float radius = ri.Cmd_Argc() > 2 ? (float)atof(ri.Cmd_Argv(2)) : 200.0f;
+	float c[3];
+	for (int k = 0; k < 3; k++) c[k] = tr.refdef.vieworg[k] + tr.refdef.viewaxis[0][k] * 96.0f;
+	MC_Blast(c, strength, radius);
+}
+
 static consoleCommand_t	commands[] = {
 	{ "imagelist",			R_ImageList_f },
 	{ "shaderlist",			R_ShaderList_f },
@@ -1627,6 +1647,7 @@ static consoleCommand_t	commands[] = {
 	{ "r_we",				R_WorldEffect_f },
 	{ "imagecacheinfo",		RE_RegisterImages_Info_f },
 	{ "modellist",			R_Modellist_f },
+	{ "meshcloth_blast",	R_MeshClothBlast_f },
 	{ "modelcacheinfo",		RE_RegisterModels_Info_f },
 	{ "r_fogDistance",		R_FogDistance_f },
 	{ "r_fogColor",			R_FogColor_f },
@@ -1781,6 +1802,16 @@ static void R_Register()
 	r_lockpvs = ri.Cvar_Get("r_lockpvs", "0", CVAR_CHEAT);
 	r_noportals = ri.Cvar_Get("r_noportals", "0", CVAR_CHEAT);
 	r_shadows = ri.Cvar_Get("cg_shadows", "2", 0);
+	r_meshCloth = ri.Cvar_Get("r_meshCloth", "1", CVAR_ARCHIVE);
+	r_meshClothGravity = ri.Cvar_Get("r_meshClothGravity", "650", CVAR_ARCHIVE);
+	r_meshClothDrag = ri.Cvar_Get("r_meshClothDrag", "1.4", CVAR_ARCHIVE);
+	r_meshClothIter = ri.Cvar_Get("r_meshClothIter", "6", CVAR_ARCHIVE);
+	r_meshClothShape = ri.Cvar_Get("r_meshClothShape", "1", CVAR_ARCHIVE);
+	r_meshClothInertia = ri.Cvar_Get("r_meshClothInertia", "1", CVAR_ARCHIVE);
+	r_meshClothMaxAccel = ri.Cvar_Get("r_meshClothMaxAccel", "0", CVAR_ARCHIVE);
+	r_meshClothAirDrag = ri.Cvar_Get("r_meshClothAirDrag", "2.5", CVAR_ARCHIVE);
+	r_meshClothWind = ri.Cvar_Get("r_meshClothWind", "0 0 0", CVAR_ARCHIVE);
+	r_meshClothGust = ri.Cvar_Get("r_meshClothGust", "0.5", CVAR_ARCHIVE);
 	r_shadowRange = ri.Cvar_Get("r_shadowRange", "1000", CVAR_ARCHIVE_ND);
 
 	/*
@@ -1910,6 +1941,7 @@ void R_Init(void)
 	R_ImageLoader_Init();
 	R_NoiseInit();
 	R_Register();
+	R_MeshClothLoadConfig();
 
 	backEndData = (backEndData_t*)R_Hunk_Alloc(sizeof(backEndData_t), qtrue);
 	R_InitNextFrame();
@@ -1953,6 +1985,7 @@ extern void R_ShutdownWorldEffects();
 
 void RE_Shutdown(qboolean destroyWindow, qboolean restarting)
 {
+	R_MeshClothShutdown();
 	R_ShutdownFlarePbos(); // flare depth-read buffers (the GL context may go away below)
 	R_VideoCaptureShutdown(R_VideoReadbackGL()); // its pixel buffer objects (the GL context may go away below)
 	s_videoGLLoaded = false;

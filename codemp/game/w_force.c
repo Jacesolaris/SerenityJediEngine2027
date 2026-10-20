@@ -64,7 +64,6 @@ extern void NPC_UseResponse(gentity_t* self, const gentity_t* user, qboolean use
 extern void Jedi_Decloak(gentity_t* self);
 extern qboolean WalkCheck(const gentity_t* self);
 extern float manual_forceblocking(const gentity_t* defender);
-extern qboolean BG_FullBodyTauntAnim(int anim);
 extern qboolean PM_SaberInBrokenParry(int move);
 extern qboolean BG_InSlowBounce(const playerState_t* ps);
 extern qboolean PM_FaceProtectAnim(int anim);

@@ -289,6 +289,18 @@ extern cvar_t* r_noPrecacheGLA;
 #endif
 
 extern cvar_t* r_noServerGhoul2;
+extern cvar_t* r_meshCloth;
+extern cvar_t* r_meshClothGravity;
+extern cvar_t* r_meshClothDrag;
+extern cvar_t* r_meshClothIter;
+extern cvar_t* r_meshClothShape;
+extern cvar_t* r_meshClothInertia;
+extern cvar_t* r_meshClothMaxAccel;
+extern cvar_t* r_meshClothAirDrag;
+extern cvar_t* r_meshClothWind;
+extern cvar_t* r_meshClothGust;
+void R_MeshClothLoadConfig();
+void R_MeshClothShutdown();
 extern cvar_t* r_Ghoul2AnimSmooth;
 extern cvar_t* r_Ghoul2UnSqashAfterSmooth;
 //extern cvar_t	*r_Ghoul2UnSqash;

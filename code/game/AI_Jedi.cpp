@@ -5764,8 +5764,10 @@ static evasionType_t Jedi_CheckEvadeSpecialAttacks()
 		//check some other attacks?
 		//check roll-stab
 		if (NPC->enemy->client->ps.torsoAnim == BOTH_ROLL_STAB
-			|| NPC->enemy->client->ps.torsoAnim == BOTH_ROLL_F && (NPC->enemy->client->pers.lastCommand.buttons &
-				BUTTON_ATTACK || NPC->enemy->client->ps.pm_flags & PMF_ATTACK_HELD))
+			|| (NPC->enemy->client->ps.torsoAnim == BOTH_ROLL_F
+				|| NPC->enemy->client->ps.torsoAnim == BOTH_ROLL_F1 ||
+				NPC->enemy->client->ps.torsoAnim == BOTH_ROLL_F2) && (NPC->enemy->client->pers.lastCommand.buttons &
+					BUTTON_ATTACK || NPC->enemy->client->ps.pm_flags & PMF_ATTACK_HELD))
 		{
 			//either already in a roll-stab or may go into one
 			if (NPCInfo->aiFlags & NPCAI_BOSS_CHARACTER || NPCInfo->aiFlags & NPCAI_BOSS_SERENITYJEDIENGINE

@@ -264,5 +264,4 @@ void ARB_InitGPUShaders() {
 			glConfigExt.doBloomWithShaders = qfalse;
 		}
 	}
-
 }

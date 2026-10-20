@@ -15660,12 +15660,12 @@ static void WP_SaberBlasterFire(gentity_t* ent, const qboolean charged, gentity_
 	{
 		constexpr int count = 5; // fully charged
 		missile->count = count;
-		missile->damage = weaponData[WP_BRYAR_PISTOL].altDamage * count;
+		missile->damage = weaponData[WP_CONCUSSION].damage * count;
 		missile->methodOfDeath = MOD_PISTOL_ALT;
 	}
 	else
 	{
-		missile->damage = weaponData[WP_BRYAR_PISTOL].damage;
+		missile->damage = weaponData[WP_CONCUSSION].damage;
 		missile->methodOfDeath = MOD_PISTOL;
 	}
 	missile->dflags = DAMAGE_DEATH_KNOCKBACK;

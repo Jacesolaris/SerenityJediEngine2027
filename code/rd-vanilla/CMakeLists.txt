@@ -105,6 +105,8 @@ if(BuildSPRdVanilla OR BuildJK2SPRdVanilla)
 		"${SPDir}/rd-vanilla/tr_curve.cpp"
 		"${SPDir}/rd-vanilla/tr_draw.cpp"
 		"${SPDir}/rd-vanilla/tr_ghoul2.cpp"
+		"${SPDir}/rd-vanilla/tr_meshcloth.cpp"
+		"${SPDir}/rd-vanilla/tr_meshcloth.h"
 		"${SPDir}/rd-vanilla/tr_image.cpp"
 		"${SPDir}/rd-vanilla/tr_init.cpp"
 		"${SPDir}/rd-vanilla/tr_light.cpp"

@@ -1152,7 +1152,19 @@ extern	cvar_t* r_showsky;						// forces sky in front of all surfaces
 extern	cvar_t* r_shownormals;					// draws wireframe normals
 extern	cvar_t* r_clear;						// force screen clear every frame
 
-extern	cvar_t* r_shadows;						// controls shadows: 0 = none, 1 = blur, 2 = stencil, 3 = black planar projection
+extern	cvar_t* r_shadows;
+extern	cvar_t* r_meshCloth;			// simulate robe surfaces listed in ext_data/meshcloth.dat
+extern	cvar_t* r_meshClothGravity;
+extern	cvar_t* r_meshClothDrag;
+extern	cvar_t* r_meshClothIter;
+extern	cvar_t* r_meshClothShape;
+extern	cvar_t* r_meshClothInertia;
+extern	cvar_t* r_meshClothMaxAccel;
+extern cvar_t* r_meshClothAirDrag;
+extern cvar_t* r_meshClothWind;
+extern cvar_t* r_meshClothGust;
+void R_MeshClothLoadConfig();
+void R_MeshClothShutdown();						// controls shadows: 0 = none, 1 = blur, 2 = stencil, 3 = black planar projection
 extern	cvar_t* r_flares;						// light flares
 
 extern	cvar_t* r_intensity;

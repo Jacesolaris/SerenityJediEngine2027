@@ -70,6 +70,8 @@ set(MPVanillaRendererFiles
 	"${MPDir}/rd-vanilla/tr_world.cpp"
 	"${MPDir}/rd-vanilla/tr_WorldEffects.cpp"
 	"${MPDir}/rd-vanilla/tr_WorldEffects.h"
+	"${MPDir}/rd-vanilla/tr_meshcloth.cpp"
+	"${MPDir}/rd-vanilla/tr_meshcloth.h"
 	)
 source_group("renderer" FILES ${MPVanillaRendererFiles})
 

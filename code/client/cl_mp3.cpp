@@ -140,10 +140,10 @@ float MP3Stream_GetRemainingTimeInSeconds(const LP_MP3STREAM lpMP3Stream)
 	if (lpMP3Stream->iTimeQuery_UnpackedLength) // fields initialised?
 	{
 		const int iRateRatio = lpMP3Stream->iTimeQuery_SampleRate / dma.speed; // whole-number rate ratio, as before
-			return static_cast<float>(static_cast<double>(lpMP3Stream->iTimeQuery_UnpackedLength - lpMP3Stream->
-				iBytesDecodedTotal * iRateRatio) / static_cast<double>(lpMP3Stream->iTimeQuery_SampleRate) /
-				static_cast<double>(lpMP3Stream->
-					iTimeQuery_Channels) / static_cast<double>(lpMP3Stream->iTimeQuery_Width));
+		return static_cast<float>(static_cast<double>(lpMP3Stream->iTimeQuery_UnpackedLength - lpMP3Stream->
+			iBytesDecodedTotal * iRateRatio) / static_cast<double>(lpMP3Stream->iTimeQuery_SampleRate) /
+			static_cast<double>(lpMP3Stream->
+				iTimeQuery_Channels) / static_cast<double>(lpMP3Stream->iTimeQuery_Width));
 	}
 
 	return 0.0f;

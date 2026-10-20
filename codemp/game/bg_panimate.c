@@ -3229,6 +3229,8 @@ qboolean BG_InFlipBack(const int anim)
 	case BOTH_FLIP_BACK1:
 	case BOTH_FLIP_BACK2:
 	case BOTH_BASHED1:
+	case BOTH_PAIN2:
+	case BOTH_PAIN3:
 		return qtrue;
 	default:;
 	}

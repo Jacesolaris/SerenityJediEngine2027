@@ -1866,7 +1866,7 @@ killProj:
 	//
 	// Stun projectile
 	//
-	if (strcmp(ent->classname, "stun") == 0)
+	if (ent->classname && strcmp(ent->classname, "stun") == 0)
 	{
 		vec3_t v = { 0 };
 		gentity_t* nent = G_Spawn();

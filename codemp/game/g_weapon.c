@@ -6831,14 +6831,14 @@ void G_SaberBlasterFire(gentity_t* ent, const qboolean charged, gentity_t* targe
 		const float box_size = BRYAR_ALT_SIZE * (BRYAR_MAX_CHARGE * 0.5f);
 
 		missile->s.generic1 = BRYAR_MAX_CHARGE; // fully charged
-		missile->damage = BRYAR_PISTOL_ALT_DPMAXDAMAGE;
+		missile->damage = CONC_DAMAGE;
 		missile->methodOfDeath = MOD_BRYAR_PISTOL_ALT;
 		VectorSet(missile->r.maxs, box_size, box_size, box_size);
 		VectorSet(missile->r.mins, -box_size, -box_size, -box_size);
 	}
 	else
 	{
-		missile->damage = BRYAR_PISTOL_DAMAGE;
+		missile->damage = CONC_DAMAGE;
 		missile->methodOfDeath = MOD_BRYAR_PISTOL;
 	}
 	missile->dflags = DAMAGE_DEATH_KNOCKBACK | DAMAGE_EXTRA_KNOCKBACK;

@@ -7157,11 +7157,21 @@ static void PM_CheckAirWallRun(void)
 {
 	if (pm->ps->groundEntityNum != ENTITYNUM_NONE)
 	{
-		pm->ps->pm_flags &= ~PMF_AIR_WALL_RAN;
+		pm->ps->pm_flags &= ~(PMF_AIR_WALL_RAN | PMF_JUMPING);
 		return;
 	}
 
-	if (pm->ps->pm_flags & (PMF_AIR_WALL_RAN | PMF_STUCK_TO_WALL | PMF_RESPAWNED)
+	// Only a jump (even a tap) lifts the player into a wall-run: running round a corner close to a wall, or dropping
+	// off a step, leaves the ground for a moment too and must not pull the player onto the wall. The jump's own frame
+	// counts (PM_CheckJump has already left the ground when this runs). PMF_JUMPING is the "jumped in this airtime"
+	// flag here (set by the jumps, never read anywhere else in MP; cleared on the ground above). Predicted with pm_flags.
+	if (pm->cmd.upmove > 0)
+	{
+		pm->ps->pm_flags |= PMF_JUMPING;
+	}
+
+	if (!(pm->ps->pm_flags & PMF_JUMPING)
+		|| pm->ps->pm_flags & (PMF_AIR_WALL_RAN | PMF_STUCK_TO_WALL | PMF_RESPAWNED)
 		|| pm->cmd.forwardmove <= 0
 		|| pm->ps->fd.forcePowerLevel[FP_LEVITATION] < FORCE_LEVEL_2
 		|| pm->ps->pm_type != PM_NORMAL

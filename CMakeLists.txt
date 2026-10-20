@@ -25,7 +25,7 @@ set(InSerenityJediEngine2027 TRUE)
 
 
 # Project name
-set(ProjectName "SerenityJediEngine2027" CACHE STRING "Project Name")
+set(ProjectName "SerenityJediEngine2027-Working" CACHE STRING "Project Name")
 project(${ProjectName})
 
 # C++ language standard: C++17 for every C++ project (shown in VS as "ISO C++17 Standard (/std:c++17)").

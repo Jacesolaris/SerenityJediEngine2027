@@ -4791,8 +4791,10 @@ static qboolean DodgeRollCheck(const gentity_t* self, const int dodge_anim, vec3
 	int dodge_distance = 200; //how far away do we do the scans.
 
 	//determine which direction we're traveling in.
-	if (dodge_anim == BOTH_ROLL_F || dodge_anim == BOTH_ROLL_F1 || dodge_anim == BOTH_ROLL_F2 || dodge_anim ==
-		BOTH_HOP_F)
+	if (dodge_anim == BOTH_ROLL_F ||
+		dodge_anim == BOTH_ROLL_F1 ||
+		dodge_anim == BOTH_ROLL_F2 ||
+		dodge_anim == BOTH_HOP_F)
 	{
 		//forward rolls
 		VectorCopy(forward, moveDir);
@@ -5461,7 +5463,18 @@ qboolean G_DoDodge(gentity_t* self, gentity_t* shooter, vec3_t dmg_origin, int h
 				else if (rolled == BOTH_ROLL_R)
 				{
 					//reset to start of the possible normal roll directions
-					rolled = BOTH_ROLL_F;
+					if (self->client->ps.weapon == WP_SABER)
+					{
+						rolled = BOTH_ROLL_F;
+					}
+					else if (self->client->ps.weapon == WP_MELEE)
+					{
+						rolled = BOTH_ROLL_F2;
+					}
+					else
+					{
+						rolled = BOTH_ROLL_F1;
+					}
 				}
 				else if (rolled == BOTH_HOP_R)
 				{
@@ -6026,7 +6039,18 @@ static qboolean G_DoSaberDodge(gentity_t* dodger, gentity_t* attacker, vec3_t dm
 				else if (rolled == BOTH_ROLL_R)
 				{
 					//reset to start of the possible normal roll directions
-					rolled = BOTH_ROLL_F;
+					if (dodger->client->ps.weapon == WP_SABER)
+					{
+						rolled = BOTH_ROLL_F;
+					}
+					else if (dodger->client->ps.weapon == WP_MELEE)
+					{
+						rolled = BOTH_ROLL_F2;
+					}
+					else
+					{
+						rolled = BOTH_ROLL_F1;
+					}
 				}
 				else if (rolled == BOTH_HOP_R)
 				{

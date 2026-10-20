@@ -43,6 +43,8 @@ set(SPRend2Files
 	"${SharedDir}/rd-rend2/tr_fbo.h"
 	"${SharedDir}/rd-rend2/tr_flares.cpp"
 	"${SharedDir}/rd-rend2/tr_ghoul2.cpp"
+	"${SPDir}/rd-vanilla/tr_meshcloth.cpp"
+	"${SPDir}/rd-vanilla/tr_meshcloth.h"
 	"${SharedDir}/rd-rend2/tr_glsl.cpp"
 	"${SharedDir}/rd-rend2/tr_glsl_parse.cpp"
 	"${SharedDir}/rd-rend2/tr_image.cpp"

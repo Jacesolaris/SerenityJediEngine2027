@@ -26,6 +26,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "tr_cache.h"
 #include "tr_allocator.h"
 #include "tr_weather.h"
+#include "../rd-vanilla/tr_meshcloth.h"
 #include <algorithm>
 
 #ifdef _G2_GORE
@@ -232,6 +233,16 @@ cvar_t* r_noPrecacheGLA;
 #endif
 
 cvar_t* r_noServerGhoul2;
+cvar_t* r_meshCloth;
+cvar_t* r_meshClothGravity;
+cvar_t* r_meshClothDrag;
+cvar_t* r_meshClothIter;
+cvar_t* r_meshClothShape;
+cvar_t* r_meshClothInertia;
+cvar_t* r_meshClothMaxAccel;
+cvar_t* r_meshClothAirDrag;
+cvar_t* r_meshClothWind;
+cvar_t* r_meshClothGust;
 cvar_t* r_Ghoul2AnimSmooth = 0;
 cvar_t* r_Ghoul2UnSqashAfterSmooth = 0;
 //cvar_t	*r_Ghoul2UnSqash;
@@ -1469,7 +1480,17 @@ typedef struct consoleCommand_s {
 	xcommand_t	func;
 } consoleCommand_t;
 
+// meshcloth_blast [strength] [radius]: test explosion 96 units in front of the camera
+static void R_MeshClothBlast_f(void) {
+	const float strength = ri.Cmd_Argc() > 1 ? (float)atof(ri.Cmd_Argv(1)) : 600.0f;
+	const float radius = ri.Cmd_Argc() > 2 ? (float)atof(ri.Cmd_Argv(2)) : 200.0f;
+	float c[3];
+	for (int k = 0; k < 3; k++) c[k] = tr.refdef.vieworg[k] + tr.refdef.viewaxis[0][k] * 96.0f;
+	MC_Blast(c, strength, radius);
+}
+
 static consoleCommand_t	commands[] = {
+	{ "meshcloth_blast",	R_MeshClothBlast_f },
 	{ "imagelist",			R_ImageList_f },
 	{ "shaderlist",			R_ShaderList_f },
 	{ "skinlist",			R_SkinList_f },
@@ -1718,6 +1739,16 @@ static void R_Register(void)
 	r_noPrecacheGLA = ri.Cvar_Get("r_noPrecacheGLA", "0", CVAR_CHEAT, "");
 #endif
 	r_noServerGhoul2 = ri.Cvar_Get("r_noserverghoul2", "0", CVAR_CHEAT, "");
+	r_meshCloth = ri.Cvar_Get("r_meshCloth", "1", CVAR_ARCHIVE, "");
+	r_meshClothGravity = ri.Cvar_Get("r_meshClothGravity", "650", CVAR_ARCHIVE, "");
+	r_meshClothDrag = ri.Cvar_Get("r_meshClothDrag", "1.4", CVAR_ARCHIVE, "");
+	r_meshClothIter = ri.Cvar_Get("r_meshClothIter", "6", CVAR_ARCHIVE, "");
+	r_meshClothShape = ri.Cvar_Get("r_meshClothShape", "1", CVAR_ARCHIVE, "");
+	r_meshClothInertia = ri.Cvar_Get("r_meshClothInertia", "1", CVAR_ARCHIVE, "");
+	r_meshClothMaxAccel = ri.Cvar_Get("r_meshClothMaxAccel", "0", CVAR_ARCHIVE, "");
+	r_meshClothAirDrag = ri.Cvar_Get("r_meshClothAirDrag", "2.5", CVAR_ARCHIVE, "");
+	r_meshClothWind = ri.Cvar_Get("r_meshClothWind", "0 0 0", CVAR_ARCHIVE, "");
+	r_meshClothGust = ri.Cvar_Get("r_meshClothGust", "0.5", CVAR_ARCHIVE, "");
 	r_Ghoul2AnimSmooth = ri.Cvar_Get("r_ghoul2animsmooth", "0.3", CVAR_NONE, "");
 	r_Ghoul2UnSqashAfterSmooth = ri.Cvar_Get("r_ghoul2unsqashaftersmooth", "1", CVAR_NONE, "");
 	broadsword = ri.Cvar_Get("broadsword", "0", CVAR_ARCHIVE, "");
@@ -2138,6 +2169,7 @@ void R_Init(void)
 	R_ImageLoader_Init();
 	R_NoiseInit();
 	R_Register();
+	R_MeshClothLoadConfig();
 
 	max_polys = Q_max(r_maxpolys->integer, DEFAULT_MAX_POLYS); // default is the minimum; the cvar can only raise it
 	max_polyverts = Q_max(r_maxpolyverts->integer, DEFAULT_MAX_POLYVERTS);
@@ -2237,6 +2269,7 @@ RE_Shutdown
 */
 void RE_Shutdown(qboolean destroyWindow, qboolean restarting)
 {
+	R_MeshClothShutdown();
 	ri.Printf(PRINT_ALL, "RE_Shutdown( %i )\n", destroyWindow);
 
 	for (size_t i = 0; i < numCommands; i++)

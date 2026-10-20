@@ -18,6 +18,9 @@
 #endif // !REND2_SP
 #include "tr_cache.h"
 
+#include "../../code/rd-vanilla/tr_meshcloth.h"
+#include <vector>
+#include <unordered_map>
 #define	LL(x) x=LittleLong(x)
 
 #ifdef G2_PERFORMANCE_ANALYSIS
@@ -3662,8 +3665,523 @@ void RB_FillBoneBlock(CRenderableSurface* surf, mat3x4_t* outMatrices)
 		sizeof(surf->boneCache->boneMatrices));
 }
 
+/*
+==============
+Mesh cloth (see code/rd-vanilla/tr_meshcloth.h)
+
+rend2 skins Ghoul2 meshes on the GPU from a static vertex buffer. For a
+cloth surface we skin it on the CPU, let the cloth module move the free
+vertices, then upload the result into a per-character vertex buffer. Each
+vertex is stored relative to one bone with weight 1 (position, normal and
+tangent pre-multiplied by that bone's inverse), so the GPU skinning puts it
+exactly where the simulation did and every rend2 shader keeps working.
+==============
+*/
+void R_MeshClothLoadConfig()
+{
+	char* buf = nullptr;
+	const long len = ri.FS_ReadFile("ext_data/meshcloth.dat", reinterpret_cast<void**>(&buf));
+	if (len > 0 && buf)
+	{
+		const int n = MC_LoadConfig(buf);
+		ri.Printf(PRINT_ALL, "Mesh cloth: %d surface(s) from ext_data/meshcloth.dat\n", n);
+		ri.FS_FreeFile(buf);
+	}
+	else
+	{
+		MC_LoadConfig("");
+	}
+}
+
+static void MC_FreeRend2Buffers();
+
+void R_MeshClothShutdown()
+{
+	MC_Clear();
+	MC_FreeRend2Buffers();
+}
+
+// Body capsules the cloth collides with, from _humanoid bone names.
+static const char* const mcColliderBones[][2] = {
+	{ "pelvis", "thoracic" },{ "thoracic", "cervical" },{ "cervical", "cranium" },
+	{ "lfemurYZ", "ltibia" },{ "ltibia", "ltalus" },{ "rfemurYZ", "rtibia" },{ "rtibia", "rtalus" },
+	{ "lhumerus", "lradius" },{ "lradius", "lhand" },{ "rhumerus", "rradius" },{ "rradius", "rhand" }
+};
+static const float mcColliderRadius[] = { 6.0f, 4.5f, 3.8f, 5.0f, 3.8f, 5.0f, 3.8f, 2.5f, 2.2f, 2.5f, 2.2f };
+static const int MC_NUM_COLLIDERS = sizeof(mcColliderRadius) / sizeof(mcColliderRadius[0]);
+
+struct mcBoneLookup_t
+{
+	const mdxaHeader_t* header;
+	int idx[MC_NUM_COLLIDERS][2];
+};
+
+static const mdxaSkel_t* MC_Skel(const mdxaHeader_t* h, const int i)
+{
+	const auto offsets = reinterpret_cast<const mdxaSkelOffsets_t*>(reinterpret_cast<const byte*>(h) + sizeof(mdxaHeader_t));
+	return reinterpret_cast<const mdxaSkel_t*>(reinterpret_cast<const byte*>(h) + sizeof(mdxaHeader_t) + offsets->offsets[i]);
+}
+
+static const mcBoneLookup_t* MC_Lookup(const mdxaHeader_t* h)
+{
+	static mcBoneLookup_t cache[8];
+	static int next = 0;
+	for (auto& c : cache)
+	{
+		if (c.header == h) return &c;
+	}
+	mcBoneLookup_t& c = cache[next];
+	next = (next + 1) % 8;
+	c.header = h;
+	for (int k = 0; k < MC_NUM_COLLIDERS; k++)
+	{
+		for (int e = 0; e < 2; e++)
+		{
+			c.idx[k][e] = -1;
+			for (int i = 0; i < h->numBones; i++)
+			{
+				if (!Q_stricmp(MC_Skel(h, i)->name, mcColliderBones[k][e]))
+				{
+					c.idx[k][e] = i;
+					break;
+				}
+			}
+		}
+	}
+	return &c;
+}
+
+static const float (*MC_BoneFn(void* ctx, const int boneIndex))[4]
+{
+	return reinterpret_cast<const float(*)[4]>(static_cast<CBoneCache*>(ctx)->boneMatrices[boneIndex]);
+}
+
+// Per cloth surface: bind-pose tangents and an index buffer starting at 0.
+struct mcR2Surf_t
+{
+	std::vector<float> bindTangent;	// 4 floats per vertex
+	IBO_t* ibo = nullptr;
+	int numIndexes = 0;
+	int sigVerts = -1, sigTris = -1, sigOfsVerts = -1;	// detects reused memory after a reload
+};
+
+// Per character and cloth surface: the dynamic vertex buffer.
+struct mcR2Inst_t
+{
+	const void* key = nullptr;
+	const mdxmSurface_t* surface = nullptr;
+	VBO_t* vbo = nullptr;
+	int numVerts = 0;
+	unsigned uploadedFrame = ~0u;
+	int lastUsedMs = 0;
+};
+
+static std::unordered_map<const mdxmSurface_t*, mcR2Surf_t> mcR2Surfs;
+static std::vector<mcR2Inst_t> mcR2Insts;
+static const int MC_R2_MAX_INSTANCES = 192;
+
+static void MC_FreeRend2Buffers()
+{
+	// the VBO/IBO objects belong to tr.vbos / tr.ibos and are deleted with them
+	mcR2Surfs.clear();
+	mcR2Insts.clear();
+}
+
+static mcR2Surf_t* MC_R2Surface(const mdxmSurface_t* surface)
+{
+	auto it = mcR2Surfs.find(surface);
+	if (it != mcR2Surfs.end() && it->second.sigVerts == surface->numVerts &&
+		it->second.sigTris == surface->numTriangles && it->second.sigOfsVerts == surface->ofsVerts)
+	{
+		return it->second.ibo ? &it->second : nullptr;
+	}
+	if (it != mcR2Surfs.end())
+	{
+		// a different surface now lives at this address: forget its buffers
+		for (auto& in : mcR2Insts)
+		{
+			if (in.surface == surface) { in.surface = nullptr; in.key = nullptr; }
+		}
+	}
+	mcR2Surf_t& s = mcR2Surfs[surface];
+	s = mcR2Surf_t();
+	s.sigVerts = surface->numVerts;
+	s.sigTris = surface->numTriangles;
+	s.sigOfsVerts = surface->ofsVerts;
+	if (surface->numVerts <= 0 || surface->numTriangles <= 0)
+	{
+		return nullptr;
+	}
+
+	const mdxmTriangle_t* t = reinterpret_cast<const mdxmTriangle_t*>(reinterpret_cast<const byte*>(surface) + surface->ofsTriangles);
+	std::vector<glIndex_t> idx(surface->numTriangles * 3);
+	for (int k = 0; k < surface->numTriangles; k++)
+	{
+		for (int e = 0; e < 3; e++)
+		{
+			idx[k * 3 + e] = t[k].indexes[e];
+		}
+	}
+
+	mdxmVertex_t* v = reinterpret_cast<mdxmVertex_t*>(reinterpret_cast<byte*>(const_cast<mdxmSurface_t*>(surface)) + surface->ofsVerts);
+	mdxmVertexTexCoord_t* tc = reinterpret_cast<mdxmVertexTexCoord_t*>(v + surface->numVerts);
+	std::vector<uint32_t> packed(surface->numVerts);
+	std::vector<glIndex_t> idxCopy(idx);
+	R_CalcMikkTSpaceGlmSurface(surface->numTriangles, v, tc, packed.data(), idxCopy.data());
+	s.bindTangent.resize(surface->numVerts * 4);
+	for (int i = 0; i < surface->numVerts; i++)
+	{
+		R_VboUnpackTangent(&s.bindTangent[i * 4], packed[i]);
+	}
+
+	s.numIndexes = surface->numTriangles * 3;
+	s.ibo = R_CreateIBO(reinterpret_cast<byte*>(idx.data()), sizeof(glIndex_t) * s.numIndexes, VBO_USAGE_STATIC,
+		va("meshcloth_ibo_%d", (int)mcR2Surfs.size()));
+	return &s;
+}
+
+static mcR2Inst_t* MC_R2Instance(const void* key, const mdxmSurface_t* surface, const int timeMs)
+{
+	mcR2Inst_t* reuse = nullptr;
+	for (auto& in : mcR2Insts)
+	{
+		if (in.key == key && in.surface == surface)
+		{
+			in.lastUsedMs = timeMs;
+			return &in;
+		}
+		// a buffer of the same size whose character hasn't been drawn for 2 s
+		if (!reuse && in.numVerts == surface->numVerts && (!in.surface || timeMs - in.lastUsedMs > 2000 || timeMs < in.lastUsedMs))
+		{
+			reuse = &in;
+		}
+	}
+	if (!reuse)
+	{
+		if ((int)mcR2Insts.size() >= MC_R2_MAX_INSTANCES)
+		{
+			return nullptr;
+		}
+		mcR2Inst_t in;
+		in.numVerts = surface->numVerts;
+		in.vbo = R_CreateVBO(nullptr, sizeof(g2GoreVert_t) * surface->numVerts, VBO_USAGE_DYNAMIC,
+			va("meshcloth_vbo_%d", (int)mcR2Insts.size()));
+		VBO_t* vbo = in.vbo;
+		vbo->offsets[ATTR_INDEX_POSITION] = offsetof(g2GoreVert_t, position);
+		vbo->offsets[ATTR_INDEX_NORMAL] = offsetof(g2GoreVert_t, normal);
+		vbo->offsets[ATTR_INDEX_TEXCOORD0] = offsetof(g2GoreVert_t, texCoords);
+		vbo->offsets[ATTR_INDEX_BONE_INDEXES] = offsetof(g2GoreVert_t, bonerefs);
+		vbo->offsets[ATTR_INDEX_BONE_WEIGHTS] = offsetof(g2GoreVert_t, weights);
+		vbo->offsets[ATTR_INDEX_TANGENT] = offsetof(g2GoreVert_t, tangents);
+		const int attrs[] = { ATTR_INDEX_POSITION, ATTR_INDEX_NORMAL, ATTR_INDEX_TEXCOORD0,
+			ATTR_INDEX_BONE_INDEXES, ATTR_INDEX_BONE_WEIGHTS, ATTR_INDEX_TANGENT };
+		for (const int a : attrs)
+		{
+			vbo->strides[a] = sizeof(g2GoreVert_t);
+		}
+		vbo->sizes[ATTR_INDEX_POSITION] = sizeof(vec3_t);
+		vbo->sizes[ATTR_INDEX_NORMAL] = sizeof(uint32_t);
+		vbo->sizes[ATTR_INDEX_TEXCOORD0] = sizeof(vec2_t);
+		vbo->sizes[ATTR_INDEX_BONE_WEIGHTS] = sizeof(byte);
+		vbo->sizes[ATTR_INDEX_BONE_INDEXES] = sizeof(byte);
+		vbo->sizes[ATTR_INDEX_TANGENT] = sizeof(uint32_t);
+		mcR2Insts.push_back(in);
+		reuse = &mcR2Insts.back();
+	}
+	reuse->key = key;
+	reuse->surface = surface;
+	reuse->uploadedFrame = ~0u;
+	reuse->lastUsedMs = timeMs;
+	return reuse;
+}
+
+// inverse of the 3x3 part of a bone matrix; false if it's degenerate
+static bool MC_Invert3x3(const float (*m)[4], float inv[3][3])
+{
+	const float a = m[0][0], b = m[0][1], c = m[0][2];
+	const float d = m[1][0], e = m[1][1], f = m[1][2];
+	const float g = m[2][0], h = m[2][1], i = m[2][2];
+	const float A = e * i - f * h, B = f * g - d * i, C = d * h - e * g;
+	const float det = a * A + b * B + c * C;
+	if (fabsf(det) < 1e-8f) return false;
+	const float r = 1.0f / det;
+	inv[0][0] = A * r; inv[0][1] = (c * h - b * i) * r; inv[0][2] = (b * f - c * e) * r;
+	inv[1][0] = B * r; inv[1][1] = (a * i - c * g) * r; inv[1][2] = (c * d - a * f) * r;
+	inv[2][0] = C * r; inv[2][1] = (b * g - a * h) * r; inv[2][2] = (a * e - b * d) * r;
+	return true;
+}
+
+static void MC_Mul3(const float m[3][3], const float* v, float* out)
+{
+	for (int r = 0; r < 3; r++)
+	{
+		out[r] = m[r][0] * v[0] + m[r][1] * v[1] + m[r][2] * v[2];
+	}
+}
+
+static void MC_Normalize(float* v)
+{
+	const float l = sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+	if (l > 1e-8f)
+	{
+		v[0] /= l; v[1] /= l; v[2] /= l;
+	}
+	else
+	{
+		v[0] = 0; v[1] = 0; v[2] = 1;
+	}
+}
+
+// Simulate and upload one cloth surface. Returns the instance to draw with,
+// or nullptr to draw the surface normally.
+static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurface_t* surface, mcR2Surf_t* rs)
+{
+	CBoneCache* bones = surf->boneCache;
+	const trRefEntity_t* ent = backEnd.currentEntity;
+	if (!bones || !bones->header || !ent || surface->numVerts > SHADER_MAX_VERTEXES)
+	{
+		return nullptr;
+	}
+	const int timeMs = backEnd.refdef.time;
+	mcR2Inst_t* in = MC_R2Instance(bones, surface, timeMs);
+	if (!in)
+	{
+		return nullptr;
+	}
+	// drawn again this frame (shadow map, another view): reuse the upload
+	if (in->uploadedFrame == backEndData->realFrameNumber)
+	{
+		return in;
+	}
+
+	vec3_t axis[3];
+	VectorCopy(ent->e.axis[0], axis[0]);
+	VectorCopy(ent->e.axis[1], axis[1]);
+	VectorCopy(ent->e.axis[2], axis[2]);
+
+	// capsules: posed bone origin = skin matrix * bind position, then to world
+	mcCapsule_t caps[MC_NUM_COLLIDERS + 2];
+	int ncaps = 0;
+	const mcBoneLookup_t* lk = MC_Lookup(bones->header);
+	for (int k = 0; k < MC_NUM_COLLIDERS; k++)
+	{
+		if (lk->idx[k][0] < 0 || lk->idx[k][1] < 0) continue;
+		for (int e = 0; e < 2; e++)
+		{
+			const int bi = lk->idx[k][e];
+			const float (*m)[4] = reinterpret_cast<const float(*)[4]>(bones->boneMatrices[bi]);
+			const mdxaBone_t& bp = MC_Skel(bones->header, bi)->BasePoseMat;
+			const vec3_t b = { bp.matrix[0][3], bp.matrix[1][3], bp.matrix[2][3] };
+			vec3_t local;
+			for (int r = 0; r < 3; r++)
+			{
+				local[r] = m[r][0] * b[0] + m[r][1] * b[1] + m[r][2] * b[2] + m[r][3];
+			}
+			float* out = e ? caps[ncaps].b : caps[ncaps].a;
+			for (int r = 0; r < 3; r++)
+			{
+				out[r] = ent->e.origin[r] + axis[0][r] * local[0] + axis[1][r] * local[1] + axis[2][r] * local[2];
+			}
+		}
+		caps[ncaps].r = mcColliderRadius[k];
+		caps[ncaps].hard = k >= 7 ? 1 : 0;	// arms
+		ncaps++;
+		// fists: a short capsule past each wrist, along the forearm
+		if (k == 8 || k == 10)
+		{
+			const mcCapsule_t& fa = caps[ncaps - 1];
+			vec3_t dir;
+			VectorSubtract(fa.b, fa.a, dir);
+			const float len = VectorNormalize(dir);
+			if (len > 0.1f)
+			{
+				VectorCopy(fa.b, caps[ncaps].a);
+				VectorMA(fa.b, 4.5f, dir, caps[ncaps].b);
+				caps[ncaps].r = 2.8f;
+				caps[ncaps].hard = 1;
+				ncaps++;
+			}
+		}
+	}
+
+	// CPU skinning: positions, normals and tangents
+	static std::vector<float> xyzBuf, nrmBuf, tanBuf;
+	static std::vector<int> mainBone;
+	static std::vector<g2GoreVert_t> out;
+	const int n = surface->numVerts;
+	xyzBuf.resize(n * 4); nrmBuf.resize(n * 4); tanBuf.resize(n * 3);
+	float (*xyz)[4] = reinterpret_cast<float(*)[4]>(xyzBuf.data());
+	float (*nrm)[4] = reinterpret_cast<float(*)[4]>(nrmBuf.data());
+	float (*tan)[3] = reinterpret_cast<float(*)[3]>(tanBuf.data()); mainBone.resize(n); out.resize(n);
+
+	const mdxmVertex_t* v = reinterpret_cast<const mdxmVertex_t*>(reinterpret_cast<const byte*>(surface) + surface->ofsVerts);
+	const mdxmVertexTexCoord_t* tc = reinterpret_cast<const mdxmVertexTexCoord_t*>(v + n);
+	const int* refs = reinterpret_cast<const int*>(reinterpret_cast<const byte*>(surface) + surface->ofsBoneReferences);
+	for (int i = 0; i < n; i++)
+	{
+		const int nw = G2_GetVertWeights(&v[i]);
+		float total = 0.0f, bestW = -1.0f;
+		float* p = xyz[i]; float* q = nrm[i]; float* t = tan[i];
+		VectorClear(p); VectorClear(q); VectorClear(t);
+		p[3] = q[3] = 0.0f;
+		mainBone[i] = 0;
+		for (int k = 0; k < nw; k++)
+		{
+			const float w = G2_GetVertBoneWeight(&v[i], k, total, nw);
+			const int bi = refs[G2_GetVertBoneIndex(&v[i], k)];
+			const float (*m)[4] = reinterpret_cast<const float(*)[4]>(bones->boneMatrices[bi]);
+			if (w > bestW) { bestW = w; mainBone[i] = bi; }
+			for (int r = 0; r < 3; r++)
+			{
+				p[r] += w * (m[r][0] * v[i].vertCoords[0] + m[r][1] * v[i].vertCoords[1] + m[r][2] * v[i].vertCoords[2] + m[r][3]);
+				q[r] += w * (m[r][0] * v[i].normal[0] + m[r][1] * v[i].normal[1] + m[r][2] * v[i].normal[2]);
+				t[r] += w * (m[r][0] * rs->bindTangent[i * 4 + 0] + m[r][1] * rs->bindTangent[i * 4 + 1] + m[r][2] * rs->bindTangent[i * 4 + 2]);
+			}
+		}
+	}
+
+	mcParams_t prm;
+	prm.gravity = r_meshClothGravity->value;
+	prm.drag = r_meshClothDrag->value;
+	prm.iterations = r_meshClothIter->integer;
+	prm.shapeScale = r_meshClothShape->value;
+	prm.inertia = r_meshClothInertia->value;
+	prm.maxAccel = r_meshClothMaxAccel->value;
+	prm.airDrag = r_meshClothAirDrag->value;
+	{
+		float w[3] = { 0, 0, 0 };
+		sscanf(r_meshClothWind->string, "%f %f %f", &w[0], &w[1], &w[2]);
+		prm.wind[0] = w[0]; prm.wind[1] = w[1]; prm.wind[2] = w[2];
+	}
+	prm.gust = r_meshClothGust->value;
+	prm.timeSec = 0.0f;
+	MC_Apply(surface, bones, timeMs, ent->e.origin, axis, caps, ncaps, &prm,
+		MC_BoneFn, bones, xyz, nrm);
+	MC_Prune(timeMs);
+
+	// express every vertex in its main bone's space, weight 1
+	for (int i = 0; i < n; i++)
+	{
+		const int bi = mainBone[i];
+		const float (*m)[4] = reinterpret_cast<const float(*)[4]>(bones->boneMatrices[bi]);
+		float inv[3][3];
+		g2GoreVert_t& o = out[i];
+		if (!MC_Invert3x3(m, inv))
+		{
+			return nullptr;
+		}
+		const vec3_t rel = { xyz[i][0] - m[0][3], xyz[i][1] - m[1][3], xyz[i][2] - m[2][3] };
+		MC_Mul3(inv, rel, o.position);
+
+		vec3_t nn = { nrm[i][0], nrm[i][1], nrm[i][2] };
+		MC_Normalize(nn);
+		// tangent: skinned bind tangent, kept perpendicular to the new normal
+		vec3_t tt = { tan[i][0], tan[i][1], tan[i][2] };
+		const float d = DotProduct(tt, nn);
+		VectorMA(tt, -d, nn, tt);
+		MC_Normalize(tt);
+
+		vec3_t ln, lt;
+		MC_Mul3(inv, nn, ln);
+		MC_Normalize(ln);
+		MC_Mul3(inv, tt, lt);
+		MC_Normalize(lt);
+		o.normal = R_VboPackNormal(ln);
+		vec4_t lt4 = { lt[0], lt[1], lt[2], rs->bindTangent[i * 4 + 3] < 0.0f ? -1.0f : 1.0f };
+		o.tangents = R_VboPackTangent(lt4);
+
+		o.texCoords[0] = tc[i].texCoords[0];
+		o.texCoords[1] = tc[i].texCoords[1];
+		o.bonerefs[0] = (byte)bi;
+		o.bonerefs[1] = o.bonerefs[2] = o.bonerefs[3] = 0;
+		o.weights[0] = 255;
+		o.weights[1] = o.weights[2] = o.weights[3] = 0;
+	}
+
+	R_BindVBO(in->vbo);
+	qglBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(g2GoreVert_t) * n, out.data());
+	in->uploadedFrame = backEndData->realFrameNumber;
+	return in;
+}
+
+// Draws a cloth surface from its own buffers. Returns false to let
+// RB_SurfaceGhoul draw it normally.
+// SJE: cloth config is matched by the folder the model was loaded from. The bone
+// cache knows its .glm model; only trust it if it really owns this surface's header.
+static const char* MC_ModelPath(const CBoneCache* bones, const mdxmHeader_t* mdxm)
+{
+	if (bones && bones->mod && bones->mod->data.glm && bones->mod->data.glm->header == mdxm && bones->mod->name[0])
+	{
+		return bones->mod->name;
+	}
+	return mdxm->name;
+}
+
+static bool RB_MeshClothDraw(CRenderableSurface* surf)
+{
+	if (!r_meshCloth || !r_meshCloth->integer || !surf->surfaceData)
+	{
+		return false;
+	}
+#ifdef _G2_GORE
+	if (surf->alternateTex)
+	{
+		return false;
+	}
+#endif
+	const mdxmSurface_t* surface = surf->surfaceData;
+	const auto mdxm = reinterpret_cast<const mdxmHeader_t*>(reinterpret_cast<const byte*>(surface) + surface->ofsHeader);
+	const auto ho = reinterpret_cast<const mdxmHierarchyOffsets_t*>(reinterpret_cast<const byte*>(mdxm) + sizeof(mdxmHeader_t));
+	const auto sh = reinterpret_cast<const mdxmSurfHierarchy_t*>(reinterpret_cast<const byte*>(ho) + ho->offsets[surface->thisSurfaceIndex]);
+	if (!MC_IsClothSurface(surface, MC_ModelPath(surf->boneCache, mdxm), sh->name, mdxm->name))
+	{
+		return false;
+	}
+	mcR2Surf_t* rs = MC_R2Surface(surface);
+	if (!rs)
+	{
+		return false;
+	}
+	mcR2Inst_t* in = RB_MeshClothUpdate(surf, surface, rs);
+	if (!in)
+	{
+		return false;
+	}
+
+	// draw on its own: these buffers can't be merged with the model's
+	RB_EndSurface();
+	RB_BeginSurface(tess.shader, tess.fogNum, tess.cubemapIndex);
+	R_BindVBO(in->vbo);
+	R_BindIBO(rs->ibo);
+	tess.externalIBO = rs->ibo;
+	glState.genShadows = surf->genShadows;
+
+	tess.multiDrawNumIndexes[0] = rs->numIndexes;
+	tess.multiDrawFirstIndex[0] = (glIndex_t*)BUFFER_OFFSET(0);
+	tess.multiDrawLastIndex[0] = (glIndex_t*)BUFFER_OFFSET(rs->numIndexes * sizeof(glIndex_t));
+	tess.multiDrawMinIndex[0] = 0;
+	tess.multiDrawMaxIndex[0] = surface->numVerts - 1;
+	tess.multiDrawPrimitives = 1;
+	backEnd.pc.c_multidraws++;
+
+	tess.numIndexes += rs->numIndexes;
+	tess.numVertexes += surface->numVerts;
+	tess.useInternalVBO = qfalse;
+	tess.dlightBits |= surf->dlightBits;
+	glState.skeletalAnimation = qtrue;
+
+	RB_EndSurface();
+	RB_BeginSurface(tess.shader, tess.fogNum, tess.cubemapIndex);
+	return true;
+}
+
 void RB_SurfaceGhoul(CRenderableSurface* surf)
 {
+	if (RB_MeshClothDraw(surf))
+	{
+		return;
+	}
+
 	mdxmVBOMesh_t* surface = surf->vboMesh;
 
 	if (surface->vbo == NULL || surface->ibo == NULL)
