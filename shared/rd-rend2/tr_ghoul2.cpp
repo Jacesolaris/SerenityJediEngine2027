@@ -3789,6 +3789,10 @@ static void MC_FreeRend2Buffers()
 
 static mcR2Surf_t* MC_R2Surface(const mdxmSurface_t* surface)
 {
+	if (!surface)
+	{
+		return nullptr;
+	}
 	auto it = mcR2Surfs.find(surface);
 	if (it != mcR2Surfs.end() && it->second.sigVerts == surface->numVerts &&
 		it->second.sigTris == surface->numTriangles && it->second.sigOfsVerts == surface->ofsVerts)
@@ -3819,7 +3823,7 @@ static mcR2Surf_t* MC_R2Surface(const mdxmSurface_t* surface)
 	{
 		for (int e = 0; e < 3; e++)
 		{
-			idx[k * 3 + e] = t[k].indexes[e];
+			idx[static_cast<std::vector<glIndex_t, std::allocator<glIndex_t>>::size_type>(k) * 3 + e] = t[k].indexes[e];
 		}
 	}
 
@@ -3828,10 +3832,10 @@ static mcR2Surf_t* MC_R2Surface(const mdxmSurface_t* surface)
 	std::vector<uint32_t> packed(surface->numVerts);
 	std::vector<glIndex_t> idxCopy(idx);
 	R_CalcMikkTSpaceGlmSurface(surface->numTriangles, v, tc, packed.data(), idxCopy.data());
-	s.bindTangent.resize(surface->numVerts * 4);
+	s.bindTangent.resize(static_cast<std::vector<float, std::allocator<float>>::size_type>(surface->numVerts) * 4);
 	for (int i = 0; i < surface->numVerts; i++)
 	{
-		R_VboUnpackTangent(&s.bindTangent[i * 4], packed[i]);
+		R_VboUnpackTangent(&s.bindTangent[static_cast<std::vector<float, std::allocator<float>>::size_type>(i) * 4], packed[i]);
 	}
 
 	s.numIndexes = surface->numTriangles * 3;
@@ -3954,13 +3958,13 @@ static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurfac
 		return in;
 	}
 
-	vec3_t axis[3];
+	vec3_t axis[3]{};
 	VectorCopy(ent->e.axis[0], axis[0]);
 	VectorCopy(ent->e.axis[1], axis[1]);
 	VectorCopy(ent->e.axis[2], axis[2]);
 
 	// capsules: posed bone origin = skin matrix * bind position, then to world
-	mcCapsule_t caps[MC_NUM_COLLIDERS + 2];
+	mcCapsule_t caps[MC_NUM_COLLIDERS + 2]{};
 	int ncaps = 0;
 	const mcBoneLookup_t* lk = MC_Lookup(bones->header);
 	for (int k = 0; k < MC_NUM_COLLIDERS; k++)
@@ -3972,7 +3976,7 @@ static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurfac
 			const float (*m)[4] = reinterpret_cast<const float(*)[4]>(bones->boneMatrices[bi]);
 			const mdxaBone_t& bp = MC_Skel(bones->header, bi)->BasePoseMat;
 			const vec3_t b = { bp.matrix[0][3], bp.matrix[1][3], bp.matrix[2][3] };
-			vec3_t local;
+			vec3_t local{};
 			for (int r = 0; r < 3; r++)
 			{
 				local[r] = m[r][0] * b[0] + m[r][1] * b[1] + m[r][2] * b[2] + m[r][3];
@@ -4009,7 +4013,9 @@ static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurfac
 	static std::vector<int> mainBone;
 	static std::vector<g2GoreVert_t> out;
 	const int n = surface->numVerts;
-	xyzBuf.resize(n * 4); nrmBuf.resize(n * 4); tanBuf.resize(n * 3);
+	xyzBuf.resize(static_cast<std::vector<float, std::allocator<float>>::size_type>(n) * 4);
+	nrmBuf.resize(static_cast<std::vector<float, std::allocator<float>>::size_type>(n) * 4);
+	tanBuf.resize(static_cast<std::vector<float, std::allocator<float>>::size_type>(n) * 3);
 	float (*xyz)[4] = reinterpret_cast<float(*)[4]>(xyzBuf.data());
 	float (*nrm)[4] = reinterpret_cast<float(*)[4]>(nrmBuf.data());
 	float (*tan)[3] = reinterpret_cast<float(*)[3]>(tanBuf.data()); mainBone.resize(n); out.resize(n);
@@ -4035,12 +4041,13 @@ static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurfac
 			{
 				p[r] += w * (m[r][0] * v[i].vertCoords[0] + m[r][1] * v[i].vertCoords[1] + m[r][2] * v[i].vertCoords[2] + m[r][3]);
 				q[r] += w * (m[r][0] * v[i].normal[0] + m[r][1] * v[i].normal[1] + m[r][2] * v[i].normal[2]);
-				t[r] += w * (m[r][0] * rs->bindTangent[i * 4 + 0] + m[r][1] * rs->bindTangent[i * 4 + 1] + m[r][2] * rs->bindTangent[i * 4 + 2]);
+				t[r] += w * (m[r][0] * rs->bindTangent[static_cast<std::vector<float, std::allocator<float>>::size_type>(i) * 4 + 0] + m[r][1] * rs->bindTangent[static_cast<std::vector<float,
+					std::allocator<float>>::size_type>(i) * 4 + 1] + m[r][2] * rs->bindTangent[static_cast<std::vector<float, std::allocator<float>>::size_type>(i) * 4 + 2]);
 			}
 		}
 	}
 
-	mcParams_t prm;
+	mcParams_t prm{};
 	prm.gravity = r_meshClothGravity->value;
 	prm.drag = r_meshClothDrag->value;
 	prm.iterations = r_meshClothIter->integer;
@@ -4049,9 +4056,19 @@ static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurfac
 	prm.maxAccel = r_meshClothMaxAccel->value;
 	prm.airDrag = r_meshClothAirDrag->value;
 	{
-		float w[3] = { 0, 0, 0 };
-		sscanf(r_meshClothWind->string, "%f %f %f", &w[0], &w[1], &w[2]);
-		prm.wind[0] = w[0]; prm.wind[1] = w[1]; prm.wind[2] = w[2];
+		const int parsed = sscanf(
+			r_meshClothWind->string,
+			"%f %f %f",
+			&prm.wind[0],
+			&prm.wind[1],
+			&prm.wind[2]);
+
+		if (parsed < 3)
+		{
+			prm.wind[0] = 0.0f;
+			prm.wind[1] = 0.0f;
+			prm.wind[2] = 0.0f;
+		}
 	}
 	prm.gust = r_meshClothGust->value;
 	prm.timeSec = 0.0f;

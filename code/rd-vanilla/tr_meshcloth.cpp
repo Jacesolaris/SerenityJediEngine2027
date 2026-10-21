@@ -52,82 +52,82 @@ namespace {
 	enum mcRuleType_t { MC_RULE_ABOVE, MC_RULE_NEAR, MC_RULE_SEGMENT };
 
 	struct mcDef_t {
-		std::string		model, surface;
-		mcRuleType_t	rule;
-		float			a[8];
-		float			tether;
-		float			shape;
-		float			bend;		// 0..1 bending stiffness (0 = limp silk, 1 = stiff leather)
-		float			inertia;	// 0..1, or -1 to use r_meshClothInertia
-		bool			self;		// self-collision (single-layer capes)
-		float			smooth;		// 0..1 crease smoothing of the drawn shape
-		float			maxAccel;	// units/s^2 of character acceleration the cloth feels, 0 = no limit, -1 = cvar
-		float			maxSpin;	// degrees/s of the attached edge's turning the cloth feels, 0 = no limit, -1 = default
-		float			spread;		// 0..1 sideways-only pull toward the animated shape (keeps a cape from roping)
-		float			thickness;	// cloth thickness in units: keeps it this far off the body (half) and off itself (full)
-		float			weight;		// relative mass per area: 1 = normal cloth, 2 = heavy wool/leather (air moves it half as much), 0.5 = silk
+		std::string		model = {}, surface = {};
+		mcRuleType_t	rule = MC_RULE_ABOVE;
+		float			a[8] = {};
+		float			tether = 0.0f;
+		float			shape = 0.0f;
+		float			bend = 0.0f;		// 0..1 bending stiffness (0 = limp silk, 1 = stiff leather)
+		float			inertia = 0.0f;	// 0..1, or -1 to use r_meshClothInertia
+		bool			self = false;		// self-collision (single-layer capes)
+		float			smooth = 0.0f;		// 0..1 crease smoothing of the drawn shape
+		float			maxAccel = 0.0f;	// units/s^2 of character acceleration the cloth feels, 0 = no limit, -1 = cvar
+		float			maxSpin = 0.0f;	// degrees/s of the attached edge's turning the cloth feels, 0 = no limit, -1 = default
+		float			spread = 0.0f;		// 0..1 sideways-only pull toward the animated shape (keeps a cape from roping)
+		float			thickness = 0.0f;	// cloth thickness in units: keeps it this far off the body (half) and off itself (full)
+		float			weight = 0.0f;		// relative mass per area: 1 = normal cloth, 2 = heavy wool/leather (air moves it half as much), 0.5 = silk
 	};
 
 	struct mcGroup_t {
-		std::vector<const mdxmSurface_t*>	surfs;
-		std::vector<const mcDef_t*>		defs;
-		std::vector<int>					vertBase;		// first global vertex of each surface
-		int									numVerts;
-		int									numParticles;
-		std::vector<int>					vertToParticle;	// global vertex -> particle
-		std::vector<int>					partSurf, partVert;	// representative surface / local vertex
-		std::vector<float>					freedom, tether, shape, bend, inertia;	// per particle
-		std::vector<char>					selfCol;		// per particle: takes part in self-collision
-		std::vector<float>					smooth;			// per particle: crease smoothing of the drawn shape
-		std::vector<float>					maxAccel;		// per particle
-		std::vector<float>					maxSpin;		// per particle
-		std::vector<float>					spread;			// per particle
-		std::vector<float>					weight;			// per particle
-		std::vector<float>					thick;			// per particle: cloth thickness
+		std::vector<const mdxmSurface_t*>	surfs = {};
+		std::vector<const mcDef_t*>		defs = {};
+		std::vector<int>					vertBase = {};		// first global vertex of each surface
+		int									numVerts = 0;
+		int									numParticles = 0;
+		std::vector<int>					vertToParticle = {};	// global vertex -> particle
+		std::vector<int>					partSurf = {}, partVert = {};	// representative surface / local vertex
+		std::vector<float>					freedom = {}, tether = {}, shape = {}, bend = {}, inertia = {};	// per particle
+		std::vector<char>					selfCol = {};		// per particle: takes part in self-collision
+		std::vector<float>					smooth = {};			// per particle: crease smoothing of the drawn shape
+		std::vector<float>					maxAccel = {};		// per particle
+		std::vector<float>					maxSpin = {};		// per particle
+		std::vector<float>					spread = {};			// per particle
+		std::vector<float>					weight = {};			// per particle
+		std::vector<float>					thick = {};			// per particle: cloth thickness
 		float								selfThick = 1.2f;	// self-collision distance (largest thickness of the self-colliding surfaces)
-		std::vector<char>					hangs;			// per particle: hanging cloth ("above" rule: capes, robes, skirts)
-		std::vector<char>					hardCol;		// per particle: arms/hands always push it out (not for sleeves, which wrap the arms)
+		std::vector<char>					hangs = {};			// per particle: hanging cloth ("above" rule: capes, robes, skirts)
+		std::vector<char>					hardCol = {};		// per particle: arms/hands always push it out (not for sleeves, which wrap the arms)
 		bool								anySmooth = false;
 		bool								anySelf = false;
-		std::vector<int>					lraAnchor;		// nearest attached particle along the cloth (-1 none)
-		std::vector<float>					lraLen;			// bind-pose distance to it along the cloth
-		float								bindLinkSum;	// total bind length of the structural links
-		std::vector<float>					bindPos;		// 3 per particle, model bind pose
-		std::vector<int>					linkA, linkB;
-		std::vector<char>					linkBend;
-		std::vector<int>					tris;			// particle indices
+		std::vector<int>					lraAnchor = {};		// nearest attached particle along the cloth (-1 none)
+		std::vector<float>					lraLen = {};			// bind-pose distance to it along the cloth
+		float								bindLinkSum = 0.0f;	// total bind length of the structural links
+		std::vector<float>					bindPos = {};		// 3 per particle, model bind pose
+		std::vector<int>					linkA = {}, linkB = {};
+		std::vector<char>					linkBend = {};
+		std::vector<int>					tris = {};			// particle indices
 	};
 
 	struct mcSurfEntry_t {
-		mcGroup_t* group;			// nullptr = not cloth
-		int			surfIndex;		// index into group->surfs
-		int			numVerts, numTris, index;	// to notice a reused address after a model reload
+		mcGroup_t* group = nullptr;			// nullptr = not cloth
+		int			surfIndex = -1;		// index into group->surfs
+		int			numVerts = 0, numTris = 0, index = 0;	// to notice a reused address after a model reload
 	};
 
 	struct mcInstance_t {
-		const mcGroup_t* group;
-		bool				active;
-		int					lastTime, lastSeen, accum, outTime;
-		float				linkScale;		// animated / bind size of the cloth (model scale)
-		vec3_t				lastOrigin;		// character origin at the previous simulation
-		vec3_t				originVel;		// its velocity (units/s)
-		vec3_t				up;				// the character's up direction (world)
-		vec3_t				side;			// the character's left direction (world)
-		std::vector<float>	pinPrev;		// attached particles' animated positions last frame
-		int					pinTime;
-		int					originTime;
-		std::vector<float>	p, prev, target, targetPrev;	// 3 per particle, world
-		std::vector<float>	simTarget;		// animated pose at the simulation's own clock (it trails the frame by 'accum')
-		std::vector<float>	outLocal, nrmLocal;				// 3 per particle, model space
-		std::vector<float>	skinNrm;						// 3 per global vertex, model space
-		std::vector<float>	scratchTarget, scratchFrom, scratchTo, scratchN;
-		std::vector<float>	push, contactN, targetSub;	// per particle: this substep's body push, contact normal, previous substep target
-		std::vector<char>	contact;
-		std::vector<float>	scratchTarget2, scratchCnt;
-		std::vector<float>	impulse;		// pending velocity kicks (units/s), e.g. from explosions
-		std::vector<float>	offPrev, offCur;	// cloth offset from the animation after the last two steps (for drawing between steps)
-		std::vector<float>	pPrevStep, pCurStep;	// world positions after the last two steps
-		vec3_t				oPrevStep, oCurStep;	// character origin at those two steps
+		const mcGroup_t* group = nullptr;
+		bool				active = false;
+		int					lastTime = 0, lastSeen = 0, accum = 0, outTime = 0;
+		float				linkScale = 1.0f;		// animated / bind size of the cloth (model scale)
+		vec3_t				lastOrigin = {};		// character origin at the previous simulation
+		vec3_t				originVel = {};		// its velocity (units/s)
+		vec3_t				up = {};				// the character's up direction (world)
+		vec3_t				side = {};			// the character's left direction (world)
+		std::vector<float>	pinPrev = {};		// attached particles' animated positions last frame
+		int					pinTime = 0;
+		int					originTime = 0;
+		std::vector<float>	p = {}, prev = {}, target = {}, targetPrev = {};	// 3 per particle, world
+		std::vector<float>	simTarget = {};		// animated pose at the simulation's own clock (it trails the frame by 'accum')
+		std::vector<float>	outLocal = {}, nrmLocal = {};				// 3 per particle, model space
+		std::vector<float>	skinNrm = {};						// 3 per global vertex, model space
+		std::vector<float>	scratchTarget = {}, scratchFrom = {}, scratchTo = {}, scratchN = {};
+		std::vector<float>	push = {}, contactN = {}, targetSub = {};	// per particle: this substep's body push, contact normal, previous substep target
+		std::vector<char>	contact = {};
+		std::vector<float>	scratchTarget2 = {}, scratchCnt = {};
+		std::vector<float>	impulse = {};		// pending velocity kicks (units/s), e.g. from explosions
+		std::vector<float>	offPrev = {}, offCur = {};	// cloth offset from the animation after the last two steps (for drawing between steps)
+		std::vector<float>	pPrevStep = {}, pCurStep = {};	// world positions after the last two steps
+		vec3_t				oPrevStep = {}, oCurStep = {};	// character origin at those two steps
 	};
 
 	std::vector<mcDef_t>										g_defs;
@@ -243,7 +243,7 @@ namespace {
 		static long long Key(long long x, long long y, long long z) { return (x * 73856093LL) ^ (y * 19349663LL) ^ (z * 83492791LL); }
 		static long long Cell(float v) { return (long long)floorf(v * 10.0f); }	// 0.1 unit cells
 		void Add(const float* p, int id) {
-			if ((int)pts.size() <= id) pts.resize(id + 1);
+			if ((int)pts.size() <= id) pts.resize(static_cast<std::vector<const float*, std::allocator<const float*>>::size_type>(id) + 1);
 			pts[id] = p;
 			cells[Key(Cell(p[0]), Cell(p[1]), Cell(p[2]))].push_back(id);
 		}
@@ -334,7 +334,7 @@ namespace {
 					if (g->defs[si]->shape > g->shape[p]) g->shape[p] = g->defs[si]->shape;
 					if (g->defs[si]->bend > g->bend[p]) g->bend[p] = g->defs[si]->bend;
 				}
-				g->vertToParticle[g->vertBase[si] + i] = p;
+				g->vertToParticle[g->vertBase[si] + static_cast<std::vector<int, std::allocator<int>>::size_type>(i)] = p;
 			}
 		}
 		g->numParticles = (int)g->partSurf.size();
@@ -356,9 +356,9 @@ namespace {
 			const mdxmSurface_t* s = g->surfs[si];
 			const int* tri = reinterpret_cast<const int*>(reinterpret_cast<const byte*>(s) + s->ofsTriangles);
 			for (int t = 0; t < s->numTriangles; t++) {
-				int pi[3];
+				int pi[3]{};
 				for (int k = 0; k < 3; k++) {
-					pi[k] = g->vertToParticle[g->vertBase[si] + tri[t * 3 + k]];
+					pi[k] = g->vertToParticle[static_cast<std::vector<int, std::allocator<int>>::size_type>(g->vertBase[si] + tri[t * 3 + k])];
 					g->tris.push_back(pi[k]);
 				}
 				for (int k = 0; k < 3; k++) {
@@ -379,7 +379,7 @@ namespace {
 		g->bindPos.resize((size_t)g->numParticles * 3);
 		for (int p = 0; p < g->numParticles; p++) {
 			bindPos[p] = Verts(g->surfs[g->partSurf[p]])[g->partVert[p]].vertCoords;
-			mcCopy(bindPos[p], &g->bindPos[p * 3]);
+			mcCopy(bindPos[p], &g->bindPos[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3]);
 		}
 		std::vector<std::vector<std::pair<int, float>>> adj(g->numParticles);
 		g->bindLinkSum = 0.0f;
@@ -502,17 +502,17 @@ namespace {
 	void ParticleNormals(const mcGroup_t* g, const std::vector<float>& pos, std::vector<float>& n) {
 		n.assign((size_t)g->numParticles * 3, 0.0f);
 		for (size_t t = 0; t + 2 < g->tris.size(); t += 3) {
-			const float* a = &pos[g->tris[t] * 3], * b = &pos[g->tris[t + 1] * 3], * c = &pos[g->tris[t + 2] * 3];
+			const float* a = &pos[static_cast<std::vector<float, std::allocator<float>>::size_type>(g->tris[static_cast<std::vector<int, std::allocator<int>>::size_type>(t)] * 3)], * b = &pos[static_cast<std::vector<float, std::allocator<float>>::size_type>(g->tris[static_cast<std::vector<int, std::allocator<int>>::size_type>(t + 1)] * 3)], * c = &pos[static_cast<std::vector<float, std::allocator<float>>::size_type>(g->tris[static_cast<std::vector<int, std::allocator<int>>::size_type>(t + 2)] * 3)];
 			vec3_t e1, e2, fn;
 			mcSub(b, a, e1);
 			mcSub(c, a, e2);
 			mcCross(e1, e2, fn);
 			for (int k = 0; k < 3; k++) {
-				float* d = &n[g->tris[t + k] * 3];
+				float* d = &n[static_cast<std::vector<float, std::allocator<float>>::size_type>(g->tris[static_cast<std::vector<int, std::allocator<int>>::size_type>(t + k)] * 3)];
 				mcAdd(d, fn, d);
 			}
 		}
-		for (int p = 0; p < g->numParticles; p++) mcNorm(&n[p * 3]);
+		for (int p = 0; p < g->numParticles; p++) mcNorm(&n[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3]);
 	}
 
 	// Only the capsules that can reach the cloth: bounds of the animated free
@@ -525,7 +525,7 @@ namespace {
 			if (g->freedom[p] <= 0.0f) continue;
 			if (g->tether[p] + MC_MARGIN > grow) grow = g->tether[p] + MC_MARGIN;
 			for (int k = 0; k < 3; k++) {
-				float v = target[p * 3 + k];
+				float v = target[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3 + k];
 				if (v < mins[k]) mins[k] = v;
 				if (v > maxs[k]) maxs[k] = v;
 			}
@@ -556,7 +556,7 @@ namespace {
 		// a vertex solved before its attachment point must not see where that
 		// point was (on a jump that's a whole frame of movement lower)
 		for (int p = 0; p < g->numParticles; p++) {
-			if (g->freedom[p] <= 0.0f) mcCopy(&in->target[p * 3], &in->p[p * 3]);
+			if (g->freedom[p] <= 0.0f) mcCopy(&in->target[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], &in->p[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3]);
 		}
 		// stretch: the fabric keeps the edge lengths the animated mesh has now
 		// (rigidly - real cloth barely stretches); bend links resist folding
@@ -564,9 +564,9 @@ namespace {
 			const int a = g->linkA[l], b = g->linkB[l];
 			const float wa = g->freedom[a] > 0.0f ? 1.0f : 0.0f, wb = g->freedom[b] > 0.0f ? 1.0f : 0.0f;
 			if (wa + wb == 0.0f) continue;
-			float* pa = &in->p[a * 3], * pb = &in->p[b * 3];
+			float* pa = &in->p[static_cast<std::vector<float, std::allocator<float>>::size_type>(a) * 3], * pb = &in->p[static_cast<std::vector<float, std::allocator<float>>::size_type>(b) * 3];
 			vec3_t dT, d;
-			mcSub(&in->target[b * 3], &in->target[a * 3], dT);
+			mcSub(&in->target[static_cast<std::vector<float, std::allocator<float>>::size_type>(b) * 3], &in->target[static_cast<std::vector<float, std::allocator<float>>::size_type>(a) * 3], dT);
 			const float rest = mcLen(dT);
 			mcSub(pb, pa, d);
 			const float len = mcLen(d);
@@ -584,42 +584,42 @@ namespace {
 		}
 		for (int p = 0; p < g->numParticles; p++) {
 			const float f = g->freedom[p];
-			float* pp = &in->p[p * 3];
-			const float* t = &in->target[p * 3];
+			float* pp = &in->p[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3];
+			const float* t = &in->target[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3];
 			if (f <= 0.0f) { mcCopy(t, pp); continue; }
 			// long range attachment: never further from the attached edge than
 			// the cloth itself is long
 			const int an = g->lraAnchor[p];
 			if (an >= 0 && !MCDBG_OFF("NOLRA")) {
 				vec3_t d;
-				mcSub(pp, &in->p[an * 3], d);
+				mcSub(pp, &in->p[static_cast<std::vector<float, std::allocator<float>>::size_type>(an) * 3], d);
 				// skinning can stretch the animated mesh past its bind size
 				// (raised shoulders): never limit tighter than the pose itself
 				vec3_t dt;
-				mcSub(t, &in->target[an * 3], dt);
+				mcSub(t, &in->target[static_cast<std::vector<float, std::allocator<float>>::size_type>(an) * 3], dt);
 				float maxLen = g->lraLen[p] * in->linkScale;
 				const float animLen = mcLen(dt);
 				if (animLen > maxLen) maxLen = animLen;
 				maxLen *= 1.03f;
 				const float len = mcLen(d);
-				if (len > maxLen && len > 1e-5f) mcMA(&in->p[an * 3], maxLen / len, d, pp);
+				if (len > maxLen && len > 1e-5f) mcMA(&in->p[static_cast<std::vector<float, std::allocator<float>>::size_type>(an) * 3], maxLen / len, d, pp);
 			}
 			// never higher than both the attached edge it hangs from and its
 			// animated spot: stops a fast turn or a spawn from flipping a cape
 			// up over the shoulders
 			if (an >= 0 && !MCDBG_OFF("NOHEIGHT")) {
-				const float hp = mcDot(pp, in->up), ha = mcDot(&in->p[an * 3], in->up), ht = mcDot(t, in->up);
+				const float hp = mcDot(pp, in->up), ha = mcDot(&in->p[static_cast<std::vector<float, std::allocator<float>>::size_type>(an) * 3], in->up), ht = mcDot(t, in->up);
 				const float lim = (ha > ht ? ha : ht) + 2.0f * in->linkScale;
 				if (hp > lim) mcMA(pp, lim - hp, in->up, pp);
 			}
 			vec3_t before;
 			mcCopy(pp, before);
-			if (Collide(pp, t, caps, ncaps, &in->contactN[p * 3], g->hardCol[p] != 0 && f > 0.5f,
-				(MC_MARGIN > 0.5f * g->thick[p] ? MC_MARGIN : 0.5f * g->thick[p]))) {
-				in->contact[p] = 1;
+			if (Collide(pp, t, caps, ncaps, &in->contactN[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], g->hardCol[static_cast<std::vector<float, std::allocator<float>>::size_type>(p)] != 0 && f > 0.5f,
+				(MC_MARGIN > 0.5f * g->thick[static_cast<std::vector<float, std::allocator<float>>::size_type>(p)] ? MC_MARGIN : 0.5f * g->thick[static_cast<std::vector<float, std::allocator<float>>::size_type>(p)]))) {
+				in->contact[static_cast<std::vector<float, std::allocator<float>>::size_type>(p)] = 1;
 				vec3_t pu;
 				mcSub(pp, before, pu);
-				mcAdd(&in->push[p * 3], pu, &in->push[p * 3]);
+				mcAdd(&in->push[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], pu, &in->push[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3]);
 			}
 			// max distance from the animated position. Soft: past the limit the
 			// cloth is reeled back in over ~100 ms instead of being projected
@@ -672,14 +672,14 @@ namespace {
 		const float friction = 0.3f;	// tangential speed removed per substep in contact
 		for (int p = 0; p < g->numParticles; p++) {
 			if (!in->contact[p] || g->freedom[p] <= 0.0f) continue;
-			float* pp = &in->p[p * 3], * pv = &in->prev[p * 3];
-			mcMA(pv, 1.0f - keepPush, &in->push[p * 3], pv);
+			float* pp = &in->p[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], * pv = &in->prev[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3];
+			mcMA(pv, 1.0f - keepPush, &in->push[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], pv);
 			// speed relative to the body surface (the animated vertex's motion)
 			vec3_t v, vb, vr, vt;
 			mcSub(pp, pv, v);
-			mcSub(&in->target[p * 3], &in->targetSub[p * 3], vb);
+			mcSub(&in->target[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], &in->targetSub[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], vb);
 			mcSub(v, vb, vr);
-			const float* n = &in->contactN[p * 3];
+			const float* n = &in->contactN[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3];
 			const float vn = mcDot(vr, n);
 			mcMA(vr, -vn, n, vt);
 			mcMA(pv, friction, vt, pv);
@@ -706,13 +706,13 @@ namespace {
 		cells.clear();
 		for (int p = 0; p < g->numParticles; p++) {
 			if (g->freedom[p] <= 0.0f || !g->selfCol[p]) continue;
-			const float* v = &in->p[p * 3];
+			const float* v = &in->p[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3];
 			cells.push_back({ key(cellOf(v, 0), cellOf(v, 1), cellOf(v, 2)), p });
 		}
 		std::sort(cells.begin(), cells.end(), [](const cellEntry_t& x, const cellEntry_t& y) { return x.key < y.key; });
 		for (int p = 0; p < g->numParticles; p++) {
 			if (g->freedom[p] <= 0.0f || !g->selfCol[p]) continue;
-			float* a = &in->p[p * 3];
+			float* a = &in->p[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3];
 			const long long cx = cellOf(a, 0), cy = cellOf(a, 1), cz = cellOf(a, 2);
 			for (long long dx = -1; dx <= 1; dx++) for (long long dy = -1; dy <= 1; dy++) for (long long dz = -1; dz <= 1; dz++) {
 				const long long k = key(cx + dx, cy + dy, cz + dz);
@@ -721,10 +721,10 @@ namespace {
 					const int q = it->p;
 					if (q <= p) continue;
 					vec3_t bd;
-					mcSub(&g->bindPos[p * 3], &g->bindPos[q * 3], bd);
+					mcSub(&g->bindPos[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], &g->bindPos[static_cast<std::vector<float, std::allocator<float>>::size_type>(q) * 3], bd);
 					const float bindDist = mcLen(bd) * in->linkScale;
 					if (bindDist < 2.5f * thick) continue;	// neighbours in the cloth
-					float* b = &in->p[q * 3];
+					float* b = &in->p[static_cast<std::vector<float, std::allocator<float>>::size_type>(q) * 3];
 					vec3_t d;
 					mcSub(a, b, d);
 					const float len = mcLen(d);
@@ -733,8 +733,8 @@ namespace {
 					mcMA(a, corr, d, a);
 					mcMA(b, -corr, d, b);
 					// a separation, not a throw
-					mcMA(&in->prev[p * 3], corr, d, &in->prev[p * 3]);
-					mcMA(&in->prev[q * 3], -corr, d, &in->prev[q * 3]);
+					mcMA(&in->prev[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], corr, d, &in->prev[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3]);
+					mcMA(&in->prev[static_cast<std::vector<float, std::allocator<float>>::size_type>(q) * 3], -corr, d, &in->prev[static_cast<std::vector<float, std::allocator<float>>::size_type>(q) * 3]);
 				}
 			}
 		}
@@ -746,7 +746,7 @@ namespace {
 		const float* up = in->up;
 		vec3_t c = { 0, 0, 0 };
 		int n = 0;
-		for (int p = 0; p < g->numParticles; p++) if (g->freedom[p] <= 0.0f) { mcAdd(c, &target[p * 3], c); n++; }
+		for (int p = 0; p < g->numParticles; p++) if (g->freedom[p] <= 0.0f) { mcAdd(c, &target[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], c); n++; }
 		if (n < 2) return;
 		mcScale(c, 1.0f / n, c);
 		// two horizontal axes, then the 2x2 covariance of the edge in that plane
@@ -758,7 +758,7 @@ namespace {
 		for (int p = 0; p < g->numParticles; p++) {
 			if (g->freedom[p] > 0.0f) continue;
 			vec3_t d;
-			mcSub(&target[p * 3], c, d);
+			mcSub(&target[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], c, d);
 			const float x = mcDot(d, e1), y = mcDot(d, e2);
 			sxx += x * x; sxy += x * y; syy += y * y;
 		}
@@ -786,8 +786,8 @@ namespace {
 		int np = 0;
 		for (int p = 0; p < g->numParticles; p++) {
 			if (g->freedom[p] > 0.0f) continue;
-			mcAdd(c0, &in->pinPrev[p * 3], c0);
-			mcAdd(c1, &target[p * 3], c1);
+			mcAdd(c0, &in->pinPrev[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], c0);
+			mcAdd(c1, &target[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], c1);
 			np++;
 		}
 		float angle = 0.0f;
@@ -798,8 +798,8 @@ namespace {
 			for (int p = 0; p < g->numParticles; p++) {
 				if (g->freedom[p] > 0.0f) continue;
 				vec3_t a, b, x;
-				mcSub(&in->pinPrev[p * 3], c0, a);
-				mcSub(&target[p * 3], c1, b);
+				mcSub(&in->pinPrev[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], c0, a);
+				mcSub(&target[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], c1, b);
 				mcMA(a, -mcDot(a, up), up, a);
 				mcMA(b, -mcDot(b, up), up, b);
 				mcCross(a, b, x);
@@ -856,7 +856,7 @@ namespace {
 		for (size_t l = 0; l < g->linkA.size(); l++) {
 			if (g->linkBend[l]) continue;
 			vec3_t d;
-			mcSub(&tgtTo[g->linkB[l] * 3], &tgtTo[g->linkA[l] * 3], d);
+			mcSub(&tgtTo[static_cast<std::vector<float, std::allocator<float>>::size_type>(g->linkB[l]) * 3], &tgtTo[static_cast<std::vector<float, std::allocator<float>>::size_type>(g->linkA[l]) * 3], d);
 			animSum += mcLen(d);
 		}
 		in->linkScale = g->bindLinkSum > 1e-3f ? animSum / g->bindLinkSum : 1.0f;
@@ -875,16 +875,16 @@ namespace {
 			ParticleNormals(g, in->p, n);
 			for (int p = 0; p < g->numParticles; p++) {
 				const float f = g->freedom[p];
-				float* pp = &in->p[p * 3], * pv = &in->prev[p * 3];
+				float* pp = &in->p[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], * pv = &in->prev[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3];
 				if (f <= 0.0f) {
 					mcCopy(pp, pv);
-					mcCopy(&in->target[p * 3], pp);
+					mcCopy(&in->target[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], pp);
 					continue;
 				}
 				vec3_t v;
 				mcSub(pp, pv, v);
 				mcScale(v, damp, v);
-				if (s == 0 && in->impulse.size() == in->p.size()) mcMA(v, h, &in->impulse[p * 3], v);
+				if (s == 0 && in->impulse.size() == in->p.size()) mcMA(v, h, &in->impulse[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], v);
 				// Air. The force comes from the cloth's motion RELATIVE TO THE AIR
 				// (its own world velocity minus the wind), split in two:
 				//  - through the cloth (along its normal): the strong "sail" drag
@@ -898,7 +898,7 @@ namespace {
 					const float invW = 1.0f / g->weight[p];
 					vec3_t rel;
 					mcMA(v, -h, windNow, rel);		// v is per substep, wind is per second
-					const float* nn = &n[p * 3];
+					const float* nn = &n[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3];
 					const float vn = mcDot(rel, nn);
 					float kn = prm->drag * h * invW;
 					if (kn > 1.0f) kn = 1.0f;
@@ -919,15 +919,15 @@ namespace {
 				if (sp > 0.0f) {
 					const float k = 1.0f - powf(1.0f - Clamp01(sp), 1.0f / sub);
 					vec3_t d;
-					mcSub(&in->target[p * 3], pp, d);
+					mcSub(&in->target[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], pp, d);
 					mcMA(pp, k * mcDot(d, in->side), in->side, pp);
 				}
 				// optional pull toward the modelled shape (off unless configured)
-				const float sh = g->shape[p] * prm->shapeScale;
+				const float sh = g->shape[static_cast<std::vector<float, std::allocator<float>>::size_type>(p)] * prm->shapeScale;
 				if (sh > 0.0f) {
 					const float k = 1.0f - powf(1.0f - Clamp01(sh), 1.0f / sub);
 					vec3_t d;
-					mcSub(&in->target[p * 3], pp, d);
+					mcSub(&in->target[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], pp, d);
 					mcMA(pp, k, d, pp);
 				}
 			}
@@ -951,8 +951,8 @@ namespace {
 			for (int i = 0; i < s->numVerts; i++) {
 				const int gv = g->vertBase[si] + i, p = g->vertToParticle[gv];
 				vec3_t pos;
-				SkinVertex(s, i, boneFn, boneCtx, pos, &in->skinNrm[gv * 3]);
-				if (!done[p]) { ToWorld(pos, origin, axis, &target[p * 3]); done[p] = 1; }
+				SkinVertex(s, i, boneFn, boneCtx, pos, &in->skinNrm[static_cast<std::vector<float, std::allocator<float>>::size_type>(gv) * 3]);
+				if (!done[p]) { ToWorld(pos, origin, axis, &target[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3]); done[p] = 1; }
 			}
 		}
 
@@ -1031,15 +1031,15 @@ namespace {
 					// frame's animated position: move that reference by the same
 					// amount, or a jump take-off puts the cloth ahead of its own
 					// attachment for a moment and yanks it
-					mcAdd(&in->targetPrev[p * 3], shift, &in->targetPrev[p * 3]);
-					if (in->simTarget.size() == in->targetPrev.size()) mcAdd(&in->simTarget[p * 3], shift, &in->simTarget[p * 3]);
+					mcAdd(&in->targetPrev[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], shift, &in->targetPrev[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3]);
+					if (in->simTarget.size() == in->targetPrev.size()) mcAdd(&in->simTarget[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], shift, &in->simTarget[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3]);
 					if (g->freedom[p] <= 0.0f) continue;
-					mcAdd(&in->p[p * 3], shift, &in->p[p * 3]);
+					mcAdd(&in->p[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], shift, &in->p[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3]);
 					if (in->pCurStep.size() == in->p.size()) {
-						mcAdd(&in->pCurStep[p * 3], shift, &in->pCurStep[p * 3]);
-						mcAdd(&in->pPrevStep[p * 3], shift, &in->pPrevStep[p * 3]);
+						mcAdd(&in->pCurStep[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], shift, &in->pCurStep[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3]);
+						mcAdd(&in->pPrevStep[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], shift, &in->pPrevStep[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3]);
 					}
-					mcAdd(&in->prev[p * 3], shift, &in->prev[p * 3]);
+					mcAdd(&in->prev[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], shift, &in->prev[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3]);
 				}
 				mcCopy(vNew, in->originVel);
 				in->originTime = timeMs;
@@ -1120,19 +1120,19 @@ namespace {
 			//    moved only by the character's TRAVEL since then. It must not
 			//    follow the pose: an animation switch (landing, a new saber move)
 			//    would otherwise teleport the whole cape to the new pose.
-			vec3_t oNow;
+			vec3_t oNow{};
 			for (int k = 0; k < 3; k++) oNow[k] = origin[k] - (in->oPrevStep[k] + (in->oCurStep[k] - in->oPrevStep[k]) * a);
 			for (int p = 0; p < g->numParticles; p++) {
 				float w = g->freedom[p] <= 0.0f ? 0.0f : (g->freedom[p] >= 1.0f ? 1.0f : g->freedom[p]);
 				if (!g->hangs[p] || MCDBG_OFF("OFFDRAW")) w = 0.0f;	// sleeves and hoods follow their limb exactly
 				for (int k = 0; k < 3; k++) {
-					const size_t i = p * 3 + k;
+					const size_t i = static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3 + k;
 					if (!ok) { off[i] = in->p[i] - target[i]; continue; }
 					const float offA = in->offPrev[i] + (in->offCur[i] - in->offPrev[i]) * a;
 					const float world = in->pPrevStep[i] + (in->pCurStep[i] - in->pPrevStep[i]) * a + oNow[k];
 					off[i] = (1.0f - w) * offA + w * (world - target[i]);
 				}
-				if (g->freedom[p] <= 0.0f) off[p * 3] = off[p * 3 + 1] = off[p * 3 + 2] = 0.0f;
+				if (g->freedom[p] <= 0.0f) off[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3] = off[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3 + 1] = off[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3 + 2] = 0.0f;
 			}
 		}
 		if (g->anySmooth) {
@@ -1146,13 +1146,13 @@ namespace {
 				for (size_t l = 0; l < g->linkA.size(); l++) {
 					if (g->linkBend[l]) continue;
 					const int a = g->linkA[l], b = g->linkB[l];
-					mcAdd(&acc[a * 3], &off[b * 3], &acc[a * 3]); cnt[a] += 1.0f;
-					mcAdd(&acc[b * 3], &off[a * 3], &acc[b * 3]); cnt[b] += 1.0f;
+					mcAdd(&acc[static_cast<std::vector<float, std::allocator<float>>::size_type>(a) * 3], &off[static_cast<std::vector<float, std::allocator<float>>::size_type>(b) * 3], &acc[static_cast<std::vector<float, std::allocator<float>>::size_type>(a) * 3]); cnt[static_cast<std::vector<float, std::allocator<float>>::size_type>(a)] += 1.0f;
+					mcAdd(&acc[static_cast<std::vector<float, std::allocator<float>>::size_type>(b) * 3], &off[static_cast<std::vector<float, std::allocator<float>>::size_type>(a) * 3], &acc[static_cast<std::vector<float, std::allocator<float>>::size_type>(b) * 3]); cnt[static_cast<std::vector<float, std::allocator<float>>::size_type>(b)] += 1.0f;
 				}
 				for (int p = 0; p < g->numParticles; p++) {
-					if (g->freedom[p] <= 0.0f || cnt[p] == 0.0f) continue;
+					if (g->freedom[p] <= 0.0f || cnt[static_cast<std::vector<float, std::allocator<float>>::size_type>(p)] == 0.0f) continue;
 					const float w = g->smooth[p] * (g->freedom[p] < 1.0f ? g->freedom[p] : 1.0f);
-					for (int k = 0; k < 3; k++) off[p * 3 + k] += w * (acc[p * 3 + k] / cnt[p] - off[p * 3 + k]);
+					for (int k = 0; k < 3; k++) off[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3 + k] += w * (acc[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3 + k] / cnt[static_cast<std::vector<float, std::allocator<float>>::size_type>(p)] - off[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3 + k]);
 				}
 			}
 		}
@@ -1174,9 +1174,9 @@ namespace {
 		in->outLocal.resize((size_t)g->numParticles * 3);
 		in->nrmLocal.resize((size_t)g->numParticles * 3);
 		for (int p = 0; p < g->numParticles; p++) {
-			ToLocal(&draw[p * 3], origin, axis, &in->outLocal[p * 3]);
-			DirToLocal(&nw[p * 3], axis, &in->nrmLocal[p * 3]);
-			mcNorm(&in->nrmLocal[p * 3]);
+			ToLocal(&draw[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], origin, axis, &in->outLocal[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3]);
+			DirToLocal(&nw[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], axis, &in->nrmLocal[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3]);
+			mcNorm(&in->nrmLocal[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3]);
 		}
 		in->outTime = timeMs;
 	}
@@ -1331,13 +1331,13 @@ void MC_Apply(const void* surfacePtr, const void* instanceKey, int timeMs,
 
 	const int base = g->vertBase[si];
 	for (int i = 0; i < surface->numVerts; i++) {
-		const int p = g->vertToParticle[base + i];
+		const int p = g->vertToParticle[static_cast<std::vector<int, std::allocator<int>>::size_type>(base + i)];
 		const float f = g->freedom[p];
 		if (f <= 0.0f) continue;
-		mcCopy(&in->outLocal[p * 3], xyz[i]);
+		mcCopy(&in->outLocal[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], xyz[i]);
 		// keep this vertex's side of the surface (two-sided robes, seams)
-		const float* cn = &in->nrmLocal[p * 3];
-		const float* sn = &in->skinNrm[(base + i) * 3];
+		const float* cn = &in->nrmLocal[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3];
+		const float* sn = &in->skinNrm[static_cast<std::vector<float, std::allocator<float>>::size_type>(base + i) * 3];
 		const float sgn = mcDot(cn, sn) < 0.0f ? -1.0f : 1.0f;
 		const float b = f < 0.25f ? f * 4.0f : 1.0f;		// fade in near the attached edge
 		for (int k = 0; k < 3; k++) normal[i][k] = normal[i][k] * (1.0f - b) + cn[k] * sgn * b;
@@ -1354,14 +1354,14 @@ void MC_Blast(const float center[3], float strength, float radius) {
 		if (in->impulse.size() != in->p.size()) in->impulse.assign(in->p.size(), 0.0f);
 		for (int p = 0; p < np; p++) {
 			vec3_t d;
-			mcSub(&in->p[p * 3], center, d);
+			mcSub(&in->p[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], center, d);
 			const float dist = mcLen(d);
 			if (dist >= radius || dist < 1e-3f) continue;
 			// falls off with distance; a little upward bias, as blast waves lift cloth
 			const float sp = strength * (1.0f - dist / radius);
 			mcScale(d, sp / dist, d);
 			d[2] += 0.3f * sp;
-			mcAdd(&in->impulse[p * 3], d, &in->impulse[p * 3]);
+			mcAdd(&in->impulse[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3], d, &in->impulse[static_cast<std::vector<float, std::allocator<float>>::size_type>(p) * 3]);
 		}
 	}
 }

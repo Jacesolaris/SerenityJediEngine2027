@@ -91,7 +91,7 @@ static float EvalWaveFormClamped(const waveForm_t* wf)
 /*
 ** RB_CalcStretchTexCoords
 */
-void RB_CalcStretchTexCoords(const waveForm_t* wf, float* tex_coords)
+void RB_CalcStretchTexCoords(const waveForm_t* wf, float* texCoords)
 {
 	texModInfo_t tmi{};
 
@@ -105,7 +105,7 @@ void RB_CalcStretchTexCoords(const waveForm_t* wf, float* tex_coords)
 	tmi.matrix[1][1] = p;
 	tmi.translate[1] = 0.5f - 0.5f * p;
 
-	RB_CalcTransformTexCoords(&tmi, tex_coords);
+	RB_CalcTransformTexCoords(&tmi, texCoords);
 }
 
 /*
@@ -707,15 +707,17 @@ void RB_CalcWaveAlpha(const waveForm_t* wf, unsigned char* dst_colors)
 */
 void RB_CalcModulateColorsByFog(unsigned char* dst_colors)
 {
-	float	tex_coords[SHADER_MAX_VERTEXES][2]{};
+	static float texCoords[SHADER_MAX_VERTEXES][2];
 
 	// calculate texcoords so we can derive density
 	// this is not wasted, because it would only have
 	// been previously called if the surface was opaque
-	RB_CalcFogTexCoords(tex_coords[0]);
+	RB_CalcFogTexCoords(texCoords[0]);
 
-	for (int i = 0; i < tess.numVertexes; i++, dst_colors += 4) {
-		const float f = 1.0 - R_FogFactor(tex_coords[i][0], tex_coords[i][1]);
+	for (int i = 0; i < tess.numVertexes; i++, dst_colors += 4)
+	{
+		const float f = 1.0f - R_FogFactor(texCoords[i][0], texCoords[i][1]);
+
 		dst_colors[0] *= f;
 		dst_colors[1] *= f;
 		dst_colors[2] *= f;
@@ -727,15 +729,15 @@ void RB_CalcModulateColorsByFog(unsigned char* dst_colors)
 */
 void RB_CalcModulateAlphasByFog(unsigned char* dst_colors)
 {
-	float	tex_coords[SHADER_MAX_VERTEXES][2]{};
+	static float	texCoords[SHADER_MAX_VERTEXES][2]{};
 
 	// calculate texcoords so we can derive density
 	// this is not wasted, because it would only have
 	// been previously called if the surface was opaque
-	RB_CalcFogTexCoords(tex_coords[0]);
+	RB_CalcFogTexCoords(texCoords[0]);
 
 	for (int i = 0; i < tess.numVertexes; i++, dst_colors += 4) {
-		const float f = 1.0 - R_FogFactor(tex_coords[i][0], tex_coords[i][1]);
+		const float f = 1.0 - R_FogFactor(texCoords[i][0], texCoords[i][1]);
 		dst_colors[3] *= f;
 	}
 }
@@ -745,15 +747,15 @@ void RB_CalcModulateAlphasByFog(unsigned char* dst_colors)
 */
 void RB_CalcModulateRGBAsByFog(unsigned char* dst_colors)
 {
-	float	tex_coords[SHADER_MAX_VERTEXES][2]{};
+	static float	texCoords[SHADER_MAX_VERTEXES][2]{};
 
 	// calculate texcoords so we can derive density
 	// this is not wasted, because it would only have
 	// been previously called if the surface was opaque
-	RB_CalcFogTexCoords(tex_coords[0]);
+	RB_CalcFogTexCoords(texCoords[0]);
 
 	for (int i = 0; i < tess.numVertexes; i++, dst_colors += 4) {
-		const float f = 1.0 - R_FogFactor(tex_coords[i][0], tex_coords[i][1]);
+		const float f = 1.0 - R_FogFactor(texCoords[i][0], texCoords[i][1]);
 		dst_colors[0] *= f;
 		dst_colors[1] *= f;
 		dst_colors[2] *= f;

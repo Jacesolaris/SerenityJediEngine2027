@@ -722,7 +722,7 @@ void RB_CalcWaveAlpha(const waveForm_t* wf, unsigned char* dst_colors)
 */
 void RB_CalcModulateColorsByFog(unsigned char* dst_colors)
 {
-	float	texCoords[SHADER_MAX_VERTEXES][2]{};
+	static float texCoords[SHADER_MAX_VERTEXES][2];
 
 	// calculate texcoords so we can derive density
 	// this is not wasted, because it would only have
@@ -731,7 +731,8 @@ void RB_CalcModulateColorsByFog(unsigned char* dst_colors)
 
 	for (int i = 0; i < tess.numVertexes; i++, dst_colors += 4)
 	{
-		const float f = 1.0 - R_FogFactor(texCoords[i][0], texCoords[i][1]);
+		const float f = 1.0f - R_FogFactor(texCoords[i][0], texCoords[i][1]);
+
 		dst_colors[0] *= f;
 		dst_colors[1] *= f;
 		dst_colors[2] *= f;
@@ -743,7 +744,7 @@ void RB_CalcModulateColorsByFog(unsigned char* dst_colors)
 */
 void RB_CalcModulateAlphasByFog(unsigned char* dst_colors)
 {
-	float	texCoords[SHADER_MAX_VERTEXES][2]{};
+	static float texCoords[SHADER_MAX_VERTEXES][2]{};
 
 	// calculate texcoords so we can derive density
 	// this is not wasted, because it would only have
@@ -761,7 +762,7 @@ void RB_CalcModulateAlphasByFog(unsigned char* dst_colors)
 */
 void RB_CalcModulateRGBAsByFog(unsigned char* dst_colors)
 {
-	float	texCoords[SHADER_MAX_VERTEXES][2]{};
+	static float	texCoords[SHADER_MAX_VERTEXES][2]{};
 
 	// calculate texcoords so we can derive density
 	// this is not wasted, because it would only have

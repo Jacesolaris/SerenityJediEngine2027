@@ -1013,7 +1013,7 @@ static void RB_SurfaceTriangles(const srfTriangles_t* srf) {
 	drawVert_t* dv = srf->verts;
 	float* xyz = tess.xyz[tess.numVertexes];
 	float* normal = tess.normal[tess.numVertexes];
-	float* tex_coords = tess.texCoords[tess.numVertexes][0];
+	float* texCoords = tess.texCoords[tess.numVertexes][0];
 	byte* color = tess.vertexColors[tess.numVertexes];
 
 	for (i = 0; i < srf->numVerts; i++, dv++)
@@ -1031,22 +1031,22 @@ static void RB_SurfaceTriangles(const srfTriangles_t* srf) {
 		}
 		normal += 4;
 
-		tex_coords[0] = dv->st[0];
-		tex_coords[1] = dv->st[1];
+		texCoords[0] = dv->st[0];
+		texCoords[1] = dv->st[1];
 
 		for (int k = 0; k < MAXLIGHTMAPS; k++)
 		{
 			if (tess.shader->lightmapIndex[k] >= 0)
 			{
-				tex_coords[2 + k * 2] = dv->lightmap[k][0];
-				tex_coords[2 + k * 2 + 1] = dv->lightmap[k][1];
+				texCoords[2 + k * 2] = dv->lightmap[k][0];
+				texCoords[2 + k * 2 + 1] = dv->lightmap[k][1];
 			}
 			else
 			{	// can't have an empty slot in the middle, so we are done
 				break;
 			}
 		}
-		tex_coords += NUM_TEX_COORDS * 2;
+		texCoords += NUM_TEX_COORDS * 2;
 
 		*reinterpret_cast<unsigned*>(color) = ComputeFinalVertexColor(reinterpret_cast<byte*>(dv->color));
 		color += 4;
@@ -1298,12 +1298,12 @@ static void RB_SurfaceMesh(md3Surface_t* surface) {
 	}
 	tess.numIndexes += indexes;
 
-	const float* tex_coords = reinterpret_cast<float*>(reinterpret_cast<byte*>(surface) + surface->ofsSt);
+	const float* texCoords = reinterpret_cast<float*>(reinterpret_cast<byte*>(surface) + surface->ofsSt);
 
 	const int numVerts = surface->numVerts;
 	for (j = 0; j < numVerts; j++) {
-		tess.texCoords[doug + j][0][0] = tex_coords[j * 2 + 0];
-		tess.texCoords[doug + j][0][1] = tex_coords[j * 2 + 1];
+		tess.texCoords[doug + j][0][0] = texCoords[j * 2 + 0];
+		tess.texCoords[doug + j][0][1] = texCoords[j * 2 + 1];
 		// FIXME: fill in lightmapST for completeness?
 	}
 
@@ -1477,7 +1477,7 @@ static void RB_SurfaceGrid(srfGridMesh_t* cv) {
 
 		float* xyz = tess.xyz[numVertexes];
 		float* normal = tess.normal[numVertexes];
-		float* tex_coords = tess.texCoords[numVertexes][0];
+		float* texCoords = tess.texCoords[numVertexes][0];
 		auto color = reinterpret_cast<unsigned char*>(&tess.vertexColors[numVertexes]);
 		int* v_dlight_bits = &tess.vertexdlight_bits[numVertexes];
 
@@ -1491,15 +1491,15 @@ static void RB_SurfaceGrid(srfGridMesh_t* cv) {
 				xyz[2] = dv->xyz[2];
 				xyz += 4;
 
-				tex_coords[0] = dv->st[0];
-				tex_coords[1] = dv->st[1];
+				texCoords[0] = dv->st[0];
+				texCoords[1] = dv->st[1];
 
 				for (int k = 0; k < MAXLIGHTMAPS; k++)
 				{
-					tex_coords[2 + k * 2] = dv->lightmap[k][0];
-					tex_coords[2 + k * 2 + 1] = dv->lightmap[k][1];
+					texCoords[2 + k * 2] = dv->lightmap[k][0];
+					texCoords[2 + k * 2 + 1] = dv->lightmap[k][1];
 				}
-				tex_coords += NUM_TEX_COORDS * 2;
+				texCoords += NUM_TEX_COORDS * 2;
 
 				//				if ( needsNormal )
 				{

@@ -806,7 +806,7 @@ static void ProjectDlightTexture2(void)
 static void ProjectDlightTexture()
 {
 	int		i = 0;
-	float* tex_coords = nullptr;
+	float* texCoords = nullptr;
 	byte* colors = nullptr;
 	static byte clip_bits[SHADER_MAX_VERTEXES]; // off the stack (C6262)
 	memset(clip_bits, 0, sizeof(clip_bits)); // cleared each time, as the {} on the stack was
@@ -833,7 +833,7 @@ static void ProjectDlightTexture()
 			continue;	// this surface definately doesn't have any of this light
 		}
 
-		tex_coords = tess.svars.texcoords[0][0];
+		texCoords = tess.svars.texcoords[0][0];
 		colors = tess.svars.colors[0];
 
 		const dlight_t* dl = &backEnd.refdef.dlights[l];
@@ -845,7 +845,7 @@ static void ProjectDlightTexture()
 		float_color[1] = dl->color[1] * 255.0f;
 		float_color[2] = dl->color[2] * 255.0f;
 
-		for (i = 0; i < tess.numVertexes; i++, tex_coords += 2, colors += 4) {
+		for (i = 0; i < tess.numVertexes; i++, texCoords += 2, colors += 4) {
 			vec3_t	dist;
 			float	modulate = 0.0f;
 
@@ -918,8 +918,8 @@ static void ProjectDlightTexture()
 					scale = 1.0f / (radius * d_use);
 				}
 
-				tex_coords[0] = 0.5f + dist[0] * scale;
-				tex_coords[1] = 0.5f + dist[1] * scale;
+				texCoords[0] = 0.5f + dist[0] * scale;
+				texCoords[1] = 0.5f + dist[1] * scale;
 			}
 			else if (best_index == 1)
 			{
@@ -949,8 +949,8 @@ static void ProjectDlightTexture()
 					scale = 1.0f / (radius * d_use);
 				}
 
-				tex_coords[0] = 0.5f + dist[0] * scale;
-				tex_coords[1] = 0.5f + dist[2] * scale;
+				texCoords[0] = 0.5f + dist[0] * scale;
+				texCoords[1] = 0.5f + dist[2] * scale;
 			}
 			else
 			{
@@ -980,21 +980,21 @@ static void ProjectDlightTexture()
 					scale = 1.0f / (radius * d_use);
 				}
 
-				tex_coords[0] = 0.5f + dist[1] * scale;
-				tex_coords[1] = 0.5f + dist[2] * scale;
+				texCoords[0] = 0.5f + dist[1] * scale;
+				texCoords[1] = 0.5f + dist[2] * scale;
 			}
 
 			int clip = 0;
-			if (tex_coords[0] < 0.0f) {
+			if (texCoords[0] < 0.0f) {
 				clip |= 1;
 			}
-			else if (tex_coords[0] > 1.0f) {
+			else if (texCoords[0] > 1.0f) {
 				clip |= 2;
 			}
-			if (tex_coords[1] < 0.0f) {
+			if (texCoords[1] < 0.0f) {
 				clip |= 4;
 			}
-			else if (tex_coords[1] > 1.0f) {
+			else if (texCoords[1] > 1.0f) {
 				clip |= 8;
 			}
 			// modulate the strength based on the height and color

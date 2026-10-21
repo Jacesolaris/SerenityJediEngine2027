@@ -1632,7 +1632,7 @@ void	RB_DeformTessGeometry();
 
 void	RB_CalcScaleTexCoords(const float scale[2], float* dstTexCoords);
 void	RB_CalcScrollTexCoords(const float scroll_speed[2], float* dstTexCoords);
-void	RB_CalcStretchTexCoords(const waveForm_t* wf, float* tex_coords);
+void	RB_CalcStretchTexCoords(const waveForm_t* wf, float* texCoords);
 void	RB_CalcTransformTexCoords(const texModInfo_t* tmi, float* dstTexCoords);
 void	RB_CalcRotateTexCoords(float degs_per_second, float* dstTexCoords);
 

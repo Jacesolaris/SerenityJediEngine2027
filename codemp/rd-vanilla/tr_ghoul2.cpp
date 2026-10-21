@@ -3874,36 +3874,65 @@ static void RB_MeshClothApply(CBoneCache* bones, const mdxmSurface_t* surface)
 	mcCapsule_t caps[MC_NUM_COLLIDERS + 2]{};
 	int ncaps = 0;
 	const mcBoneLookup_t* lk = MC_Lookup(bones->header);
+
 	for (int k = 0; k < MC_NUM_COLLIDERS; k++)
 	{
-		if (lk->idx[k][0] < 0 || lk->idx[k][1] < 0) continue;
+		if (lk->idx[k][0] < 0 || lk->idx[k][1] < 0)
+		{
+			continue;
+		}
+
 		for (int e = 0; e < 2; e++)
 		{
 			const int bi = lk->idx[k][e];
+
 			const mdxaBone_t& m = bones->EvalRender(bi);
 			const mdxaBone_t& bp = MC_Skel(bones->header, bi)->BasePoseMat;
-			const vec3_t b = { bp.matrix[0][3], bp.matrix[1][3], bp.matrix[2][3] };
+
+			const vec3_t b =
+			{
+				bp.matrix[0][3],
+				bp.matrix[1][3],
+				bp.matrix[2][3]
+			};
+
 			vec3_t local{};
+
 			for (int r = 0; r < 3; r++)
 			{
-				local[r] = m.matrix[r][0] * b[0] + m.matrix[r][1] * b[1] + m.matrix[r][2] * b[2] + m.matrix[r][3];
+				local[r] =
+					m.matrix[r][0] * b[0] +
+					m.matrix[r][1] * b[1] +
+					m.matrix[r][2] * b[2] +
+					m.matrix[r][3];
 			}
+
 			float* out = e ? caps[ncaps].b : caps[ncaps].a;
+
 			for (int r = 0; r < 3; r++)
 			{
-				out[r] = ent->e.origin[r] + axis[0][r] * local[0] + axis[1][r] * local[1] + axis[2][r] * local[2];
+				out[r] =
+					ent->e.origin[r] +
+					axis[0][r] * local[0] +
+					axis[1][r] * local[1] +
+					axis[2][r] * local[2];
 			}
 		}
+
 		caps[ncaps].r = mcColliderRadius[k];
-		caps[ncaps].hard = k >= 7 ? 1 : 0;	// arms
+		caps[ncaps].hard = (k >= 7) ? 1 : 0; // arms
 		ncaps++;
+
 		// fists: a short capsule past each wrist, along the forearm
 		if (k == 8 || k == 10)
 		{
 			const mcCapsule_t& fa = caps[ncaps - 1];
+
 			vec3_t dir;
 			VectorSubtract(fa.b, fa.a, dir);
+
 			const float len = VectorNormalize(dir);
+
 			if (len > 0.1f)
 			{
 				VectorCopy(fa.b, caps[ncaps].a);
@@ -3916,6 +3945,7 @@ static void RB_MeshClothApply(CBoneCache* bones, const mdxmSurface_t* surface)
 	}
 
 	mcParams_t prm{};
+
 	prm.gravity = r_meshClothGravity->value;
 	prm.drag = r_meshClothDrag->value;
 	prm.iterations = r_meshClothIter->integer;
@@ -3923,16 +3953,40 @@ static void RB_MeshClothApply(CBoneCache* bones, const mdxmSurface_t* surface)
 	prm.inertia = r_meshClothInertia->value;
 	prm.maxAccel = r_meshClothMaxAccel->value;
 	prm.airDrag = r_meshClothAirDrag->value;
+
 	{
-		float w[3] = { 0, 0, 0 };
-		sscanf(r_meshClothWind->string, "%f %f %f", &w[0], &w[1], &w[2]);
-		prm.wind[0] = w[0]; prm.wind[1] = w[1]; prm.wind[2] = w[2];
+		const int parsed = sscanf(
+			r_meshClothWind->string,
+			"%f %f %f",
+			&prm.wind[0],
+			&prm.wind[1],
+			&prm.wind[2]);
+
+		if (parsed < 3)
+		{
+			prm.wind[0] = 0.0f;
+			prm.wind[1] = 0.0f;
+			prm.wind[2] = 0.0f;
+		}
 	}
+
 	prm.gust = r_meshClothGust->value;
 	prm.timeSec = 0.0f;
 
-	MC_Apply(surface, bones, backEnd.refdef.time, ent->e.origin, axis, caps, ncaps, &prm,
-		MC_BoneFn, bones, &tess.xyz[tess.numVertexes], &tess.normal[tess.numVertexes]);
+	MC_Apply(
+		surface,
+		bones,
+		backEnd.refdef.time,
+		ent->e.origin,
+		axis,
+		caps,
+		ncaps,
+		&prm,
+		MC_BoneFn,
+		bones,
+		&tess.xyz[tess.numVertexes],
+		&tess.normal[tess.numVertexes]);
+
 	MC_Prune(backEnd.refdef.time);
 }
 
