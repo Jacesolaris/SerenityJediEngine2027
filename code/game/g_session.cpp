@@ -218,11 +218,11 @@ void G_ReadSessionData(gclient_t* client)
 		tok = strtok(NULL, " ");
 	}
 
-	if (i != WP_NUM_WEAPONS)
+	if (i != MISSION_STATS_WEAPONS)
 	{
 		Com_Printf(S_COLOR_YELLOW
 			"G_ReadSessionData: sessionweapons expected %d entries, got %d\n",
-			WP_NUM_WEAPONS, i);
+			MISSION_STATS_WEAPONS, i);
 	}
 }
 

@@ -290,8 +290,8 @@ public:
 
 	float	mAlpha = 1.0f;
 	TFlags	mFlags;
-	CVec3	mPosition;
-	CVec3	mVelocity;
+	CVec3	mPosition{ 0.0f, 0.0f, 0.0f };
+	CVec3	mVelocity{ 0.0f, 0.0f, 0.0f };
 	float	mMass = 1.0f;			// A higher number will more greatly resist force and result in greater gravity
 };
 

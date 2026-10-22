@@ -97,7 +97,7 @@ public:
 	float mRange;
 	float mRangeMax;
 	CVec3 mPoint;
-	CVec3 mNormal;
+	CVec3 mNormal{ 0.0f, 0.0f, 0.0f };
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////

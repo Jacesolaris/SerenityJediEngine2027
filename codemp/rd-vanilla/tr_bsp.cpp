@@ -1379,6 +1379,7 @@ static void R_LoadSubmodels(const lump_t* l, world_t& worldData, const int index
 		assert(model != nullptr);			// this should never happen
 		if (model == nullptr) {
 			ri.Error(ERR_DROP, "R_LoadSubmodels: R_AllocModel() failed");
+			return;
 		}
 
 		model->type = MOD_BRUSH;

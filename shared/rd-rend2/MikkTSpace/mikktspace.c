@@ -1134,6 +1134,7 @@ static tbool AssignRecur(const int piTriListIn[], STriInfo psTriInfos[],
 	else if (pVerts[1] == iVertRep) i = 1;
 	else if (pVerts[2] == iVertRep) i = 2;
 	assert(i >= 0 && i < 3);
+	if (i < 0) return TFALSE;	// vertex not on this triangle (never expected)
 
 	// early out
 	if (pMyTriInfo->AssignedGroup[i] == pGroup) return TTRUE;
@@ -1221,6 +1222,7 @@ static tbool GenerateTSpaces(STSpace psTspace[], const STriInfo pTriInfos[], con
 			else if (pTriInfos[f].AssignedGroup[1] == pGroup) index = 1;
 			else if (pTriInfos[f].AssignedGroup[2] == pGroup) index = 2;
 			assert(index >= 0 && index < 3);
+			if (index < 0) continue;	// triangle not in this group (never expected)
 
 			iVertIndex = piTriListIn[f * 3 + index];
 			assert(iVertIndex == pGroup->iVertexRepresentitive);

@@ -722,7 +722,7 @@ static cvarTable_t cvarTable[] = {
 
 	{ &cg_com_rend2, "com_rend2", "0", CVAR_ARCHIVE | CVAR_SAVEGAME },
 
-	{ &cg_textprintscale, "cg_textprintscale", "0.5f", CVAR_ARCHIVE },
+	{ &cg_textprintscale, "cg_textprintscale", "0.66f", CVAR_ARCHIVE },
 
 	{ &cg_subtitleSize, "g_subtitlesize", "0.5", CVAR_ARCHIVE }, // (2026-10-13) subtitle/caption size, clamped 0.25 - 2.0
 };

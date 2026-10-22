@@ -108,7 +108,7 @@ public:
 	// Constructors
 	////////////////////////////////////////////////////////////////////////////////////
 #ifndef _DEBUG
-	CVec4() {}
+	CVec4() = default;
 #else
 	CVec4() { v[0] = v[1] = v[2] = v[3] = RAVL_VEC_UDF; } // DEBUG INITIALIZATION
 #endif

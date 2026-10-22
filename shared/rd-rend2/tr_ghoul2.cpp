@@ -3705,9 +3705,10 @@ void R_MeshClothShutdown()
 static const char* const mcColliderBones[][2] = {
 	{ "pelvis", "thoracic" },{ "thoracic", "cervical" },{ "cervical", "cranium" },
 	{ "lfemurYZ", "ltibia" },{ "ltibia", "ltalus" },{ "rfemurYZ", "rtibia" },{ "rtibia", "rtalus" },
-	{ "lhumerus", "lradius" },{ "lradius", "lhand" },{ "rhumerus", "rradius" },{ "rradius", "rhand" }
+	{ "lhumerus", "lradius" },{ "lradius", "lhand" },{ "rhumerus", "rradius" },{ "rradius", "rhand" },
+	{ "lclavical", "lhumerus" }, { "rclavical", "rhumerus" }	// shoulders (hard 2: grid-simulated cloth only)
 };
-static const float mcColliderRadius[] = { 6.0f, 4.5f, 3.8f, 5.0f, 3.8f, 5.0f, 3.8f, 2.5f, 2.2f, 2.5f, 2.2f };
+static const float mcColliderRadius[] = { 6.0f, 4.5f, 3.8f, 5.0f, 3.8f, 5.0f, 3.8f, 2.5f, 2.2f, 2.5f, 2.2f, 4.2f, 4.2f };
 static const int MC_NUM_COLLIDERS = sizeof(mcColliderRadius) / sizeof(mcColliderRadius[0]);
 
 struct mcBoneLookup_t
@@ -3754,6 +3755,106 @@ static const mcBoneLookup_t* MC_Lookup(const mdxaHeader_t* h)
 static const float (*MC_BoneFn(void* ctx, const int boneIndex))[4]
 {
 	return reinterpret_cast<const float(*)[4]>(static_cast<CBoneCache*>(ctx)->boneMatrices[boneIndex]);
+}
+
+// saber hilt collider: the hand bolt tag (*r_hand, *l_hand) is skinned like the engine skins it
+// for bolts; the hilt lies along the blade direction (the bolt's minus Y = the tag triangle's
+// longest side) and reaches a little behind the fist and well in front of it
+static bool MC_HiltCapsule(const mdxmSurface_t* clothSurf, CBoneCache* bones, const char* tag,
+	const trRefEntity_t* ent, const vec3_t axis[3], mcCapsule_t& cap)
+{
+	const mdxmHeader_t* h = reinterpret_cast<const mdxmHeader_t*>(reinterpret_cast<const byte*>(clothSurf) + clothSurf->ofsHeader);
+	const mdxmHierarchyOffsets_t* ho = reinterpret_cast<const mdxmHierarchyOffsets_t*>(reinterpret_cast<const byte*>(h) + sizeof(mdxmHeader_t));
+	int ti = -1;
+	for (int i = 0; i < h->numSurfaces && ti < 0; i++)
+	{
+		const mdxmSurfHierarchy_t* sh = reinterpret_cast<const mdxmSurfHierarchy_t*>(reinterpret_cast<const byte*>(ho) + ho->offsets[i]);
+		if (!Q_stricmp(sh->name, tag)) ti = i;
+	}
+	if (ti < 0) return false;
+	const mdxmSurface_t* ts = nullptr;
+	const byte* lod = reinterpret_cast<const byte*>(h) + h->ofsLODs;
+	for (int l = 0; l < h->numLODs && !ts; l++)
+	{
+		const mdxmLODSurfOffset_t* lo = reinterpret_cast<const mdxmLODSurfOffset_t*>(lod + sizeof(mdxmLOD_t));
+		if (reinterpret_cast<const byte*>(lo) + lo->offsets[clothSurf->thisSurfaceIndex] == reinterpret_cast<const byte*>(clothSurf))
+			ts = reinterpret_cast<const mdxmSurface_t*>(reinterpret_cast<const byte*>(lo) + lo->offsets[ti]);
+		lod += reinterpret_cast<const mdxmLOD_t*>(lod)->ofsEnd;
+	}
+	if (!ts || ts->numVerts < 3) return false;
+	const int* refs = reinterpret_cast<const int*>(reinterpret_cast<const byte*>(ts) + ts->ofsBoneReferences);
+	const mdxmVertex_t* v = reinterpret_cast<const mdxmVertex_t*>(reinterpret_cast<const byte*>(ts) + ts->ofsVerts);
+	vec3_t p[3];
+	for (int j = 0; j < 3; j++, v++)
+	{
+		VectorClear(p[j]);
+		const int nw = G2_GetVertWeights(v);
+		float tot = 0.0f;
+		for (int k = 0; k < nw; k++)
+		{
+			const int bi = refs[G2_GetVertBoneIndex(v, k)];
+			const float w = G2_GetVertBoneWeight(v, k, tot, nw);
+			const float (*m)[4] = MC_BoneFn(bones, bi);
+			for (int r = 0; r < 3; r++) p[j][r] += w * (DotProduct(m[r], v->vertCoords) + m[r][3]);
+		}
+	}
+	vec3_t sides[3];
+	for (int j = 0; j < 3; j++) VectorSubtract(p[(j + 1) % 3], p[j], sides[j]);
+	vec3_t dir;
+	VectorCopy(sides[iG2_TRISIDE_LONGEST], dir);
+	if (VectorNormalize(dir) < 1e-4f) return false;
+	VectorScale(dir, -1.0f, dir);	// blade direction
+	vec3_t la, lb;
+	VectorMA(p[MDX_TAG_ORIGIN], -4.0f, dir, la);
+	VectorMA(p[MDX_TAG_ORIGIN], 9.0f, dir, lb);
+	for (int r = 0; r < 3; r++)
+	{
+		cap.a[r] = ent->e.origin[r] + axis[0][r] * la[0] + axis[1][r] * la[1] + axis[2][r] * la[2];
+		cap.b[r] = ent->e.origin[r] + axis[0][r] * lb[0] + axis[1][r] * lb[1] + axis[2][r] * lb[2];
+	}
+	cap.r = 1.6f;
+	cap.hard = 1;
+	return true;
+}
+
+// the floor under a character, for its cloth: one trace per character per frame
+static void MC_FloorUnder(const trRefEntity_t* ent, const int timeMs, mcParams_t& prm)
+{
+	// no collision world (menus, character select, UI model views): no floor, never trace
+	if (!tr.world || (backEnd.refdef.rdflags & RDF_NOWORLDMODEL))
+	{
+		prm.floor = 0;
+		return;
+	}
+	struct floorCache_t { int time; int ok; float pt[3]; float n[3]; };
+	static std::unordered_map<const void*, floorCache_t> cache;
+	floorCache_t& c = cache[ent];
+	if (c.time != timeMs)
+	{
+		c.time = timeMs;
+		c.ok = 0;
+		trace_t tr;
+		vec3_t start, end;
+		VectorCopy(ent->e.origin, start);
+		VectorCopy(ent->e.origin, end);
+		start[2] += 8.0f;
+		end[2] -= 96.0f;
+#ifdef REND2_SP
+		ri.SV_Trace(&tr, start, nullptr, nullptr, end, ENTITYNUM_NONE, CONTENTS_SOLID, G2_NOCOLLIDE, 0);
+#else
+		ri.CM_BoxTrace(&tr, start, end, vec3_origin, vec3_origin, 0, CONTENTS_SOLID, qfalse);	// MP: world only
+#endif
+		if (tr.fraction < 1.0f && !tr.startsolid && !tr.allsolid && tr.plane.normal[2] > 0.5f)
+		{
+			c.ok = 1;
+			VectorCopy(tr.endpos, c.pt);
+			VectorCopy(tr.plane.normal, c.n);
+		}
+		if (cache.size() > 256) cache.clear();
+	}
+	prm.floor = c.ok;
+	VectorCopy(c.pt, prm.floorPt);
+	VectorCopy(c.n, prm.floorN);
 }
 
 // Per cloth surface: bind-pose tangents and an index buffer starting at 0.
@@ -3964,7 +4065,7 @@ static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurfac
 	VectorCopy(ent->e.axis[2], axis[2]);
 
 	// capsules: posed bone origin = skin matrix * bind position, then to world
-	mcCapsule_t caps[MC_NUM_COLLIDERS + 2]{};
+	mcCapsule_t caps[MC_NUM_COLLIDERS + 4]{};
 	int ncaps = 0;
 	const mcBoneLookup_t* lk = MC_Lookup(bones->header);
 	for (int k = 0; k < MC_NUM_COLLIDERS; k++)
@@ -3988,7 +4089,7 @@ static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurfac
 			}
 		}
 		caps[ncaps].r = mcColliderRadius[k];
-		caps[ncaps].hard = k >= 7 ? 1 : 0;	// arms
+		caps[ncaps].hard = k >= 11 ? 2 : (k >= 7 ? 1 : 0);	// arms, shoulders
 		ncaps++;
 		// fists: a short capsule past each wrist, along the forearm
 		if (k == 8 || k == 10)
@@ -4047,6 +4148,10 @@ static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurfac
 		}
 	}
 
+	// saber hilts in both hands
+	if (MC_HiltCapsule(surface, bones, "*r_hand", ent, axis, caps[ncaps])) ncaps++;
+	if (MC_HiltCapsule(surface, bones, "*l_hand", ent, axis, caps[ncaps])) ncaps++;
+
 	mcParams_t prm{};
 	prm.gravity = r_meshClothGravity->value;
 	prm.drag = r_meshClothDrag->value;
@@ -4072,6 +4177,8 @@ static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurfac
 	}
 	prm.gust = r_meshClothGust->value;
 	prm.timeSec = 0.0f;
+	MC_FloorUnder(ent, timeMs, prm);
+
 	MC_Apply(surface, bones, timeMs, ent->e.origin, axis, caps, ncaps, &prm,
 		MC_BoneFn, bones, xyz, nrm);
 	MC_Prune(timeMs);

@@ -113,7 +113,7 @@ namespace ragl
 	public:
 		~c_node() = default;
 
-		c_node()
+		c_node() : mPoint(0.0f)
 		{}
 
 		c_node(const CVec3& Pt) : mPoint(Pt)
