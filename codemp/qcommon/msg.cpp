@@ -2558,6 +2558,7 @@ void MSG_CheckNETFPSFOverrides(const qboolean psfOverrides)
 //MAKE SURE THIS MATCHES THE ENUM IN BG_PUBLIC.H!!!
 //This is in caps, because it is important.
 #define STAT_WEAPONS 4
+#define STAT_WEAPONS2 14 // owned weapons 32-63 (game: bg_public.h), sent like STAT_WEAPONS (2026-10-25)
 
 /*
 =============
@@ -2754,7 +2755,7 @@ void MSG_WriteDeltaPlayerstate(msg_t * msg, playerState_s * from, playerState_s 
 		{
 			if (statsbits & 1 << i)
 			{
-				if (i == STAT_WEAPONS)
+				if (i == STAT_WEAPONS || i == STAT_WEAPONS2)
 				{
 					//ugly.. but we're gonna need it anyway -rww
 					//(just send this one in MAX_WEAPONS bits, so that we can add up to MAX_WEAPONS weaps without hassle)
@@ -2995,7 +2996,7 @@ void MSG_ReadDeltaPlayerstate(msg_t * msg, playerState_t * from, playerState_t *
 			{
 				if (bits & 1 << i)
 				{
-					if (i == STAT_WEAPONS)
+					if (i == STAT_WEAPONS || i == STAT_WEAPONS2)
 					{
 						//ugly.. but we're gonna need it anyway -rww
 						to->stats[i] = MSG_ReadBits(msg, MAX_WEAPONS);

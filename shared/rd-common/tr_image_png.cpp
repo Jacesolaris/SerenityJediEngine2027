@@ -34,6 +34,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define RD_PNG_ALLOC_ROWS(n)	ri.Hunk_AllocateTempMemory(n)
 #define RD_PNG_FREE_ROWS(p)	ri.Hunk_FreeTempMemory(p)
 #endif
+#include "q_profile.h"
 
 #include "rd-common/tr_common.h"
 #include <png.h>
@@ -254,6 +255,12 @@ struct PNGFileReader
 		}
 
 		// interlaced PNGs: let libpng combine the passes (stops the 'Interlace handling should be turned on' warning)
+		// 16-bit PNGs: 8 bits per channel. The buffer below is 4 bytes a pixel, so a 16-bit file (8 bytes a pixel)
+		// was written past its end - heap corruption.
+		if (depth == 16)
+		{
+			png_set_strip_16(png_ptr);
+		}
 		png_set_interlace_handling(png_ptr);
 
 		png_read_update_info(png_ptr, info_ptr);
@@ -344,7 +351,153 @@ void LoadPNG(const char* filename, byte** data, int* width, int* height)
 	{
 		return;
 	}
+	PROFILE_ZONE("Load: decode PNG");	// after the read: a name with no file is not a decode
 
 	PNGFileReader reader(buf, static_cast<size_t>(len));
 	reader.read(data, width, height);
+}
+
+/*
+=================
+R_DecodePNGThreadSafe
+
+The image prefetch's PNG decode (tr_image_load.cpp), safe on the render job workers: the same libpng calls and
+transforms as PNGFileReader::read above (so the same RGBA pixels), but from memory, into malloc'd memory, and
+silent - nothing here touches the engine (no prints, no Z_Malloc/Hunk memory, no file system). Any error, any
+libpng warning or anything read() would refuse returns false, and LoadPNG then loads that file the normal way
+(printing exactly as before). libpng keeps all its state in the png_struct, so one decode per thread is safe.
+=================
+*/
+namespace {
+struct pngMemSource_t
+{
+	const byte* data;
+	size_t size;
+	size_t offset;
+	bool warned;
+};
+
+void PNG_TS_Read(const png_structp png_ptr, const png_bytep out, const png_size_t length)
+{
+	auto* src = static_cast<pngMemSource_t*>(png_get_io_ptr(png_ptr));
+	if (length > src->size - src->offset)
+	{
+		png_error(png_ptr, "PNG data ends unexpectedly");	// longjmps to the decode's error handler
+	}
+	memcpy(out, src->data + src->offset, length);
+	src->offset += length;
+}
+
+void PNG_TS_Error(const png_structp png_ptr, png_const_charp)
+{
+	// silent: straight back to the setjmp in R_DecodePNGThreadSafe (if this returned, libpng would print to stderr)
+	png_longjmp(png_ptr, 1);
+}
+
+void PNG_TS_Warning(const png_structp png_ptr, png_const_charp)
+{
+	static_cast<pngMemSource_t*>(png_get_error_ptr(png_ptr))->warned = true;	// LoadPNG would print it: let it
+}
+}
+
+bool R_DecodePNGThreadSafe(const byte* data, const size_t len, byte** pic, int* width, int* height)
+{
+	*pic = nullptr;
+	*width = 0;
+	*height = 0;
+
+	constexpr int signature_len = 8;
+	if (!data || len < signature_len || png_sig_cmp(const_cast<png_bytep>(data), 0, signature_len) != 0)
+	{
+		return false;
+	}
+
+	pngMemSource_t src = { data, len, signature_len, false };
+	png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, &src, PNG_TS_Error, PNG_TS_Warning);
+	if (!png_ptr)
+	{
+		return false;
+	}
+	png_infop info_ptr = png_create_info_struct(png_ptr);
+	if (!info_ptr)
+	{
+		png_destroy_read_struct(&png_ptr, nullptr, nullptr);
+		return false;
+	}
+
+	byte* volatile pixels = nullptr;
+	png_bytep* volatile rows = nullptr;
+	if (setjmp(png_jmpbuf(png_ptr)))
+	{
+		free(rows);
+		free(pixels);
+		png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+		return false;
+	}
+
+	png_set_read_fn(png_ptr, &src, PNG_TS_Read);
+#ifdef PNG_HANDLE_AS_UNKNOWN_SUPPORTED
+	png_set_keep_unknown_chunks(png_ptr, PNG_HANDLE_CHUNK_NEVER, nullptr, -1);
+#endif
+	png_set_sig_bytes(png_ptr, signature_len);
+	png_read_info(png_ptr, info_ptr);
+
+	png_uint_32 width32 = 0;
+	png_uint_32 height32 = 0;
+	int depth = 0;
+	int colortype = 0;
+	png_get_IHDR(png_ptr, info_ptr, &width32, &height32, &depth, &colortype, nullptr, nullptr, nullptr);
+
+	// the same checks as read(): power-of-two sizes (as an int, like IsPowerOfTwo), 24 or 32 bit only
+	const int w = static_cast<int>(width32);
+	const int h = static_cast<int>(height32);
+	if ((w & w - 1) != 0 || (h & h - 1) != 0 || (colortype != PNG_COLOR_TYPE_RGB && colortype != PNG_COLOR_TYPE_RGBA))
+	{
+		png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+		return false;
+	}
+	if (colortype == PNG_COLOR_TYPE_RGB)
+	{
+		png_set_add_alpha(png_ptr, 0xff, PNG_FILLER_AFTER);
+	}
+	if (depth == 16)
+	{
+		png_set_strip_16(png_ptr);	// as read(): 8 bits per channel (16-bit PNGs used to overflow the pixel buffer)
+	}
+	png_set_interlace_handling(png_ptr);
+	png_read_update_info(png_ptr, info_ptr);
+	if (png_get_rowbytes(png_ptr, info_ptr) != static_cast<size_t>(width32) * 4)
+	{
+		png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+		return false;
+	}
+
+	pixels = static_cast<byte*>(malloc(static_cast<size_t>(width32 * height32 * 4)));
+	rows = static_cast<png_bytep*>(malloc(sizeof(png_bytep) * (height32 ? height32 : 1)));
+	if (!pixels || !rows)
+	{
+		free(rows);
+		free(pixels);
+		png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+		return false;
+	}
+	for (unsigned int i = 0, j = 0; i < height32; i++, j += 4)
+	{
+		rows[i] = pixels + j * width32;
+	}
+	png_read_image(png_ptr, rows);
+	png_read_end(png_ptr, nullptr);
+	free(rows);
+	rows = nullptr;
+	png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+
+	if (src.warned)
+	{
+		free(pixels);
+		return false;
+	}
+	*pic = pixels;
+	*width = w;
+	*height = h;
+	return true;
 }

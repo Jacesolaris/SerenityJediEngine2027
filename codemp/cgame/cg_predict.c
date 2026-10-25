@@ -267,6 +267,17 @@ static void CG_ClipMoveToEntities(const vec3_t start, const vec3_t mins, const v
 		ignored = &cg_entities[skip_number];
 	}
 
+	// the box the whole move sweeps through (plus a unit): an entity box outside it can't be hit or started
+	// in, so its trace is skipped - same result, much cheaper with many NPCs (effects trace every frame).
+	// cg_traceCull 0 = test every entity as before.
+	vec3_t sweepMins, sweepMaxs;
+	for (int k = 0; k < 3; k++)
+	{
+		sweepMins[k] = (start[k] < end[k] ? start[k] : end[k]) + (mins ? mins[k] : 0.0f) - 1.0f;
+		sweepMaxs[k] = (start[k] > end[k] ? start[k] : end[k]) + (maxs ? maxs[k] : 0.0f) + 1.0f;
+	}
+	const qboolean cull = cg_traceCull.integer ? qtrue : qfalse;
+
 	for (i = 0; i < cg_numSolidEntities; i++)
 	{
 		vec3_t angles;
@@ -316,6 +327,17 @@ static void CG_ClipMoveToEntities(const vec3_t start, const vec3_t mins, const v
 				bg_vehicle_adjust_b_box_for_orientation(cent->m_pVehicle, cent->lerpOrigin, bmins, bmaxs,
 					cent->currentState.number, MASK_PLAYERSOLID, NULL);
 				cent->m_pVehicle->m_vOrientation = old;
+			}
+
+			if (cull)
+			{
+				const float* o = cent->lerpOrigin;
+				if (o[0] + bmaxs[0] < sweepMins[0] || o[0] + bmins[0] > sweepMaxs[0]
+					|| o[1] + bmaxs[1] < sweepMins[1] || o[1] + bmins[1] > sweepMaxs[1]
+					|| o[2] + bmaxs[2] < sweepMins[2] || o[2] + bmins[2] > sweepMaxs[2])
+				{
+					continue;
+				}
 			}
 
 			cmodel = trap->CM_TempModel(bmins, bmaxs, 0);
@@ -759,7 +781,7 @@ static void CG_TouchItem(centity_t* cent)
 	// if its a weapon, give them some predicted ammo so the autoswitch will work
 	if (item->giType == IT_WEAPON)
 	{
-		cg.predictedPlayerState.stats[STAT_WEAPONS] |= 1 << item->giTag;
+		BG_GiveWeapon(cg.predictedPlayerState.stats, item->giTag);
 		if (!cg.predictedPlayerState.ammo[item->giTag])
 		{
 			cg.predictedPlayerState.ammo[item->giTag] = 1;

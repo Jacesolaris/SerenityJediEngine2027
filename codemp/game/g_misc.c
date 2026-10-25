@@ -2372,47 +2372,51 @@ static qboolean HasValidWeaponThatUsesAmmo(const gentity_t* ent, const int ammot
 	switch (ammotype)
 	{
 	case AMMO_BLASTER:
-		if (ent->client->ps.stats[STAT_WEAPONS] & 1 << WP_BLASTER)
+		if (BG_HasWeapon(ent->client->ps.stats, WP_BLASTER))
 			return qtrue;
-		if (ent->client->ps.stats[STAT_WEAPONS] & 1 << WP_DROIDEKA)
+		if (BG_HasWeapon(ent->client->ps.stats, WP_DROIDEKA))
 			return qtrue;
 		break;
 	case AMMO_POWERCELL:
-		if (ent->client->ps.stats[STAT_WEAPONS] & 1 << WP_DISRUPTOR)
+		if (BG_HasWeapon(ent->client->ps.stats, WP_DISRUPTOR))
 			return qtrue;
-		if (ent->client->ps.stats[STAT_WEAPONS] & 1 << WP_BOWCASTER)
+		if (BG_HasWeapon(ent->client->ps.stats, WP_BOWCASTER))
 			return qtrue;
-		if (ent->client->ps.stats[STAT_WEAPONS] & 1 << WP_DEMP2)
+		if (BG_HasWeapon(ent->client->ps.stats, WP_DEMP2))
+			return qtrue;
+		if (BG_HasWeapon(ent->client->ps.stats, WP_NOGHRI_STICK))
+			return qtrue;
+		if (BG_HasWeapon(ent->client->ps.stats, WP_TUSKEN_RIFLE))
 			return qtrue;
 
 		break;
 	case AMMO_METAL_BOLTS:
-		if (ent->client->ps.stats[STAT_WEAPONS] & 1 << WP_REPEATER)
+		if (BG_HasWeapon(ent->client->ps.stats, WP_REPEATER))
 			return qtrue;
-		if (ent->client->ps.stats[STAT_WEAPONS] & 1 << WP_Z6_ROTARY_CANNON)
+		if (BG_HasWeapon(ent->client->ps.stats, WP_Z6_ROTARY_CANNON))
 			return qtrue;
-		if (ent->client->ps.stats[STAT_WEAPONS] & 1 << WP_FLECHETTE)
+		if (BG_HasWeapon(ent->client->ps.stats, WP_FLECHETTE))
 			return qtrue;
-		if (ent->client->ps.stats[STAT_WEAPONS] & 1 << WP_CONCUSSION)
+		if (BG_HasWeapon(ent->client->ps.stats, WP_CONCUSSION))
 			return qtrue;
 
 		break;
 	case AMMO_ROCKETS:
-		if (ent->client->ps.stats[STAT_WEAPONS] & 1 << WP_ROCKET_LAUNCHER)
+		if (BG_HasWeapon(ent->client->ps.stats, WP_ROCKET_LAUNCHER))
 			return qtrue;
 		break;
 	case AMMO_THERMAL:
-		if (ent->client->ps.stats[STAT_WEAPONS] & 1 << WP_THERMAL ||
+		if (BG_HasWeapon(ent->client->ps.stats, WP_THERMAL) ||
 			ent->client->ps.ammo[AMMO_THERMAL] > 0)
 			return qtrue;
 		break;
 	case AMMO_TRIPMINE:
-		if (ent->client->ps.stats[STAT_WEAPONS] & 1 << WP_TRIP_MINE ||
+		if (BG_HasWeapon(ent->client->ps.stats, WP_TRIP_MINE) ||
 			ent->client->ps.ammo[AMMO_TRIPMINE] > 0)
 			return qtrue;
 		break;
 	case AMMO_DETPACK:
-		if (ent->client->ps.stats[STAT_WEAPONS] & 1 << WP_DET_PACK ||
+		if (BG_HasWeapon(ent->client->ps.stats, WP_DET_PACK) ||
 			ent->client->ps.ammo[AMMO_DETPACK] > 0)
 			return qtrue;
 		break;

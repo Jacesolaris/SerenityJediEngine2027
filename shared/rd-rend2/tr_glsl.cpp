@@ -21,6 +21,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 // tr_glsl.c
 #include "tr_local.h"
+#include "q_profile.h"
 #include "tr_allocator.h"
 #include "glsl_shaders.h"
 
@@ -147,6 +148,12 @@ static uniformInfo_t uniformsInfo[] =
 	{ "u_RandomOffset",			GLSL_VEC4, 1 },
 	{ "u_ChunkParticles",		GLSL_INT, 1 },
 	{ "u_BloomStrength",		GLSL_FLOAT, 1 },
+
+	{ "u_SkinParams",			GLSL_VEC4, 1 },
+	{ "u_Grade0",				GLSL_VEC4, 1 },
+	{ "u_Grade1",				GLSL_VEC4, 1 },
+	{ "u_Grade2",				GLSL_VEC4, 1 },
+	{ "u_Grade3",				GLSL_VEC4, 1 },
 };
 
 static void GLSL_PrintProgramInfoLog(GLuint object, qboolean developerOnly)
@@ -2699,6 +2706,7 @@ static int GLSL_LoadGPUProgramSMAA(
 
 void GLSL_LoadGPUShaders()
 {
+	PROFILE_ZONE("Load: GLSL shaders");
 #if 0
 	// vertex size = 48 bytes
 	VertexFormat bspVertexFormat = {

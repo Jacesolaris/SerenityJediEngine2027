@@ -24,6 +24,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // snd_mem.c: sound caching
 
 #include "snd_local.h"
+#include "q_profile.h"
 #include "snd_mp3.h"
 #include "snd_ambient.h"
 
@@ -988,6 +989,7 @@ static qboolean S_LoadSound_Actual(sfx_t* sfx)
 //
 qboolean S_LoadSound(sfx_t* sfx)
 {
+	PROFILE_ZONE("Load: sound file");
 	gbInsideLoadSound = qtrue;	// !!!!!!!!!!!!!
 
 	const qboolean bReturn = S_LoadSound_Actual(sfx);

@@ -100,6 +100,27 @@ static void R_IssueRenderCommands(const qboolean runPerformanceCounters)
 	// clear it out, in case this is a sync and not a buffer flip
 	cmd_list->used = 0;
 
+	if (R_SmpActive())
+	{
+		// r_smp: the end of a frame goes to the render thread (R_SmpEndFrame waits for the last
+		// frame first); anything issued in the middle of a frame is drawn here, after a sync
+		if (runPerformanceCounters)
+		{
+			R_SmpWaitIdle();
+			R_PerformanceCounters();	// the last frame's: the back end is idle
+			if (!r_skipBackEnd->integer)
+			{
+				R_SmpEndFrame(cmd_list->cmds);
+			}
+			else
+			{
+				R_G2SmpNewFrame(R_SmpFrame());	// not drawn: reuse this buffer's ghoul2 memory
+			}
+			return;
+		}
+		R_SyncRenderThread();
+	}
+
 	// at this point, the back end thread is idle, so it is ok
 	// to look at it's performance counters
 	if (runPerformanceCounters) {
@@ -182,6 +203,9 @@ void R_AddDrawSurfCmd(drawSurf_t* drawSurfs, const int numDrawSurfs)
 
 	cmd->refdef = tr.refdef;
 	cmd->viewParms = tr.viewParms;
+
+	// r_smp: skin this view's ghoul2 models now, while their bone caches are as this view set them
+	R_G2SmpPrepareDrawSurfs(drawSurfs, numDrawSurfs);
 }
 
 /*
@@ -210,15 +234,17 @@ void RE_SetColor(const float* rgba)
 	cmd->color[3] = rgba[3];
 
 	// Dynamic HUD (cgame cg_dynamicHud): while cgame draws the HUD it sets r_hudAlpha below 1 and the HUD's 2D drawing
-	// fades with it (cgame sets it back to 1 straight after, so the crosshair, radar, console and menus are not touched)
+	// fades with it (cgame sets it back to 1 straight after, so the crosshair, radar, console and menus are not touched).
+	// The fade is applied per shader stage in the backend (RB_HudFadeStage), so shaders that ignore the vertex alpha fade too.
 	static cvar_t* r_hudAlpha = nullptr;
 	if (!r_hudAlpha)
 	{
 		r_hudAlpha = ri.Cvar_Get("r_hudAlpha", "1", CVAR_TEMP, "");
 	}
-	if (r_hudAlpha&& r_hudAlpha->value < 1.0f)
+	cmd->hudFade = 0.0f;
+	if (r_hudAlpha && r_hudAlpha->value < 1.0f)
 	{
-		cmd->color[3] *= r_hudAlpha->value > 0.0f ? r_hudAlpha->value : 0.0f;
+		cmd->hudFade = r_hudAlpha->value > 0.0f ? 1.0f - r_hudAlpha->value : 1.0f;
 	}
 }
 
@@ -344,7 +370,16 @@ void RE_BeginFrame(const stereoFrame_t stereoFrame) {
 	if (!tr.registered) {
 		return;
 	}
-	glState.finishCalled = qfalse;
+	if (R_SmpActive())
+	{
+		R_SmpRunCinematics();	// r_smp: video maps the last frame drew (the back end can't run cinematics)
+		R_WorldEffectsSmpCache();	// r_smp: the weather's file cache, made here instead of on the render thread
+	}
+	else
+	{
+		glState.finishCalled = qfalse;	// r_smp: RB_DrawBuffer does it (glState is the back end's)
+	}
+	R_WorldEffectsWind();	// weather wind, once a frame (mesh cloth, R_GetWindVector)
 
 	tr.frameCount++;
 	tr.frameSceneNum = 0;
@@ -408,8 +443,9 @@ void RE_BeginFrame(const stereoFrame_t stereoFrame) {
 		R_SetGammaCorrectionLUT();
 	}
 
-	// check for errors
-	if (!r_ignoreGLErrors->integer) {
+	// check for errors (r_smp: the back end checks at the end of each frame, RB_SwapBuffers -
+	// a check here would make every frame wait for the render thread)
+	if (!r_ignoreGLErrors->integer && !R_SmpActive()) {
 		R_IssuePendingRenderCommands();
 
 		const GLenum err = qglGetError();
@@ -478,10 +514,20 @@ void RE_EndFrame(int* frontEndMsec, int* backEndMsec) {
 		*frontEndMsec = tr.frontEndMsec;
 	}
 	tr.frontEndMsec = 0;
-	if (backEndMsec) {
-		*backEndMsec = backEnd.pc.msec;
+	if (R_SmpActive())
+	{
+		// the render thread is drawing this frame: report the last one (R_SmpWaitIdle took it)
+		if (backEndMsec) {
+			*backEndMsec = R_SmpLastBackEndMsec();
+		}
 	}
-	backEnd.pc.msec = 0;
+	else
+	{
+		if (backEndMsec) {
+			*backEndMsec = backEnd.pc.msec;
+		}
+		backEnd.pc.msec = 0;
+	}
 }
 
 /*
@@ -499,6 +545,7 @@ void RE_TakeVideoFrame(const int width, const int height, byte* captureBuffer, b
 		return;
 
 	cmd->commandId = RC_VIDEOFRAME;
+	R_SmpForceMainThreadFrame();	// r_smp: the capture writes the video file with the client, so this frame is drawn on the main thread
 
 	cmd->width = width;
 	cmd->height = height;

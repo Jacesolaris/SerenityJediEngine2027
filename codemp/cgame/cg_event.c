@@ -1558,6 +1558,8 @@ static void CG_G2MarkEvent(entityState_t* es)
 	case WP_BOWCASTER:
 	case WP_REPEATER:
 	case WP_Z6_ROTARY_CANNON:
+	case WP_NOGHRI_STICK:
+	case WP_TUSKEN_RIFLE:
 	case WP_TURRET:
 		if (!size)
 		{
@@ -1852,6 +1854,33 @@ static void CG_SaberBlasterEvent(const int owner_num, const int parm)
 		break;
 	}
 }
+
+// An explosion (a splash weapon's missile hit something): tell the renderer, whose mesh cloth then blows the
+// capes and robes near it outwards (renderer command meshcloth_blast). Sized roughly like each weapon's blast.
+// cg_clothExplosion scales it, 0 = off.
+static void CG_ClothBlast(const int weapon, const qboolean altFire, const vec3_t origin)
+{
+	float radius = 0.0f, strength = 0.0f;
+	switch (weapon)
+	{
+	case WP_ROCKET_LAUNCHER:	radius = 200.0f; strength = 800.0f; break;
+	case WP_THERMAL:			radius = 280.0f; strength = 1000.0f; break;
+	case WP_TRIP_MINE:
+	case WP_DET_PACK:			radius = 280.0f; strength = 1100.0f; break;
+	case WP_CONCUSSION:			if (!altFire) { radius = 200.0f; strength = 800.0f; } break;
+	case WP_REPEATER:			if (altFire) { radius = 160.0f; strength = 600.0f; } break;
+	case WP_FLECHETTE:			if (altFire) { radius = 160.0f; strength = 600.0f; } break;
+	case WP_DEMP2:				if (altFire) { radius = 200.0f; strength = 500.0f; } break;
+	default: break;
+	}
+	if (radius <= 0.0f || cg_clothExplosion.value <= 0.0f)
+	{
+		return;
+	}
+	trap->SendConsoleCommand(va("meshcloth_blast %.0f %.0f %.0f %.0f %.0f\n", origin[0], origin[1], origin[2],
+		strength * cg_clothExplosion.value, radius));
+}
+
 
 void CG_EntityEvent(centity_t* cent, vec3_t position)
 {
@@ -2986,7 +3015,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 
 				if (es->eventParm && es->eventParm < WP_NUM_WEAPONS)
 				{
-					cg.snap->ps.stats[STAT_WEAPONS] &= ~(1 << es->eventParm);
+					BG_TakeWeapon(cg.snap->ps.stats, es->eventParm);
 					weap = cg.snap->ps.weapon;
 				}
 				else if (es->eventParm)
@@ -3003,7 +3032,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 			int weapon = es->eventParm;
 			weaponInfo_t* weapon_info = NULL;
 
-			assert(weapon >= 0 && weapon < MAX_WEAPONS);
+			assert(weapon >= 0 && weapon < WP_NUM_WEAPONS);
 
 			weapon_info = &cg_weapons[weapon];
 
@@ -4423,6 +4452,10 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 				}
 			}
 			if (doit) {
+				if (!es->emplacedOwner)
+				{
+					CG_ClothBlast(es->weapon, (cent->currentState.eFlags & EF_ALT_FIRING) ? qtrue : qfalse, position);	// splash weapons blow mesh cloth
+				}
 				if (es->emplacedOwner)
 				{
 					//hack: this is an index to a custom effect to use
@@ -4470,6 +4503,10 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 			}
 			if (doit)
 			{
+				if (!es->emplacedOwner)
+				{
+					CG_ClothBlast(es->weapon, (cent->currentState.eFlags & EF_ALT_FIRING) ? qtrue : qfalse, position);	// splash weapons blow mesh cloth
+				}
 				if (es->emplacedOwner)
 				{
 					//hack: this is an index to a custom effect to use
@@ -4516,6 +4553,10 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 			}
 			if (doit)
 			{
+				if (!es->emplacedOwner)
+				{
+					CG_ClothBlast(es->weapon, (cent->currentState.eFlags & EF_ALT_FIRING) ? qtrue : qfalse, position);	// splash weapons blow mesh cloth
+				}
 				if (es->emplacedOwner)
 				{
 					//hack: this is an index to a custom effect to use

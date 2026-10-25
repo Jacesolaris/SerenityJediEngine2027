@@ -544,6 +544,11 @@ struct gentity_s
 	int weaponfiredelaytime;
 	int corpsePushUntil; // ragdoll: until when this body can be pushed (G_PushCorpse)
 	int corpseTouchTime; // ragdoll: walking into it pushes again after this (G_CorpseTouchPush)
+	// SP NPC fields used by the SP Jedi AI port (DH 2026-10-24)
+	int Dash_NPC_Count;
+	qboolean saberPower;
+	int saberPowerTime;
+	int next_kick_time;
 };
 
 #define DAMAGEREDIRECT_HEAD		1
@@ -1068,6 +1073,7 @@ struct gclient_s
 
 	int stunDamage; // Amount of stun damage to be given
 	int stunTime; // When to apply stun damage
+	int stunEventTime; // the last EV_STUNNED sent for this client (force lightning sends at most one a second)
 
 	signed char forced_forwardmove;
 	signed char forced_rightmove;
@@ -1501,6 +1507,9 @@ void G_CreateFakeClient(int entNum, gclient_t** cl);
 void G_CleanAllFakeClients(void);
 
 void G_SetAnim(gentity_t* ent, usercmd_t* ucmd, int setAnimParts, int anim, int setAnimFlags, int blendTime);
+// Ragnos' scepter for the Possessed Tavion bot (ai_main.c): EF2_SCEPTER and her attack timers, at each spawn
+void G_ScepterSpawnCheck(gentity_t* ent);
+void G_ScepterShutdown(void); // G_ShutdownGame: frees the scepter model
 gentity_t* G_PickTarget(char* targetname);
 void GlobalUse(gentity_t* self, gentity_t* other, gentity_t* activator);
 void G_UseTargets2(gentity_t* ent, gentity_t* activator, const char* string);
@@ -1701,6 +1710,7 @@ void InitBodyQue(void);
 void ClientSpawn(gentity_t* ent);
 void player_die(gentity_t* self, const gentity_t* inflictor, gentity_t* attacker, const int damage, const int means_of_death);
 qboolean G_CorpsePushable(const gentity_t* ent);
+qboolean G_SaberBlasterKyleModel(const gentity_t* ent);	// g_cmds.c: SS_BLASTER is Kyle Katarn's style only
 void G_PushCorpse(gentity_t* ent, const vec3_t push);
 void G_CorpseTouchPush(gentity_t* corpse);
 void G_ForceThrowCorpses(gentity_t* self, qboolean pull, int radius, float arc);

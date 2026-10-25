@@ -791,9 +791,30 @@ bool CLine::Update(void)
 
 		VectorAdd(mOrigin1, mOrgOffset, mOrigin1); //add the offset to the bolt point
 
-		VectorMA(mOrigin1, mVel[0], ax[0], mOrigin2);
-		VectorMA(mOrigin2, mVel[1], ax[1], mOrigin2);
-		VectorMA(mOrigin2, mVel[2], ax[2], mOrigin2);
+		if (mFlags & FX_APPLY_PHYSICS)
+		{
+			// SP's traced line (the scepter beam, 2026-10-24): it runs from the bolt until it hits something, up to
+			// 2048, and plays its impact effect there. MP never had this, so the line had no length. Along ax[0], as
+			// in SP (the bolt matrices and the axis set-up are the same in both)
+			vec3_t dir, end;
+			trace_t trace;
+
+			VectorCopy(ax[0], dir);
+			VectorMA(mOrigin1, 2048.0f, dir, end);
+			theFxHelper.Trace(trace, mOrigin1, nullptr, nullptr, end, mEntNum, MASK_SHOT);
+			VectorCopy(trace.endpos, mOrigin2);
+
+			if (mImpactFxID > 0 && trace.fraction < 1.0f)
+			{
+				theFxScheduler.PlayEffect(mImpactFxID, trace.endpos, trace.plane.normal);
+			}
+		}
+		else
+		{
+			VectorMA(mOrigin1, mVel[0], ax[0], mOrigin2);
+			VectorMA(mOrigin2, mVel[1], ax[1], mOrigin2);
+			VectorMA(mOrigin2, mVel[2], ax[2], mOrigin2);
+		}
 	}
 
 	if (!Cull())

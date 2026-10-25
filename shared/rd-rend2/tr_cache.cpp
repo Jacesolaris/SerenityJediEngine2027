@@ -12,6 +12,17 @@ namespace
 		Q_strncpyz(out, path, outSize);
 		Q_strlwr(out);
 	}
+
+	// FNV-1a of an already normalized (lower case) path, for the asset index
+	uint32_t PathHash(const char* path)
+	{
+		uint32_t h = 2166136261u;
+		for (; *path; path++)
+		{
+			h = (h ^ static_cast<unsigned char>(*path)) * 16777619u;
+		}
+		return h;
+	}
 }
 
 // This differs significantly from Raven's own caching code.
@@ -164,6 +175,11 @@ void CModelCacheManager::DeleteAll(void)
 
 	FileCache().swap(files);
 	AssetCache().swap(assets);
+	assetIndex.clear();
+	for (auto& memo : handleMemo)
+	{
+		memo.name[0] = '\0';
+	}
 }
 
 /*
@@ -204,22 +220,52 @@ void CModelCacheManager::DumpNonPure(void)
 
 CModelCacheManager::AssetCache::iterator CModelCacheManager::FindAsset(const char* path)
 {
-	return std::find_if(
-		std::begin(assets), std::end(assets), [path](const Asset& asset)
+	// a hash lookup (assets only grow, or are all cleared): this used to be a linear search with strcmp over
+	// every loaded model, about 1 us a call - with many NPCs, several ms a frame
+	size_t best = SIZE_MAX;
+	const auto range = assetIndex.equal_range(PathHash(path));
+	for (auto it = range.first; it != range.second; ++it)
+	{
+		if (it->second < best && strcmp(path, assets[it->second].path) == 0)
 		{
-			return strcmp(path, asset.path) == 0;
-		});
+			best = it->second;	// the first entry for a path, as the old linear search found
+		}
+	}
+	if (best == SIZE_MAX)
+		return std::end(assets);
+	return std::begin(assets) + static_cast<std::ptrdiff_t>(best);
 }
 
 qhandle_t CModelCacheManager::GetModelHandle(const char* fileName)
 {
+	// memo of exact name strings (as MovieDuels has it): a repeated lookup skips the lower-casing and the index
+	uint32_t exact = 2166136261u;
+	size_t len = 0;
+	while (fileName[len] && len < MAX_QPATH)
+	{
+		exact = (exact ^ static_cast<unsigned char>(fileName[len])) * 16777619u;
+		len++;
+	}
+	HandleMemo* memo = nullptr;
+	if (len > 0 && len < MAX_QPATH)
+	{
+		memo = &handleMemo[exact & (HANDLE_MEMO_SIZE - 1)];
+		if (memo->name[0] && strcmp(memo->name, fileName) == 0)
+			return memo->handle;
+	}
+
 	char path[MAX_QPATH];
 	NormalizePath(path, fileName, sizeof(path));
 
 	const auto it = FindAsset(path);
 	if (it == std::end(assets))
-		return -1; // asset not found
+		return -1; // asset not found (not remembered: it may be loaded next)
 
+	if (memo)
+	{
+		Q_strncpyz(memo->name, fileName, sizeof(memo->name));
+		memo->handle = it->handle;
+	}
 	return it->handle;
 }
 
@@ -231,6 +277,7 @@ void CModelCacheManager::InsertModelHandle(const char* fileName, qhandle_t handl
 	Asset asset{};
 	asset.handle = handle;
 	Q_strncpyz(asset.path, path, sizeof(asset.path));
+	assetIndex.emplace(PathHash(path), assets.size());
 	assets.emplace_back(asset);
 }
 

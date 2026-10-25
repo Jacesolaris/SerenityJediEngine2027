@@ -807,7 +807,7 @@ static void RB_SurfaceElectricity()
 	// see if we should grow from start to end
 	if (e->renderfx & RF_GROW)
 	{
-		perc = 1.0f - (e->endTime - tr.refdef.time) / e->angles[1]/*duration*/;
+		perc = 1.0f - (e->endTime - RB_SMP(refdef, tr.refdef).time) / e->angles[1]/*duration*/;
 
 		if (perc > 1.0f)
 		{
@@ -973,7 +973,7 @@ static uint32_t ComputeFinalVertexColor(const byte* colors) {
 	uint32_t r = g = b = 0;
 	for (k = 0; k < MAXLIGHTMAPS; k++) {
 		if (tess.shader->styles[k] < LS_UNUSED && tess.shader->styles[k] < MAX_LIGHT_STYLES) { // stay inside styleColors[] (a bad style stops, as an unused one does)
-			byte* style_color = styleColors[tess.shader->styles[k]];
+			const byte* style_color = RB_SMP(styleColors, styleColors)[tess.shader->styles[k]];
 
 			r += static_cast<uint32_t>(*colors++) * static_cast<uint32_t>(*style_color++);
 			g += static_cast<uint32_t>(*colors++) * static_cast<uint32_t>(*style_color++);
@@ -2113,7 +2113,7 @@ static bool RB_TestZFlare(srfFlare_t* surf) {
 
 	if (R_FlarePbosReady())
 	{
-		const int frame = tr.frameCount;
+		const int frame = RB_SMP(frameCount, tr.frameCount);
 		if (surf->pboQueued == frame + 1)
 		{
 			// already tested in an earlier view of this frame (portal / mirror): same answer

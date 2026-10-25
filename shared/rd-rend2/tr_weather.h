@@ -39,12 +39,13 @@ enum weatherType_t
 // Per-chunk particle buffer sizes. Must be >= every particleCount the weather commands set (sand and fog use
 // 1600): drawing more than the buffer holds read past its end, and on AMD those particles all came back at
 // the same spot, stacking into a big white blob (ffa4 fog weather). RB_SurfaceWeather also clamps.
+// Sand and fog: 3 x 1600, for repeated weather lines (R_WeatherStackedCount, up to 3 times the count).
 const int maxWeatherTypeParticles[NUM_WEATHER_TYPES] = {
 	30000,
 	10000,
 	5000,
-	1600,
-	1600
+	4800,
+	4800
 };
 
 struct weatherObject_t
@@ -122,6 +123,7 @@ void R_AddWeatherBrush(uint8_t numPlanes, vec4_t* planes);
 void R_LoadWeatherImages();
 void R_ShutdownWeatherSystem();
 void RB_SurfaceWeather(srfWeather_t* surf);
+void R_UpdateWeatherWind();	// RE_BeginFrame: the global wind, once a frame
 bool R_IsOutside(vec3_t pos);
 bool R_IsShaking(vec3_t pos);
 float R_IsOutsideCausingPain(vec3_t pos);

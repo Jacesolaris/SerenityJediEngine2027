@@ -24,6 +24,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // sv_game.c -- interface to the game dll
 
 #include "../server/exe_headers.h"
+#include "q_profile.h"
 
 #include "../qcommon/cm_local.h"
 
@@ -917,6 +918,7 @@ Init the game subsystem for a new map
 */
 void SV_InitGameProgs()
 {
+	PROFILE_ZONE("Load: game init (entities, nav, scripts)");
 	game_import_t import{};
 	int i = 0;
 

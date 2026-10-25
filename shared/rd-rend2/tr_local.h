@@ -293,6 +293,9 @@ extern cvar_t* r_meshCloth;
 extern cvar_t* r_meshClothGravity;
 extern cvar_t* r_meshClothDrag;
 extern cvar_t* r_meshClothIter;
+extern cvar_t* r_meshClothLodNear;		// cloth beyond this distance: half the passes, updated at most every 32 ms (0 = off)
+extern cvar_t* r_meshClothLodFar;		// cloth beyond this distance: not simulated (0 = off)
+extern cvar_t* r_threads;				// renderer job workers: -1 automatic, 0 off (draws exactly as before), N workers
 extern cvar_t* r_meshClothShape;
 extern cvar_t* r_meshClothInertia;
 extern cvar_t* r_meshClothMaxAccel;
@@ -442,6 +445,7 @@ typedef struct dlight_s {
 
 	vec3_t	transformed;		// origin in local coordinate system
 	int		additive;			// texture detail is lost tho when the lightmap is dark
+	int		noShadow;			// r_dlightShadowMax: this light casts no shadow this frame (R_GatherFrameViews)
 } dlight_t;
 
 // a trRefEntity_t has all the information passed in by
@@ -987,6 +991,7 @@ typedef struct {
 	vec4_t normalScale;
 	vec4_t specularScale;
 	float  parallaxBias;
+	vec4_t skinParams;	// "skin r g b wrap": light wraps past the shadow edge per colour (wrap 0 = off)
 
 	surfaceSprite_t* ss;
 } shaderStage_t;
@@ -1548,6 +1553,12 @@ typedef enum
 	UNIFORM_CHUNK_PARTICLES,
 
 	UNIFORM_BLOOMSTRENGTH,
+
+	UNIFORM_SKINPARAMS,
+	UNIFORM_GRADE0,
+	UNIFORM_GRADE1,
+	UNIFORM_GRADE2,
+	UNIFORM_GRADE3,
 
 	UNIFORM_COUNT
 } uniform_t;
@@ -2510,6 +2521,7 @@ typedef struct {
 
 	qboolean	projection2D;	// if qtrue, drawstretchpic doesn't need to change modes
 	float		color2D[4];
+	float		hudFade2D;	// dynamic HUD fade of the current 2D colour (see RB_HudFadeStage)
 	trRefEntity_t	entity2D;		// currentEntity will point at this when doing 2D rendering
 	trRefEntity_t	entityFlare;	// currentEntity will point at this when doing flare rendering
 
@@ -3608,6 +3620,11 @@ public:
 
 void R_AddGhoulSurfaces(trRefEntity_t* ent, int entityNum);
 void RB_SurfaceGhoul(CRenderableSurface* surf);
+
+// threaded mesh cloth (tr_ghoul2.cpp), around each draw list
+void RB_G2PrepareDrawSurfs(drawSurf_t* drawSurfs, int numDrawSurfs);
+void RB_G2FinishDrawSurfs();
+void R_ShutdownRenderJobs();
 void RB_TransformBones(const trRefEntity_t* ent, const trRefdef_t* refdef, int currentFrameNum, gpuFrame_t* frame);
 int RB_GetBoneUboOffset(CRenderableSurface* surf);
 int RB_GetPreviousBoneUboOffset(CRenderableSurface* surf);
@@ -3668,6 +3685,7 @@ typedef struct renderCommandList_s {
 typedef struct setColorCommand_s {
 	int		commandId;
 	float	color[4];
+	float	hudFade;	// dynamic HUD: how far this 2D colour is faded (0 = not at all, 1 = gone)
 } setColorCommand_t;
 
 typedef struct drawBufferCommand_s {

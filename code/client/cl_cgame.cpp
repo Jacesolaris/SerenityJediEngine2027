@@ -26,6 +26,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // leave this as first line for PCH reasons...
 //
 #include "../server/exe_headers.h"
+#include "q_profile.h"
 #include "../ui/ui_shared.h"
 
 #include "client.h"
@@ -1451,6 +1452,7 @@ extern qboolean Sys_LowPhysicalMemory();
 
 void CL_InitCGame()
 {
+	PROFILE_ZONE("Load: cgame init (models, sounds, shaders)");
 	//int		t1, t2;
 
 	//t1 = Sys_Milliseconds();
@@ -1481,6 +1483,7 @@ void CL_InitCGame()
 	//Com_Printf( "CL_InitCGame: %5.2f seconds\n", (t2-t1)/1000.0 );
 	// have the renderer touch all its images, so they are present
 	// on the card even if the driver does deferred loading
+	FS_LookupCacheEnd();	// the map load is over (RE_EndRegistration writes files)
 	re.EndRegistration();
 
 	// make sure everything is paged in

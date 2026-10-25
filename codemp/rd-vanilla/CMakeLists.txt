@@ -57,6 +57,7 @@ set(MPVanillaRendererFiles
 	"${MPDir}/rd-vanilla/tr_model.cpp"
 	"${SharedDir}/rd-vanilla/tr_quicksprite.cpp"
 	"${SharedDir}/rd-vanilla/tr_quicksprite.h"
+	"${SharedDir}/rd-vanilla/tr_smp.cpp"
 	"${MPDir}/rd-vanilla/tr_scene.cpp"
 	"${MPDir}/rd-vanilla/tr_shade.cpp"
 	"${MPDir}/rd-vanilla/tr_shade_calc.cpp"

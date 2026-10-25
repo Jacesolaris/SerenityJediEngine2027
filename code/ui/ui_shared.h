@@ -493,6 +493,7 @@ void Menus_Activate(menuDef_t* menu);
 menuDef_t* Menus_ActivateByName(const char* p);
 qboolean Menus_AnyFullScreenVisible();
 void Menus_CloseAll();
+void Menus_HideAllForMapLoad();
 int Menu_Count();
 itemDef_t* Menu_FindItemByName(const menuDef_t* menu, const char* p);
 void Menu_ShowGroup(menuDef_t* menu, const char* itemName, qboolean showFlag);

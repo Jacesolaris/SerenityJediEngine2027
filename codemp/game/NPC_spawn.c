@@ -1117,12 +1117,12 @@ static void NPC_SetWeapons(gentity_t* ent)
 	int bestWeap = WP_NONE;
 	const int weapons = NPC_WeaponsForTeam(ent->client->playerTeam, ent->spawnflags, ent->NPC_type);
 
-	ent->client->ps.stats[STAT_WEAPONS] = 0;
+	BG_ClearWeapons(ent->client->ps.stats);
 	for (int curWeap = WP_SABER; curWeap < WP_NUM_WEAPONS; curWeap++)
 	{
-		if (weapons & 1 << curWeap)
+		if (WP_MASK_HAS(weapons, curWeap))
 		{
-			ent->client->ps.stats[STAT_WEAPONS] |= 1 << curWeap;
+			BG_GiveWeapon(ent->client->ps.stats, curWeap);
 			RegisterItem(BG_FindItemForWeapon(curWeap)); //precache the weapon
 			//rwwFIXMEFIXME: Precache
 			ent->NPC->currentAmmo = ent->client->ps.ammo[weaponData[curWeap].ammoIndex] = 100; //FIXME: max ammo

@@ -5793,6 +5793,18 @@ void Menu_New(char* buffer)
 Menus_CloseAll
 ===============
 */
+// A map load is starting (CL_MapLoading) and the UI is shut down a moment later (CL_FlushMemory): hide every menu,
+// WITHOUT running close scripts (nothing a menu's onClose does should happen at a map start), so the screen drawn
+// before the load is the loading splash (UI_DrawConnect) and not the menu that was clicked, frozen until the UI restarts.
+void Menus_HideAllForMapLoad()
+{
+	for (int i = 0; i < menuCount; i++)
+	{
+		Menus[i].window.flags &= ~(WINDOW_HASFOCUS | WINDOW_VISIBLE);
+	}
+	openMenuCount = 0;
+}
+
 void Menus_CloseAll()
 {
 	for (int i = 0; i < menuCount; i++)

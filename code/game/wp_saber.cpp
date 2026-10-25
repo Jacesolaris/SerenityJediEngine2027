@@ -15678,6 +15678,40 @@ static void WP_SaberBlasterFire(gentity_t* ent, const qboolean charged, gentity_
 }
 
 // called from ClientThink_real before the force powers, the saber and Pmove see the buttons
+// SS_BLASTER is Kyle Katarn's style only (DH 2026-10-24): his model folders (kyle, kylejk2, kyle_jedimaster, DarkKyle, ...)
+static qboolean WP_SaberBlasterKyleModel(const gentity_t* ent)
+{
+	if (ent->playerModel < 0 || ent->playerModel >= static_cast<int>(ent->ghoul2.size()))
+	{
+		return qfalse;
+	}
+	char path[MAX_QPATH];
+	Q_strncpyz(path, ent->ghoul2[ent->playerModel].mFileName, sizeof path);
+	Q_strlwr(path);
+	return strstr(path, "kyle") ? qtrue : qfalse;
+}
+
+// any other character loses the style, however he got it (NPC file, give all, setforceall, style cycle), and
+// leaves it for Medium
+static void WP_SaberBlasterKyleOnly(gentity_t* ent)
+{
+	playerState_t* ps = &ent->client->ps;
+	if (!(ps->saberStylesKnown & 1 << SS_BLASTER) && ps->saberAnimLevel != SS_BLASTER)
+	{
+		return;
+	}
+	if (WP_SaberBlasterKyleModel(ent))
+	{
+		return;
+	}
+	ps->saberStylesKnown &= ~(1 << SS_BLASTER);
+	if (ps->saberAnimLevel == SS_BLASTER)
+	{
+		ps->saberStylesKnown |= 1 << SS_MEDIUM;
+		ps->saberAnimLevel = SS_MEDIUM;
+	}
+}
+
 void WP_SaberBlasterThink(gentity_t* ent, usercmd_t* ucmd)
 {
 	const qboolean is_Ready_to_Reload = ((ent->client->buttons & BUTTON_WALKING) && (ent->client->buttons & BUTTON_DASH)) ? qtrue : qfalse;
@@ -15687,6 +15721,7 @@ void WP_SaberBlasterThink(gentity_t* ent, usercmd_t* ucmd)
 	}
 	const int ent_num = ent->s.number;
 
+	WP_SaberBlasterKyleOnly(ent);
 	WP_SaberBlasterUpdatePistolModel(ent);
 	saberBlasterAltHeld[ent_num] = qfalse;
 

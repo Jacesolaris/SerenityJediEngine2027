@@ -23,6 +23,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "server.h"
+#include "q_profile.h"
 #include "ghoul2/G2.h"
 #include "qcommon/cm_public.h"
 #include "qcommon/MiniHeap.h"
@@ -483,6 +484,8 @@ static char sv_systemInfoBuffer[16384];
 
 void SV_SpawnServer(char* server, const qboolean killBots, const ForceReload_e eForceReload)
 {
+	PROFILE_ZONE("Load: SV_SpawnServer (whole map load)");
+	FS_LookupCacheBegin();	// the map load starts: missing files are looked for once per folder
 	int         i = 0;
 	int         checksum = 0;
 	qboolean    isBot;
@@ -783,6 +786,11 @@ void SV_SpawnServer(char* server, const qboolean killBots, const ForceReload_e e
 	}
 
 	SV_BeginAutoRecordDemos();
+
+	if (com_dedicated->integer)
+	{
+		FS_LookupCacheEnd();	// no client here to end it in CL_InitCGame
+	}
 }
 
 /*

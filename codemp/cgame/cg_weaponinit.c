@@ -480,6 +480,108 @@ void CG_RegisterWeapon(const int weapon_num)
 		cgs.effects.cloneFleshImpactEffect = trap->FX_RegisterEffect("clone/flesh_impact");
 		break;
 
+	case WP_NOGHRI_STICK: // the noghri stick (from SJE SP)
+		weaponInfo->selectSound = trap->S_RegisterSound("sound/weapons/blaster/select.wav");
+
+		weaponInfo->flashSound[0] = NULL_SOUND; // the muzzle effect plays sound/weapons/noghri/fire.mp3
+		weaponInfo->firingSound = NULL_SOUND;
+		weaponInfo->chargeSound = NULL_SOUND;
+		weaponInfo->muzzleEffect = trap->FX_RegisterEffect("noghri_stick/muzzle_flash");
+		weaponInfo->missileModel = NULL_HANDLE;
+		weaponInfo->missileSound = NULL_SOUND;
+		weaponInfo->missileDlight = 0;
+		weaponInfo->missilehit_sound = NULL_SOUND;
+		weaponInfo->missileTrailFunc = FX_NoghriShotProjectileThink;
+
+		// the alt fire is the stick swing: no shot, no flash
+		weaponInfo->altFlashSound[0] = NULL_SOUND;
+		weaponInfo->altFiringSound = NULL_SOUND;
+		weaponInfo->altChargeSound = NULL_SOUND;
+		weaponInfo->altMuzzleEffect = 0;
+		weaponInfo->altMissileModel = NULL_HANDLE;
+		weaponInfo->altMissileSound = NULL_SOUND;
+		weaponInfo->altMissileDlight = 0;
+		weaponInfo->altMissilehit_sound = NULL_SOUND;
+		weaponInfo->altMissileTrailFunc = FX_NoghriShotProjectileThink;
+
+		cgs.effects.noghriShotEffect = trap->FX_RegisterEffect("noghri_stick/shot");
+		cgs.effects.noghriImpactEffect = trap->FX_RegisterEffect("noghri_stick/flesh_impact");
+		trap->FX_RegisterEffect("noghri_stick/gas_cloud");
+		trap->S_RegisterSound("sound/weapons/noghri/impact.mp3");
+		for (int i = 1; i <= 4; i++)
+		{
+			trap->S_RegisterSound(va("sound/weapons/tusken_staff/stickhit%d.mp3", i));
+		}
+		break;
+
+	case WP_TUSKEN_RIFLE: // the tusken rifle (from SJE SP)
+		weaponInfo->selectSound = trap->S_RegisterSound("sound/weapons/disruptor/select.wav");
+
+		// the primary fire is the shot
+		weaponInfo->flashSound[0] = trap->S_RegisterSound("sound/weapons/tusken_rifle/fire_gun.wav");
+		weaponInfo->firingSound = NULL_SOUND;
+		weaponInfo->chargeSound = NULL_SOUND;
+		weaponInfo->muzzleEffect = trap->FX_RegisterEffect("tusken/muzzle_flash");
+		weaponInfo->missileModel = NULL_HANDLE;
+		weaponInfo->missileSound = NULL_SOUND;
+		weaponInfo->missileDlight = 50; // as SP
+		VectorSet(weaponInfo->missileDlightColor, 1.0f, 0.75f, 0.25f);
+		weaponInfo->missilehit_sound = NULL_SOUND;
+		weaponInfo->missileTrailFunc = FX_TuskenShotProjectileThink;
+
+		// the alt fire bashes with the butt: a whoosh, no shot
+		for (int i = 0; i < 4; i++)
+		{
+			weaponInfo->altFlashSound[i] = trap->S_RegisterSound(va("sound/weapons/tusken_staff/swing%d.mp3", i + 1));
+		}
+		weaponInfo->altFiringSound = NULL_SOUND;
+		weaponInfo->altChargeSound = NULL_SOUND;
+		weaponInfo->altMuzzleEffect = 0;
+		weaponInfo->altMissileModel = NULL_HANDLE;
+		weaponInfo->altMissileSound = NULL_SOUND;
+		weaponInfo->altMissileDlight = 0;
+		weaponInfo->altMissilehit_sound = NULL_SOUND;
+		weaponInfo->altMissileTrailFunc = FX_TuskenShotProjectileThink;
+
+		cgs.effects.tuskenShotEffect = trap->FX_RegisterEffect("tusken/shot");
+		cgs.effects.tuskenHitEffect = trap->FX_RegisterEffect("tusken/hit");
+		cgs.effects.tuskenHitWallEffect = trap->FX_RegisterEffect("tusken/hitwall");
+		for (int i = 1; i <= 4; i++)
+		{
+			trap->S_RegisterSound(va("sound/weapons/tusken_staff/stickhit%d.mp3", i));
+		}
+		break;
+
+	case WP_TUSKEN_STAFF: // the tusken staff (from SJE SP): swings only
+		weaponInfo->selectSound = trap->S_RegisterSound("sound/weapons/melee/select.wav");
+
+		for (int i = 0; i < 4; i++)
+		{
+			weaponInfo->flashSound[i] = trap->S_RegisterSound(va("sound/weapons/tusken_staff/swing%d.mp3", i + 1));
+			weaponInfo->altFlashSound[i] = weaponInfo->flashSound[i];
+		}
+		weaponInfo->firingSound = NULL_SOUND;
+		weaponInfo->chargeSound = NULL_SOUND;
+		weaponInfo->muzzleEffect = 0;
+		weaponInfo->missileModel = NULL_HANDLE;
+		weaponInfo->missileSound = NULL_SOUND;
+		weaponInfo->missileDlight = 0;
+		weaponInfo->missilehit_sound = NULL_SOUND;
+		weaponInfo->missileTrailFunc = 0;
+		weaponInfo->altFiringSound = NULL_SOUND;
+		weaponInfo->altChargeSound = NULL_SOUND;
+		weaponInfo->altMuzzleEffect = 0;
+		weaponInfo->altMissileModel = NULL_HANDLE;
+		weaponInfo->altMissileSound = NULL_SOUND;
+		weaponInfo->altMissileDlight = 0;
+		weaponInfo->altMissilehit_sound = NULL_SOUND;
+		weaponInfo->altMissileTrailFunc = 0;
+		for (int i = 1; i <= 4; i++)
+		{
+			trap->S_RegisterSound(va("sound/weapons/tusken_staff/stickhit%d.mp3", i));
+		}
+		break;
+
 	case WP_EMPLACED_GUN:
 		weaponInfo->selectSound = trap->S_RegisterSound("sound/weapons/blaster/select.wav");
 

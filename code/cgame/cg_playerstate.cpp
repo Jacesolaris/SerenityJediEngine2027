@@ -265,7 +265,7 @@ static void CG_CheckLocalSounds(const playerState_t* ps, const playerState_t* op
 	// hit changes
 	if (ps->persistant[PERS_HITS] > ops->persistant[PERS_HITS])
 	{
-		//cgi_S_StartLocalSound(cgs.media.hit_sound, CHAN_LOCAL_SOUND);
+		//cgi_S_StartLocalSound(cgs.media.hitsound, CHAN_LOCAL_SOUND);
 	}
 	else if (ps->persistant[PERS_HITS] < ops->persistant[PERS_HITS])
 	{
@@ -291,11 +291,10 @@ static void CG_CheckLocalSounds(const playerState_t* ps, const playerState_t* op
 		{
 			cgi_S_StartLocalSound(cgs.media.humiliationSound, CHAN_ANNOUNCER);
 		}
-		/*if (ps->persistant[PERS_IMPRESSIVE_COUNT] != ops->persistant[PERS_IMPRESSIVE_COUNT])
+		if (ps->persistant[PERS_IMPRESSIVE_COUNT] != ops->persistant[PERS_IMPRESSIVE_COUNT])
 		{
 			cgi_S_StartLocalSound(cgs.media.impressiveSound, CHAN_ANNOUNCER);
-			reward = qtrue;
-		}*/
+		}
 		if (ps->persistant[PERS_PLAYEREVENTS] != ops->persistant[PERS_PLAYEREVENTS])
 		{
 			if ((ps->persistant[PERS_PLAYEREVENTS] & PLAYEREVENT_DENIEDREWARD) != (ops->persistant[PERS_PLAYEREVENTS] &

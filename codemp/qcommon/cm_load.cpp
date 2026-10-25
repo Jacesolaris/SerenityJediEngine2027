@@ -23,6 +23,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 // cmodel.c -- model loading
 #include "cm_local.h"
+#include "q_profile.h"
 #include "qcommon/qfiles.h"
 
 #ifdef BSPC
@@ -808,6 +809,7 @@ static void CM_LoadMap_Actual(const char* name, const qboolean clientload, int* 
 //
 void CM_LoadMap(const char* name, const qboolean clientload, int* checksum)
 {
+	PROFILE_ZONE("Load: collision map (CM_LoadMap)");
 	gbUsingCachedMapDataRightNow = qtrue; // !!!!!!!!!!!!!!!!!!
 
 	CM_LoadMap_Actual(name, clientload, checksum, cmg);

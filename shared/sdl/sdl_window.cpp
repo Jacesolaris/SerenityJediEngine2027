@@ -20,6 +20,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <SDL.h>
+#include "q_profile.h"
 #include <SDL_syswm.h>
 #include "qcommon/qcommon.h"
 #include "rd-common/tr_types.h"
@@ -170,6 +171,7 @@ void GLimp_Minimize()
 
 void WIN_Present(const window_t* window)
 {
+	PROFILE_ZONE("Present (swap buffers)");
 	if (window->api == GRAPHICS_API_OPENGL)
 	{
 		SDL_GL_SwapWindow(screen);

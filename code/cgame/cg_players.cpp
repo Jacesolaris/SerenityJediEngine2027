@@ -5189,6 +5189,32 @@ static void CG_ForceDeadlySightBlur(const vec3_t org)
 	ex->refEntity.customShader = cgi_R_RegisterShader("gfx/effects/forcePush");
 }
 
+// A force push / pull just started (its refraction powerup came on): tell the renderer, whose mesh cloth then blows
+// the capes and robes in front of the user (renderer command meshcloth_push). cg_clothForcePush scales it, 0 = off.
+static void CG_ClothForcePush(const centity_t* cent)
+{
+	static qboolean wasOn[MAX_GENTITIES];
+	const int num = cent->currentState.number;
+	if (num < 0 || num >= MAX_GENTITIES || !cent->gent || !cent->gent->client)
+	{
+		return;
+	}
+	const playerState_t* ps = &cent->gent->client->ps;
+	const qboolean on = (ps->powerups[PW_FORCE_PUSH] > cg.time || ps->powerups[PW_FORCE_PUSH_RHAND] > cg.time) ? qtrue : qfalse;
+	const qboolean started = on && !wasOn[num] ? qtrue : qfalse;
+	wasOn[num] = on;
+	if (!started || cg_clothForcePush.value <= 0.0f)
+	{
+		return;
+	}
+	vec3_t fwd;
+	AngleVectors(ps->viewangles, fwd, nullptr, nullptr);
+	const vec_t* org = cent->gent->client->renderInfo.eyePoint;
+	const float strength = (ps->forcePowersActive & 1 << FP_PULL ? -500.0f : 800.0f) * cg_clothForcePush.value;
+	cgi_SendConsoleCommand(va("meshcloth_push %.0f %.0f %.0f %.3f %.3f %.3f %.0f 400\n",
+		org[0], org[1], org[2], fwd[0], fwd[1], fwd[2], strength));
+}
+
 static void CG_ForcePushBodyBlur(const centity_t* cent, const vec3_t origin, vec3_t temp_angles)
 {
 	vec3_t fx_org;
@@ -16659,6 +16685,7 @@ void CG_Player(centity_t* cent)
 				cgi_R_AddLightToScene(org, radius, 1.0f, 1.0f, 1.0f);
 			}
 		}
+		CG_ClothForcePush(cent);
 		//"refraction" effect -rww
 		if (cent->gent->client->ps.powerups[PW_FORCE_PUSH] > cg.time)
 		{

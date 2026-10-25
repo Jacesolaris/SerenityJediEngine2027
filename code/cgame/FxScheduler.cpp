@@ -24,6 +24,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #if !defined(FX_SCHEDULER_H_INC)
 #include "FxScheduler.h"
+#include "q_profile.h"
 #endif
 
 #if !defined(GHOUL2_SHARED_H_INC)
@@ -1350,6 +1351,7 @@ void CFxScheduler::AddScheduledEffects(const bool portal)
 	}
 	else
 	{
+		PROFILE_ZONE("FX: looped effects");
 		AddLoopedEffects();
 	}
 

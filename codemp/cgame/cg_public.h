@@ -723,6 +723,10 @@ typedef struct cgameImport_s {
 	struct {
 		float			(*R_Font_StrLenPixels)					(const char* text, int iFontIndex, float scale);
 	} ext;
+
+	// BOTH_WIND (bg_pmove.c PM_TorsoAgainstWind): qtrue when a strong gust blows at pos and pos is outside,
+	// dir = where it blows to. qfalse when the renderer has no wind. Kept last: the engine fills it in.
+	qboolean(*WE_GetWindGust)							(vec3_t pos, vec3_t dir);
 } cgameImport_t;
 
 typedef struct cgameExport_s {

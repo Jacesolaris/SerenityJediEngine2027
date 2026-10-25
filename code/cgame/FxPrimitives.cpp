@@ -24,6 +24,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #if !defined(FX_SCHEDULER_H_INC)
 #include "FxScheduler.h"
+#include "q_profile.h"
 #endif
 
 #include "cg_media.h"
@@ -275,22 +276,26 @@ bool CParticle::UpdateOrigin()
 		else
 		{
 			// if this returns solid, we need to do a trace
+			PROFILE_ZONE("FX: particle contents check");
 			solid = !!(CG_PointContents(new_origin, ENTITYNUM_WORLD) & (MASK_SHOT | CONTENTS_WATER));
 		}
 
 		if (solid)
 		{
 			trace_t trace;
+			PROFILE_ZONE("FX: particle collision trace");
 
 			if (mFlags & FX_USE_BBOX)
 			{
 				if (mFlags & FX_GHOUL2_TRACE)
 				{
+					PROFILE_ZONE("FX: trace bbox ghoul2");
 					theFxHelper.G2Trace(&trace, mOrigin1, mMin, mMax, new_origin, ENTITYNUM_NONE,
 						MASK_SHOT | CONTENTS_WATER);
 				}
 				else
 				{
+					PROFILE_ZONE("FX: trace bbox");
 					theFxHelper.Trace(&trace, mOrigin1, mMin, mMax, new_origin, -1, MASK_SHOT | CONTENTS_WATER);
 				}
 			}
@@ -298,11 +303,13 @@ bool CParticle::UpdateOrigin()
 			{
 				if (mFlags & FX_GHOUL2_TRACE)
 				{
+					PROFILE_ZONE("FX: trace point ghoul2");
 					theFxHelper.G2Trace(&trace, mOrigin1, nullptr, nullptr, new_origin, ENTITYNUM_NONE,
 						MASK_SHOT | CONTENTS_WATER);
 				}
 				else
 				{
+					PROFILE_ZONE("FX: trace point");
 					theFxHelper.Trace(&trace, mOrigin1, nullptr, nullptr, new_origin, -1, MASK_SHOT | CONTENTS_WATER);
 				}
 			}

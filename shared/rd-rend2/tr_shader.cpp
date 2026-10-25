@@ -20,6 +20,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
 #include "tr_local.h"
+#include "q_profile.h"
 
 // tr_shader.c -- this file deals with the parsing and definition of shaders
 
@@ -2026,6 +2027,23 @@ static qboolean ParseStage(shaderStage_t* stage, const char** text)
 		{
 			stage->cloth = qtrue;
 
+			continue;
+		}
+		//
+		// skin <r> <g> <b> <wrap>: cheap subsurface look for skin. Light wraps past the shadow
+		// edge, scaled per colour channel (red most), and diffuse uses a softened normal (lightall).
+		else if (Q_stricmp(token, "skin") == 0)
+		{
+			for (int k = 0; k < 4; k++)
+			{
+				token = COM_ParseExt(text, qfalse);
+				if (!token[0])
+				{
+					ri.Printf(PRINT_WARNING, "WARNING: 'skin' needs r g b wrap in shader '%s'\n", shader.name);
+					break;
+				}
+				stage->skinParams[k] = atof(token);
+			}
 			continue;
 		}
 		// surfaceSprites <type> ...
@@ -4177,11 +4195,11 @@ static shader_t* FinishShader(void)
 			}
 
 			if (index < MAX_SHADER_STAGES)
-				memmove(pStage, pStage + 1, sizeof(*pStage) * (index - stage));
+				memmove(pStage, pStage + 1, sizeof(*pStage) * (static_cast<unsigned long long>(index) - stage));
 			else
 			{
 				if (stage + 1 < MAX_SHADER_STAGES)
-					memmove(pStage, pStage + 1, sizeof(*pStage) * (index - stage - 1));
+					memmove(pStage, pStage + 1, sizeof(*pStage) * (static_cast<unsigned long long>(index) - stage - 1));
 
 				Com_Memset(&stages[index - 1], 0, sizeof(*stages));
 			}
@@ -4486,24 +4504,36 @@ most world construction surfaces.
 */
 shader_t* R_FindShader(const char* name, const int* lightmapIndexes, const byte* styles, const qboolean mipRawImage)
 {
+	PROFILE_ZONE("Load: shader find/parse");
+
+	if (!name || !name[0])
+	{
+		return tr.defaultShader;
+	}
+
+	PROFILE_TEXT(name);
+
 	char		strippedName[MAX_QPATH];
-	int			hash = 0, flags = 0;
+	int			hash = 0;
+	int			flags = 0;
 	const char* shaderText = nullptr;
 	image_t* image = nullptr;
 	shader_t* sh = nullptr;
 
-	if (name[0] == 0) {
-		return tr.defaultShader;
-	}
-
 	// use (fullbright) vertex lighting if the bsp file doesn't have
 	// lightmaps
-	if (lightmapIndexes[0] >= 0 && lightmapIndexes[0] >= tr.numLightmaps) {
+	if (lightmapIndexes[0] >= 0 && lightmapIndexes[0] >= tr.numLightmaps)
+	{
 		lightmapIndexes = lightmapsVertex;
 	}
-	else if (lightmapIndexes[0] < LIGHTMAP_2D) {
-		// negative lightmap indexes cause stray pointers (think tr.lightmaps[lightmapIndex])
-		ri.Printf(PRINT_WARNING, "WARNING: shader '%s' has invalid lightmap index of %d\n", name, lightmapIndexes[0]);
+	else if (lightmapIndexes[0] < LIGHTMAP_2D)
+	{
+		// negative lightmap indexes cause stray pointers
+		// (think tr.lightmaps[lightmapIndex])
+		ri.Printf(PRINT_WARNING,
+			"WARNING: shader '%s' has invalid lightmap index of %d\n",
+			name, lightmapIndexes[0]);
+
 		lightmapIndexes = lightmapsVertex;
 	}
 
@@ -4516,12 +4546,15 @@ shader_t* R_FindShader(const char* name, const int* lightmapIndexes, const byte*
 	//
 	// see if the shader is already loaded
 	//
-	for (sh = hashTable[hash]; sh; sh = sh->next) {
-		// NOTE: if there was no shader or image available with the name strippedName
-		// then a default shader is created with lightmapIndex == LIGHTMAP_NONE, so we
-		// have to check all default shaders otherwise for every call to R_FindShader
-		// with that same strippedName a new default shader is created.
-		if (IsShader(sh, strippedName, lightmapIndexes, styles)) {
+	for (sh = hashTable[hash]; sh; sh = sh->next)
+	{
+		// NOTE: if there was no shader or image available with the name
+		// strippedName then a default shader is created with
+		// lightmapIndex == LIGHTMAP_NONE, so we have to check all default
+		// shaders otherwise for every call to R_FindShader with that same
+		// strippedName a new default shader is created.
+		if (IsShader(sh, strippedName, lightmapIndexes, styles))
+		{
 			// match found
 			return sh;
 		}
@@ -4532,7 +4565,9 @@ shader_t* R_FindShader(const char* name, const int* lightmapIndexes, const byte*
 	Q_strncpyz(shader.name, strippedName, sizeof(shader.name));
 	Com_Memcpy(shader.lightmapIndex, lightmapIndexes, sizeof(shader.lightmapIndex));
 	Com_Memcpy(shader.styles, styles, sizeof(shader.styles));
-	switch (lightmapIndexes[0]) {
+
+	switch (lightmapIndexes[0])
+	{
 	case LIGHTMAP_2D:
 	case LIGHTMAP_WHITEIMAGE:
 	{
@@ -4552,24 +4587,33 @@ shader_t* R_FindShader(const char* name, const int* lightmapIndexes, const byte*
 #ifdef REND2_SP
 	COM_BeginParseSession();
 #endif
+
 	shaderText = FindShaderInShaderText(strippedName);
-	if (shaderText) {
+
+	if (shaderText)
+	{
 		// enable this when building a pak file to get a global list
 		// of all explicit shaders
-		if (r_printShaders->integer) {
+		if (r_printShaders->integer)
+		{
 			ri.Printf(PRINT_ALL, "*SHADER* %s\n", name);
 		}
 
-		if (!ParseShader(&shaderText)) {
+		if (!ParseShader(&shaderText))
+		{
 			// had errors, so use default shader
 			shader.defaultShader = qtrue;
 		}
+
 		sh = FinishShader();
+
 #ifdef REND2_SP
 		COM_EndParseSession();
 #endif
+
 		return sh;
 	}
+
 #ifdef REND2_SP
 	COM_EndParseSession();
 #endif
@@ -4582,14 +4626,18 @@ shader_t* R_FindShader(const char* name, const int* lightmapIndexes, const byte*
 	flags = IMGFLAG_NONE;
 
 	if (shader.isHDRLit == qtrue)
+	{
 		flags |= IMGFLAG_SRGB;
+	}
 
 	if (mipRawImage)
 	{
 		flags |= IMGFLAG_MIPMAP | IMGFLAG_PICMIP;
 
 		if (r_genNormalMaps->integer)
+		{
 			flags |= IMGFLAG_GENNORMALMAP;
+		}
 	}
 	else
 	{
@@ -4597,8 +4645,13 @@ shader_t* R_FindShader(const char* name, const int* lightmapIndexes, const byte*
 	}
 
 	image = R_FindImageFile(strippedName, IMGTYPE_COLORALPHA, flags);
-	if (!image) {
-		ri.Printf(PRINT_DEVELOPER, "Couldn't find image file for shader %s\n", name);
+
+	if (!image)
+	{
+		ri.Printf(PRINT_DEVELOPER,
+			"Couldn't find image file for shader %s\n",
+			name);
+
 		shader.defaultShader = qtrue;
 		return FinishShader();
 	}
@@ -4606,14 +4659,16 @@ shader_t* R_FindShader(const char* name, const int* lightmapIndexes, const byte*
 	//
 	// create the default shading commands
 	//
-	if (shader.lightmapIndex[0] == LIGHTMAP_NONE) {
+	if (shader.lightmapIndex[0] == LIGHTMAP_NONE)
+	{
 		// dynamic colors at vertexes
 		stages[0].bundle[0].image[0] = image;
 		stages[0].active = qtrue;
 		stages[0].rgbGen = CGEN_LIGHTING_DIFFUSE;
 		stages[0].stateBits = GLS_DEFAULT;
 	}
-	else if (shader.lightmapIndex[0] == LIGHTMAP_BY_VERTEX) {
+	else if (shader.lightmapIndex[0] == LIGHTMAP_BY_VERTEX)
+	{
 		// explicit colors at vertexes
 		stages[0].bundle[0].image[0] = image;
 		stages[0].active = qtrue;
@@ -4621,17 +4676,20 @@ shader_t* R_FindShader(const char* name, const int* lightmapIndexes, const byte*
 		stages[0].alphaGen = AGEN_SKIP;
 		stages[0].stateBits = GLS_DEFAULT;
 	}
-	else if (shader.lightmapIndex[0] == LIGHTMAP_2D) {
+	else if (shader.lightmapIndex[0] == LIGHTMAP_2D)
+	{
 		// GUI elements
 		stages[0].bundle[0].image[0] = image;
 		stages[0].active = qtrue;
 		stages[0].rgbGen = CGEN_VERTEX;
 		stages[0].alphaGen = AGEN_VERTEX;
-		stages[0].stateBits = GLS_DEPTHTEST_DISABLE |
+		stages[0].stateBits =
+			GLS_DEPTHTEST_DISABLE |
 			GLS_SRCBLEND_SRC_ALPHA |
 			GLS_DSTBLEND_ONE_MINUS_SRC_ALPHA;
 	}
-	else if (shader.lightmapIndex[0] == LIGHTMAP_WHITEIMAGE) {
+	else if (shader.lightmapIndex[0] == LIGHTMAP_WHITEIMAGE)
+	{
 		// fullbright level
 		stages[0].bundle[0].image[0] = tr.whiteImage;
 		stages[0].active = qtrue;
@@ -4643,15 +4701,21 @@ shader_t* R_FindShader(const char* name, const int* lightmapIndexes, const byte*
 		stages[1].rgbGen = CGEN_IDENTITY;
 		stages[1].stateBits |= GLS_SRCBLEND_DST_COLOR | GLS_DSTBLEND_ZERO;
 	}
-	else {
+	else
+	{
 		// two pass lightmap
-		stages[0].bundle[0].image[0] = tr.lightmaps[shader.lightmapIndex[0]];
+		stages[0].bundle[0].image[0] =
+			tr.lightmaps[shader.lightmapIndex[0]];
 		stages[0].bundle[0].isLightmap = qtrue;
+
 		if (r_deluxeMapping->integer && tr.worldDeluxeMapping)
-			stages[0].bundle[TB_DELUXEMAP].image[0] = tr.deluxemaps[shader.lightmapIndex[0]];
+		{
+			stages[0].bundle[TB_DELUXEMAP].image[0] =
+				tr.deluxemaps[shader.lightmapIndex[0]];
+		}
+
 		stages[0].active = qtrue;
 		stages[0].rgbGen = CGEN_IDENTITY;	// lightmaps are scaled on creation
-		// for identitylight
 		stages[0].stateBits = GLS_DEFAULT;
 
 		stages[1].bundle[0].image[0] = image;
@@ -4995,6 +5059,7 @@ static char* s_shaderBuffers[MAX_SHADER_FILES] = { nullptr };
 
 static void ScanAndLoadShaderFiles(void)
 {
+	PROFILE_ZONE("Load: scan .shader files");
 	char** shaderFiles = nullptr;
 	const char* p = nullptr;
 	int         numShaderFiles = 0;

@@ -332,6 +332,18 @@ qboolean InVisrange(const gentity_t* ent)
 	return qtrue;
 }
 
+// Force Sight level 3 lets an NPC sense enemies through walls; everyone else needs a clear line of sight (DH 2026-10-24)
+qboolean NPC_SeesThroughWalls(const gentity_t* self)
+{
+	if (!self || !self->client)
+	{
+		return qfalse;
+	}
+	return (self->client->ps.forcePowersKnown & (1 << FP_SEE)) && self->client->ps.forcePowerLevel[FP_SEE] >= 3
+		? qtrue
+		: qfalse;
+}
+
 /*
 NPC_CheckVisibility
 */
@@ -370,7 +382,7 @@ visibility_t NPC_CheckVisibility(const gentity_t* ent, const int flags)
 	//Meaning has to be a direct line of site
 	if (flags & CHECK_360)
 	{
-		if (!CanSee(ent))
+		if (!NPC_SeesThroughWalls(NPC) && !CanSee(ent))
 		{
 			return VIS_PVS;
 		}

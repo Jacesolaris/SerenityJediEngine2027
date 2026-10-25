@@ -146,8 +146,11 @@ void CFxScheduler::AddLoopedEffects()
 			data->mEntityNum = entNum;
 			CGVM_GetLerpOrigin();
 
+			// vol and rad were missing here, so the portal flag went in as the volume and the relative flag as
+			// the portal flag: every repeat of a looping bolted effect only drew in the sky portal, and only its
+			// first play showed (the Possessed Tavion scepter beam, 2026-10-24)
 			PlayEffect(mLoopedEffectArray[i].mId, data->mPoint, nullptr, mLoopedEffectArray[i].mBoltInfo,
-				mLoopedEffectArray[i].mGhoul2, -1, mLoopedEffectArray[i].mPortalEffect, false,
+				mLoopedEffectArray[i].mGhoul2, -1, -1, -1, mLoopedEffectArray[i].mPortalEffect, false,
 				mLoopedEffectArray[i].mIsRelative); //very important to send FALSE to not recursively add me!
 			mLoopedEffectArray[i].mNextTime = theFxHelper.mTime + mEffectTemplates[mLoopedEffectArray[i].mId].
 				mRepeatDelay;
@@ -1451,13 +1454,20 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate* fx, const vec3_t origin, mat
 	case Line:
 		//---------
 
-		FX_AddLine(org, org2,
+	{
+		CLine* line = FX_AddLine(org, org2,
 			fx->mSizeStart.GetVal(), fx->mSizeEnd.GetVal(), fx->mSizeParm.GetVal(),
 			fx->mAlphaStart.GetVal(), fx->mAlphaEnd.GetVal(), fx->mAlphaParm.GetVal(),
 			sRGB, eRGB, fx->mRGBParm.GetVal(),
 			fx->mLife.GetVal(), fx->mMediaHandles.GetHandle(), flags, fx->mMatImpactFX, fxParm,
 			ghoul2, entNum, modelNum, boltNum);
+		if (line)
+		{
+			// a traced line's impact effect (SP's, CLine::Update with FX_APPLY_PHYSICS)
+			line->SetImpactFxID(fx->mImpactFxHandles.GetHandle());
+		}
 		break;
+	}
 
 		//---------
 	case Tail:

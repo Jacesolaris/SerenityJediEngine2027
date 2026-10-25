@@ -2099,10 +2099,11 @@ static void EWebDisattach(const gentity_t* owner, gentity_t* eweb)
 	if (owner->health > 0)
 	{
 		owner->client->ps.stats[STAT_WEAPONS] = eweb->genericValue11;
+		owner->client->ps.stats[STAT_WEAPONS2] = eweb->genericValue12;
 	}
 	else
 	{
-		owner->client->ps.stats[STAT_WEAPONS] = 0;
+		BG_ClearWeapons(owner->client->ps.stats);
 	}
 	eweb->think = G_FreeEntity;
 	eweb->nextthink = level.time;
@@ -2493,7 +2494,7 @@ static void EWebThink(gentity_t* self)
 				owner->client->ps.viewangles[YAW] = yaw;
 			}
 			owner->client->ps.weapon = WP_EMPLACED_GUN;
-			owner->client->ps.stats[STAT_WEAPONS] = WP_EMPLACED_GUN;
+			BG_SetOnlyWeapon(owner->client->ps.stats, WP_EMPLACED_GUN);
 
 			if (self->genericValue8 < level.time)
 			{
@@ -2661,6 +2662,7 @@ static gentity_t* EWeb_Create(gentity_t* spawner)
 
 	//store off the owner's current weapons, we will be forcing him to use the "emplaced" weapon
 	ent->genericValue11 = spawner->client->ps.stats[STAT_WEAPONS];
+	ent->genericValue12 = spawner->client->ps.stats[STAT_WEAPONS2];
 
 	//start the "unfolding" anim
 	EWeb_SetBoneAnim(ent, 4, 20);
@@ -2953,15 +2955,15 @@ static int Pickup_Ammo(const gentity_t* ent, const gentity_t* other)
 			Add_Ammo(other, AMMO_POWERCELL, 100);
 			Add_Ammo(other, AMMO_METAL_BOLTS, 100);
 			Add_Ammo(other, AMMO_ROCKETS, 5);
-			if (other->client->ps.stats[STAT_WEAPONS] & 1 << WP_DET_PACK)
+			if (BG_HasWeapon(other->client->ps.stats, WP_DET_PACK))
 			{
 				Add_Ammo(other, AMMO_DETPACK, 2);
 			}
-			if (other->client->ps.stats[STAT_WEAPONS] & 1 << WP_THERMAL)
+			if (BG_HasWeapon(other->client->ps.stats, WP_THERMAL))
 			{
 				Add_Ammo(other, AMMO_THERMAL, 2);
 			}
-			if (other->client->ps.stats[STAT_WEAPONS] & 1 << WP_TRIP_MINE)
+			if (BG_HasWeapon(other->client->ps.stats, WP_TRIP_MINE))
 			{
 				Add_Ammo(other, AMMO_TRIPMINE, 2);
 			}
@@ -3023,7 +3025,7 @@ static int Pickup_Weapon(const gentity_t* ent, gentity_t* other)
 	}
 
 	// add the weapon
-	other->client->ps.stats[STAT_WEAPONS] |= 1 << ent->item->giTag;
+	BG_GiveWeapon(other->client->ps.stats, ent->item->giTag);
 
 	G_AddEvent(other, EV_WEAPINVCHANGE, other->client->ps.stats[STAT_WEAPONS]);
 
@@ -3457,7 +3459,7 @@ void Touch_Item(gentity_t* ent, gentity_t* other, trace_t* trace)
 
 			if (other && other->client && other->client->ps.ammo[weaponData[weap_for_ammo].ammoIndex] > 0)
 			{
-				other->client->ps.stats[STAT_WEAPONS] |= 1 << weap_for_ammo;
+				BG_GiveWeapon(other->client->ps.stats, weap_for_ammo);
 				G_AddEvent(other, EV_WEAPINVCHANGE, other->client->ps.stats[STAT_WEAPONS]);
 			}
 		}
@@ -3993,6 +3995,9 @@ void clear_registered_items(void)
 	RegisterItem(BG_FindItemForWeapon(WP_CONCUSSION));
 	RegisterItem(BG_FindItemForWeapon(WP_DROIDEKA));
 	RegisterItem(BG_FindItemForWeapon(WP_Z6_ROTARY_CANNON));
+	RegisterItem(BG_FindItemForWeapon(WP_NOGHRI_STICK));
+	RegisterItem(BG_FindItemForWeapon(WP_TUSKEN_RIFLE));
+	RegisterItem(BG_FindItemForWeapon(WP_TUSKEN_STAFF));
 
 	if (level.gametype == GT_SIEGE)
 	{//kind of cheesy, maybe check if siege class with disp's is gonna be on this map too
@@ -4079,9 +4084,9 @@ static qboolean G_AmmoDisabled(const int wDisable, const gitem_t* item)
 		return qfalse;
 	case AMMO_BLASTER:
 	{
-		if (!(wDisable & 1 << WP_BRYAR_PISTOL)
-			|| !(wDisable & 1 << WP_BLASTER)
-			|| !(wDisable & 1 << WP_BRYAR_OLD))
+		if (!(WP_MASK_HAS(wDisable, WP_BRYAR_PISTOL))
+			|| !(WP_MASK_HAS(wDisable, WP_BLASTER))
+			|| !(WP_MASK_HAS(wDisable, WP_BRYAR_OLD)))
 		{
 			return qfalse;
 		}
@@ -4089,9 +4094,9 @@ static qboolean G_AmmoDisabled(const int wDisable, const gitem_t* item)
 	}
 	case AMMO_POWERCELL:
 	{
-		if (!(wDisable & 1 << WP_DISRUPTOR)
-			|| !(wDisable & 1 << WP_BOWCASTER)
-			|| !(wDisable & 1 << WP_DEMP2))
+		if (!(WP_MASK_HAS(wDisable, WP_DISRUPTOR))
+			|| !(WP_MASK_HAS(wDisable, WP_BOWCASTER))
+			|| !(WP_MASK_HAS(wDisable, WP_DEMP2)))
 		{
 			return qfalse;
 		}
@@ -4099,9 +4104,9 @@ static qboolean G_AmmoDisabled(const int wDisable, const gitem_t* item)
 	}
 	case AMMO_METAL_BOLTS:
 	{
-		if (!(wDisable & 1 << WP_REPEATER)
-			|| !(wDisable & 1 << WP_Z6_ROTARY_CANNON)
-			|| !(wDisable & 1 << WP_FLECHETTE))
+		if (!(WP_MASK_HAS(wDisable, WP_REPEATER))
+			|| !(WP_MASK_HAS(wDisable, WP_Z6_ROTARY_CANNON))
+			|| !(WP_MASK_HAS(wDisable, WP_FLECHETTE)))
 		{
 			return qfalse;
 		}
@@ -4109,7 +4114,7 @@ static qboolean G_AmmoDisabled(const int wDisable, const gitem_t* item)
 	}
 	case AMMO_ROCKETS:
 	{
-		if (!(wDisable & 1 << WP_ROCKET_LAUNCHER))
+		if (!(WP_MASK_HAS(wDisable, WP_ROCKET_LAUNCHER)))
 		{
 			return qfalse;
 		}
@@ -4117,7 +4122,7 @@ static qboolean G_AmmoDisabled(const int wDisable, const gitem_t* item)
 	}
 	case AMMO_THERMAL:
 	{
-		if (!(wDisable & 1 << WP_THERMAL))
+		if (!(WP_MASK_HAS(wDisable, WP_THERMAL)))
 		{
 			return qfalse;
 		}
@@ -4125,7 +4130,7 @@ static qboolean G_AmmoDisabled(const int wDisable, const gitem_t* item)
 	}
 	case AMMO_TRIPMINE:
 	{
-		if (!(wDisable & 1 << WP_THERMAL))
+		if (!(WP_MASK_HAS(wDisable, WP_THERMAL)))
 		{
 			return qfalse;
 		}
@@ -4133,7 +4138,7 @@ static qboolean G_AmmoDisabled(const int wDisable, const gitem_t* item)
 	}
 	case AMMO_DETPACK:
 	{
-		if (!(wDisable & 1 << WP_THERMAL))
+		if (!(WP_MASK_HAS(wDisable, WP_THERMAL)))
 		{
 			return qfalse;
 		}
@@ -4173,7 +4178,7 @@ void G_SpawnItem(gentity_t* ent, gitem_t* item)
 
 	if (item->giType == IT_WEAPON &&
 		w_disable &&
-		w_disable & 1 << item->giTag)
+		WP_MASK_HAS(w_disable, item->giTag))
 	{
 		G_FreeEntity(ent);
 		return;

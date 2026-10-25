@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // tr_models.c -- model loading and caching
 
 #include "tr_local.h"
+#include "q_profile.h"
 #include "tr_cache.h"
 #include <qcommon/sstring.h>
 #include <qcommon/matcomp.h>
@@ -292,6 +293,7 @@ asked for again.
 */
 qhandle_t RE_RegisterModel(const char* name)
 {
+	PROFILE_ZONE("Load: model register");
 	model_t* mod = nullptr;
 	qhandle_t	hModel = 0;
 	qboolean	orgNameFailed = qfalse;
@@ -1072,6 +1074,7 @@ R_LoadMD3
 */
 static qboolean R_LoadMD3(model_t* mod, int lod, void* buffer, const char* modName)
 {
+	PROFILE_ZONE("Load: model .md3");
 	int             i = 0, j = 0;
 
 	md3Header_t* md3Model = nullptr;
@@ -1838,6 +1841,7 @@ static qboolean R_LoadMDR(model_t* mod, void* buffer, int filesize, const char* 
 ** RE_BeginRegistration
 */
 void RE_BeginRegistration(glconfig_t* glconfigOut) {
+	PROFILE_ZONE("Load: renderer begin registration");
 	R_Init();
 
 	*glconfigOut = glConfig;

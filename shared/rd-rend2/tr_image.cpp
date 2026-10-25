@@ -21,6 +21,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 // tr_image.c
 #include "tr_local.h"
+#include "q_profile.h"
+#include "q_jobs.h"
+#include <vector>
 #include "glext.h"
 #include "tr_smaa.h"
 
@@ -422,113 +425,134 @@ static void YCoCgAtoRGBA(const byte* in, byte* out, int width, int height)
 	}
 }
 
+// Runs fn( firstRow, endRow ) over the rows of an image, on the render job
+// workers when r_threads allows (R_RenderJobPool() is nullptr when it is 0).
+// Each row must be independent. Small images just run here.
+template <class F>
+static void R_ImageRows(const int width, const int height, const F& fn)
+{
+	qjobs::Pool* pool = R_RenderJobPool();
+	const int minRows = MAX(1, 32768 / MAX(width, 1));	// ~32k pixels per job at least
+	if (pool && height > minRows)
+	{
+		pool->ParallelFor(height, minRows, [&fn](const int begin, const int end) { fn(begin, end); });
+	}
+	else
+	{
+		fn(0, height);
+	}
+}
+
 // uses a sobel filter to change a texture to a normal map
 static void RGBAtoNormal(const byte* in, byte* out, int width, int height, qboolean clampToEdge)
 {
-	int x = 0, y = 0, max = 0;
+	PROFILE_ZONE("Load: normal map from diffuse");
 
 	// convert to heightmap, storing in alpha
 	// same as converting to Y in YCoCg
-	max = 1;
-	for (y = 0; y < height; y++)
+	// (rows run on the job workers: each row keeps its own max, combined below)
+	std::vector<byte> rowMax(height, 0);
+	R_ImageRows(width, height, [&](const int y0, const int y1)
 	{
-		const byte* inbyte = in + y * width * 4;
-		byte* outbyte = out + y * width * 4 + 3;
-
-		for (x = 0; x < width; x++)
+		for (int y = y0; y < y1; y++)
 		{
-			byte result = (inbyte[0] >> 2) + (inbyte[1] >> 1) + (inbyte[2] >> 2);
-			result = result * result / 255; // Make linear
-			*outbyte = result;
-			max = MAX(max, *outbyte);
-			outbyte += 4;
-			inbyte += 4;
+			const byte* inbyte = in + y * width * 4;
+			byte* outbyte = out + y * width * 4 + 3;
+			byte m = 0;
+
+			for (int x = 0; x < width; x++)
+			{
+				byte result = (inbyte[0] >> 2) + (inbyte[1] >> 1) + (inbyte[2] >> 2);
+				result = result * result / 255; // Make linear
+				*outbyte = result;
+				m = MAX(m, result);
+				outbyte += 4;
+				inbyte += 4;
+			}
+			rowMax[y] = m;
 		}
+	});
+
+	int max = 1;
+	for (int y = 0; y < height; y++)
+	{
+		max = MAX(max, (int)rowMax[y]);
 	}
 
 	// level out heights
 	if (max < 255)
 	{
-		for (y = 0; y < height; y++)
+		const byte add = (byte)(255 - max);
+		R_ImageRows(width, height, [&](const int y0, const int y1)
 		{
-			byte* outbyte = out + y * width * 4 + 3;
-
-			for (x = 0; x < width; x++)
+			for (int y = y0; y < y1; y++)
 			{
-				*outbyte = *outbyte + (255 - max);
-				outbyte += 4;
+				byte* outbyte = out + y * width * 4 + 3;
+
+				for (int x = 0; x < width; x++)
+				{
+					*outbyte = *outbyte + add;
+					outbyte += 4;
+				}
 			}
-		}
+		});
 	}
 
 	// now run sobel filter over height values to generate X and Y
 	// then normalize
-	for (y = 0; y < height; y++)
+	// Reads only the height (alpha) bytes and writes only RGB, so rows are
+	// independent. Neighbour rows/columns wrap or clamp exactly as before, but
+	// are worked out once per row/column instead of per sample.
+	R_ImageRows(width, height, [&](const int y0, const int y1)
 	{
-		byte* outbyte = out + y * width * 4;
-
-		for (x = 0; x < width; x++)
+		for (int y = y0; y < y1; y++)
 		{
-			// 0 1 2
-			// 3 4 5
-			// 6 7 8
+			const int ym = clampToEdge ? MAX(y - 1, 0) : (y - 1 + height) % height;
+			const int yp = clampToEdge ? MIN(y + 1, height - 1) : (y + 1) % height;
+			const byte* r0 = out + ym * width * 4 + 3;	// heights of the row above
+			const byte* r1 = out + y * width * 4 + 3;
+			const byte* r2 = out + yp * width * 4 + 3;	// and below
+			byte* outbyte = out + y * width * 4;
 
-			byte s[9]{};
-			int x2 = 0, y2 = 0, i = 0;
-			vec3_t normal{};
-
-			i = 0;
-			for (y2 = -1; y2 <= 1; y2++)
+			for (int x = 0; x < width; x++)
 			{
-				int src_y = y + y2;
-
-				if (clampToEdge)
+				// 0 1 2
+				// 3 4 5
+				// 6 7 8
+				int xm = (x - 1) * 4, xp = (x + 1) * 4;
+				const int xc = x * 4;
+				if (x == 0 || x == width - 1)	// edges only: wrap or clamp the neighbours
 				{
-					src_y = CLAMP(src_y, 0, height - 1);
+					xm = (clampToEdge ? MAX(x - 1, 0) : (x - 1 + width) % width) * 4;
+					xp = (clampToEdge ? MIN(x + 1, width - 1) : (x + 1) % width) * 4;
 				}
-				else
+				const int s0 = r0[xm], s1 = r0[xc], s2 = r0[xp];
+				const int s3 = r1[xm], s4 = r1[xc], s5 = r1[xp];
+				const int s6 = r2[xm], s7 = r2[xc], s8 = r2[xp];
+				vec3_t normal;
+
+				normal[0] = s0 - s2
+					+ 2 * s3 - 2 * s5
+					+ s6 - s8;
+
+				normal[1] = s0 + 2 * s1 + s2
+
+					- s6 - 2 * s7 - s8;
+
+				normal[2] = s4 * 4;
+
+				if (!VectorNormalize2(normal, normal))
 				{
-					src_y = (src_y + height) % height;
+					VectorSet(normal, 0, 0, 1);
 				}
 
-				for (x2 = -1; x2 <= 1; x2++)
-				{
-					int src_x = x + x2;
-
-					if (clampToEdge)
-					{
-						src_x = CLAMP(src_x, 0, width - 1);
-					}
-					else
-					{
-						src_x = (src_x + width) % width;
-					}
-
-					s[i++] = *(out + (src_y * width + src_x) * 4 + 3);
-				}
+				*outbyte++ = FloatToOffsetByte(normal[0]);
+				*outbyte++ = FloatToOffsetByte(normal[1]);
+				*outbyte++ = FloatToOffsetByte(normal[2]);
+				outbyte++;
 			}
-
-			normal[0] = s[0] - s[2]
-				+ 2 * s[3] - 2 * s[5]
-				+ s[6] - s[8];
-
-			normal[1] = s[0] + 2 * s[1] + s[2]
-
-				- s[6] - 2 * s[7] - s[8];
-
-			normal[2] = s[4] * 4;
-
-			if (!VectorNormalize2(normal, normal))
-			{
-				VectorSet(normal, 0, 0, 1);
-			}
-
-			*outbyte++ = FloatToOffsetByte(normal[0]);
-			*outbyte++ = FloatToOffsetByte(normal[1]);
-			*outbyte++ = FloatToOffsetByte(normal[2]);
-			outbyte++;
 		}
-	}
+	});
 }
 
 #define COPYSAMPLE(a,b) *(unsigned int *)(a) = *(unsigned int *)(b)
@@ -2312,6 +2336,7 @@ This is the only way any 2d image_t are created
 ================
 */
 image_t* R_CreateImage(const char* name, byte* pic, int width, int height, imgType_t type, int flags, int internalFormat) {
+	PROFILE_ZONE("Load: image create (upload + mipmaps)");
 	image_t* image = nullptr;
 	qboolean	isLightmap = qfalse;
 	long		hash = 0;
@@ -2721,6 +2746,7 @@ static image_t* R_GetLoadedImage(const char* name, int flags) {
 
 void R_LoadPackedMaterialImage(shaderStage_t* stage, const char* packedImageName, int flags)
 {
+	PROFILE_ZONE("Load: packed material image");
 	char	packedName[MAX_QPATH];
 	int		packedWidth = 0, packedHeight = 0;
 	byte* packedPic = nullptr;
@@ -2890,20 +2916,22 @@ static void R_CreateNormalMap(const char* name, byte* pic, int width, int height
 
 #if 1
 		// Brighten up the original image to work with the normal map
-		RGBAtoYCoCgA(pic, pic, width, height);
-		for (y = 0; y < height; y++)
+		// (per pixel, so a row at a time on the render job workers - same result as one pass)
+		R_ImageRows(width, height, [&](const int y0, const int y1)
 		{
-			byte* picbyte = pic + y * width * 4;
-			byte* normbyte = normalPic + y * width * 4;
-			for (x = 0; x < width; x++)
+			for (int row = y0; row < y1; row++)
 			{
-				int div = MAX(normbyte[2] - 127, 16);
-				picbyte[0] = CLAMP(picbyte[0] * 128 / div, 0, 255);
-				picbyte += 4;
-				normbyte += 4;
+				byte* picbyte = pic + row * width * 4;
+				const byte* normbyte = normalPic + row * width * 4;
+				RGBAtoYCoCgA(picbyte, picbyte, width, 1);
+				for (int col = 0; col < width; col++)
+				{
+					int div = MAX(normbyte[col * 4 + 2] - 127, 16);
+					picbyte[col * 4] = CLAMP(picbyte[col * 4] * 128 / div, 0, 255);
+				}
+				YCoCgAtoRGBA(picbyte, picbyte, width, 1);
 			}
-		}
-		YCoCgAtoRGBA(pic, pic, width, height);
+		});
 #else
 		// Blur original image's luma to work with the normal map
 		{
@@ -2975,6 +3003,7 @@ Returns NULL if it fails, not a default image.
 */
 image_t* R_FindImageFile(const char* name, imgType_t type, int flags)
 {
+	PROFILE_ZONE("Load: image (find + load)");
 	image_t* image = nullptr;
 	int		width = 0, height = 0;
 	byte* pic = nullptr;

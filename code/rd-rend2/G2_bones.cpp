@@ -794,7 +794,8 @@ qboolean G2_Set_Bone_Anim_Index(
 	if (setFrame != -1.0f)
 	{
 		const float frameOffset = setFrame - static_cast<float>(startFrame);
-		blist[index].startTime = currentTime - static_cast<int>((frameOffset * 50.0f) / animSpeed);
+		// start time rounded to the nearest ms (was truncated: every re-set of a playing anim nudged it by up to 1 ms, which at high frame rates added up)
+		blist[index].startTime = currentTime - static_cast<int>(floorf((frameOffset * 50.0f) / animSpeed + 0.5f));
 	}
 	else
 	{
@@ -879,7 +880,8 @@ qboolean G2_Set_Bone_Anim(const CGhoul2Info* ghlInfo, boneInfo_v& blist, const c
 		// start up the animation:)
 		if (setFrame != -1)
 		{
-			blist[index].startTime = (currentTime - (((setFrame - (float)startFrame) * 50.0) / animSpeed));
+			// start time rounded to the nearest ms (was truncated: every re-set of a playing anim nudged it by up to 1 ms, which at high frame rates added up)
+			blist[index].startTime = currentTime - static_cast<int>(floor((setFrame - (float)startFrame) * 50.0 / animSpeed + 0.5));
 		}
 		else
 		{

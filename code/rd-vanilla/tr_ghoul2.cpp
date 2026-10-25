@@ -21,6 +21,13 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "../server/exe_headers.h"
+#include "q_profile.h"
+#include "q_jobs.h"
+#include <algorithm>
+#include <memory>
+#include <functional>
+#include <unordered_map>
+#include <vector>
 
 #include "../client/vmachine.h"
 
@@ -655,17 +662,103 @@ public:
 	{}
 };
 
-constexpr auto MAX_RENDER_SURFACES = 2048;
-static CRenderableSurface RSStorage[MAX_RENDER_SURFACES];
-static unsigned int NextRS = 0;
+// Ghoul2 surfaces queued for drawing this frame, reset by RB_SwapBuffers (R_ResetGhoul2RenderSurfaces).
+// This used to be a ring of 2048 that was never reset: a frame with more ghoul2 surfaces than that
+// (big battles, plus shadow surfaces) wrapped round and overwrote surfaces still queued, so models
+// were drawn with other surfaces' meshes and bones. Now more blocks are added as needed; a block,
+// once made, is kept and reused every frame, and pointers stay valid all frame.
+constexpr int RENDER_SURFACE_BLOCK = 2048;
+constexpr int MAX_RENDER_SURFACE_BLOCKS = 128;	// 262144 surfaces at most; past that it wraps as before
+static std::vector<std::unique_ptr<CRenderableSurface[]>> RSBlocksFrames[SMP_FRAMES];	// r_smp: one set per frame buffer
+static int NextRSFrames[SMP_FRAMES] = {};
+static int s_rsFrame = 0;		// the frame buffer the front end is filling (always 0 without r_smp)
 
 static CRenderableSurface* AllocRS()
 {
-	CRenderableSurface* ret = &RSStorage[NextRS];
+	auto& RSBlocks = RSBlocksFrames[s_rsFrame];
+	int& NextRS = NextRSFrames[s_rsFrame];
+	if (NextRS >= RENDER_SURFACE_BLOCK * MAX_RENDER_SURFACE_BLOCKS)
+	{
+		NextRS = 0;
+	}
+	const int block = NextRS / RENDER_SURFACE_BLOCK;
+	if (block >= static_cast<int>(RSBlocks.size()))
+	{
+		RSBlocks.emplace_back(new CRenderableSurface[RENDER_SURFACE_BLOCK]);
+	}
+	CRenderableSurface* ret = &RSBlocks[block][NextRS % RENDER_SURFACE_BLOCK];
 	ret->Init();
 	NextRS++;
-	NextRS %= MAX_RENDER_SURFACES;
 	return ret;
+}
+
+// called by RB_SwapBuffers: every surface queued this frame has been drawn
+void R_ResetGhoul2RenderSurfaces()
+{
+	NextRSFrames[s_rsFrame] = 0;
+}
+
+// r_smp: memory that lives as long as one frame buffer (skinned vertices, gore copies). Blocks are
+// kept and reused; pointers stay valid until the same frame buffer is filled again.
+struct smpArena_t
+{
+	std::vector<std::unique_ptr<float[]>> blocks;
+	std::vector<size_t> sizes;
+	size_t block = 0;	// block being filled
+	size_t used = 0;	// floats used in it
+};
+static smpArena_t s_smpArena[SMP_FRAMES];
+static constexpr size_t SMP_ARENA_BLOCK = 256 * 1024;	// floats (1 MB)
+
+static float* R_G2SmpAlloc(const size_t count)
+{
+	smpArena_t& a = s_smpArena[s_rsFrame];
+	while (a.block < a.blocks.size() && a.used + count > a.sizes[a.block])
+	{
+		a.block++;
+		a.used = 0;
+	}
+	if (a.block >= a.blocks.size())
+	{
+		const size_t size = (std::max)(SMP_ARENA_BLOCK, count);
+		a.blocks.emplace_back(new float[size]);
+		a.sizes.push_back(size);
+		a.block = a.blocks.size() - 1;
+		a.used = 0;
+	}
+	float* p = a.blocks[a.block].get() + a.used;
+	a.used += count;
+	return p;
+}
+
+// r_smp: the front end moves to frame buffer 'frame' (the back end has finished with it)
+void R_G2SmpNewFrame(const int frame)
+{
+	s_rsFrame = frame;
+	NextRSFrames[frame] = 0;
+	s_smpArena[frame].block = 0;
+	s_smpArena[frame].used = 0;
+}
+
+// r_smp: a gore piece's vertex data belongs to the game, which may free it while the render thread
+// draws the frame - and the base surface writes its skinned vertices into it. Give the frame its own
+// copy. Layout (RB_SurfaceGhoul): numVerts, numTris, numVerts vertex indexes, xyz[4][n], normal[4][n],
+// st[2][n], indexes[3][numTris] - all 4 byte values.
+static float* R_G2SmpGoreCopy(float* tex)
+{
+	if (!tex || !R_SmpActive())
+	{
+		return tex;
+	}
+	const auto header = reinterpret_cast<const int*>(tex);
+	if (header[0] <= 0 || header[1] <= 0 || header[0] > SHADER_MAX_VERTEXES || header[1] > SHADER_MAX_INDEXES)
+	{
+		return tex;	// not what RB_SurfaceGhoul expects either
+	}
+	const size_t count = 2 + 11 * static_cast<size_t>(header[0]) + 3 * static_cast<size_t>(header[1]);
+	float* copy = R_G2SmpAlloc(count);
+	memcpy(copy, tex, count * sizeof(float));
+	return copy;
 }
 
 /*
@@ -888,7 +981,8 @@ static int G2_GetBonePoolIndex(const mdxaHeader_t* pMDXAHeader, const int iFrame
 	if (!pMDXAHeader)
 	{
 #ifdef _DEBUG
-		Com_Printf("Debug: G2_GetBonePoolIndex - pMDXAHeader was NULL\n");
+		if (!qjobs::OnWorkerThread())	// bones can be worked out on job workers: the console is main thread only
+			Com_Printf("Debug: G2_GetBonePoolIndex - pMDXAHeader was NULL\n");
 #endif
 		return 0;
 	}
@@ -902,7 +996,8 @@ static int G2_GetBonePoolIndex(const mdxaHeader_t* pMDXAHeader, const int iFrame
 	if (iFrame < 0 || iFrame >= pMDXAHeader->numFrames)
 	{
 #ifdef _DEBUG
-		Com_Printf("Debug: G2_GetBonePoolIndex - iFrame %d out of range (0..%d). Clamping.\n", iFrame, pMDXAHeader->numFrames - 1);
+		if (!qjobs::OnWorkerThread())	// bones can be worked out on job workers: the console is main thread only
+			Com_Printf("Debug: G2_GetBonePoolIndex - iFrame %d out of range (0..%d). Clamping.\n", iFrame, pMDXAHeader->numFrames - 1);
 #endif
 		if (iFrame < 0)
 		{
@@ -920,7 +1015,8 @@ static int G2_GetBonePoolIndex(const mdxaHeader_t* pMDXAHeader, const int iFrame
 	if (iBone < 0 || iBone >= pMDXAHeader->numBones)
 	{
 #ifdef _DEBUG
-		Com_Printf("Debug: G2_GetBonePoolIndex - iBone %d out of range (0..%d). Clamping.\n", iBone, pMDXAHeader->numBones - 1);
+		if (!qjobs::OnWorkerThread())	// bones can be worked out on job workers: the console is main thread only
+			Com_Printf("Debug: G2_GetBonePoolIndex - iBone %d out of range (0..%d). Clamping.\n", iBone, pMDXAHeader->numBones - 1);
 #endif
 		if (iBone < 0)
 		{
@@ -1798,7 +1894,7 @@ void G2_TransformBone(const int index, const CBoneCache& cb)
 			// this is crazy, we are gonna drive the animation to ID while we are doing post mults to compensate.
 			Multiply_3x4Matrix(&temp, &firstPass, &skel->BasePoseMat);
 			const float matrixScale = VectorLength(reinterpret_cast<float*>(&temp));
-			static mdxaBone_t toMatrix =
+			mdxaBone_t toMatrix =	// not static: bones can be evaluated on job workers (r_threads)
 			{
 				{
 					{ 1.0f, 0.0f, 0.0f, 0.0f },
@@ -2057,6 +2153,7 @@ constexpr auto GHOUL2_RAG_STARTED = 0x0010;
 // start the recursive hirearchial bone transform and lerp process for this model
 static void G2_TransformGhoulBones(boneInfo_v& rootBoneList, const mdxaBone_t& rootMatrix, CGhoul2Info& ghoul2, const int time, const bool smooth = true)
 {
+	PROFILE_ZONE("Ghoul2 bones");
 #ifdef G2_PERFORMANCE_ANALYSIS
 	G2PerformanceCounter_G2_TransformGhoulBones++;
 #endif
@@ -2533,7 +2630,7 @@ static void RenderSurfaces(CRenderSurface& RS)
 		if (r_AdvancedsurfaceSprites->integer)
 		{
 			if (r_shadows->integer == 2
-				&& !(RS.renderfx & (RF_DEPTHHACK))
+				&& !(RS.renderfx & (RF_NOSHADOW | RF_DEPTHHACK))
 				&& shader->sort == SS_OPAQUE)
 			{
 				// set the surface info to point at the where the transformed bone list is going to be for when the surface gets rendered out
@@ -2628,7 +2725,7 @@ static void RenderSurfaces(CRenderSurface& RS)
 						CRenderableSurface* newSurf2 = AllocRS();
 						*newSurf2 = *newSurf;
 						newSurf2->goreChain = nullptr;
-						newSurf2->alternateTex = tex->tex[RS.lod];
+						newSurf2->alternateTex = R_G2SmpGoreCopy(tex->tex[RS.lod]);	// r_smp: the frame's own copy
 						newSurf2->scale = 1.0f;
 						newSurf2->fade = 1.0f;
 						newSurf2->impactTime = 1.0f; // done with
@@ -2808,6 +2905,55 @@ static bool bInShadowRange(vec3_t location)
 	return dist < r_shadowRange->value;
 }
 
+// Stencil shadows (cg_shadows 2) for this character: within r_shadowRange, and (r_shadowMaxCharacters, default 16,
+// 0 = no limit) one of the characters nearest the camera. Every shadowed character costs a shadow volume per
+// surface, built on the CPU: 50 fighting NPCs spent 7.5 ms a frame on them. The limit is worked out once a view.
+static bool R_StencilShadowAllowed(const trRefEntity_t* ent)
+{
+	vec3_t org;
+	VectorCopy(ent->e.origin, org);
+	if (!bInShadowRange(org))
+	{
+		return false;
+	}
+	static cvar_t* maxChars = nullptr;
+	if (!maxChars)
+	{
+		maxChars = ri.Cvar_Get("r_shadowMaxCharacters", "16", CVAR_ARCHIVE_ND);
+	}
+	const int maxN = maxChars->integer;
+	if (maxN <= 0)
+	{
+		return true;
+	}
+	static int lastView = -1;
+	static float limitSq = 0.0f;
+	if (lastView != tr.viewCount)
+	{
+		lastView = tr.viewCount;
+		static std::vector<float> d;
+		d.clear();
+		for (int i = 0; i < tr.refdef.num_entities; i++)
+		{
+			const trRefEntity_t* e = &tr.refdef.entities[i];
+			if (e->e.reType == RT_MODEL && e->e.ghoul2 && !(e->e.renderfx & RF_THIRD_PERSON))
+			{
+				d.push_back(DistanceSquared(e->e.origin, tr.viewParms.ori.origin));
+			}
+		}
+		if (static_cast<int>(d.size()) <= maxN)
+		{
+			limitSq = 1e30f;
+		}
+		else
+		{
+			std::nth_element(d.begin(), d.begin() + (maxN - 1), d.end());
+			limitSq = d[maxN - 1];
+		}
+	}
+	return DistanceSquared(ent->e.origin, tr.viewParms.ori.origin) <= limitSq;
+}
+
 /*
 ==============
 R_AddGHOULSurfaces
@@ -2947,7 +3093,7 @@ void R_AddGhoulSurfaces(trRefEntity_t* ent)
 #else
 			CRenderSurface RS(ghoul2[i].mSurfaceRoot, ghoul2[i].mSlist, cust_shader, fogNum, personalModel, ghoul2[i].mBoneCache, ent->e.renderfx, skin, ghoul2[i].currentModel, whichLod, ghoul2[i].mBltlist);
 #endif
-			if (!personalModel && RS.renderfx & RF_SHADOW_PLANE && !bInShadowRange(ent->e.origin))
+			if (!personalModel && !R_StencilShadowAllowed(ent))
 			{
 				RS.renderfx |= RF_NOSHADOW;
 			}
@@ -3113,11 +3259,152 @@ static bool MC_HiltCapsule(const mdxmSurface_t* clothSurf, CBoneCache* bones, co
 	return true;
 }
 
+// The view cloth is prepared for: the back end's (RB_DrawSurfs), or with r_smp the front end's
+// (R_G2SmpPrepareDrawSurfs sets these to tr.refdef / tr.viewParms while it runs).
+static const trRefdef_t* s_mcRefdef = &backEnd.refdef;
+static const viewParms_t* s_mcView = &backEnd.viewParms;
+
+// MC_Blast (meshcloth_blast): is the line between an explosion and a character's cloth clear of walls?
+// A blast centre inside a wall (impact points sit on surfaces) counts as clear.
+bool R_MeshClothVisible(const float from[3], const float to[3])
+{
+	if (!tr.world)
+	{
+		return true;
+	}
+	trace_t trc;
+	ri.SV_Trace(&trc, from, nullptr, nullptr, to, ENTITYNUM_NONE, CONTENTS_SOLID, G2_NOCOLLIDE, 0);
+	return trc.startsolid || trc.fraction >= 0.99f;
+}
+
+// r_meshClothWeatherWind: the map's weather wind (wind zones, constant wind - weather files, r_we) blows
+// the cloth too, outside only. 1 = as the weather says, other values scale it, 0 = off.
+bool R_GetWindVector(vec3_t windVector, vec3_t atpoint);
+bool R_GetWindSpeed(float& windSpeed, vec3_t atpoint);
+bool R_IsOutside(vec3_t pos);
+
+bool R_IsWetWeather();
+
+// the water surface above a character standing in water: found in 12-unit steps up from its feet
+static bool MC_WaterHeight(const vec3_t origin, float* z)
+{
+	vec3_t p;
+	VectorCopy(origin, p);
+	p[2] -= 16.0f;	// near the feet (the origin is at the hips)
+	if (!(ri.CM_PointContents(p, 0) & (CONTENTS_WATER | CONTENTS_SLIME)))
+	{
+		return false;
+	}
+	for (int i = 0; i < 8; i++)
+	{
+		p[2] += 12.0f;
+		if (!(ri.CM_PointContents(p, 0) & (CONTENTS_WATER | CONTENTS_SLIME)))
+		{
+			*z = p[2] - 6.0f;
+			return true;
+		}
+	}
+	*z = p[2];
+	return true;
+}
+
+// The weather on one character's cloth (key: its bone cache, the cloth's own key), main thread:
+//  r_meshClothWeatherWind  the map's wind, outside only; fades in and out over ~0.4 s at a shelter edge
+//  r_meshClothWater        in water: heavy drag, the cloth floats up a little (strength; 0 = off)
+//  r_meshClothRain         outside in rain the cloth soaks and gets heavier, then dries (0 = off)
+static void MC_WeatherWind(const trRefEntity_t* ent, const void* key, const int timeMs, mcParams_t& prm)
+{
+	// r_meshClothFlutter: wind ripples across the cloth (tr_meshcloth.cpp Step), for any wind
+	static cvar_t* fl = nullptr;
+	if (!fl)
+	{
+		fl = ri.Cvar_Get("r_meshClothFlutter", "0.35", CVAR_ARCHIVE_ND);
+	}
+	prm.flutter = fl ? fl->value : 0.0f;
+
+	static cvar_t* cv = nullptr;
+	static cvar_t* wa = nullptr;
+	static cvar_t* ra = nullptr;
+	if (!cv)
+	{
+		cv = ri.Cvar_Get("r_meshClothWeatherWind", "1", CVAR_ARCHIVE_ND);
+		wa = ri.Cvar_Get("r_meshClothWater", "1", CVAR_ARCHIVE_ND);
+		ra = ri.Cvar_Get("r_meshClothRain", "1", CVAR_ARCHIVE_ND);
+	}
+	if (!tr.world || (s_mcRefdef->rdflags & RDF_NOWORLDMODEL))
+	{
+		return;
+	}
+	vec3_t pos;
+	VectorCopy(ent->e.origin, pos);
+	pos[2] += 32.0f;	// the body, not the floor it stands on
+	const bool outside = R_IsOutside(pos);
+
+	float wetTarget = 0.0f;
+	float waterZ = 0.0f;
+	if (wa->value > 0.0f && MC_WaterHeight(ent->e.origin, &waterZ))
+	{
+		prm.water = 1;
+		prm.waterZ = waterZ;
+		prm.waterDrag = 6.0f * wa->value;
+		wetTarget = 2.0f;
+	}
+	else if (ra->value > 0.0f && outside && R_IsWetWeather())
+	{
+		wetTarget = 1.0f;
+	}
+	float outsideF = 0.0f, wet = 0.0f;
+	MC_WeatherState(key, timeMs, outside, wetTarget, &outsideF, &wet);
+	prm.wet = ra->value > 0.0f ? wet * ra->value : 0.0f;
+
+	if (cv->value <= 0.0f || outsideF <= 0.0f)
+	{
+		return;
+	}
+	vec3_t dir;
+	float speed = 0.0f;
+	if (!R_GetWindVector(dir, pos) || !R_GetWindSpeed(speed, pos) || speed <= 0.0f)
+	{
+		return;
+	}
+	VectorMA(prm.wind, speed * cv->value * outsideF, dir, prm.wind);
+}
+
+// r_meshClothOthers (1 = on, 0 = off): the characters of this scene, listed once a frame, so the ones close
+// to a character push its cloth (tr_meshcloth.cpp MC_NearCharacters). Main thread.
+static int MC_OthersNear(const trRefEntity_t* ent, mcCapsule_t* out)
+{
+	static cvar_t* oc = nullptr;
+	if (!oc)
+	{
+		oc = ri.Cvar_Get("r_meshClothOthers", "1", CVAR_ARCHIVE_ND);
+	}
+	if (!oc->integer || !s_mcRefdef || (s_mcRefdef->rdflags & RDF_NOWORLDMODEL))
+	{
+		return 0;
+	}
+	if (!MC_CharactersListed(tr.frameCount))
+	{
+		static std::vector<float> origins;
+		origins.clear();
+		for (int i = 0; i < s_mcRefdef->num_entities; i++)
+		{
+			const trRefEntity_t* e = &s_mcRefdef->entities[i];
+			if (e->e.reType == RT_MODEL && e->e.ghoul2)
+			{
+				origins.insert(origins.end(), e->e.origin, e->e.origin + 3);
+			}
+		}
+		MC_SetCharacters(tr.frameCount, reinterpret_cast<const float(*)[3]>(origins.data()), static_cast<int>(origins.size() / 3));
+	}
+	return MC_NearCharacters(ent->e.origin, out, MC_MAX_OTHERS);
+}
+
 // the floor under a character, for its cloth: one trace per character per frame
 static void MC_FloorUnder(const trRefEntity_t* ent, const int timeMs, mcParams_t& prm)
 {
 	// no collision world (menus, character select, UI model views): no floor, never trace
-	if (!tr.world || (backEnd.refdef.rdflags & RDF_NOWORLDMODEL))
+	if (!tr.world || (s_mcRefdef->rdflags & RDF_NOWORLDMODEL))
 	{
 		prm.floor = 0;
 		return;
@@ -3160,26 +3447,102 @@ static const char* MC_ModelPath(const CBoneCache* bones, const mdxmHeader_t* mdx
 	return mdxm->name;
 }
 
-static void RB_MeshClothApply(CRenderableSurface* surf, const mdxmSurface_t* surface)
+// distance level of detail for mesh cloth (r_meshClothLodNear / r_meshClothLodFar): the
+// character's distance from this view's camera, scaled by the field of view so that
+// zooming in (scopes) counts as closer. The cloth module picks the band.
+static void MC_LodParams(const trRefEntity_t* ent, mcParams_t& prm)
 {
-	CBoneCache* bones = surf->boneCache;
-	const trRefEntity_t* ent = backEnd.currentEntity;
+	prm.lodNear = r_meshClothLodNear ? r_meshClothLodNear->value : 0.0f;
+	prm.lodFar = r_meshClothLodFar ? r_meshClothLodFar->value : 0.0f;
+	vec3_t d;
+	VectorSubtract(ent->e.origin, s_mcView->ori.origin, d);
+	float dist = VectorLength(d);
+	const float fov = s_mcView->fovX;
+	if (fov > 1.0f && fov < 179.0f)
+	{
+		dist *= tanf(DEG2RAD(fov * 0.5f));
+	}
+	prm.lodDist = dist;
+}
 
+// Mesh cloth for one surface, in two parts so the simulation can run on a job worker:
+//   RB_MeshClothPrepare  main thread: cloth state, console values, floor trace
+//   RB_MeshClothRun      any thread (one per bone cache at a time): body capsules
+//                        from the bone cache, then the simulation into xyz / normal
+struct g2ClothPrep_t
+{
+	mcRun_t run{};
+	mcParams_t prm{};
+	mcBoneLookup_t lk{};
+	vec3_t axis[3]{};
+	int time = 0;
+	mcCapsule_t others[MC_MAX_OTHERS]{};	// nearby characters (r_meshClothOthers)
+	int numOthers = 0;
+};
+
+static bool RB_MeshClothPrepare(CBoneCache* bones, const mdxmSurface_t* surface, const trRefEntity_t* ent, const int timeMs, g2ClothPrep_t& cp)
+{
 	if (!bones || !bones->header || !ent)
 	{
-		return;
+		return false;
+	}
+	if (!MC_Prepare(surface, bones, timeMs, &cp.run))
+	{
+		return false;
 	}
 
-	vec3_t axis[3]{};
-	VectorCopy(ent->e.axis[0], axis[0]);
-	VectorCopy(ent->e.axis[1], axis[1]);
-	VectorCopy(ent->e.axis[2], axis[2]);
+	cp.lk = *MC_Lookup(bones->header);
+	VectorCopy(ent->e.axis[0], cp.axis[0]);
+	VectorCopy(ent->e.axis[1], cp.axis[1]);
+	VectorCopy(ent->e.axis[2], cp.axis[2]);
+	cp.time = timeMs;
+
+	mcParams_t& prm = cp.prm;
+
+	prm.gravity = r_meshClothGravity->value;
+	prm.drag = r_meshClothDrag->value;
+	prm.iterations = r_meshClothIter->integer;
+	prm.shapeScale = r_meshClothShape->value;
+	prm.inertia = r_meshClothInertia->value;
+	prm.maxAccel = r_meshClothMaxAccel->value;
+	prm.airDrag = r_meshClothAirDrag->value;
+
+	{
+		const int parsed = sscanf(
+			r_meshClothWind->string,
+			"%f %f %f",
+			&prm.wind[0],
+			&prm.wind[1],
+			&prm.wind[2]);
+
+		if (parsed < 3)
+		{
+			prm.wind[0] = 0.0f;
+			prm.wind[1] = 0.0f;
+			prm.wind[2] = 0.0f;
+		}
+	}
+
+	prm.gust = r_meshClothGust->value;
+	MC_WeatherWind(ent, bones, timeMs, prm);
+	prm.timeSec = 0.0f;
+
+	MC_LodParams(ent, prm);
+	MC_FloorUnder(ent, timeMs, prm);
+	cp.numOthers = MC_OthersNear(ent, cp.others);
+	return true;
+}
+
+static void RB_MeshClothRun(CBoneCache* bones, const mdxmSurface_t* surface, const trRefEntity_t* ent, g2ClothPrep_t& cp,
+	float (*xyz)[4], float (*normal)[4])
+{
+	const vec3_t* axis = cp.axis;
 
 	// capsules: posed bone origin = skin matrix * bind position, then to world
-	mcCapsule_t caps[MC_NUM_COLLIDERS + 4]{};
+	mcCapsule_t caps[MC_NUM_COLLIDERS + 4 + MC_MAX_OTHERS]{};
 	int ncaps = 0;
 
-	const mcBoneLookup_t* lk = MC_Lookup(bones->header);
+	const mcBoneLookup_t* lk = &cp.lk;	// copied on the main thread (MC_Lookup is a shared cache)
 
 	for (int k = 0; k < MC_NUM_COLLIDERS; k++)
 	{
@@ -3253,52 +3616,24 @@ static void RB_MeshClothApply(CRenderableSurface* surf, const mdxmSurface_t* sur
 	// saber hilts in both hands
 	if (MC_HiltCapsule(surface, bones, "*r_hand", ent, axis, caps[ncaps])) ncaps++;
 	if (MC_HiltCapsule(surface, bones, "*l_hand", ent, axis, caps[ncaps])) ncaps++;
-
-	mcParams_t prm{};
-
-	prm.gravity = r_meshClothGravity->value;
-	prm.drag = r_meshClothDrag->value;
-	prm.iterations = r_meshClothIter->integer;
-	prm.shapeScale = r_meshClothShape->value;
-	prm.inertia = r_meshClothInertia->value;
-	prm.maxAccel = r_meshClothMaxAccel->value;
-	prm.airDrag = r_meshClothAirDrag->value;
-
+	// nearby characters (r_meshClothOthers)
+	for (int i = 0; i < cp.numOthers; i++)
 	{
-		const int parsed = sscanf(
-			r_meshClothWind->string,
-			"%f %f %f",
-			&prm.wind[0],
-			&prm.wind[1],
-			&prm.wind[2]);
-
-		if (parsed < 3)
-		{
-			prm.wind[0] = 0.0f;
-			prm.wind[1] = 0.0f;
-			prm.wind[2] = 0.0f;
-		}
+		caps[ncaps++] = cp.others[i];
 	}
 
-	prm.gust = r_meshClothGust->value;
-	prm.timeSec = 0.0f;
+	MC_Run(&cp.run, surface, cp.time, ent->e.origin, axis, caps, ncaps, &cp.prm, MC_BoneFn, bones, xyz, normal);
+}
 
-	MC_FloorUnder(ent, backEnd.refdef.time, prm);
-
-	MC_Apply(
-		surface,
-		bones,
-		backEnd.refdef.time,
-		ent->e.origin,
-		axis,
-		caps,
-		ncaps,
-		&prm,
-		MC_BoneFn,
-		bones,
-		&tess.xyz[tess.numVertexes],
-		&tess.normal[tess.numVertexes]);
-
+static void RB_MeshClothApply(CRenderableSurface* surf, const mdxmSurface_t* surface)
+{
+	CBoneCache* bones = surf->boneCache;
+	const trRefEntity_t* ent = backEnd.currentEntity;
+	g2ClothPrep_t cp;
+	if (RB_MeshClothPrepare(bones, surface, ent, backEnd.refdef.time, cp))
+	{
+		RB_MeshClothRun(bones, surface, ent, cp, &tess.xyz[tess.numVertexes], &tess.normal[tess.numVertexes]);
+	}
 	MC_Prune(backEnd.refdef.time);
 }
 
@@ -3354,16 +3689,526 @@ void G2_ConstructGhoulSkeleton(CGhoul2Info_v& ghoul2, const int frameNum, const 
 
 /*
 ==============
+G2_SkinSurface: one ghoul2 surface's vertices posed by its bone cache.
+Used by RB_SurfaceGhoul and by the threaded pre-pass (on job workers: it
+only touches this bone cache and the output arrays).
+==============
+*/
+static void G2_SkinSurface(const mdxmSurface_t* surface, CBoneCache* bones, float (*outXyz)[4], float (*outNormal)[4])
+{
+	const int numVerts = surface->numVerts;
+	const int* piBoneReferences = reinterpret_cast<const int*>(reinterpret_cast<const byte*>(surface) + surface->ofsBoneReferences);
+	mdxmVertex_t* v = reinterpret_cast<mdxmVertex_t*>(const_cast<byte*>(reinterpret_cast<const byte*>(surface)) + surface->ofsVerts);
+	int k = 0;
+
+	float fTotalWeight = 0.0f;
+	float fBoneWeight = 0.0f;
+	float t1 = 0.0f;
+	float t2 = 0.0f;
+	const mdxaBone_t* bone = nullptr;
+	const mdxaBone_t* bone2 = nullptr;
+	for (int j = 0; j < numVerts; j++, v++)
+	{
+		bone = &bones->EvalRender(piBoneReferences[G2_GetVertBoneIndex(v, 0)]);
+		int iNumWeights = G2_GetVertWeights(v);
+		outNormal[j][0] = DotProduct(bone->matrix[0], v->normal);
+		outNormal[j][1] = DotProduct(bone->matrix[1], v->normal);
+		outNormal[j][2] = DotProduct(bone->matrix[2], v->normal);
+
+		if (iNumWeights == 1)
+		{
+			outXyz[j][0] = DotProduct(bone->matrix[0], v->vertCoords) + bone->matrix[0][3];
+			outXyz[j][1] = DotProduct(bone->matrix[1], v->vertCoords) + bone->matrix[1][3];
+			outXyz[j][2] = DotProduct(bone->matrix[2], v->vertCoords) + bone->matrix[2][3];
+		}
+		else
+		{
+			fBoneWeight = G2_GetVertBoneWeightNotSlow(v, 0);
+			if (iNumWeights == 2)
+			{
+				bone2 = &bones->EvalRender(piBoneReferences[G2_GetVertBoneIndex(v, 1)]);
+
+				t1 = DotProduct(bone->matrix[0], v->vertCoords) + bone->matrix[0][3];
+				t2 = DotProduct(bone2->matrix[0], v->vertCoords) + bone2->matrix[0][3];
+				outXyz[j][0] = fBoneWeight * (t1 - t2) + t2;
+				t1 = DotProduct(bone->matrix[1], v->vertCoords) + bone->matrix[1][3];
+				t2 = DotProduct(bone2->matrix[1], v->vertCoords) + bone2->matrix[1][3];
+				outXyz[j][1] = fBoneWeight * (t1 - t2) + t2;
+				t1 = DotProduct(bone->matrix[2], v->vertCoords) + bone->matrix[2][3];
+				t2 = DotProduct(bone2->matrix[2], v->vertCoords) + bone2->matrix[2][3];
+				outXyz[j][2] = fBoneWeight * (t1 - t2) + t2;
+			}
+			else
+			{
+				outXyz[j][0] = fBoneWeight * (DotProduct(bone->matrix[0], v->vertCoords) + bone->matrix[0][
+					3]);
+				outXyz[j][1] = fBoneWeight * (DotProduct(bone->matrix[1], v->vertCoords) + bone->matrix[1][
+					3]);
+				outXyz[j][2] = fBoneWeight * (DotProduct(bone->matrix[2], v->vertCoords) + bone->matrix[2][
+					3]);
+
+				fTotalWeight = fBoneWeight;
+				for (k = 1; k < iNumWeights - 1; k++)
+				{
+					bone = &bones->EvalRender(piBoneReferences[G2_GetVertBoneIndex(v, k)]);
+					fBoneWeight = G2_GetVertBoneWeightNotSlow(v, k);
+					fTotalWeight += fBoneWeight;
+
+					outXyz[j][0] += fBoneWeight * (DotProduct(bone->matrix[0], v->vertCoords) + bone->matrix[
+						0][3]);
+					outXyz[j][1] += fBoneWeight * (DotProduct(bone->matrix[1], v->vertCoords) + bone->matrix[
+						1][3]);
+					outXyz[j][2] += fBoneWeight * (DotProduct(bone->matrix[2], v->vertCoords) + bone->matrix[
+						2][3]);
+				}
+				bone = &bones->EvalRender(piBoneReferences[G2_GetVertBoneIndex(v, k)]);
+				fBoneWeight = 1.0f - fTotalWeight;
+
+				outXyz[j][0] += fBoneWeight * (DotProduct(bone->matrix[0], v->vertCoords) + bone->matrix[0][
+					3]);
+				outXyz[j][1] += fBoneWeight * (DotProduct(bone->matrix[1], v->vertCoords) + bone->matrix[1][
+					3]);
+				outXyz[j][2] += fBoneWeight * (DotProduct(bone->matrix[2], v->vertCoords) + bone->matrix[2][
+					3]);
+			}
+		}
+
+	}
+}
+
+/*
+==============
+Threaded ghoul2 skinning + mesh cloth (r_threads)
+
+Before a draw list is drawn, every ghoul2 surface in it is skinned, and its
+cloth simulated, on the job workers. RB_SurfaceGhoul then only copies the
+finished vertices into tess.
+
+Surfaces are grouped by bone cache: a bone cache works out each bone the
+first time it is used, so all surfaces of one bone cache are done by one
+thread. Everything that is not thread-safe is done on the main thread first:
+deciding which surfaces are cloth, creating cloth state, console values,
+floor traces and the collider bone lookup.
+
+r_threads 0 skips all of this and draws exactly as before.
+==============
+*/
+struct g2PreSurf_t
+{
+	CRenderableSurface* surf;
+	const trRefEntity_t* ent;
+	int vertOfs;		// first vertex in s_g2PreXyz / s_g2PreNormal
+	int cloth;			// index into s_g2PreCloth, or -1
+};
+
+static qjobs::Pool* s_g2Pool = nullptr;		// heap: stopped in R_ShutdownRenderJobs, never by a static destructor
+static std::vector<g2PreSurf_t> s_g2PreSurfs;
+static std::vector<int> s_g2PreGroups;			// start of each bone cache's run in s_g2PreSurfs, then the end
+static std::vector<g2ClothPrep_t> s_g2PreCloth;
+static std::vector<float> s_g2PreXyz;			// 4 floats per vertex, like tess.xyz
+static std::vector<float> s_g2PreNormal;
+static std::unordered_map<const CRenderableSurface*, int> s_g2PreIndex;
+static bool s_g2PreActive = false;
+
+// worker threads for renderer jobs: r_threads -1 = automatic, 0 = off, N = N workers
+static int R_RenderJobThreads()
+{
+	const int want = r_threads ? r_threads->integer : 0;
+	if (want < 0)
+	{
+		return (std::min)(qjobs::Pool::DefaultThreads(), 7);
+	}
+	return (std::min)(want, qjobs::Pool::kMaxThreads);
+}
+
+static const g2PreSurf_t* RB_G2PreSkinned(const CRenderableSurface* surf)
+{
+	if (!s_g2PreActive)
+	{
+		return nullptr;
+	}
+	const auto it = s_g2PreIndex.find(surf);
+	return it == s_g2PreIndex.end() ? nullptr : &s_g2PreSurfs[it->second];
+}
+
+// where RB_G2PreSkinGroups writes: s_g2PreXyz / s_g2PreNormal (back end), or this frame's memory (r_smp)
+static float* s_g2DstXyz = nullptr;
+static float* s_g2DstNormal = nullptr;
+
+static void RB_G2PreSkinGroups(const int begin, const int end)
+{
+	for (int gi = begin; gi < end; gi++)
+	{
+		for (int i = s_g2PreGroups[gi]; i < s_g2PreGroups[gi + 1]; i++)
+		{
+			g2PreSurf_t& ps = s_g2PreSurfs[i];
+			const mdxmSurface_t* surface = ps.surf->surfaceData;
+			const auto xyz = reinterpret_cast<float(*)[4]>(&s_g2DstXyz[static_cast<size_t>(ps.vertOfs) * 4]);
+			const auto nrm = reinterpret_cast<float(*)[4]>(&s_g2DstNormal[static_cast<size_t>(ps.vertOfs) * 4]);
+			G2_SkinSurface(surface, ps.surf->boneCache, xyz, nrm);
+			if (ps.cloth >= 0)
+			{
+				RB_MeshClothRun(ps.surf->boneCache, surface, ps.ent, s_g2PreCloth[ps.cloth], xyz, nrm);
+			}
+		}
+	}
+}
+
+// called by RB_DrawSurfs (backEnd.refdef is already this view's) before anything is drawn
+void RB_G2PrepareDrawSurfs(drawSurf_t* drawSurfs, const int numDrawSurfs)
+{
+	if (R_SmpActive())
+	{
+		return;	// r_smp: the front end did it (R_G2SmpPrepareDrawSurfs), into the frame's own memory
+	}
+	s_g2PreActive = false;
+	s_g2PreIndex.clear();
+
+	const int threads = R_RenderJobThreads();
+	if (threads <= 0 && s_g2Pool)
+	{
+		s_g2Pool->Start(0);	// switched off: let the workers go
+	}
+	if (threads <= 0 || numDrawSurfs <= 0)
+	{
+		return;
+	}
+
+	PROFILE_ZONE("Ghoul2 skin + cloth (threaded)");
+
+	if (!s_g2Pool)
+	{
+		s_g2Pool = new qjobs::Pool;
+	}
+	s_g2Pool->Start(threads);
+
+	// every ghoul2 surface in the list, once
+	s_g2PreSurfs.clear();
+	s_g2PreCloth.clear();
+	for (int i = 0; i < numDrawSurfs; i++)
+	{
+		const drawSurf_t* ds = &drawSurfs[i];
+		if (*ds->surface != SF_MDX)
+		{
+			continue;
+		}
+		const auto cs = reinterpret_cast<CRenderableSurface*>(ds->surface);
+#ifdef _G2_GORE
+		if (cs->alternateTex)
+		{
+			continue;	// gore pieces: filled from their base surface when that is drawn
+		}
+#endif
+		if (!cs->surfaceData || !cs->boneCache || cs->surfaceData->numVerts <= 0)
+		{
+			continue;
+		}
+		int entityNum = 0, fogNum = 0, dlighted = 0;
+		shader_t* shader = nullptr;
+		R_DecomposeSort(ds->sort, &entityNum, &shader, &fogNum, &dlighted);
+		if (entityNum == REFENTITYNUM_WORLD)
+		{
+			continue;
+		}
+		if (!s_g2PreIndex.emplace(cs, 0).second)
+		{
+			continue;	// drawn more than once: skin once
+		}
+		s_g2PreSurfs.push_back({ cs, &backEnd.refdef.entities[entityNum], 0, -1 });
+	}
+	if (s_g2PreSurfs.empty())
+	{
+		s_g2PreIndex.clear();
+		return;
+	}
+
+	// group by bone cache, keeping draw order inside each group
+	std::stable_sort(s_g2PreSurfs.begin(), s_g2PreSurfs.end(), [](const g2PreSurf_t& a, const g2PreSurf_t& b)
+		{
+			return std::less<const void*>()(a.surf->boneCache, b.surf->boneCache);
+		});
+
+	const int count = static_cast<int>(s_g2PreSurfs.size());
+	int totalVerts = 0;
+	s_g2PreGroups.clear();
+	for (int i = 0; i < count; i++)
+	{
+		g2PreSurf_t& ps = s_g2PreSurfs[i];
+		s_g2PreIndex[ps.surf] = i;
+		ps.vertOfs = totalVerts;
+		totalVerts += ps.surf->surfaceData->numVerts;
+		if (i == 0 || ps.surf->boneCache != s_g2PreSurfs[i - 1].surf->boneCache)
+		{
+			s_g2PreGroups.push_back(i);
+		}
+	}
+	s_g2PreGroups.push_back(count);
+
+	// cloth: main thread only. Which surfaces are cloth first (that can reset all
+	// cloth state when models were reloaded), then the per-surface preparation.
+	if (r_meshCloth && r_meshCloth->integer)
+	{
+		static std::vector<int> isCloth;
+		isCloth.assign(count, 0);
+		for (int i = 0; i < count; i++)
+		{
+			const mdxmSurface_t* surface = s_g2PreSurfs[i].surf->surfaceData;
+			const auto mdxm = reinterpret_cast<const mdxmHeader_t*>(reinterpret_cast<const byte*>(surface) + surface->ofsHeader);
+			const auto ho = reinterpret_cast<const mdxmHierarchyOffsets_t*>(reinterpret_cast<const byte*>(mdxm) + sizeof(mdxmHeader_t));
+			const auto sh = reinterpret_cast<const mdxmSurfHierarchy_t*>(reinterpret_cast<const byte*>(ho) + ho->offsets[surface->thisSurfaceIndex]);
+			isCloth[i] = MC_IsClothSurface(surface, MC_ModelPath(s_g2PreSurfs[i].surf->boneCache, mdxm), sh->name, mdxm->name) ? 1 : 0;
+		}
+		for (int i = 0; i < count; i++)
+		{
+			if (!isCloth[i])
+			{
+				continue;
+			}
+			g2PreSurf_t& ps = s_g2PreSurfs[i];
+			g2ClothPrep_t cp;
+			if (RB_MeshClothPrepare(ps.surf->boneCache, ps.surf->surfaceData, ps.ent, backEnd.refdef.time, cp))
+			{
+				ps.cloth = static_cast<int>(s_g2PreCloth.size());
+				s_g2PreCloth.push_back(cp);
+			}
+		}
+	}
+
+	s_g2PreXyz.resize(static_cast<size_t>(totalVerts) * 4);
+	s_g2PreNormal.resize(static_cast<size_t>(totalVerts) * 4);
+	s_g2DstXyz = s_g2PreXyz.data();
+	s_g2DstNormal = s_g2PreNormal.data();
+
+	// one job per bone cache
+	s_g2Pool->ParallelFor(static_cast<int>(s_g2PreGroups.size()) - 1, 1, [](const int begin, const int end)
+		{
+			RB_G2PreSkinGroups(begin, end);
+		});
+
+	if (!s_g2PreCloth.empty())
+	{
+		MC_Prune(backEnd.refdef.time);
+	}
+	s_g2PreActive = true;
+}
+
+/*
+==============
+R_G2SmpPrepareDrawSurfs
+
+r_smp: the same work as RB_G2PrepareDrawSurfs, done by the front end for one view when its draw
+list is queued (R_AddDrawSurfCmd), into the frame buffer's own memory (CRenderableSurface::smpXyz).
+The render thread then never touches a bone cache, which the game and cgame change (and can free)
+while it draws. Every ghoul2 surface is done, whatever r_threads is (r_threads 0: on this thread).
+==============
+*/
+void R_G2SmpPrepareDrawSurfs(drawSurf_t* drawSurfs, const int numDrawSurfs)
+{
+	if (!R_SmpActive() || numDrawSurfs <= 0)
+	{
+		return;
+	}
+	PROFILE_ZONE("Ghoul2 skin + cloth (front end, r_smp)");
+
+	s_g2PreSurfs.clear();
+	s_g2PreCloth.clear();
+	s_g2PreIndex.clear();
+	for (int i = 0; i < numDrawSurfs; i++)
+	{
+		const drawSurf_t* ds = &drawSurfs[i];
+		if (*ds->surface != SF_MDX)
+		{
+			continue;
+		}
+		const auto cs = reinterpret_cast<CRenderableSurface*>(ds->surface);
+#ifdef _G2_GORE
+		if (cs->alternateTex)
+		{
+			continue;	// gore pieces: filled from their base surface when that is drawn
+		}
+#endif
+		if (cs->smpXyz || !cs->surfaceData || !cs->boneCache || cs->surfaceData->numVerts <= 0)
+		{
+			continue;
+		}
+		if (!s_g2PreIndex.emplace(cs, 0).second)
+		{
+			continue;	// drawn more than once: skin once
+		}
+		int entityNum = 0, fogNum = 0, dlighted = 0;
+		shader_t* shader = nullptr;
+		R_DecomposeSort(ds->sort, &entityNum, &shader, &fogNum, &dlighted);
+		const trRefEntity_t* ent = entityNum == REFENTITYNUM_WORLD ? nullptr : &tr.refdef.entities[entityNum];
+		s_g2PreSurfs.push_back({ cs, ent, 0, -1 });
+	}
+	s_g2PreIndex.clear();
+	if (s_g2PreSurfs.empty())
+	{
+		return;
+	}
+
+	// group by bone cache, keeping draw order inside each group
+	std::stable_sort(s_g2PreSurfs.begin(), s_g2PreSurfs.end(), [](const g2PreSurf_t& a, const g2PreSurf_t& b)
+		{
+			return std::less<const void*>()(a.surf->boneCache, b.surf->boneCache);
+		});
+
+	const int count = static_cast<int>(s_g2PreSurfs.size());
+	size_t totalVerts = 0;
+	s_g2PreGroups.clear();
+	for (int i = 0; i < count; i++)
+	{
+		g2PreSurf_t& ps = s_g2PreSurfs[i];
+		ps.vertOfs = static_cast<int>(totalVerts);
+		totalVerts += ps.surf->surfaceData->numVerts;
+		if (i == 0 || ps.surf->boneCache != s_g2PreSurfs[i - 1].surf->boneCache)
+		{
+			s_g2PreGroups.push_back(i);
+		}
+	}
+	s_g2PreGroups.push_back(count);
+
+	s_g2DstXyz = R_G2SmpAlloc(totalVerts * 4);
+	s_g2DstNormal = R_G2SmpAlloc(totalVerts * 4);
+	for (const g2PreSurf_t& ps : s_g2PreSurfs)
+	{
+		ps.surf->smpXyz = s_g2DstXyz + static_cast<size_t>(ps.vertOfs) * 4;
+		ps.surf->smpNormal = s_g2DstNormal + static_cast<size_t>(ps.vertOfs) * 4;
+	}
+
+	// cloth, on this (the main) thread as in RB_G2PrepareDrawSurfs, for this view
+	if (r_meshCloth && r_meshCloth->integer)
+	{
+		s_mcRefdef = &tr.refdef;
+		s_mcView = &tr.viewParms;
+		static std::vector<int> isCloth;
+		isCloth.assign(count, 0);
+		for (int i = 0; i < count; i++)
+		{
+			const mdxmSurface_t* surface = s_g2PreSurfs[i].surf->surfaceData;
+			const auto mdxm = reinterpret_cast<const mdxmHeader_t*>(reinterpret_cast<const byte*>(surface) + surface->ofsHeader);
+			const auto ho = reinterpret_cast<const mdxmHierarchyOffsets_t*>(reinterpret_cast<const byte*>(mdxm) + sizeof(mdxmHeader_t));
+			const auto sh = reinterpret_cast<const mdxmSurfHierarchy_t*>(reinterpret_cast<const byte*>(ho) + ho->offsets[surface->thisSurfaceIndex]);
+			isCloth[i] = MC_IsClothSurface(surface, MC_ModelPath(s_g2PreSurfs[i].surf->boneCache, mdxm), sh->name, mdxm->name) ? 1 : 0;
+		}
+		for (int i = 0; i < count; i++)
+		{
+			g2PreSurf_t& ps = s_g2PreSurfs[i];
+			if (!isCloth[i] || !ps.ent)
+			{
+				continue;
+			}
+			g2ClothPrep_t cp;
+			if (RB_MeshClothPrepare(ps.surf->boneCache, ps.surf->surfaceData, ps.ent, tr.refdef.time, cp))
+			{
+				ps.cloth = static_cast<int>(s_g2PreCloth.size());
+				s_g2PreCloth.push_back(cp);
+			}
+		}
+		s_mcRefdef = &backEnd.refdef;
+		s_mcView = &backEnd.viewParms;
+	}
+
+	if (!s_g2Pool)
+	{
+		s_g2Pool = new qjobs::Pool;
+	}
+	s_g2Pool->Start((std::max)(R_RenderJobThreads(), 0));	// r_threads 0: no workers, all on this thread
+
+	// one job per bone cache
+	s_g2Pool->ParallelFor(static_cast<int>(s_g2PreGroups.size()) - 1, 1, [](const int begin, const int end)
+		{
+			RB_G2PreSkinGroups(begin, end);
+		});
+
+#ifdef _G2_GORE
+	// gore pieces can be drawn before their base surface (sorted earlier): give them this frame's
+	// vertices now (RB_SurfaceGhoul writes the same values again when the base surface is drawn)
+	for (const g2PreSurf_t& ps : s_g2PreSurfs)
+	{
+		const int numVerts = ps.surf->surfaceData->numVerts;
+		for (auto g = static_cast<CRenderableSurface*>(ps.surf->goreChain); g; g = static_cast<CRenderableSurface*>(g->goreChain))
+		{
+			if (!g->alternateTex)
+			{
+				continue;
+			}
+			const auto data = reinterpret_cast<int*>(g->alternateTex) + 2;
+			const int gnumVerts = data[-2];
+			float* fxyz = reinterpret_cast<float*>(data) + gnumVerts;
+			float* fnrm = fxyz + static_cast<size_t>(gnumVerts) * 4;
+			for (int j = 0; j < gnumVerts; j++)
+			{
+				if (data[j] >= 0 && data[j] < numVerts)
+				{
+					memcpy(fxyz + j * 4, ps.surf->smpXyz + static_cast<size_t>(data[j]) * 4, sizeof(float) * 3);
+					memcpy(fnrm + j * 4, ps.surf->smpNormal + static_cast<size_t>(data[j]) * 4, sizeof(float) * 3);
+				}
+			}
+		}
+	}
+#endif
+
+	if (!s_g2PreCloth.empty())
+	{
+		MC_Prune(tr.refdef.time);
+	}
+}
+
+// called by RB_DrawSurfs when the list has been drawn
+void RB_G2FinishDrawSurfs()
+{
+	if (R_SmpActive())
+	{
+		return;	// r_smp: nothing of this was used (and the front end may be using the index)
+	}
+	s_g2PreActive = false;
+	s_g2PreIndex.clear();
+}
+
+// called by RE_Shutdown: the workers must be gone before the renderer is unloaded
+void R_ShutdownRenderJobs()
+{
+	RB_G2FinishDrawSurfs();
+	delete s_g2Pool;
+	s_g2Pool = nullptr;
+}
+
+// The same workers for other renderer work done on the main thread, such as image
+// loading (tr_image.cpp, tr_image_load.cpp). nullptr when r_threads is 0, so the
+// caller runs serially exactly as before.
+qjobs::Pool* R_RenderJobPool()
+{
+	const int threads = R_RenderJobThreads();
+	if (threads <= 0)
+	{
+		if (s_g2Pool)
+		{
+			s_g2Pool->Start(0);	// switched off: let the workers go
+		}
+		return nullptr;
+	}
+	if (!s_g2Pool)
+	{
+		s_g2Pool = new qjobs::Pool;
+	}
+	s_g2Pool->Start(threads);
+	return s_g2Pool;
+}
+
+/*
+==============
 RB_SurfaceGhoul//
 ==============
 */
 void RB_SurfaceGhoul(CRenderableSurface* surf)
 {
+	PROFILE_ZONE("Ghoul2 surface (skin + cloth)");
 #ifdef G2_PERFORMANCE_ANALYSIS
 	G2PerformanceTimer_RB_SurfaceGhoul.Start();
 #endif
 
-	int j = 0, k = 0;
+	int j = 0;
 	int baseIndex = 0, baseVertex = 0;
 	int numVerts = 0;
 	mdxmVertex_t* v = nullptr;
@@ -3371,7 +4216,6 @@ void RB_SurfaceGhoul(CRenderableSurface* surf)
 	int indexes = 0;
 	glIndex_t* tessIndexes = nullptr;
 	mdxmVertexTexCoord_t* pTexCoords = nullptr;
-	int* piBoneReferences = nullptr;
 
 #ifdef _G2_GORE
 	if (surf->alternateTex)
@@ -3510,139 +4354,37 @@ void RB_SurfaceGhoul(CRenderableSurface* surf)
 
 	numVerts = surface->numVerts;
 
-	piBoneReferences = reinterpret_cast<int*>(reinterpret_cast<byte*>(surface) + surface->ofsBoneReferences);
 	baseVertex = tess.numVertexes;
 	v = reinterpret_cast<mdxmVertex_t*>(reinterpret_cast<byte*>(surface) + surface->ofsVerts);
 	pTexCoords = reinterpret_cast<mdxmVertexTexCoord_t*>(&v[numVerts]);
 
-	//	if (r_ghoul2fastnormals&&r_ghoul2fastnormals->integer==0)
-#if 0
-	if (0)
+	const g2PreSurf_t* pre = RB_G2PreSkinned(surf);
+	const bool smpSkinned = surf->smpXyz != nullptr;
+	if (smpSkinned)
 	{
-		for (j = 0; j < numVerts; j++, baseVertex++, v++)
-		{
-			const int iNumWeights = G2_GetVertWeights(v);
-
-			float fTotalWeight = 0.0f;
-
-			k = 0;
-			int		iBoneIndex = G2_GetVertBoneIndex(v, k);
-			float	fBoneWeight = G2_GetVertBoneWeight(v, k, fTotalWeight, iNumWeights);
-			const mdxaBone_t* bone = &bones->EvalRender(piBoneReferences[iBoneIndex]);
-
-			tess.xyz[baseVertex][0] = fBoneWeight * (DotProduct(bone->matrix[0], v->vertCoords) + bone->matrix[0][3]);
-			tess.xyz[baseVertex][1] = fBoneWeight * (DotProduct(bone->matrix[1], v->vertCoords) + bone->matrix[1][3]);
-			tess.xyz[baseVertex][2] = fBoneWeight * (DotProduct(bone->matrix[2], v->vertCoords) + bone->matrix[2][3]);
-
-			tess.normal[baseVertex][0] = fBoneWeight * DotProduct(bone->matrix[0], v->normal);
-			tess.normal[baseVertex][1] = fBoneWeight * DotProduct(bone->matrix[1], v->normal);
-			tess.normal[baseVertex][2] = fBoneWeight * DotProduct(bone->matrix[2], v->normal);
-
-			for (k++; k < iNumWeights; k++)
-			{
-				iBoneIndex = G2_GetVertBoneIndex(v, k);
-				fBoneWeight = G2_GetVertBoneWeight(v, k, fTotalWeight, iNumWeights);
-
-				bone = &bones->EvalRender(piBoneReferences[iBoneIndex]);
-
-				tess.xyz[baseVertex][0] += fBoneWeight * (DotProduct(bone->matrix[0], v->vertCoords) + bone->matrix[0][3]);
-				tess.xyz[baseVertex][1] += fBoneWeight * (DotProduct(bone->matrix[1], v->vertCoords) + bone->matrix[1][3]);
-				tess.xyz[baseVertex][2] += fBoneWeight * (DotProduct(bone->matrix[2], v->vertCoords) + bone->matrix[2][3]);
-
-				tess.normal[baseVertex][0] += fBoneWeight * DotProduct(bone->matrix[0], v->normal);
-				tess.normal[baseVertex][1] += fBoneWeight * DotProduct(bone->matrix[1], v->normal);
-				tess.normal[baseVertex][2] += fBoneWeight * DotProduct(bone->matrix[2], v->normal);
-			}
-
-			tess.texCoords[baseVertex][0][0] = pTexCoords[j].texCoords[0];
-			tess.texCoords[baseVertex][0][1] = pTexCoords[j].texCoords[1];
-		}
+		// r_smp: skinned, and its cloth simulated, by the front end into this frame's memory
+		memcpy(&tess.xyz[baseVertex][0], surf->smpXyz, sizeof(float) * 4 * numVerts);
+		memcpy(&tess.normal[baseVertex][0], surf->smpNormal, sizeof(float) * 4 * numVerts);
+	}
+	else if (pre)
+	{
+		// skinned, and its cloth simulated, on the job workers before this list was drawn
+		memcpy(&tess.xyz[baseVertex][0], &s_g2PreXyz[static_cast<size_t>(pre->vertOfs) * 4], sizeof(float) * 4 * numVerts);
+		memcpy(&tess.normal[baseVertex][0], &s_g2PreNormal[static_cast<size_t>(pre->vertOfs) * 4], sizeof(float) * 4 * numVerts);
 	}
 	else
 	{
-#endif
-		float fTotalWeight = 0.0f;
-		float fBoneWeight = 0.0f;
-		float t1 = 0.0f;
-		float t2 = 0.0f;
-		const mdxaBone_t* bone = nullptr;
-		const mdxaBone_t* bone2 = nullptr;
-		for (j = 0; j < numVerts; j++, baseVertex++, v++)
-		{
-			bone = &bones->EvalRender(piBoneReferences[G2_GetVertBoneIndex(v, 0)]);
-			int iNumWeights = G2_GetVertWeights(v);
-			tess.normal[baseVertex][0] = DotProduct(bone->matrix[0], v->normal);
-			tess.normal[baseVertex][1] = DotProduct(bone->matrix[1], v->normal);
-			tess.normal[baseVertex][2] = DotProduct(bone->matrix[2], v->normal);
-
-			if (iNumWeights == 1)
-			{
-				tess.xyz[baseVertex][0] = DotProduct(bone->matrix[0], v->vertCoords) + bone->matrix[0][3];
-				tess.xyz[baseVertex][1] = DotProduct(bone->matrix[1], v->vertCoords) + bone->matrix[1][3];
-				tess.xyz[baseVertex][2] = DotProduct(bone->matrix[2], v->vertCoords) + bone->matrix[2][3];
-			}
-			else
-			{
-				fBoneWeight = G2_GetVertBoneWeightNotSlow(v, 0);
-				if (iNumWeights == 2)
-				{
-					bone2 = &bones->EvalRender(piBoneReferences[G2_GetVertBoneIndex(v, 1)]);
-
-					t1 = DotProduct(bone->matrix[0], v->vertCoords) + bone->matrix[0][3];
-					t2 = DotProduct(bone2->matrix[0], v->vertCoords) + bone2->matrix[0][3];
-					tess.xyz[baseVertex][0] = fBoneWeight * (t1 - t2) + t2;
-					t1 = DotProduct(bone->matrix[1], v->vertCoords) + bone->matrix[1][3];
-					t2 = DotProduct(bone2->matrix[1], v->vertCoords) + bone2->matrix[1][3];
-					tess.xyz[baseVertex][1] = fBoneWeight * (t1 - t2) + t2;
-					t1 = DotProduct(bone->matrix[2], v->vertCoords) + bone->matrix[2][3];
-					t2 = DotProduct(bone2->matrix[2], v->vertCoords) + bone2->matrix[2][3];
-					tess.xyz[baseVertex][2] = fBoneWeight * (t1 - t2) + t2;
-				}
-				else
-				{
-					tess.xyz[baseVertex][0] = fBoneWeight * (DotProduct(bone->matrix[0], v->vertCoords) + bone->matrix[0][
-						3]);
-					tess.xyz[baseVertex][1] = fBoneWeight * (DotProduct(bone->matrix[1], v->vertCoords) + bone->matrix[1][
-						3]);
-					tess.xyz[baseVertex][2] = fBoneWeight * (DotProduct(bone->matrix[2], v->vertCoords) + bone->matrix[2][
-						3]);
-
-					fTotalWeight = fBoneWeight;
-					for (k = 1; k < iNumWeights - 1; k++)
-					{
-						bone = &bones->EvalRender(piBoneReferences[G2_GetVertBoneIndex(v, k)]);
-						fBoneWeight = G2_GetVertBoneWeightNotSlow(v, k);
-						fTotalWeight += fBoneWeight;
-
-						tess.xyz[baseVertex][0] += fBoneWeight * (DotProduct(bone->matrix[0], v->vertCoords) + bone->matrix[
-							0][3]);
-						tess.xyz[baseVertex][1] += fBoneWeight * (DotProduct(bone->matrix[1], v->vertCoords) + bone->matrix[
-							1][3]);
-						tess.xyz[baseVertex][2] += fBoneWeight * (DotProduct(bone->matrix[2], v->vertCoords) + bone->matrix[
-							2][3]);
-					}
-					bone = &bones->EvalRender(piBoneReferences[G2_GetVertBoneIndex(v, k)]);
-					fBoneWeight = 1.0f - fTotalWeight;
-
-					tess.xyz[baseVertex][0] += fBoneWeight * (DotProduct(bone->matrix[0], v->vertCoords) + bone->matrix[0][
-						3]);
-					tess.xyz[baseVertex][1] += fBoneWeight * (DotProduct(bone->matrix[1], v->vertCoords) + bone->matrix[1][
-						3]);
-					tess.xyz[baseVertex][2] += fBoneWeight * (DotProduct(bone->matrix[2], v->vertCoords) + bone->matrix[2][
-						3]);
-				}
-			}
-
-			tess.texCoords[baseVertex][0][0] = pTexCoords[j].texCoords[0];
-			tess.texCoords[baseVertex][0][1] = pTexCoords[j].texCoords[1];
-		}
-#if 0
+		G2_SkinSurface(surface, bones, &tess.xyz[baseVertex], &tess.normal[baseVertex]);
 	}
-#endif
+	for (j = 0; j < numVerts; j++)
+	{
+		tess.texCoords[baseVertex + j][0][0] = pTexCoords[j].texCoords[0];
+		tess.texCoords[baseVertex + j][0][1] = pTexCoords[j].texCoords[1];
+	}
 
 	// mesh cloth: replace free robe vertices with simulated positions before
-	// gore copies them and before the surface is drawn
-	if (r_meshCloth && r_meshCloth->integer)
+	// gore copies them and before the surface is drawn (the pre-pass already did)
+	if (!pre && !smpSkinned && !R_SmpOnRenderThread() && r_meshCloth && r_meshCloth->integer)	// r_smp: cloth state is the front end's
 	{
 		const auto mdxm = reinterpret_cast<const mdxmHeader_t*>(reinterpret_cast<const byte*>(surface) + surface->ofsHeader);
 		const auto ho = reinterpret_cast<const mdxmHierarchyOffsets_t*>(reinterpret_cast<const byte*>(mdxm) + sizeof(mdxmHeader_t));
@@ -3845,6 +4587,7 @@ int NewToOldRemapTable[53] = {
 
 qboolean R_LoadMDXM(model_t* mod, void* buffer, const char* mod_name, qboolean& bAlreadyCached)
 {
+	PROFILE_ZONE("Load: model .glm");
 	int					i = 0, l = 0, j = 0;
 	mdxmHeader_t* pinmodel = nullptr, * mdxm = nullptr;
 	mdxmLOD_t* lod = nullptr;
@@ -4186,6 +4929,7 @@ R_LoadMDXA - load a Ghoul 2 animation file
 */
 qboolean R_LoadMDXA(model_t* mod, void* buffer, const char* mod_name, qboolean& bAlreadyCached)
 {
+	PROFILE_ZONE("Load: animation .gla");
 	mdxaHeader_t* pinmodel = nullptr, * mdxa = nullptr;
 	int version = 0;
 	int size = 0;

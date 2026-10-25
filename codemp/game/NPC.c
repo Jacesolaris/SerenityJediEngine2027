@@ -66,6 +66,26 @@ qboolean NPC_IsTrooper(const gentity_t* self)
 	return self && self->NPC && self->s.weapon && !!(self->NPC->scriptFlags & SCF_NO_GROUPS);
 }
 
+// SP NPC.cpp: the big classes (the SP Jedi AI won't make them do flips or roll dodges)
+qboolean NPC_IsOversized(const gentity_t* self)
+{
+	switch (self->client->NPC_class)
+	{
+	case CLASS_WOOKIE:
+	case CLASS_SBD:
+	case CLASS_ASSASSIN_DROID:
+	case CLASS_HAZARD_TROOPER:
+	case CLASS_ROCKETTROOPER:
+	case CLASS_SABER_DROID:
+	case CLASS_VADER:
+		return qtrue;
+	default:
+		break;
+	}
+
+	return qfalse;
+}
+
 static void CorpsePhysics(gentity_t* self)
 {
 	// run the bot through the server like it was a real client
@@ -1532,9 +1552,11 @@ static void NPC_RunBehavior(const npcteam_t team, const int b_state)
 		//saber droid
 		NPC_BSSD_Default();
 	}
-	else if (NPCS.NPC->client->ps.weapon == WP_SABER)
+	else if (NPCS.NPC->client->ps.weapon == WP_SABER ||
+		(NPCS.NPC->client->NPC_class == CLASS_SITHLORD && NPCS.NPC->client->ps.weapon == WP_MELEE) ||
+		(NPCS.NPC->client->NPC_class == CLASS_SITHLORD && NPCS.NPC->client->ps.weapon == WP_NONE))
 	{
-		//jedi
+		//jedi (as SP: also an unarmed / melee Sith lord)
 		NPC_BehaviorSet_Jedi(b_state);
 		dontSetAim = qtrue;
 	}
@@ -2072,8 +2094,27 @@ void NPC_Think(gentity_t* self)
 {
 	vec3_t oldMoveDir;
 	const int i = 0;
+	static qboolean spreadRegistered = qfalse;
 
 	self->nextthink = level.time + FRAMETIME / 2;
+
+	// g_npcThinkSpread: NPCs think every 50 ms, which is every other server frame (sv_fps 40). Split them
+	// between the two frames by entity number, so NPCs spawned together don't all think in the same frame.
+	// 0 = as before.
+	if (!spreadRegistered)
+	{
+		trap->Cvar_Register(NULL, "g_npcThinkSpread", "1", CVAR_ARCHIVE);
+		spreadRegistered = qtrue;
+	}
+	const int frameMsec = level.time - level.previousTime;	// one server frame
+	if (trap->Cvar_VariableIntegerValue("g_npcThinkSpread") && frameMsec > 0 && frameMsec < FRAMETIME / 2)
+	{
+		const int frame = self->nextthink / frameMsec;
+		if ((frame + self->s.number) & 1)
+		{
+			self->nextthink += frameMsec;
+		}
+	}
 
 	SetNPCGlobals(self);
 

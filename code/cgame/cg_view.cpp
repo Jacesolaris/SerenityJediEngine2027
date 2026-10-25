@@ -37,6 +37,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 // this line must stay at top so the whole PCH thing works...
 #include "cg_headers.h"
+#include "q_profile.h"
 
 #include "cg_media.h"
 #include "FxScheduler.h"
@@ -2755,6 +2756,7 @@ static qboolean cg_rangedFogging = qfalse; //so we know if we should go back to 
 
 void CG_DrawActiveFrame(const int serverTime, const stereoFrame_t stereoView)
 {
+	PROFILE_ZONE("cgame DrawActiveFrame");
 	qboolean inwater = qfalse;
 
 	cg.time = serverTime;
@@ -2783,10 +2785,10 @@ void CG_DrawActiveFrame(const int serverTime, const stereoFrame_t stereoView)
 	// clear all the render lists
 	cgi_R_ClearScene();
 
-	CG_BuildSolidList();
+	{ PROFILE_ZONE("cgame: solid list"); CG_BuildSolidList(); }
 
 	// set up cg.snap and possibly cg.nextSnap
-	CG_ProcessSnapshots();
+	{ PROFILE_ZONE("cgame: snapshots"); CG_ProcessSnapshots(); }
 	// if we haven't received any snapshots yet, all
 	// we can draw is the information screen
 	if (!cg.snap)
@@ -2935,7 +2937,7 @@ void CG_DrawActiveFrame(const int serverTime, const stereoFrame_t stereoView)
 	cg.clientFrame++;
 
 	// update cg.predictedPlayerState
-	CG_PredictPlayerState();
+	{ PROFILE_ZONE("cgame: prediction"); CG_PredictPlayerState(); }
 
 	if (cg.snap->ps.eFlags & EF_HELD_BY_SAND_CREATURE)
 	{
@@ -3076,9 +3078,12 @@ void CG_DrawActiveFrame(const int serverTime, const stereoFrame_t stereoView)
 	// build the render lists
 	if (!cg.hyperspace)
 	{
-		CG_AddPacketEntities(qfalse); // adter calcViewValues, so predicted player state is correct
-		CG_AddMarks();
-		CG_DrawMiscEnts();
+		{
+			PROFILE_ZONE("cgame: packet entities (players and NPCs)");
+			CG_AddPacketEntities(qfalse); // adter calcViewValues, so predicted player state is correct
+		}
+		{ PROFILE_ZONE("cgame: marks"); CG_AddMarks(); }
+		{ PROFILE_ZONE("cgame: misc ents"); CG_DrawMiscEnts(); }
 	}
 
 	//check for opaque water
@@ -3126,7 +3131,7 @@ void CG_DrawActiveFrame(const int serverTime, const stereoFrame_t stereoView)
 	if (!cg.hyperspace && fx_freeze.integer < 2)
 	{
 		//Add all effects
-		theFxScheduler.AddScheduledEffects(false);
+		{ PROFILE_ZONE("cgame: effects (FX scheduler)"); theFxScheduler.AddScheduledEffects(false); }
 	}
 
 	// finish up the rest of the refdef
@@ -3137,7 +3142,10 @@ void CG_DrawActiveFrame(const int serverTime, const stereoFrame_t stereoView)
 
 	if (!cg.hyperspace)
 	{
-		CG_AddLocalEntities();
+		{
+			PROFILE_ZONE("cgame: local entities");
+			CG_AddLocalEntities();
+		}
 	}
 
 	memcpy(cg.refdef.areamask, cg.snap->areamask, sizeof cg.refdef.areamask);
@@ -3159,13 +3167,13 @@ void CG_DrawActiveFrame(const int serverTime, const stereoFrame_t stereoView)
 		VectorClear(cg.refdefViewAngles);
 		cg.refdefViewAngles[YAW] = static_cast<float>(-360) * cg_pano.integer / cg_panoNumShots.integer; //choose angle
 		AnglesToAxis(cg.refdefViewAngles, cg.refdef.viewaxis);
-		CG_DrawActive(stereoView);
+		{ PROFILE_ZONE("cgame: draw (scene + 2D)"); CG_DrawActive(stereoView); }
 		cg.levelShot = qfalse;
 	}
 	else
 	{
 		// actually issue the rendering calls
-		CG_DrawActive(stereoView);
+		{ PROFILE_ZONE("cgame: draw (scene + 2D)"); CG_DrawActive(stereoView); }
 	}
 }
 

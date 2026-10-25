@@ -52,6 +52,7 @@ extern qboolean Rosh_TwinPresent();
 extern void G_CheckCharmed(gentity_t* self);
 extern qboolean Wampa_CheckDropVictim(gentity_t* self, qboolean exclude_me);
 extern cvar_t* g_debugDamage;
+extern cvar_t* g_awardStreaks;
 extern qboolean stop_icarus;
 extern cvar_t* g_dismemberment;
 extern cvar_t* g_saberPickuppableDroppedSabers;
@@ -4697,6 +4698,50 @@ extern qboolean G_RagDoll(gentity_t* ent, vec3_t forcedAngles);
 player_die
 ==================
 */
+// award streaks (DH 2026-10-25, g_awardStreaks 1; 0 = the old awards): every 4th kill in a row without dying plays
+// "excellent", every 4th kill of a saber user with saber offense 3 or more (without dying) "impressive", and every 4th
+// death in a row without a kill "humiliation". The cgame plays them when the counters change (cg_awardsounds 1).
+#define AWARD_STREAK		4
+#define AWARD_STREAKS_ON	(g_awardStreaks && g_awardStreaks->integer)
+static int s_awardKills[MAX_CLIENTS];
+static int s_awardSaberKills[MAX_CLIENTS];
+static int s_awardDeaths[MAX_CLIENTS];
+
+static void G_AwardStreaks(gentity_t* self, gentity_t* attacker)
+{
+	if (!AWARD_STREAKS_ON || !self->client)
+	{
+		return;
+	}
+	if (self->s.number < MAX_CLIENTS)
+	{
+		s_awardKills[self->s.number] = 0;
+		s_awardSaberKills[self->s.number] = 0;
+		if (++s_awardDeaths[self->s.number] % AWARD_STREAK == 0)
+		{
+			self->client->ps.persistant[PERS_GAUNTLET_FRAG_COUNT]++;
+		}
+	}
+	if (!attacker || attacker == self || !attacker->client || attacker->s.number >= MAX_CLIENTS || OnSameTeam(self, attacker))
+	{
+		return;
+	}
+	const int a = attacker->s.number;
+
+	s_awardDeaths[a] = 0;
+	if (++s_awardKills[a] % AWARD_STREAK == 0)
+	{
+		attacker->client->ps.persistant[PERS_EXCELLENT_COUNT]++;
+		attacker->client->rewardTime = level.time + REWARD_SPRITE_TIME;
+	}
+	if (self->client->ps.weapon == WP_SABER && self->client->ps.forcePowerLevel[FP_SABER_OFFENSE] >= FORCE_LEVEL_3
+		&& ++s_awardSaberKills[a] % AWARD_STREAK == 0)
+	{
+		attacker->client->ps.persistant[PERS_IMPRESSIVE_COUNT]++;
+		attacker->client->rewardTime = level.time + REWARD_SPRITE_TIME;
+	}
+}
+
 void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, const int damage, const int means_of_death, const int dflags, const int hit_loc)
 {
 	int anim = 0;
@@ -5224,6 +5269,8 @@ void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 		G_MakeTeamVulnerable();
 	}
 
+	G_AwardStreaks(self, attacker);
+
 	if (attacker && attacker->client)
 	{
 		if (self->s.number < MAX_CLIENTS)
@@ -5249,7 +5296,7 @@ void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 			AddFatigueKillBonus(attacker, self, means_of_death);
 		}
 
-		if (means_of_death == MOD_FORCE_LIGHTNING && (self->s.number < MAX_CLIENTS || G_ControlledByPlayer(self)))
+		if (!AWARD_STREAKS_ON && means_of_death == MOD_FORCE_LIGHTNING && (self->s.number < MAX_CLIENTS || G_ControlledByPlayer(self)))
 		{
 			// play humiliation on player
 			attacker->client->ps.persistant[PERS_GAUNTLET_FRAG_COUNT]++;
@@ -5260,7 +5307,7 @@ void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 
 		// check for two kills in a short amount of time
 		// if this is close enough to the last kill, give a reward sound
-		if (level.time - attacker->client->lastKillTime < CARNAGE_REWARD_TIME)
+		if (!AWARD_STREAKS_ON && level.time - attacker->client->lastKillTime < CARNAGE_REWARD_TIME)
 		{
 			// play excellent on player
 			attacker->client->ps.persistant[PERS_EXCELLENT_COUNT]++;

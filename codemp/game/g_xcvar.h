@@ -71,7 +71,7 @@ XCVAR_DEF(g_acidRainDamage, "1", NULL, CVAR_ARCHIVE, qtrue) // acid rain hurts p
 XCVAR_DEF(g_adaptRespawn, "1", NULL, CVAR_NONE, qtrue)
 XCVAR_DEF(g_allowDuelSuicide, "1", NULL, CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_allowHighPingDuelist, "1", NULL, CVAR_NONE, qtrue)
-XCVAR_DEF(g_allowNPC, "0", NULL, CVAR_ARCHIVE, qtrue)
+XCVAR_DEF(g_allowNPC, "1", NULL, CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_allowTeamVote, "1", NULL, CVAR_ARCHIVE, qfalse)
 XCVAR_DEF(g_allowVote, "1", NULL, CVAR_ARCHIVE, qfalse)
 XCVAR_DEF(g_antiFakePlayer, "1", NULL, CVAR_ARCHIVE, qfalse)
@@ -143,6 +143,7 @@ XCVAR_DEF(g_saberLockFactor, "2", NULL, CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_saberLocking, "1", NULL, CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_saberBlasterAimArc, "30", NULL, CVAR_ARCHIVE, qtrue) // SS_BLASTER (2026-10-14): pistol auto aim half angle (degrees)
 XCVAR_DEF(g_saberBlasterAimRange, "4096", NULL, CVAR_ARCHIVE, qtrue) // SS_BLASTER (2026-10-14): pistol auto aim range
+XCVAR_DEF(g_saberBlasterAIFire, "2000", NULL, CVAR_ARCHIVE, qtrue) // SS_BLASTER (2026-10-24): bots / NPCs fire the pistol out of saber reach: average ms between bursts (0 = off)
 XCVAR_DEF(g_saberRealisticCombat, "2", NULL, CVAR_ARCHIVE, qfalse)
 XCVAR_DEF(g_saberRestrictForce, "0", NULL, CVAR_ARCHIVE, qfalse)
 XCVAR_DEF(g_saberTraceSaberFirst, "0", NULL, CVAR_ARCHIVE, qtrue)
@@ -263,5 +264,17 @@ XCVAR_DEF(g_spaceBattle, "1", NULL, CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_spaceWingmen, "3", NULL, CVAR_ARCHIVE, qtrue) // team 1 (red: the Rebels) AI ships at most
 XCVAR_DEF(g_spaceEnemies, "5", NULL, CVAR_ARCHIVE, qtrue) // team 2 (blue: the Empire) AI ships at most
 XCVAR_DEF(g_spaceAISkill, "-1", NULL, CVAR_ARCHIVE, qtrue) // 0-3, -1: medium
+XCVAR_DEF(in_joystick, "1", NULL, CVAR_ARCHIVE, qtrue)
+
+XCVAR_DEF(g_npc_is_smart, "1", NULL, CVAR_ARCHIVE, qfalse) // NPCs use the smarter SP combat AI (SP g_npc_is_smart) (DH 2026-10-24 SP NPC port)
+XCVAR_DEF(g_npc_is_smart_range, "3500", NULL, CVAR_ARCHIVE, qfalse) // range for the smarter NPC AI (SP g_npc_is_smart_range) (DH 2026-10-24 SP NPC port)
+XCVAR_DEF(g_AllowMawKick, "0", NULL, CVAR_ARCHIVE, qfalse) // Maw (no legs) may kick (SP g_allowmawkick) (DH 2026-10-24 SP NPC port)
+XCVAR_DEF(g_saberNewControlScheme, "0", NULL, CVAR_ARCHIVE, qfalse) // SP g_saberNewControlScheme (DH 2026-10-24 SP NPC port)
+XCVAR_DEF(g_npcSpecialAttackFreq, "1.0", NULL, CVAR_ARCHIVE, qfalse) // how often NPCs use special saber attacks (SP g_npcSpecialAttackFreq) (DH 2026-10-24 SP NPC port)
+
+XCVAR_DEF(g_allowgunnerbash, "1", NULL, CVAR_ARCHIVE, qfalse) // gunner NPCs bash/kick enemies who get close (SP g_allowgunnerbash) (DH 2026-10-24 SP NPC port)
+XCVAR_DEF(g_tuskenWeapons, "1", NULL, CVAR_ARCHIVE, qfalse) // tusken raiders get the tusken staff (no saber), tusken snipers the tusken rifle (SP weapons ported 2026-10-25); 0: the old saber / disruptor loadouts
+XCVAR_DEF(g_awardStreaks, "1", NULL, CVAR_ARCHIVE, qfalse) // award sounds for kill / death / saber-3 kill streaks of 4 (0: the old awards) (DH 2026-10-25)
+XCVAR_DEF(g_Advancedaitalk, "1", NULL, CVAR_ARCHIVE, qfalse) // NPCs taunt/talk in combat (SP g_Advancedaitalk) (DH 2026-10-24 SP NPC port)
 
 #undef XCVAR_DEF

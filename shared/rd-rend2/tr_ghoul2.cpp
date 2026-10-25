@@ -1,4 +1,5 @@
 #include "client/client.h"	//FIXME!! EVIL - just include the definitions needed
+#include "q_profile.h"
 #include "tr_local.h"
 #include "qcommon/matcomp.h"
 #include "qcommon/qcommon.h"
@@ -17,10 +18,16 @@
 #include "qcommon/disablewarnings.h"
 #endif // !REND2_SP
 #include "tr_cache.h"
+#include "tr_weather.h"	// mesh cloth: weather wind (MC_WeatherWind)
 
 #include "../../code/rd-vanilla/tr_meshcloth.h"
 #include <vector>
 #include <unordered_map>
+#include <algorithm>
+#include <functional>
+#include "q_jobs.h"
+#include <memory>
+#include <vector>
 #define	LL(x) x=LittleLong(x)
 
 #ifdef G2_PERFORMANCE_ANALYSIS
@@ -92,19 +99,33 @@ void G2Time_ReportTimers(void)
 extern cvar_t* sv_mapname;
 #endif
 
-static const int MAX_RENDERABLE_SURFACES = 4096; // rend2 0b17a331
-static CRenderableSurface renderSurfHeap[MAX_RENDERABLE_SURFACES];
+// Ghoul2 surfaces queued for drawing this frame (reset by RB_SwapBuffers). Every view adds its own -
+// the main view, each sun shadow cascade and all six shadow faces of every dynamic light - so a big
+// battle needs far more than the old fixed 4096. When those ran out the heap wrapped round to 0 and
+// overwrote surfaces still queued for this frame, so models were drawn with other surfaces' meshes
+// and bones (stray polygons). Now more blocks are added as needed; a block, once made, is kept and
+// reused every frame, and pointers stay valid all frame. Wrapping only happens past the hard cap.
+static const int RENDERABLE_SURFACE_BLOCK = 4096;
+static const int MAX_RENDERABLE_SURFACE_BLOCKS = 64;	// 262144 surfaces, ~20 MB at most
+static std::vector<std::unique_ptr<CRenderableSurface[]>> renderSurfBlocks;
 static int currentRenderSurfIndex = 0;
 
 static CRenderableSurface* AllocGhoul2RenderableSurface()
 {
-	if (currentRenderSurfIndex >= MAX_RENDERABLE_SURFACES - 1)
+	int block = currentRenderSurfIndex / RENDERABLE_SURFACE_BLOCK;
+	if (block >= MAX_RENDERABLE_SURFACE_BLOCKS)
 	{
 		ResetGhoul2RenderableSurfaceHeap();
-		ri.Printf(PRINT_DEVELOPER, "AllocRenderableSurface: Reached maximum number of Ghoul2 renderable surfaces (%d)\n", MAX_RENDERABLE_SURFACES);
+		block = 0;
+		ri.Printf(PRINT_DEVELOPER, "AllocRenderableSurface: Reached maximum number of Ghoul2 renderable surfaces (%d)\n", RENDERABLE_SURFACE_BLOCK * MAX_RENDERABLE_SURFACE_BLOCKS);
+	}
+	if (block >= static_cast<int>(renderSurfBlocks.size()))
+	{
+		renderSurfBlocks.emplace_back(new CRenderableSurface[RENDERABLE_SURFACE_BLOCK]);
 	}
 
-	CRenderableSurface* rs = &renderSurfHeap[currentRenderSurfIndex++];
+	CRenderableSurface* rs = &renderSurfBlocks[block][currentRenderSurfIndex % RENDERABLE_SURFACE_BLOCK];
+	currentRenderSurfIndex++;
 
 	rs->Init();
 
@@ -815,6 +836,10 @@ public:
 	shader_t* gore_shader;
 	CGoreSet* gore_set;
 #endif
+	// the entity's dynamic lights and cubemap: the same for all its surfaces, so worked out once (RenderSurfaces)
+	bool			lightsDone = false;
+	int				dlightBits = 0;
+	int				cubemapIndex = 0;
 
 	CRenderSurface(
 		int				initsurfaceNum,
@@ -2060,6 +2085,7 @@ void G2_SetUpBolts(
 
 static void G2_TransformGhoulBones(boneInfo_v& rootBoneList, const mdxaBone_t& rootMatrix, CGhoul2Info& ghoul2, const int time, const bool smooth = true)
 {
+	PROFILE_ZONE("Ghoul2 bones");
 #ifdef G2_PERFORMANCE_ANALYSIS
 	G2PerformanceTimer_G2_TransformGhoulBones.Start();
 	G2PerformanceCounter_G2_TransformGhoulBones++;
@@ -2548,12 +2574,18 @@ static void RenderSurfaces(CRenderSurface& RS, const trRefEntity_t* ent, int ent
 		}
 
 		// Get dlightBits and Cubemap
-		float radius = 0.0f;
-		// scale the radius if needed
-		float largestScale = MAX(ent->e.modelScale[0], MAX(ent->e.modelScale[1], ent->e.modelScale[2]));
-		radius = ent->e.radius * largestScale;
-		int dlightBits = R_DLightsForPoint(ent->e.origin, radius);
-		int cubemapIndex = R_CubemapForPoint(ent->e.origin);
+		// (once per entity and view: they only depend on the entity, not the surface)
+		if (!RS.lightsDone)
+		{
+			// scale the radius if needed
+			const float largestScale = MAX(ent->e.modelScale[0], MAX(ent->e.modelScale[1], ent->e.modelScale[2]));
+			const float radius = ent->e.radius * largestScale;
+			RS.dlightBits = R_DLightsForPoint(ent->e.origin, radius);
+			RS.cubemapIndex = R_CubemapForPoint(ent->e.origin);
+			RS.lightsDone = true;
+		}
+		const int dlightBits = RS.dlightBits;
+		const int cubemapIndex = RS.cubemapIndex;
 
 		// don't add third_person objects if not viewing through a portal
 		if (!RS.personalModel)
@@ -3817,6 +3849,143 @@ static bool MC_HiltCapsule(const mdxmSurface_t* clothSurf, CBoneCache* bones, co
 	return true;
 }
 
+// MC_Blast (meshcloth_blast): is the line between an explosion and a character's cloth clear of walls?
+// A blast centre inside a wall (impact points sit on surfaces) counts as clear.
+bool R_MeshClothVisible(const float from[3], const float to[3])
+{
+	if (!tr.world)
+	{
+		return true;
+	}
+	trace_t trc;
+#ifdef REND2_SP
+	ri.SV_Trace(&trc, from, nullptr, nullptr, to, ENTITYNUM_NONE, CONTENTS_SOLID, G2_NOCOLLIDE, 0);
+#else
+	ri.CM_BoxTrace(&trc, from, to, vec3_origin, vec3_origin, 0, CONTENTS_SOLID, qfalse);	// MP: world only
+#endif
+	return trc.startsolid || trc.fraction >= 0.99f;
+}
+
+// r_meshClothWeatherWind: the map's weather wind (tr.weatherSystem: constant wind and wind zones) blows
+// the cloth too, outside only. 1 = as the weather says, other values scale it, 0 = off.
+// the water surface above a character standing in water: found in 12-unit steps up from its feet
+static bool MC_WaterHeight(const vec3_t origin, float* z)
+{
+	vec3_t p;
+	VectorCopy(origin, p);
+	p[2] -= 16.0f;	// near the feet (the origin is at the hips)
+	if (!(ri.CM_PointContents(p, 0) & (CONTENTS_WATER | CONTENTS_SLIME)))
+	{
+		return false;
+	}
+	for (int i = 0; i < 8; i++)
+	{
+		p[2] += 12.0f;
+		if (!(ri.CM_PointContents(p, 0) & (CONTENTS_WATER | CONTENTS_SLIME)))
+		{
+			*z = p[2] - 6.0f;
+			return true;
+		}
+	}
+	*z = p[2];
+	return true;
+}
+
+static cvar_t* MC_ClothCvar(const char* name, const char* value, const char* desc)
+{
+#ifdef REND2_SP
+	return ri.Cvar_Get(name, value, CVAR_ARCHIVE_ND);
+#else
+	return ri.Cvar_Get(name, value, CVAR_ARCHIVE_ND, desc);
+#endif
+}
+
+// The weather on one character's cloth (key: its bone cache, the cloth's own key), main thread:
+//  r_meshClothWeatherWind  the map's wind (tr.weatherSystem: constant wind and wind zones), outside only;
+//                          fades in and out over ~0.4 s at a shelter edge
+//  r_meshClothWater        in water: heavy drag, the cloth floats up a little (strength; 0 = off)
+//  r_meshClothRain         outside in rain the cloth soaks and gets heavier, then dries (0 = off)
+static void MC_WeatherWind(const trRefEntity_t* ent, const void* key, const int timeMs, mcParams_t& prm)
+{
+	// r_meshClothFlutter: wind ripples across the cloth (tr_meshcloth.cpp Step), for any wind
+	static cvar_t* fl = nullptr;
+	static cvar_t* cv = nullptr;
+	static cvar_t* wa = nullptr;
+	static cvar_t* ra = nullptr;
+	if (!fl)
+	{
+		fl = MC_ClothCvar("r_meshClothFlutter", "0.35", "Wind ripples across mesh cloth: 0 even push .. 1 strong flapping");
+		cv = MC_ClothCvar("r_meshClothWeatherWind", "1", "Weather wind blows mesh cloth (outside): 1 as the weather says, 0 off");
+		wa = MC_ClothCvar("r_meshClothWater", "1", "Mesh cloth in water: drag and floating (strength, 0 off)");
+		ra = MC_ClothCvar("r_meshClothRain", "1", "Mesh cloth soaks in the rain and gets heavier (strength, 0 off)");
+	}
+	prm.flutter = fl ? fl->value : 0.0f;
+
+	if (!tr.world || !tr.weatherSystem || (backEnd.refdef.rdflags & RDF_NOWORLDMODEL))
+	{
+		return;
+	}
+	vec3_t pos;
+	VectorCopy(ent->e.origin, pos);
+	pos[2] += 32.0f;	// the body, not the floor it stands on
+	const bool outside = R_IsOutside(pos);
+
+	float wetTarget = 0.0f;
+	float waterZ = 0.0f;
+	if (wa->value > 0.0f && MC_WaterHeight(ent->e.origin, &waterZ))
+	{
+		prm.water = 1;
+		prm.waterZ = waterZ;
+		prm.waterDrag = 6.0f * wa->value;
+		wetTarget = 2.0f;
+	}
+	else if (ra->value > 0.0f && outside && tr.weatherSystem->weatherSlots[WEATHER_RAIN].active)
+	{
+		wetTarget = 1.0f;
+	}
+	float outsideF = 0.0f, wet = 0.0f;
+	MC_WeatherState(key, timeMs, outside, wetTarget, &outsideF, &wet);
+	prm.wet = ra->value > 0.0f ? wet * ra->value : 0.0f;
+
+	if (cv->value <= 0.0f || outsideF <= 0.0f)
+	{
+		return;
+	}
+	// rend2 keeps its wind in thousandths ("constantwind 0 900 0" is stored as 0 0.9 0, gusts go to 1.5):
+	// back to units per second, the same strength as the vanilla renderer
+	VectorMA(prm.wind, cv->value * outsideF * 1000.0f, tr.weatherSystem->windDirection, prm.wind);
+}
+
+// r_meshClothOthers (1 = on, 0 = off): the characters of this scene, listed once a frame, so the ones close
+// to a character push its cloth (tr_meshcloth.cpp MC_NearCharacters). Main thread.
+static int MC_OthersNear(const trRefEntity_t* ent, mcCapsule_t* out)
+{
+	static cvar_t* oc = nullptr;
+	if (!oc)
+	{
+		oc = MC_ClothCvar("r_meshClothOthers", "1", "Characters close to each other push each other's mesh cloth (0 off)");
+	}
+	if (!oc->integer || (backEnd.refdef.rdflags & RDF_NOWORLDMODEL))
+	{
+		return 0;
+	}
+	if (!MC_CharactersListed(tr.frameCount))
+	{
+		static std::vector<float> origins;
+		origins.clear();
+		for (int i = 0; i < backEnd.refdef.num_entities; i++)
+		{
+			const trRefEntity_t* e = &backEnd.refdef.entities[i];
+			if (e->e.reType == RT_MODEL && e->e.ghoul2)
+			{
+				origins.insert(origins.end(), e->e.origin, e->e.origin + 3);
+			}
+		}
+		MC_SetCharacters(tr.frameCount, reinterpret_cast<const float(*)[3]>(origins.data()), static_cast<int>(origins.size() / 3));
+	}
+	return MC_NearCharacters(ent->e.origin, out, MC_MAX_OTHERS);
+}
+
 // the floor under a character, for its cloth: one trace per character per frame
 static void MC_FloorUnder(const trRefEntity_t* ent, const int timeMs, mcParams_t& prm)
 {
@@ -3875,6 +4044,9 @@ struct mcR2Inst_t
 	int numVerts = 0;
 	unsigned uploadedFrame = ~0u;
 	int lastUsedMs = 0;
+	std::vector<g2GoreVert_t> pending;	// built on a job worker before drawing (r_threads)
+	unsigned pendingFrame = ~0u;		// frame 'pending' was built for
+	bool pendingOk = false;				// false: draw this surface normally this frame
 };
 
 static std::unordered_map<const mdxmSurface_t*, mcR2Surf_t> mcR2Surfs;
@@ -3947,6 +4119,11 @@ static mcR2Surf_t* MC_R2Surface(const mdxmSurface_t* surface)
 
 static mcR2Inst_t* MC_R2Instance(const void* key, const mdxmSurface_t* surface, const int timeMs)
 {
+	// never reallocate: the threaded pre-pass keeps pointers to instances until they are drawn
+	if (mcR2Insts.capacity() < static_cast<size_t>(MC_R2_MAX_INSTANCES))
+	{
+		mcR2Insts.reserve(MC_R2_MAX_INSTANCES);
+	}
 	mcR2Inst_t* reuse = nullptr;
 	for (auto& in : mcR2Insts)
 	{
@@ -3996,6 +4173,7 @@ static mcR2Inst_t* MC_R2Instance(const void* key, const mdxmSurface_t* surface, 
 	reuse->key = key;
 	reuse->surface = surface;
 	reuse->uploadedFrame = ~0u;
+	reuse->pendingFrame = ~0u;
 	reuse->lastUsedMs = timeMs;
 	return reuse;
 }
@@ -4037,37 +4215,95 @@ static void MC_Normalize(float* v)
 	}
 }
 
-// Simulate and upload one cloth surface. Returns the instance to draw with,
-// or nullptr to draw the surface normally.
-static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurface_t* surface, mcR2Surf_t* rs)
+// distance level of detail for mesh cloth (r_meshClothLodNear / r_meshClothLodFar): the
+// character's distance from this view's camera, scaled by the field of view so that
+// zooming in (scopes) counts as closer. The cloth module picks the band.
+static void MC_LodParams(const trRefEntity_t* ent, mcParams_t& prm)
 {
-	CBoneCache* bones = surf->boneCache;
-	const trRefEntity_t* ent = backEnd.currentEntity;
-	if (!bones || !bones->header || !ent || surface->numVerts > SHADER_MAX_VERTEXES)
+	prm.lodNear = r_meshClothLodNear ? r_meshClothLodNear->value : 0.0f;
+	prm.lodFar = r_meshClothLodFar ? r_meshClothLodFar->value : 0.0f;
+	vec3_t d;
+	VectorSubtract(ent->e.origin, backEnd.viewParms.ori.origin, d);
+	float dist = VectorLength(d);
+	const float fov = backEnd.viewParms.fovX;
+	if (fov > 1.0f && fov < 179.0f)
 	{
-		return nullptr;
+		dist *= tanf(DEG2RAD(fov * 0.5f));
 	}
-	const int timeMs = backEnd.refdef.time;
-	mcR2Inst_t* in = MC_R2Instance(bones, surface, timeMs);
-	if (!in)
+	prm.lodDist = dist;
+	if (backEnd.viewParms.flags & VPF_DEPTHSHADOW)
 	{
-		return nullptr;
+		prm.lodDist = -1.0f;	// shadow map view (sun, lights): keep the camera view's level of detail
 	}
-	// drawn again this frame (shadow map, another view): reuse the upload
-	if (in->uploadedFrame == backEndData->realFrameNumber)
-	{
-		return in;
-	}
+}
 
+// Mesh cloth for one surface, in parts so the simulation can run on a job worker:
+//   RB_MeshClothPrepare  main thread: cloth state, console values, floor trace
+//   RB_MeshClothBuild    any thread (one per bone cache at a time): body capsules,
+//                        CPU skinning, the simulation, packed vertices for the buffer
+//   RB_MeshClothUpload   main thread (OpenGL)
+struct g2ClothPrep_t
+{
+	mcRun_t run{};
+	mcParams_t prm{};
+	mcBoneLookup_t lk{};
 	vec3_t axis[3]{};
-	VectorCopy(ent->e.axis[0], axis[0]);
-	VectorCopy(ent->e.axis[1], axis[1]);
-	VectorCopy(ent->e.axis[2], axis[2]);
+	int time = 0;
+	mcCapsule_t others[MC_MAX_OTHERS]{};	// nearby characters (r_meshClothOthers)
+	int numOthers = 0;
+	bool ok = false;	// false: no cloth state for this surface (skin it, don't simulate)
+};
+
+static void RB_MeshClothPrepare(CBoneCache* bones, const mdxmSurface_t* surface, const trRefEntity_t* ent, const int timeMs, g2ClothPrep_t& cp)
+{
+	cp.ok = MC_Prepare(surface, bones, timeMs, &cp.run);
+	cp.lk = *MC_Lookup(bones->header);
+	VectorCopy(ent->e.axis[0], cp.axis[0]);
+	VectorCopy(ent->e.axis[1], cp.axis[1]);
+	VectorCopy(ent->e.axis[2], cp.axis[2]);
+	cp.time = timeMs;
+
+	mcParams_t& prm = cp.prm;
+	prm.gravity = r_meshClothGravity->value;
+	prm.drag = r_meshClothDrag->value;
+	prm.iterations = r_meshClothIter->integer;
+	prm.shapeScale = r_meshClothShape->value;
+	prm.inertia = r_meshClothInertia->value;
+	prm.maxAccel = r_meshClothMaxAccel->value;
+	prm.airDrag = r_meshClothAirDrag->value;
+	{
+		const int parsed = sscanf(
+			r_meshClothWind->string,
+			"%f %f %f",
+			&prm.wind[0],
+			&prm.wind[1],
+			&prm.wind[2]);
+
+		if (parsed < 3)
+		{
+			prm.wind[0] = 0.0f;
+			prm.wind[1] = 0.0f;
+			prm.wind[2] = 0.0f;
+		}
+	}
+	prm.gust = r_meshClothGust->value;
+	MC_WeatherWind(ent, bones, timeMs, prm);
+	prm.timeSec = 0.0f;
+	MC_LodParams(ent, prm);
+	MC_FloorUnder(ent, timeMs, prm);
+	cp.numOthers = MC_OthersNear(ent, cp.others);
+}
+
+// false: a degenerate bone, draw the surface normally
+static bool RB_MeshClothBuild(CBoneCache* bones, const mdxmSurface_t* surface, const mcR2Surf_t* rs, const trRefEntity_t* ent,
+	g2ClothPrep_t& cp, std::vector<g2GoreVert_t>& out)
+{
+	const vec3_t* axis = cp.axis;
 
 	// capsules: posed bone origin = skin matrix * bind position, then to world
-	mcCapsule_t caps[MC_NUM_COLLIDERS + 4]{};
+	mcCapsule_t caps[MC_NUM_COLLIDERS + 4 + MC_MAX_OTHERS]{};
 	int ncaps = 0;
-	const mcBoneLookup_t* lk = MC_Lookup(bones->header);
+	const mcBoneLookup_t* lk = &cp.lk;	// copied on the main thread (MC_Lookup is a shared cache)
 	for (int k = 0; k < MC_NUM_COLLIDERS; k++)
 	{
 		if (lk->idx[k][0] < 0 || lk->idx[k][1] < 0) continue;
@@ -4110,9 +4346,9 @@ static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurfac
 	}
 
 	// CPU skinning: positions, normals and tangents
-	static std::vector<float> xyzBuf, nrmBuf, tanBuf;
-	static std::vector<int> mainBone;
-	static std::vector<g2GoreVert_t> out;
+	// per thread: this can run on job workers
+	thread_local static std::vector<float> xyzBuf, nrmBuf, tanBuf;
+	thread_local static std::vector<int> mainBone;
 	const int n = surface->numVerts;
 	xyzBuf.resize(static_cast<std::vector<float, std::allocator<float>>::size_type>(n) * 4);
 	nrmBuf.resize(static_cast<std::vector<float, std::allocator<float>>::size_type>(n) * 4);
@@ -4151,37 +4387,16 @@ static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurfac
 	// saber hilts in both hands
 	if (MC_HiltCapsule(surface, bones, "*r_hand", ent, axis, caps[ncaps])) ncaps++;
 	if (MC_HiltCapsule(surface, bones, "*l_hand", ent, axis, caps[ncaps])) ncaps++;
-
-	mcParams_t prm{};
-	prm.gravity = r_meshClothGravity->value;
-	prm.drag = r_meshClothDrag->value;
-	prm.iterations = r_meshClothIter->integer;
-	prm.shapeScale = r_meshClothShape->value;
-	prm.inertia = r_meshClothInertia->value;
-	prm.maxAccel = r_meshClothMaxAccel->value;
-	prm.airDrag = r_meshClothAirDrag->value;
+	// nearby characters (r_meshClothOthers)
+	for (int i = 0; i < cp.numOthers; i++)
 	{
-		const int parsed = sscanf(
-			r_meshClothWind->string,
-			"%f %f %f",
-			&prm.wind[0],
-			&prm.wind[1],
-			&prm.wind[2]);
-
-		if (parsed < 3)
-		{
-			prm.wind[0] = 0.0f;
-			prm.wind[1] = 0.0f;
-			prm.wind[2] = 0.0f;
-		}
+		caps[ncaps++] = cp.others[i];
 	}
-	prm.gust = r_meshClothGust->value;
-	prm.timeSec = 0.0f;
-	MC_FloorUnder(ent, timeMs, prm);
 
-	MC_Apply(surface, bones, timeMs, ent->e.origin, axis, caps, ncaps, &prm,
-		MC_BoneFn, bones, xyz, nrm);
-	MC_Prune(timeMs);
+	if (cp.ok)
+	{
+		MC_Run(&cp.run, surface, cp.time, ent->e.origin, axis, caps, ncaps, &cp.prm, MC_BoneFn, bones, xyz, nrm);
+	}
 
 	// express every vertex in its main bone's space, weight 1
 	for (int i = 0; i < n; i++)
@@ -4192,7 +4407,7 @@ static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurfac
 		g2GoreVert_t& o = out[i];
 		if (!MC_Invert3x3(m, inv))
 		{
-			return nullptr;
+			return false;
 		}
 		const vec3_t rel = { xyz[i][0] - m[0][3], xyz[i][1] - m[1][3], xyz[i][2] - m[2][3] };
 		MC_Mul3(inv, rel, o.position);
@@ -4222,9 +4437,87 @@ static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurfac
 		o.weights[1] = o.weights[2] = o.weights[3] = 0;
 	}
 
+	return true;
+}
+
+static void RB_MeshClothUpload(mcR2Inst_t* in, const std::vector<g2GoreVert_t>& out, const int n)
+{
 	R_BindVBO(in->vbo);
 	qglBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(g2GoreVert_t) * n, out.data());
 	in->uploadedFrame = backEndData->realFrameNumber;
+}
+
+static int R_RenderJobThreads();
+
+// r_meshClothThreads (with r_threads on): 1 (or more) = cloth simulated on the job workers before each
+// camera view is drawn; 0 = cloth on the main thread exactly as with r_threads 0 (everything else stays
+// threaded). With r_threads 0 this is always 0.
+static int MC_ThreadMode()
+{
+	static cvar_t* cv = nullptr;
+	if (!cv)
+	{
+#ifdef REND2_SP
+		cv = ri.Cvar_Get("r_meshClothThreads", "1", CVAR_ARCHIVE);
+#else
+		cv = ri.Cvar_Get("r_meshClothThreads", "1", CVAR_ARCHIVE, "Mesh cloth with r_threads: 1 workers, 0 main thread, 2 workers but shadow views simulate for themselves");
+#endif
+	}
+	if (R_RenderJobThreads() <= 0 || !cv)
+	{
+		return 0;
+	}
+	return cv->integer;
+}
+
+// Simulate and upload one cloth surface. Returns the instance to draw with,
+// or nullptr to draw the surface normally.
+static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurface_t* surface, mcR2Surf_t* rs)
+{
+	CBoneCache* bones = surf->boneCache;
+	const trRefEntity_t* ent = backEnd.currentEntity;
+	if (!bones || !bones->header || !ent || surface->numVerts > SHADER_MAX_VERTEXES)
+	{
+		return nullptr;
+	}
+	const int timeMs = backEnd.refdef.time;
+	mcR2Inst_t* in = MC_R2Instance(bones, surface, timeMs);
+	if (!in)
+	{
+		return nullptr;
+	}
+	// drawn again this frame (shadow map, another view): reuse the upload
+	if (in->uploadedFrame == backEndData->realFrameNumber)
+	{
+		return in;
+	}
+
+	// (Shadow map views used to reuse the camera view's last upload here with r_threads on. That drew
+	// Dooku's cape as stray strips and patches in MD's Geonosis scenes - Jace's r_meshClothThreads 1/2/0
+	// test - so shadow views simulate for themselves again, as with r_threads 0.)
+
+	// built on a job worker before this list was drawn (r_threads): only the upload is left
+	if (in->pendingFrame == backEndData->realFrameNumber)
+	{
+		in->pendingFrame = ~0u;
+		if (!in->pendingOk)
+		{
+			return nullptr;
+		}
+		RB_MeshClothUpload(in, in->pending, surface->numVerts);
+		return in;
+	}
+
+	g2ClothPrep_t cp;
+	RB_MeshClothPrepare(bones, surface, ent, timeMs, cp);
+	thread_local static std::vector<g2GoreVert_t> out;
+	const bool ok = RB_MeshClothBuild(bones, surface, rs, ent, cp, out);
+	MC_Prune(timeMs);
+	if (!ok)
+	{
+		return nullptr;
+	}
+	RB_MeshClothUpload(in, out, surface->numVerts);
 	return in;
 }
 
@@ -4241,9 +4534,19 @@ static const char* MC_ModelPath(const CBoneCache* bones, const mdxmHeader_t* mdx
 	return mdxm->name;
 }
 
+// In-game menu model views (character menus: a 3D view without a world drawn while a level is loaded) get no cloth
+// simulation in rend2: the surfaces are drawn normally, in their animated pose. Jace's test (23/10/2026): MD9's in-game
+// character menu drew hooded/caped models (Jedi Warrior, Sith Eradicator, Arcann, Sidious) with exploded cloth triangles
+// in rend2 only, with r_threads 0 as well, while the same characters in the level and the main menu (no level) were fine.
+// Cause not found yet; the main menu (no level loaded) keeps its cloth.
+static bool MC_SkipScene()
+{
+	return tr.world && (backEnd.refdef.rdflags & RDF_NOWORLDMODEL);
+}
+
 static bool RB_MeshClothDraw(CRenderableSurface* surf)
 {
-	if (!r_meshCloth || !r_meshCloth->integer || !surf->surfaceData)
+	if (!r_meshCloth || !r_meshCloth->integer || !surf->surfaceData || MC_SkipScene())
 	{
 		return false;
 	}
@@ -4299,8 +4602,226 @@ static bool RB_MeshClothDraw(CRenderableSurface* surf)
 	return true;
 }
 
+/*
+==============
+Threaded mesh cloth (r_threads)
+
+rend2 skins Ghoul2 models on the GPU, so only cloth surfaces have CPU work:
+skinning, the simulation and packing the vertex buffer. Before a draw list is
+drawn, that is done on the job workers for every cloth surface not yet
+uploaded this frame; drawing then only uploads the result.
+
+Cloth surfaces are grouped by bone cache (one cloth state per character).
+The bone matrices were all worked out at the start of the frame, so the
+workers only read them. Everything else that is not thread-safe (buffers,
+cloth state, console values, floor traces, the collider bone lookup) is done
+on the main thread first.
+
+r_threads 0 skips all of this and draws exactly as before.
+==============
+*/
+struct g2R2ClothJob_t
+{
+	CBoneCache* bones;
+	const mdxmSurface_t* surface;
+	const mcR2Surf_t* rs;
+	const trRefEntity_t* ent;
+	mcR2Inst_t* in;
+	int prep;			// index into s_r2ClothPrep
+};
+
+static qjobs::Pool* s_g2Pool = nullptr;		// heap: stopped in R_ShutdownRenderJobs, never by a static destructor
+static std::vector<g2R2ClothJob_t> s_r2ClothJobs;
+static std::vector<g2ClothPrep_t> s_r2ClothPrep;
+static std::vector<int> s_r2ClothGroups;		// start of each bone cache's run in s_r2ClothJobs, then the end
+
+// worker threads for renderer jobs: r_threads -1 = automatic, 0 = off, N = N workers
+static int R_RenderJobThreads()
+{
+	const int want = r_threads ? r_threads->integer : 0;
+	if (want < 0)
+	{
+		return (std::min)(qjobs::Pool::DefaultThreads(), 7);
+	}
+	return (std::min)(want, qjobs::Pool::kMaxThreads);
+}
+
+static void RB_G2R2ClothGroups(const int begin, const int end)
+{
+	for (int gi = begin; gi < end; gi++)
+	{
+		for (int i = s_r2ClothGroups[gi]; i < s_r2ClothGroups[gi + 1]; i++)
+		{
+			const g2R2ClothJob_t& j = s_r2ClothJobs[i];
+			j.in->pendingOk = RB_MeshClothBuild(j.bones, j.surface, j.rs, j.ent, s_r2ClothPrep[j.prep], j.in->pending);
+		}
+	}
+}
+
+// called by RB_DrawSurfs (backEnd.refdef is already this view's) before anything is drawn
+void RB_G2PrepareDrawSurfs(drawSurf_t* drawSurfs, const int numDrawSurfs)
+{
+	const int threads = R_RenderJobThreads();
+	if (threads <= 0 && s_g2Pool)
+	{
+		s_g2Pool->Start(0);	// switched off: let the workers go
+	}
+	if (threads <= 0 || numDrawSurfs <= 0 || !r_meshCloth || !r_meshCloth->integer || MC_ThreadMode() <= 0 || MC_SkipScene())
+	{
+		return;
+	}
+	if (backEnd.viewParms.flags & VPF_DEPTHSHADOW)
+	{
+		return;	// shadow map views reuse last frame's cloth (RB_MeshClothUpdate); the main view simulates it
+	}
+
+	PROFILE_ZONE("Mesh cloth (threaded)");
+
+	const unsigned frame = backEndData->realFrameNumber;
+	const int timeMs = backEnd.refdef.time;
+
+	// the cloth surfaces in the list. Which surfaces are cloth is decided first
+	// for all of them: that can reset all cloth state when models were reloaded.
+	static std::vector<CRenderableSurface*> cand;
+	static std::vector<const trRefEntity_t*> candEnt;
+	cand.clear();
+	candEnt.clear();
+	for (int i = 0; i < numDrawSurfs; i++)
+	{
+		const drawSurf_t* ds = &drawSurfs[i];
+		if (*ds->surface != SF_MDX)
+		{
+			continue;
+		}
+		const auto cs = reinterpret_cast<CRenderableSurface*>(ds->surface);
+#ifdef _G2_GORE
+		if (cs->alternateTex)
+		{
+			continue;
+		}
+#endif
+		if (!cs->surfaceData || !cs->boneCache || !cs->boneCache->header)
+		{
+			continue;
+		}
+		int entityNum = 0, cubemapIndex = 0, postRender = 0;
+		shader_t* shader = nullptr;
+		R_DecomposeSort(ds->sort, &entityNum, &shader, &cubemapIndex, &postRender);
+		if (entityNum == REFENTITYNUM_WORLD)
+		{
+			continue;
+		}
+		const mdxmSurface_t* surface = cs->surfaceData;
+		const auto mdxm = reinterpret_cast<const mdxmHeader_t*>(reinterpret_cast<const byte*>(surface) + surface->ofsHeader);
+		const auto ho = reinterpret_cast<const mdxmHierarchyOffsets_t*>(reinterpret_cast<const byte*>(mdxm) + sizeof(mdxmHeader_t));
+		const auto sh = reinterpret_cast<const mdxmSurfHierarchy_t*>(reinterpret_cast<const byte*>(ho) + ho->offsets[surface->thisSurfaceIndex]);
+		if (!MC_IsClothSurface(surface, MC_ModelPath(cs->boneCache, mdxm), sh->name, mdxm->name))
+		{
+			continue;
+		}
+		cand.push_back(cs);
+		candEnt.push_back(&backEnd.refdef.entities[entityNum]);
+	}
+
+	s_r2ClothJobs.clear();
+	s_r2ClothPrep.clear();
+	for (size_t c = 0; c < cand.size(); c++)
+	{
+		CRenderableSurface* cs = cand[c];
+		const mdxmSurface_t* surface = cs->surfaceData;
+		if (surface->numVerts > SHADER_MAX_VERTEXES)
+		{
+			continue;
+		}
+		mcR2Surf_t* rs = MC_R2Surface(surface);
+		if (!rs)
+		{
+			continue;
+		}
+		mcR2Inst_t* in = MC_R2Instance(cs->boneCache, surface, timeMs);
+		if (!in || in->uploadedFrame == frame || in->pendingFrame == frame)
+		{
+			continue;	// no buffer, or already done this frame
+		}
+		g2ClothPrep_t cp;
+		RB_MeshClothPrepare(cs->boneCache, surface, candEnt[c], timeMs, cp);
+		in->pendingFrame = frame;
+		in->pendingOk = false;
+		s_r2ClothJobs.push_back({ cs->boneCache, surface, rs, candEnt[c], in, static_cast<int>(s_r2ClothPrep.size()) });
+		s_r2ClothPrep.push_back(cp);
+	}
+	if (s_r2ClothJobs.empty())
+	{
+		return;
+	}
+
+	// group by bone cache, keeping draw order inside each group
+	std::stable_sort(s_r2ClothJobs.begin(), s_r2ClothJobs.end(), [](const g2R2ClothJob_t& a, const g2R2ClothJob_t& b)
+		{
+			return std::less<const void*>()(a.bones, b.bones);
+		});
+	s_r2ClothGroups.clear();
+	for (size_t i = 0; i < s_r2ClothJobs.size(); i++)
+	{
+		if (i == 0 || s_r2ClothJobs[i].bones != s_r2ClothJobs[i - 1].bones)
+		{
+			s_r2ClothGroups.push_back(static_cast<int>(i));
+		}
+	}
+	s_r2ClothGroups.push_back(static_cast<int>(s_r2ClothJobs.size()));
+
+	if (!s_g2Pool)
+	{
+		s_g2Pool = new qjobs::Pool;
+	}
+	s_g2Pool->Start(threads);
+
+	// one job per bone cache
+	s_g2Pool->ParallelFor(static_cast<int>(s_r2ClothGroups.size()) - 1, 1, [](const int begin, const int end)
+		{
+			RB_G2R2ClothGroups(begin, end);
+		});
+
+	MC_Prune(timeMs);
+}
+
+// called by RB_DrawSurfs when the list has been drawn (rend2: results are kept per frame)
+void RB_G2FinishDrawSurfs()
+{
+}
+
+// called by RE_Shutdown: the workers must be gone before the renderer is unloaded
+void R_ShutdownRenderJobs()
+{
+	delete s_g2Pool;
+	s_g2Pool = nullptr;
+}
+
+// The same workers for other renderer work done on the main thread, such as image
+// loading (tr_image.cpp, tr_image_load.cpp). nullptr when r_threads is 0, so the
+// caller runs serially exactly as before.
+qjobs::Pool* R_RenderJobPool()
+{
+	const int threads = R_RenderJobThreads();
+	if (threads <= 0)
+	{
+		if (s_g2Pool)
+		{
+			s_g2Pool->Start(0);	// switched off: let the workers go
+		}
+		return nullptr;
+	}
+	if (!s_g2Pool)
+	{
+		s_g2Pool = new qjobs::Pool;
+	}
+	s_g2Pool->Start(threads);
+	return s_g2Pool;
+}
+
 void RB_SurfaceGhoul(CRenderableSurface* surf)
 {
+	PROFILE_ZONE("Ghoul2 surface");
 	if (RB_MeshClothDraw(surf))
 	{
 		return;
@@ -4620,6 +5141,7 @@ qhandle_t R_SJE_ChooseAnimGLA(const char* meshName, const mdxmHeader_t* mdxm, qb
 
 qboolean R_LoadMDXM(model_t* mod, void* buffer, const char* mod_name, qboolean& bAlreadyCached)
 {
+	PROFILE_ZONE("Load: model .glm");
 	int					i = 0, l = 0, j = 0;
 	mdxmHeader_t* pinmodel = nullptr, * mdxm = nullptr;
 	mdxmLOD_t* lod = nullptr;
@@ -5406,6 +5928,7 @@ R_LoadMDXA - load a Ghoul 2 animation file
 */
 qboolean R_LoadMDXA(model_t* mod, void* buffer, const char* mod_name, qboolean& bAlreadyCached)
 {
+	PROFILE_ZONE("Load: animation .gla");
 	mdxaHeader_t* pinmodel = nullptr, * mdxa = nullptr;
 	int version = 0;
 	int size = 0;

@@ -189,6 +189,7 @@ constexpr auto CHECK_FOV = 4;
 constexpr auto CHECK_SHOOT = 8;
 constexpr auto CHECK_VISRANGE = 16;
 extern qboolean CanSee(const gentity_t* ent);
+extern qboolean NPC_SeesThroughWalls(const gentity_t* self);
 extern qboolean InFOV(const gentity_t* ent, const gentity_t* from, int hFOV, int vFOV);
 extern qboolean InFOV(vec3_t origin, const gentity_t* from, int hFOV, int vFOV);
 extern qboolean InFOV(vec3_t spot, vec3_t from, vec3_t fromAngles, int hFOV, int vFOV);

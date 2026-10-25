@@ -47,7 +47,7 @@ static void CG_CheckAmmo(void)
 	weapons = cg.snap->ps.stats[STAT_WEAPONS];
 	total = 0;
 	for (i = WP_BRYAR_PISTOL; i < WP_NUM_WEAPONS; i++) {
-		if (!(weapons & (1 << i))) {
+		if (!(WP_MASK_HAS(weapons, i))) {
 			continue;
 		}
 		switch (i)
@@ -60,6 +60,8 @@ static void CG_CheckAmmo(void)
 		case WP_BOWCASTER:
 		case WP_REPEATER:
 		case WP_Z6_ROTARY_CANNON:
+		case WP_NOGHRI_STICK:
+		case WP_TUSKEN_RIFLE:
 		case WP_DEMP2:
 		case WP_FLECHETTE:
 		case WP_ROCKET_LAUNCHER:

@@ -23,6 +23,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "server.h"
+#include "q_profile.h"
 
 #include "ghoul2/ghoul2_shared.h"
 #include "sv_gameapi.h"
@@ -1337,6 +1338,7 @@ happen before SV_Frame is called
 */
 void SV_Frame(const int msec)
 {
+	PROFILE_ZONE("Server frame (game)");
 	int startTime = 0;
 
 	// the menu kills the server with this cvar

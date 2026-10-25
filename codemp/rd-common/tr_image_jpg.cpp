@@ -23,6 +23,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "tr_common.h"
+#include "q_profile.h"
 
 /*
  * Include file for users of JPEG library.
@@ -33,6 +34,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
 #include <jpeglib.h>
+#include <setjmp.h>
+#include <stdlib.h>
 
 static void R_JPGErrorExit(const j_common_ptr cinfo)
 {
@@ -94,6 +97,7 @@ void LoadJPG(const char* filename, unsigned char** pic, int* width, int* height)
 	if (!fbuffer.b || len < 0) {
 		return;
 	}
+	PROFILE_ZONE("Load: decode JPG");	// after the read: a name with no file is not a decode
 
 	/* Step 1: allocate and initialize JPEG decompression object */
 
@@ -220,6 +224,120 @@ void LoadJPG(const char* filename, unsigned char** pic, int* width, int* height)
 
 	/* And we're done! */
 }
+
+/*
+=================
+R_DecodeJPGThreadSafe
+
+The same decode as LoadJPG (same libjpeg calls, same RGB -> RGBA expansion) for the
+image prefetch in tr_image_load.cpp, which runs it on the render job workers. So:
+the file is already in memory, the pixels go in malloc() memory, nothing is printed,
+and libjpeg errors jump back here instead of reaching R_JPGErrorExit. Returns false
+on any error or warning; the prefetch then lets LoadJPG load that file the normal way,
+which prints exactly what it always did.
+=================
+*/
+struct jpgThreadSafeError_t
+{
+	jpeg_error_mgr pub;	// first, so libjpeg's err pointer is also ours
+	jmp_buf jump;
+};
+
+static void R_JPGThreadSafeErrorExit(const j_common_ptr cinfo)
+{
+	longjmp(reinterpret_cast<jpgThreadSafeError_t*>(cinfo->err)->jump, 1);
+}
+
+static void R_JPGThreadSafeOutputMessage(const j_common_ptr cinfo)
+{
+	// silent: warnings are still counted in num_warnings
+}
+
+bool R_DecodeJPGThreadSafe(const byte* data, const size_t len, byte** pic, int* width, int* height)
+{
+	*pic = nullptr;
+	*width = 0;
+	*height = 0;
+	if (!data || len == 0)
+	{
+		return false;
+	}
+
+	// no C++ objects in this function: longjmp must not skip a destructor
+	jpeg_decompress_struct cinfo = {};
+	jpgThreadSafeError_t jerr;
+	byte* volatile out = nullptr;	// volatile: still valid after a longjmp
+
+	cinfo.err = jpeg_std_error(&jerr.pub);
+	jerr.pub.error_exit = R_JPGThreadSafeErrorExit;
+	jerr.pub.output_message = R_JPGThreadSafeOutputMessage;
+
+	if (setjmp(jerr.jump))
+	{
+		jpeg_destroy_decompress(&cinfo);
+		free(out);
+		return false;
+	}
+
+	jpeg_create_decompress(&cinfo);
+	jpeg_mem_src(&cinfo, const_cast<unsigned char*>(data), static_cast<unsigned long>(len));
+	(void)jpeg_read_header(&cinfo, TRUE);
+	cinfo.out_color_space = JCS_RGB;
+	(void)jpeg_start_decompress(&cinfo);
+
+	const unsigned int pixelcount = cinfo.output_width * cinfo.output_height;
+	if (!cinfo.output_width || !cinfo.output_height
+		|| pixelcount * 4 / cinfo.output_width / 4 != cinfo.output_height
+		|| pixelcount > 0x1FFFFFFF || cinfo.output_components != 3
+		)
+	{
+		jpeg_destroy_decompress(&cinfo);
+		return false;
+	}
+
+	const unsigned int memcount = pixelcount * 4;
+	const unsigned int row_stride = cinfo.output_width * cinfo.output_components;
+	out = static_cast<byte*>(malloc(memcount));
+	if (!out)
+	{
+		jpeg_destroy_decompress(&cinfo);
+		return false;
+	}
+
+	while (cinfo.output_scanline < cinfo.output_height)
+	{
+		JSAMPROW row = out + row_stride * cinfo.output_scanline;
+		(void)jpeg_read_scanlines(&cinfo, &row, 1);
+	}
+
+	(void)jpeg_finish_decompress(&cinfo);
+	const bool warned = jerr.pub.num_warnings != 0;
+	const int w = static_cast<int>(cinfo.output_width);
+	const int h = static_cast<int>(cinfo.output_height);
+	jpeg_destroy_decompress(&cinfo);
+	if (warned)
+	{
+		free(out);
+		return false;	// let LoadJPG load it and print the warning, as before
+	}
+
+	// Expand from RGB to RGBA
+	byte* buf = out;
+	unsigned int sindex = pixelcount * 3;
+	unsigned int dindex = memcount;
+	do {
+		buf[--dindex] = 255;
+		buf[--dindex] = buf[--sindex];
+		buf[--dindex] = buf[--sindex];
+		buf[--dindex] = buf[--sindex];
+	} while (sindex);
+
+	*pic = buf;
+	*width = w;
+	*height = h;
+	return true;
+}
+
 
 /* Expanded data destination object for stdio output */
 

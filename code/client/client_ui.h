@@ -32,5 +32,6 @@ void UI_SetActiveMenu(const char* menuname, const char* menuID);
 void UI_UpdateConnectionMessageString(const char* string);
 qboolean UI_ConsoleCommand();
 qboolean _UI_IsFullscreen();
+void Menus_HideAllForMapLoad();	// ui_shared.cpp
 
 #endif //__CLIENTUI_H__

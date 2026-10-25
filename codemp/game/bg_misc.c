@@ -304,6 +304,9 @@ int WeaponIdleAnim[WP_NUM_WEAPONS] =
 	BOTH_STAND3, //WP_CONCUSSION
 	BOTH_STAND3, //WP_DROIDEKA,
 	BOTH_STAND3, //WP_Z6_ROTARY_CANNON,
+	BOTH_STAND3, //WP_NOGHRI_STICK,
+	BOTH_STAND3, //WP_TUSKEN_RIFLE,
+	BOTH_STAND3, //WP_TUSKEN_STAFF,
 	SBD_WEAPON_STANDING, //WP_BRYAR_OLD,
 
 	//NOT VALID (e.g. should never really be used):
@@ -332,6 +335,9 @@ int WeaponReadyAnim[WP_NUM_WEAPONS] =
 	TORSO_WEAPONREADY3, //WP_CONCUSSION
 	TORSO_WEAPONREADY3, //WP_DROIDEKA,
 	TORSO_WEAPONREADY3, //WP_Z6_ROTARY_CANNON,
+	TORSO_WEAPONREADY3, //WP_NOGHRI_STICK,
+	TORSO_WEAPONREADY3, //WP_TUSKEN_RIFLE,
+	TORSO_WEAPONREADY3, //WP_TUSKEN_STAFF,
 	SBD_WEAPON_STANDING,//WP_BRYAR_OLD,
 
 	//NOT VALID (e.g. should never really be used):
@@ -360,6 +366,9 @@ int WeaponReadyAnim2[WP_NUM_WEAPONS] =
 	TORSO_WEAPONREADY3,  //WP_CONCUSSION
 	TORSO_WEAPONREADY3, //WP_DROIDEKA,
 	TORSO_WEAPONREADY3, //WP_Z6_ROTARY_CANNON,
+	TORSO_WEAPONREADY3, //WP_NOGHRI_STICK,
+	TORSO_WEAPONREADY3, //WP_TUSKEN_RIFLE,
+	TORSO_WEAPONREADY3, //WP_TUSKEN_STAFF,
 	SBD_WEAPON_STANDING, //WP_BRYAR_OLD,
 
 	//NOT VALID (e.g. should never really be used):
@@ -388,6 +397,9 @@ int WeaponReadyLegsAnim[WP_NUM_WEAPONS] =
 	BOTH_STAND1, //WP_CONCUSSION
 	BOTH_STAND1, //WP_DROIDEKA,
 	BOTH_STAND1, //WP_Z6_ROTARY_CANNON,
+	BOTH_STAND1, //WP_NOGHRI_STICK,
+	BOTH_STAND1, //WP_TUSKEN_RIFLE,
+	BOTH_STAND1, //WP_TUSKEN_STAFF,
 	BOTH_STAND1, //WP_BRYAR_OLD,
 
 	//NOT VALID (e.g. should never really be used):
@@ -416,6 +428,9 @@ int WeaponAttackAnim[WP_NUM_WEAPONS] =
 	BOTH_ATTACK4,  //WP_CONCUSSION,
 	BOTH_ATTACK4, //WP_DROIDEKA,
 	BOTH_ATTACK3, //WP_Z6_ROTARY_CANNON,
+	BOTH_ATTACK3, //WP_NOGHRI_STICK,
+	BOTH_ATTACK3, //WP_TUSKEN_RIFLE,
+	BOTH_ATTACK3, //WP_TUSKEN_STAFF,
 	SBD_WEAPON_OUT_STANDING, //WP_BRYAR_OLD,
 
 	//NOT VALID (e.g. should never really be used):
@@ -444,6 +459,9 @@ int WeaponAttackAnim2[WP_NUM_WEAPONS] =
 	BOTH_ATTACK4,  //WP_CONCUSSION,
 	BOTH_ATTACK4, //WP_DROIDEKA,
 	BOTH_ATTACK3, //WP_Z6_ROTARY_CANNON,
+	BOTH_ATTACK3, //WP_NOGHRI_STICK,
+	BOTH_ATTACK3, //WP_TUSKEN_RIFLE,
+	BOTH_ATTACK3, //WP_TUSKEN_STAFF,
 	SBD_WEAPON_OUT_STANDING, //WP_BRYAR_OLD,
 
 	//NOT VALID (e.g. should never really be used):
@@ -472,6 +490,9 @@ int WeaponAltAttackAnim[WP_NUM_WEAPONS] =
 	BOTH_ATTACK3,  //WP_CONCUSSION,
 	BOTH_ATTACK3, //WP_DROIDEKA,
 	BOTH_ATTACK3, //WP_Z6_ROTARY_CANNON,
+	BOTH_ATTACK3, //WP_NOGHRI_STICK,
+	BOTH_ATTACK3, //WP_TUSKEN_RIFLE,
+	BOTH_ATTACK3, //WP_TUSKEN_STAFF,
 	SBD_WEAPON_OUT_STANDING, //WP_BRYAR_OLD,
 
 	//NOT VALID (e.g. should never really be used):
@@ -500,6 +521,9 @@ int WeaponAltAttackAnim2[WP_NUM_WEAPONS] =
 	BOTH_ATTACK3,  //WP_CONCUSSION,
 	BOTH_ATTACK3, //WP_DROIDEKA,
 	BOTH_ATTACK3, //WP_Z6_ROTARY_CANNON,
+	BOTH_ATTACK3, //WP_NOGHRI_STICK,
+	BOTH_ATTACK3, //WP_TUSKEN_RIFLE,
+	BOTH_ATTACK3, //WP_TUSKEN_STAFF,
 	SBD_WEAPON_OUT_STANDING, //WP_BRYAR_OLD,
 
 	//NOT VALID (e.g. should never really be used):
@@ -528,6 +552,9 @@ int WeaponAimAnim[WP_NUM_WEAPONS] =
 	TORSO_WEAPONREADY4,  //WP_CONCUSSION,
 	TORSO_WEAPONREADY4, //WP_DROIDEKA,
 	TORSO_WEAPONREADY3, //WP_Z6_ROTARY_CANNON,
+	TORSO_WEAPONREADY3, //WP_NOGHRI_STICK,
+	TORSO_WEAPONREADY3, //WP_TUSKEN_RIFLE,
+	TORSO_WEAPONREADY3, //WP_TUSKEN_STAFF,
 	SBD_WEAPON_OUT_STANDING, //WP_BRYAR_OLD,
 
 	//NOT VALID (e.g. should never really be used):
@@ -556,6 +583,9 @@ int WeaponAimAnim2[WP_NUM_WEAPONS] =
 	TORSO_WEAPONREADY4,  //WP_CONCUSSION,
 	TORSO_WEAPONREADY4, //WP_DROIDEKA,
 	TORSO_WEAPONREADY3, //WP_Z6_ROTARY_CANNON,
+	TORSO_WEAPONREADY3, //WP_NOGHRI_STICK,
+	TORSO_WEAPONREADY3, //WP_TUSKEN_RIFLE,
+	TORSO_WEAPONREADY3, //WP_TUSKEN_STAFF,
 	SBD_WEAPON_OUT_STANDING, //WP_BRYAR_OLD,
 
 	//NOT VALID (e.g. should never really be used):
@@ -584,6 +614,9 @@ int WeaponAltAimAnim[WP_NUM_WEAPONS] =
 	TORSO_WEAPONREADY4,  //WP_CONCUSSION,
 	TORSO_WEAPONREADY3, //WP_DROIDEKA,
 	TORSO_WEAPONREADY3, //WP_Z6_ROTARY_CANNON,
+	TORSO_WEAPONREADY3, //WP_NOGHRI_STICK,
+	TORSO_WEAPONREADY3, //WP_TUSKEN_RIFLE,
+	TORSO_WEAPONREADY3, //WP_TUSKEN_STAFF,
 	SBD_WEAPON_OUT_STANDING, //WP_BRYAR_OLD,
 
 	//NOT VALID (e.g. should never really be used):
@@ -612,6 +645,9 @@ int WeaponAltAimAnim2[WP_NUM_WEAPONS] =
 	TORSO_WEAPONREADY4,  //WP_CONCUSSION,
 	TORSO_WEAPONREADY3, //WP_DROIDEKA,
 	TORSO_WEAPONREADY3, //WP_Z6_ROTARY_CANNON,
+	TORSO_WEAPONREADY3, //WP_NOGHRI_STICK,
+	TORSO_WEAPONREADY3, //WP_TUSKEN_RIFLE,
+	TORSO_WEAPONREADY3, //WP_TUSKEN_STAFF,
 	SBD_WEAPON_OUT_STANDING, //WP_BRYAR_OLD,
 
 	//NOT VALID (e.g. should never really be used):
@@ -640,6 +676,9 @@ int WeaponAimingAnim[WP_NUM_WEAPONS] =
 	TORSO_WEAPONREADY4,  //WP_CONCUSSION,
 	TORSO_WEAPONREADY4, //WP_DROIDEKA,
 	TORSO_WEAPONREADY3, //WP_Z6_ROTARY_CANNON,
+	TORSO_WEAPONREADY3, //WP_NOGHRI_STICK,
+	TORSO_WEAPONREADY3, //WP_TUSKEN_RIFLE,
+	TORSO_WEAPONREADY3, //WP_TUSKEN_STAFF,
 	SBD_WEAPON_OUT_STANDING, //WP_BRYAR_OLD,
 
 	//NOT VALID (e.g. should never really be used):
@@ -668,6 +707,9 @@ int WeaponAimingAnim2[WP_NUM_WEAPONS] =
 	TORSO_WEAPONREADY4,  //WP_CONCUSSION,
 	TORSO_WEAPONREADY4, //WP_DROIDEKA,
 	TORSO_WEAPONREADY3, //WP_Z6_ROTARY_CANNON,
+	TORSO_WEAPONREADY3, //WP_NOGHRI_STICK,
+	TORSO_WEAPONREADY3, //WP_TUSKEN_RIFLE,
+	TORSO_WEAPONREADY3, //WP_TUSKEN_STAFF,
 	SBD_WEAPON_OUT_STANDING, //WP_BRYAR_OLD,
 
 	//NOT VALID (e.g. should never really be used):
@@ -1753,6 +1795,69 @@ the Z-6 rotary cannon (from MovieDuels)
 	100,
 	IT_WEAPON,
 	WP_Z6_ROTARY_CANNON,
+	/* precache */ "",
+	/* sounds */ "",
+	"" // description
+},
+
+/*QUAKED weapon_noghri_stick (.3 .3 1) (-16 -16 -16) (16 16 16) suspended
+the noghri stick (from SJE SP)
+*/
+{
+	"weapon_noghri_stick",
+	"sound/weapons/w_pkup.wav",
+	{
+		"models/weapons2/noghri_stick/noghri_stick_w.glm",
+		0, 0, 0
+	},
+	/* view */ "models/weapons2/noghri_stick/noghri_stick.md3",
+	/* icon */ "gfx/hud/w_icon_noghri",
+	/* pickup */ //	"Noghri Stick",
+	100,
+	IT_WEAPON,
+	WP_NOGHRI_STICK,
+	/* precache */ "",
+	/* sounds */ "",
+	"" // description
+},
+
+/*QUAKED weapon_tusken_rifle (.3 .3 1) (-16 -16 -16) (16 16 16) suspended
+the tusken rifle (from SJE SP)
+*/
+{
+	"weapon_tusken_rifle",
+	"sound/weapons/w_pkup.wav",
+	{
+		"models/weapons2/tusken_rifle/tusken_rifle_w.glm",
+		0, 0, 0
+	},
+	/* view */ "models/weapons2/tusken_rifle/tusken_rifle.md3",
+	/* icon */ "gfx/hud/w_icon_tusken",
+	/* pickup */ //	"Tusken Rifle",
+	100,
+	IT_WEAPON,
+	WP_TUSKEN_RIFLE,
+	/* precache */ "",
+	/* sounds */ "",
+	"" // description
+},
+
+/*QUAKED weapon_tusken_staff (.3 .3 1) (-16 -16 -16) (16 16 16) suspended
+the tusken staff (from SJE SP; SP has no icon for it, the melee one is used)
+*/
+{
+	"weapon_tusken_staff",
+	"sound/weapons/w_pkup.wav",
+	{
+		"models/weapons2/tusken_staff/tusken_staff_w.glm",
+		0, 0, 0
+	},
+	/* view */ "models/weapons2/tusken_staff/tusken_staff.md3",
+	/* icon */ "gfx/hud/w_icon_melee",
+	/* pickup */ //	"Tusken Staff",
+	100,
+	IT_WEAPON,
+	WP_TUSKEN_STAFF,
 	/* precache */ "",
 	/* sounds */ "",
 	"" // description
@@ -2923,7 +3028,7 @@ qboolean BG_CanItemBeGrabbed(const int gametype, const entityState_t* ent, const
 		{
 			const int ammo_index = weaponData[item->giTag].ammoIndex;
 
-			if (COM_BitCheck(&ps->stats[STAT_WEAPONS], item->giTag) &&
+			if (BG_HasWeapon(ps->stats, item->giTag) &&
 				ps->ammo[ammo_index] >= ammoData[ammo_index].max &&
 				item->giTag != WP_THERMAL &&
 				item->giTag != WP_TRIP_MINE &&
@@ -2935,7 +3040,7 @@ qboolean BG_CanItemBeGrabbed(const int gametype, const entityState_t* ent, const
 		else
 		{
 			if (!(ent->eFlags & EF_DROPPEDWEAPON) &&
-				(ps->stats[STAT_WEAPONS] & (1 << item->giTag)) &&
+				(BG_HasWeapon(ps->stats, item->giTag)) &&
 				item->giTag != WP_THERMAL &&
 				item->giTag != WP_TRIP_MINE &&
 				item->giTag != WP_DET_PACK)
@@ -2951,7 +3056,7 @@ qboolean BG_CanItemBeGrabbed(const int gametype, const entityState_t* ent, const
 			const int ammo_index = weaponData[item->giTag].ammoIndex;
 
 			if (ps->ammo[ammo_index] >= ammoData[ammo_index].max &&
-				(ps->stats[STAT_WEAPONS] & (1 << item->giTag)))
+				(BG_HasWeapon(ps->stats, item->giTag)))
 			{
 				return qfalse;
 			}

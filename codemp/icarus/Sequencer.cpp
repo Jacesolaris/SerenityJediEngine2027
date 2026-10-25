@@ -667,7 +667,7 @@ int CSequencer::ParseAffect(CBlock* block, bstream_t* bstream)
 		if (!ent)
 		{
 			// a valid entity name was not returned from the get command
-			m_ie->I_DPrintf(WL_WARNING, "'%s' : invalid affect() target\n");
+			m_ie->I_DPrintf(WL_WARNING, "'%s' : invalid affect() target\n", p1 ? p1 : "(no name)"); // the name was missing: %s read garbage and crashed (2026-10-24)
 		}
 	} // end if(!ent)
 
@@ -1763,7 +1763,7 @@ void CSequencer::CheckAffect(CBlock** command)
 			if (!ent)
 			{
 				// a valid entity name was not returned from the get command
-				m_ie->I_DPrintf(WL_WARNING, "'%s' : invalid affect() target\n");
+				m_ie->I_DPrintf(WL_WARNING, "'%s' : invalid affect() target\n", p1 ? p1 : "(no name)"); // the name was missing: %s read garbage and crashed (2026-10-24)
 			}
 		} // end if(!ent)
 

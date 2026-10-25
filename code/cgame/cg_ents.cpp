@@ -26,6 +26,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "cg_headers.h"
 
 #include "cg_media.h"
+#include "q_profile.h"
 #include "../game/g_functions.h"
 #include "../ghoul2/G2.h"
 #include "FxScheduler.h"
@@ -2851,16 +2852,25 @@ static void CG_AddCEntity(centity_t* cent)
 	case ET_TERRAIN:
 		break;
 	case ET_GENERAL:
+	{
+		PROFILE_ZONE("cgame: general entity");
 		CG_General(cent);
+	}
 		break;
 	case ET_PLAYER:
+	{
+		PROFILE_ZONE("cgame: player or NPC (CG_Player)");
 		CG_Player(cent);
+	}
 		break;
 	case ET_ITEM:
 		CG_Item(cent);
 		break;
 	case ET_MISSILE:
+	{
+		PROFILE_ZONE("cgame: missile");
 		CG_Missile(cent);
+	}
 		break;
 	case ET_MOVER:
 		CG_Mover(cent);

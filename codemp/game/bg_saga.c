@@ -109,6 +109,9 @@ stringID_table_t WPTable[] =
 	ENUM2STRING(WP_CONCUSSION),
 	ENUM2STRING(WP_DROIDEKA),
 	ENUM2STRING(WP_Z6_ROTARY_CANNON),
+	ENUM2STRING(WP_NOGHRI_STICK),
+	ENUM2STRING(WP_TUSKEN_RIFLE),
+	ENUM2STRING(WP_TUSKEN_STAFF),
 	ENUM2STRING(WP_BRYAR_OLD),
 	ENUM2STRING(WP_EMPLACED_GUN),
 	ENUM2STRING(WP_TURRET),
@@ -880,7 +883,10 @@ static int BG_SiegeTranslateGenericTable(const char* buf, const stringID_table_t
 						//Got it, so add the value into our items value.
 						if (bitflag)
 						{
-							items |= 1 << table[k].id;
+							if (table[k].id < 32) // a 32 bit mask: weapons 32+ cannot be listed
+							{
+								items |= 1 << table[k].id;
+							}
 						}
 						else
 						{
@@ -1054,13 +1060,13 @@ static void BG_SiegeParseClassFile(const char* filename, siegeClassDesc_t* descB
 		Com_Error(ERR_DROP, "Siege class without weapons entry");
 	}
 
-	if (!(bgSiegeClasses[bgNumSiegeClasses].weapons & 1 << WP_SABER))
+	if (!(WP_MASK_HAS(bgSiegeClasses[bgNumSiegeClasses].weapons, WP_SABER)))
 	{
 		//make sure it has melee if there's no saber
-		bgSiegeClasses[bgNumSiegeClasses].weapons |= 1 << WP_MELEE;
+		WP_MASK_ADD(bgSiegeClasses[bgNumSiegeClasses].weapons, WP_MELEE);
 
 		//always give them this too if they are not a saber user
-		//bgSiegeClasses[bgNumSiegeClasses].weapons |= (1 << WP_BRYAR_PISTOL);
+		//WP_MASK_ADD(bgSiegeClasses[bgNumSiegeClasses].weapons, WP_BRYAR_PISTOL);
 	}
 
 	//Parse forcepowers

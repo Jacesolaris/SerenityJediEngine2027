@@ -23,6 +23,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 // cl_cgame.c  -- client system interaction with client game
 #include "client.h"
+#include "q_profile.h"
 #include "cl_cgameapi.h"
 #include "botlib/botlib.h"
 #include "FXExport.h"
@@ -586,6 +587,8 @@ Should only be called by CL_StartHunkUsers
 
 void CL_InitCGame(void)
 {
+	PROFILE_ZONE("Load: cgame init (models, sounds, shaders)");
+	FS_LookupCacheBegin();	// a client joining a server never ran SV_SpawnServer here
 	const int t1 = Sys_Milliseconds();
 
 	// put away the console
@@ -628,6 +631,7 @@ void CL_InitCGame(void)
 
 	// have the renderer touch all its images, so they are present
 	// on the card even if the driver does deferred loading
+	FS_LookupCacheEnd();	// the map load is over (RE_EndRegistration writes files)
 	re->EndRegistration();
 
 	// make sure everything is paged in

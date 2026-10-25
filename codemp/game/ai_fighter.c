@@ -495,7 +495,7 @@ static void Fighter_MakePilot(gentity_t* ship, const int side)
 		// he walks to it first (unarmed: a ship only fires for a pilot with no weapon in his hands)
 		pilot->client->ps.weapon = WP_NONE;
 		pilot->s.weapon = WP_NONE;
-		pilot->client->ps.stats[STAT_WEAPONS] = 0;
+		BG_ClearWeapons(pilot->client->ps.stats);
 		if (Fighter_Developer())
 		{
 			Com_Printf("fighter AI: %s %d walks to %s %d for team %d\n", pilot->NPC_type, pilot->s.number,
@@ -819,7 +819,7 @@ static qboolean Fighter_Board(gentity_t* pilot)
 	// a ship only fires for a pilot with no weapon in his hands
 	pilot->client->ps.weapon = WP_NONE;
 	pilot->s.weapon = WP_NONE;
-	pilot->client->ps.stats[STAT_WEAPONS] = 0;
+	BG_ClearWeapons(pilot->client->ps.stats);
 
 	// his side (NPC_Begin has put him on a siege team by who he hates, which is not the map's)
 	pilot->client->sess.sessionTeam = fighter_side[pilot->s.number];

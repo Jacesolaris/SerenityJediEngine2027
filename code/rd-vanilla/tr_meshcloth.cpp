@@ -18,6 +18,7 @@ Per character instance:
 */
 
 #include "../qcommon/q_shared.h"
+#include "q_profile.h"
 #include "../rd-common/mdx_format.h"
 #include "tr_meshcloth.h"
 
@@ -29,6 +30,7 @@ Per character instance:
 #include <cstring>
 #include <cstdlib>
 #include <algorithm>
+#include <chrono>
 
 #ifdef MC_DEBUG
 #include <cstdlib>
@@ -40,6 +42,7 @@ int g_mcDbgTether = 0;
 namespace {
 
 const int	MC_STEP_MS		= 16;
+const int	MC_LOD_MS		= 32;		// mid-distance cloth (mcParams_t::lodNear) updates at most this often
 const float	MC_DT			= 0.016f;
 const int	MC_MAX_STEPS	= 2;		// SJE: was 4. A slow frame ran up to 4 steps, which made the next frame slower still
 								// (frame rate collapsed with heavy capes). Past 2 steps the cloth just runs a little slow.
@@ -136,6 +139,7 @@ struct mcInstance_t {
 	bool				active = false;
 	int					lastTime = 0, lastSeen = 0, accum = 0, outTime = 0;
 	float				linkScale = 1.0f;		// animated / bind size of the cloth (model scale)
+	int lod = 0;					// distance level of detail last used: 0 full, 1 reduced, 2 not simulated
 	vec3_t				lastOrigin = {};		// character origin at the previous simulation
 	vec3_t				originVel = {};		// its velocity (units/s)
 	vec3_t				up = {};				// the character's up direction (world)
@@ -164,6 +168,14 @@ std::unordered_map<const mdxmSurface_t *, mcSurfEntry_t>	g_surfs;
 std::vector<mcGroup_t *>									g_groups;
 std::unordered_map<unsigned long long, mcInstance_t *>		g_instances;
 int															g_lastPrune;
+
+// cloth instances are forgotten by the wall clock, not a scene time: an in-game menu model view (UI time) and the
+// level (game time) are drawn in the same frame with different times, and pruning by either one deleted every
+// instance of the other each frame (reset every frame: a 10 fps character menu, exploding capes)
+static int MC_WallMs() {
+	static const auto start = std::chrono::steady_clock::now();
+	return (int)std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::steady_clock::now() - start ).count();
+}
 
 // Local inlined vector helpers: the engine's VectorLength/VectorSubtract/...
 // are out-of-line calls in this codebase, and the inner loops below run them
@@ -958,7 +970,7 @@ void SelfCollide( const mcGroup_t *g, mcInstance_t *in ) {
 	auto cellOf = [&]( const float *v, int k ) { return (long long)floorf( v[k] / cell ); };
 	auto key = []( long long x, long long y, long long z ) { return ( x * 73856093LL ) ^ ( y * 19349663LL ) ^ ( z * 83492791LL ); };
 	struct cellEntry_t { long long key; int p; };
-	static std::vector<cellEntry_t> cells;
+	thread_local static std::vector<cellEntry_t> cells;	// per thread: cloth can simulate on job workers
 	cells.clear();
 	for ( int p = 0; p < g->numParticles; p++ ) {
 		if ( g->freedom[p] <= 0.0f || !g->selfCol[p] ) continue;
@@ -1266,6 +1278,21 @@ void Step( const mcGroup_t *g, mcInstance_t *in, const std::vector<float> &tgtFr
 		const float gs = 1.0f + prm->gust * ( 0.6f * sinf( t * 1.3f ) + 0.4f * sinf( t * 3.7f + 1.1f ) );
 		mcScale( prm->wind, gs, windNow );
 	}
+	// flutter (r_meshClothFlutter): the wind's strength also varies across the cloth, in ripples that travel
+	// along it (a phase from each particle's position and the time), so wind flaps a cape instead of
+	// pushing it as one stiff sheet. Worked out once per step, only when there is wind.
+	thread_local static std::vector<float> windF;
+	const bool flutter = prm->flutter > 0.0f && mcDot( windNow, windNow ) > 1e-4f;
+	if ( flutter ) {
+		windF.resize( g->numParticles );
+		const float t = prm->timeSec;
+		const float a = Clamp01( prm->flutter );
+		for ( int p = 0; p < g->numParticles; p++ ) {
+			const float *pp = &in->p[p * 3];
+			const float ph = t * 7.3f + pp[0] * 0.045f + pp[1] * 0.037f + pp[2] * 0.051f;
+			windF[p] = 1.0f + a * ( 0.65f * sinf( ph ) + 0.35f * sinf( ph * 2.3f + 1.7f ) );
+		}
+	}
 
 	// the cloth's current size against its bind pose (model scale)
 	float animSum = 0.0f;
@@ -1301,6 +1328,13 @@ void Step( const mcGroup_t *g, mcInstance_t *in, const std::vector<float> &tgtFr
 			mcSub( pp, pv, v );
 			mcScale( v, damp, v );
 			if ( s == 0 && in->impulse.size() == in->p.size() ) mcMA( v, h, &in->impulse[p * 3], v );
+			// under water (r_meshClothWater): heavy drag instead of the air, and the cloth floats up a little
+			const bool underWater = prm->water && pp[2] < prm->waterZ;
+			if ( underWater ) {
+				float kw = prm->waterDrag * h;
+				if ( kw > 0.9f ) kw = 0.9f;
+				mcScale( v, 1.0f - kw, v );
+			}
 			// Air. The force comes from the cloth's motion RELATIVE TO THE AIR
 			// (its own world velocity minus the wind), split in two:
 			//  - through the cloth (along its normal): the strong "sail" drag
@@ -1309,11 +1343,12 @@ void Step( const mcGroup_t *g, mcInstance_t *in, const std::vector<float> &tgtFr
 			//    when its wearer falls and streams it back when he runs.
 			// Both are divided by the cloth's weight (mass per area): the same
 			// air moves a heavy wool cloak less than a silk cape. Gravity is
-			// not divided, since every mass falls alike.
-			{
-				const float invW = 1.0f / g->weight[p];
+			// not divided, since every mass falls alike. Wet cloth (rain,
+			// r_meshClothRain) weighs more, so the air moves it less.
+			if ( !underWater ) {
+				const float invW = 1.0f / ( g->weight[p] * ( 1.0f + Clamp01( prm->wet ) ) );
 				vec3_t rel;
-				mcMA( v, -h, windNow, rel );		// v is per substep, wind is per second
+				mcMA( v, flutter ? -h * windF[p] : -h, windNow, rel );		// v is per substep, wind is per second
 				const float *nn = &n[p * 3];
 				const float vn = mcDot( rel, nn );
 				float kn = prm->drag * h * invW;
@@ -1327,7 +1362,11 @@ void Step( const mcGroup_t *g, mcInstance_t *in, const std::vector<float> &tgtFr
 			}
 			mcCopy( pp, pv );
 			mcAdd( pp, v, pp );
-			pp[2] -= prm->gravity * h * h;
+			if ( underWater ) {
+				pp[2] += prm->gravity * 0.15f * h * h;	// buoyant: drifts slowly up instead of falling
+			} else {
+				pp[2] -= prm->gravity * h * h;
+			}
 			// sideways-only pull toward the animated shape: stops a cape
 			// rolling up into a rope in saber spins, while it still trails,
 			// swings and lifts freely front to back and up and down
@@ -1818,17 +1857,13 @@ bool MC_IsClothSurface( const void *surfacePtr, const char *modelName, const cha
 	return false;
 }
 
-void MC_Apply( const void *surfacePtr, const void *instanceKey, int timeMs,
-			   const vec3_t origin, const vec3_t axis[3],
-			   const mcCapsule_t *caps, int ncaps, const mcParams_t *prm,
-			   mcBoneFn_t boneFn, void *boneCtx,
-			   float (*xyz)[4], float (*normal)[4] ) {
+bool MC_Prepare( const void *surfacePtr, const void *instanceKey, int timeMs, mcRun_t *run ) {
 	const mdxmSurface_t *surface = static_cast<const mdxmSurface_t *>( surfacePtr );
 	auto sit = g_surfs.find( surface );
-	if ( sit == g_surfs.end() || !sit->second.group ) return;
+	if ( sit == g_surfs.end() || !sit->second.group ) return false;
 	const mcGroup_t *g = sit->second.group;
 	const int si = sit->second.surfIndex;
-	if ( g->surfs[si]->numVerts != surface->numVerts ) return;
+	if ( g->surfs[si]->numVerts != surface->numVerts ) return false;
 
 	const unsigned long long key = (unsigned long long)(size_t)instanceKey * 31ULL ^ (unsigned long long)(size_t)g;
 	mcInstance_t *in;
@@ -1842,13 +1877,55 @@ void MC_Apply( const void *surfacePtr, const void *instanceKey, int timeMs,
 	} else {
 		in = iit->second;
 	}
-	in->lastSeen = timeMs;
+	in->lastSeen = MC_WallMs();
+
+	// the group's lazily built data is shared by every character with this model: build it
+	// here, on the main thread, so MC_Run (maybe on a job worker) only ever reads the group
+	ComputeRootDist( g );
+
+	run->instance = in;
+	run->group = g;
+	run->surfIndex = si;
+	return true;
+}
+
+void MC_Run( const mcRun_t *run, const void *surfacePtr, int timeMs,
+			 const vec3_t origin, const vec3_t axis[3],
+			 const mcCapsule_t *caps, int ncaps, const mcParams_t *prm,
+			 mcBoneFn_t boneFn, void *boneCtx,
+			 float (*xyz)[4], float (*normal)[4] ) {
+	PROFILE_ZONE("Mesh cloth");
+	const mdxmSurface_t *surface = static_cast<const mdxmSurface_t *>( surfacePtr );
+	const mcGroup_t *g = static_cast<const mcGroup_t *>( run->group );
+	mcInstance_t *in = static_cast<mcInstance_t *>( run->instance );
+	const int si = run->surfIndex;
+
+	// distance level of detail. Coming back in, the band edges are 10% nearer,
+	// so a character standing on an edge doesn't flip between bands every frame.
+	// lodDist < 0 (rend2 shadow map views): keep the level the camera's view chose - measured from a
+	// light or the sun, every cape was "far away", so a shadow pass drawn first each frame froze it.
+	int lod = 0;
+	if ( prm->lodDist < 0.0f ) lod = in->lod;
+	else if ( prm->lodFar > 0.0f && prm->lodDist > prm->lodFar * ( in->lod == 2 ? 0.9f : 1.0f ) ) lod = 2;
+	else if ( prm->lodNear > 0.0f && prm->lodDist > prm->lodNear * ( in->lod >= 1 ? 0.9f : 1.0f ) ) lod = 1;
+	in->lod = lod;
+	if ( lod == 2 ) {
+		// far away: not simulated, the surface keeps its animated pose. The cloth
+		// settles again from the pose when the character comes closer.
+		in->active = false;
+		return;
+	}
 
 	// the first cloth surface drawn this frame simulates the whole model;
 	// the others (and shadow/mirror passes) reuse the result
-	if ( in->outTime != timeMs || !in->active ) {
+	bool simulate = in->outTime != timeMs || !in->active;
+	// mid distance: at most every MC_LOD_MS, with half the constraint passes. Frames in
+	// between reuse the last result; the fixed 16 ms steps still all run on the next update.
+	if ( simulate && lod == 1 && in->active && timeMs >= in->outTime && timeMs - in->outTime < MC_LOD_MS ) simulate = false;
+	if ( simulate ) {
 		mcParams_t pt = *prm;
 		pt.timeSec = timeMs * 0.001f;
+		if ( lod == 1 && pt.iterations > 1 ) pt.iterations = ( pt.iterations + 1 ) / 2;
 		Simulate( g, in, timeMs, origin, axis, caps, ncaps, &pt, boneFn, boneCtx );
 	}
 
@@ -1868,12 +1945,31 @@ void MC_Apply( const void *surfacePtr, const void *instanceKey, int timeMs,
 	}
 }
 
-void MC_Blast( const float center[3], float strength, float radius ) {
+void MC_Apply( const void *surfacePtr, const void *instanceKey, int timeMs,
+			   const vec3_t origin, const vec3_t axis[3],
+			   const mcCapsule_t *caps, int ncaps, const mcParams_t *prm,
+			   mcBoneFn_t boneFn, void *boneCtx,
+			   float (*xyz)[4], float (*normal)[4] ) {
+	mcRun_t run;
+	if ( !MC_Prepare( surfacePtr, instanceKey, timeMs, &run ) ) return;
+	MC_Run( &run, surfacePtr, timeMs, origin, axis, caps, ncaps, prm, boneFn, boneCtx, xyz, normal );
+}
+
+void MC_Blast( const float center[3], float strength, float radius, mcVisibleFn_t visible ) {
 	if ( radius <= 1.0f ) return;
 	for ( auto &kv : g_instances ) {
 		mcInstance_t *in = kv.second;
 		if ( !in || !in->active || in->p.empty() ) continue;
 		const int np = (int)( in->p.size() / 3 );
+		if ( visible ) {
+			// one check per character, to the middle of its cloth: a blast behind a wall leaves it alone
+			vec3_t mid = { 0, 0, 0 };
+			for ( int p = 0; p < np; p++ ) mcAdd( mid, &in->p[p * 3], mid );
+			mcScale( mid, 1.0f / np, mid );
+			vec3_t d;
+			mcSub( mid, center, d );
+			if ( mcDot( d, d ) > radius * radius * 4.0f || !visible( center, mid ) ) continue;
+		}
 		if ( in->impulse.size() != in->p.size() ) in->impulse.assign( in->p.size(), 0.0f );
 		for ( int p = 0; p < np; p++ ) {
 			vec3_t d;
@@ -1889,7 +1985,31 @@ void MC_Blast( const float center[3], float strength, float radius ) {
 	}
 }
 
-void MC_Prune( int timeMs ) {
+void MC_Push( const float center[3], const float dir[3], float strength, float radius, float coneDot ) {
+	if ( radius <= 1.0f || strength == 0.0f ) return;
+	for ( auto &kv : g_instances ) {
+		mcInstance_t *in = kv.second;
+		if ( !in || !in->active || in->p.empty() ) continue;
+		const int np = (int)( in->p.size() / 3 );
+		if ( in->impulse.size() != in->p.size() ) in->impulse.assign( in->p.size(), 0.0f );
+		for ( int p = 0; p < np; p++ ) {
+			vec3_t d;
+			mcSub( &in->p[p * 3], center, d );
+			const float dist = mcLen( d );
+			if ( dist >= radius || dist < 1e-3f ) continue;
+			mcScale( d, 1.0f / dist, d );
+			if ( mcDot( d, dir ) < coneDot ) continue;	// behind or beside the pusher
+			// strongest near the hand, nothing at the edge; mostly along the wave, a little up
+			const float sp = strength * ( 1.0f - dist / radius );
+			mcScale( d, sp, d );
+			d[2] += 0.15f * fabsf( sp );
+			mcAdd( &in->impulse[p * 3], d, &in->impulse[p * 3] );
+		}
+	}
+}
+
+void MC_Prune( int ) {
+	const int timeMs = MC_WallMs();
 	if ( timeMs - g_lastPrune < 1000 && timeMs >= g_lastPrune ) return;
 	g_lastPrune = timeMs;
 	for ( auto it = g_instances.begin(); it != g_instances.end(); ) {
@@ -1900,4 +2020,83 @@ void MC_Prune( int timeMs ) {
 			++it;
 		}
 	}
+}
+
+// MC_WeatherState: per character, eased so nothing jumps (see tr_meshcloth.h). Main thread only.
+struct mcWeather_t {
+	float	outside = 0.0f;
+	float	wet = 0.0f;
+	int		time = 0;
+};
+static std::unordered_map<const void *, mcWeather_t> g_weather;
+
+void MC_WeatherState( const void *instanceKey, int timeMs, bool outside, float wetTarget, float *outsideOut, float *wetOut ) {
+	auto found = g_weather.find( instanceKey );
+	if ( found == g_weather.end() ) {
+		if ( g_weather.size() > 512 ) {
+			// forget characters not seen for a while
+			for ( auto it = g_weather.begin(); it != g_weather.end(); ) {
+				if ( timeMs - it->second.time > MC_FORGET_MS || timeMs < it->second.time ) it = g_weather.erase( it );
+				else ++it;
+			}
+		}
+		mcWeather_t w;
+		w.outside = outside ? 1.0f : 0.0f;	// a new character starts where it is, no fade
+		w.wet = Clamp01( wetTarget );
+		w.time = timeMs;
+		found = g_weather.emplace( instanceKey, w ).first;
+	}
+	mcWeather_t &w = found->second;
+	float dt = ( timeMs - w.time ) * 0.001f;
+	if ( dt < 0.0f || dt > 1.0f ) dt = 1.0f;	// a reload or a long pause: catch up at once
+	w.time = timeMs;
+	const float o = outside ? 1.0f : 0.0f;
+	const float os = dt / 0.4f;
+	w.outside = w.outside < o ? ( w.outside + os > o ? o : w.outside + os ) : ( w.outside - os < o ? o : w.outside - os );
+	const float wt = Clamp01( wetTarget );
+	if ( wt >= 1.0f && w.wet < 1.0f && wetTarget > 1.0f ) {
+		w.wet = 1.0f;	// in water: soaked at once
+	} else if ( w.wet < wt ) {
+		w.wet += dt / 8.0f;
+		if ( w.wet > wt ) w.wet = wt;
+	} else if ( w.wet > wt ) {
+		w.wet -= dt / 45.0f;
+		if ( w.wet < wt ) w.wet = wt;
+	}
+	*outsideOut = w.outside;
+	*wetOut = w.wet;
+}
+
+// MC_SetCharacters / MC_NearCharacters (r_meshClothOthers): other characters push cloth. Main thread.
+static std::vector<float> g_charOrigins;
+static int g_charFrame = -1;
+
+void MC_SetCharacters( int frameId, const float ( *origins )[3], int count ) {
+	g_charFrame = frameId;
+	g_charOrigins.assign( &origins[0][0], &origins[0][0] + count * 3 );
+}
+
+bool MC_CharactersListed( int frameId ) {
+	return g_charFrame == frameId;
+}
+
+int MC_NearCharacters( const float origin[3], mcCapsule_t *out, int max ) {
+	// a standing character as a capsule from the knees to the chest; the cloth of a robe reaches about
+	// 40 units out, so only characters within NEAR units of this one can touch it
+	const float NEAR = 72.0f;
+	int n = 0;
+	const int count = (int)g_charOrigins.size() / 3;
+	for ( int i = 0; i < count && n < max; i++ ) {
+		const float *o = &g_charOrigins[i * 3];
+		const float dx = o[0] - origin[0], dy = o[1] - origin[1], dz = o[2] - origin[2];
+		const float d2 = dx * dx + dy * dy;
+		if ( d2 < 1.0f && fabsf( dz ) < 1.0f ) continue;	// this character itself
+		if ( d2 > NEAR * NEAR || fabsf( dz ) > 64.0f ) continue;
+		mcCapsule_t &c = out[n++];
+		c.a[0] = o[0]; c.a[1] = o[1]; c.a[2] = o[2] - 12.0f;
+		c.b[0] = o[0]; c.b[1] = o[1]; c.b[2] = o[2] + 28.0f;
+		c.r = 12.0f;
+		c.hard = 0;
+	}
+	return n;
 }

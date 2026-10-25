@@ -22,6 +22,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "tr_local.h"
+#include "q_profile.h"
 
 #include "ghoul2/G2.h"
 #include "ghoul2/g2_local.h"
@@ -242,7 +243,7 @@ void RE_AddRefEntityToScene(const refEntity_t* ent)
 	{
 		CGhoul2Info_v& ghoul2 = *static_cast<CGhoul2Info_v*>(ent->ghoul2);
 
-		if (!ghoul2[0].mModel)
+		if (!ghoul2.size() || !ghoul2[0].mModel)	// an empty instance (no models) must not be indexed
 		{
 			ri.Printf(PRINT_ALL, "Your ghoul2 instance has no model!\n");
 		}
@@ -350,6 +351,7 @@ to handle mirrors,
 void RE_RenderWorldEffects();
 void RE_RenderAutoMap(void);
 void RE_RenderScene(const refdef_t* fd) {
+	PROFILE_ZONE("R front end: RenderScene");
 	viewParms_t		parms;
 	static	int		lastTime = 0;
 

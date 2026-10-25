@@ -556,7 +556,7 @@ static void NPC_BSGrenadier_Attack(void)
 		NPC->enemy->client->ps.saberHolstered) //256
 	{
 		//enemy is far or using saber
-		if (NPCS.NPC->client->ps.weapon == WP_MELEE && NPCS.NPC->client->ps.stats[STAT_WEAPONS] & 1 << WP_THERMAL)
+		if (NPCS.NPC->client->ps.weapon == WP_MELEE && BG_HasWeapon(NPCS.NPC->client->ps.stats, WP_THERMAL))
 		{
 			//fisticuffs, make switch to thermal if have it
 			//reset fire-timing variables

@@ -363,6 +363,7 @@ typedef struct
 
 	lookMode_t lookMode;
 	qboolean shouldJetOn;
+	int counterFlags; // SP Jedi AI counterattack AIFLAG_* bits; own field, SP's bits clash with NPCAI_WALKING/KNEEL (DH 2026-10-24 SP NPC port)
 } gNPC_t;
 
 void NPC_InitGame(void);

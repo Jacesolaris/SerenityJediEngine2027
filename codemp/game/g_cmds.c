@@ -470,8 +470,12 @@ static void G_Give(gentity_t* ent, const char* name, const char* args, const int
 
 	if (give_all || !Q_stricmp(name, "weapons"))
 	{
-		ent->client->ps.stats[STAT_WEAPONS] = (1 << (LAST_USEABLE_WEAPON + 1)) - (1 << WP_NONE);
-		ent->client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_DROIDEKA); // the droideka's arm blasters are for droidekas only
+		BG_ClearWeapons(ent->client->ps.stats);
+		for (int w = WP_NONE; w <= LAST_USEABLE_WEAPON; w++)
+		{
+			BG_GiveWeapon(ent->client->ps.stats, w);
+		}
+		BG_TakeWeapon(ent->client->ps.stats, WP_DROIDEKA); // the droideka's arm blasters are for droidekas only
 		G_AddEvent(ent, EV_WEAPINVCHANGE, ent->client->ps.stats[STAT_WEAPONS]);
 		if (!give_all)
 			return;
@@ -486,7 +490,12 @@ static void G_Give(gentity_t* ent, const char* name, const char* args, const int
 
 	if (!give_all && !Q_stricmp(name, "weaponnum"))
 	{
-		ent->client->ps.stats[STAT_WEAPONS] |= 1 << atoi(args);
+		const int w = atoi(args);
+
+		if (w > WP_NONE && w < WP_NUM_WEAPONS)
+		{
+			BG_GiveWeapon(ent->client->ps.stats, w);
+		}
 		G_AddEvent(ent, EV_WEAPINVCHANGE, ent->client->ps.stats[STAT_WEAPONS]);
 		return;
 	}
@@ -3533,8 +3542,36 @@ void Cmd_ToggleSaber_f(gentity_t* ent)
 	}
 }
 
+// SS_BLASTER is Kyle Katarn's style only (DH 2026-10-24): his model folders (kyle, kylejk2, kyle_jedimaster, DarkKyle, ...).
+// Players and bots: their model from the userinfo; NPCs: from the NPC file (NPC_stats.c).
+qboolean G_SaberBlasterKyleModel(const gentity_t* ent)
+{
+	char model[MAX_QPATH];
+	if (!ent->client)
+	{
+		return qfalse;
+	}
+	if (ent->s.number < MAX_CLIENTS)
+	{
+		// players and bots: the model they picked (client->modelname is not kept up to date in siege)
+		char userinfo[MAX_INFO_STRING];
+		trap->GetUserinfo(ent->s.number, userinfo, sizeof userinfo);
+		Q_strncpyz(model, Info_ValueForKey(userinfo, "model"), sizeof model);
+	}
+	else
+	{
+		Q_strncpyz(model, ent->client->modelname, sizeof model);
+	}
+	Q_strlwr(model);
+	return strstr(model, "kyle") ? qtrue : qfalse;
+}
+
 qboolean G_ValidSaberStyle(const gentity_t* ent, const int saber_style)
 {
+	if (saber_style == SS_BLASTER && !G_SaberBlasterKyleModel(ent))
+	{
+		return qfalse;	// even with give all / setforceall
+	}
 	// an NPC / bot with a set of known styles (NPC file saberStyle lines, bot class) only uses those (2026-10-15)
 	if (ent->client->saberStylesKnown && !(ent->client->saberStylesKnown & 1 << saber_style))
 	{

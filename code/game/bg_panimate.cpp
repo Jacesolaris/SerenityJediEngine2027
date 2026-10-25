@@ -6229,6 +6229,19 @@ float PM_GetTimeScaleMod(const gentity_t* gent)
 PM_SetAnimFinal
 -------------------------
 */
+// The walk/run playback speed follows the measured move speed (g_noFootSlide), which changes a little
+// on every pmove. Re-setting the anim for every tiny change restarted it from its current frame with the
+// start time rounded to whole milliseconds: at high frame rates (300+ fps, one player pmove every 2-3 ms)
+// the player's walk/run anims crawled, jittered or stuck. Only a change of more than 5% re-sets it now.
+static bool PM_AnimSpeedUnchanged(const float playing, const float wanted)
+{
+	if (playing == wanted)
+	{
+		return true;
+	}
+	return fabsf(playing - wanted) <= 0.05f * fabsf(wanted);
+}
+
 void PM_SetAnimFinal(int* torso_anim, int* legs_anim, const int setAnimParts, int anim, const int setAnimFlags,
 	int* torso_anim_timer,
 	int* legs_anim_timer, gentity_t* gent, int blendTime) // default blendTime=350
@@ -6501,8 +6514,8 @@ void PM_SetAnimFinal(int* torso_anim, int* legs_anim, const int setAnimParts, in
 	//----------------------------------------------------------
 	if (!anim_restart && !anim_pace)
 	{
-		tors_play &= !(tors_on_anim_now && tors_speed == animSpeed && !tors_match_body_frame);
-		body_play &= !(body_on_anim_now && body_speed == animSpeed && !body_match_tors_frame);
+		tors_play &= !(tors_on_anim_now && PM_AnimSpeedUnchanged(tors_speed, animSpeed) && !tors_match_body_frame);
+		body_play &= !(body_on_anim_now && PM_AnimSpeedUnchanged(body_speed, animSpeed) && !body_match_tors_frame);
 	}
 
 #ifndef FINAL_BUILD
@@ -6719,6 +6732,7 @@ static bool TorsoAgainstWindTest(gentity_t* ent)
 {
 	if (ent && //valid ent
 		ent->client && //a client
+		!in_camera && //not in a cutscene: the script's anim (sitting, talking) stays
 		ent->client->ps.groundEntityNum != ENTITYNUM_NONE &&
 		//either not holding a saber or the saber is in the ready pose
 		(ent->s.number < MAX_CLIENTS || G_ControlledByPlayer(ent)) &&

@@ -81,7 +81,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define DEFAULT_REDTEAM_NAME	"Empire"
 #define DEFAULT_BLUETEAM_NAME	"Rebellion"
 
-#define CURRENT_SJE_CLIENTVERSION		"Day-22,Month-10,Year-26,BuildNum-14" // build date
+#define CURRENT_SJE_CLIENTVERSION		"Day-25,Month-10,Year-26,BuildNum-16" // build date
 
 #define	STEPSIZE		18
 
@@ -703,7 +703,8 @@ typedef enum {
 	STAT_DODGE,			//number of Dodge Points the player has.  DP is used for evading/blocking attacks before they hurt you.
 	STAT_MAX_DODGE,		//maximum number of dodge points allowed.
 	STAT_AMMOPOOL,
-	STAT_SABER_WEAR			//breakable saber staffs: 0-100 wear (101: broken by a heavy hit), the HUD tints the saber style icon by it
+	STAT_SABER_WEAR,		//breakable saber staffs: 0-100 wear (101: broken by a heavy hit), the HUD tints the saber style icon by it
+	STAT_WEAPONS2 = 14		// owned weapons 32-63 (msg.cpp sends it in 32 bits like STAT_WEAPONS), see BG_HasWeapon
 } statIndex_t;
 
 // playerState_t->persistant[] indexes
@@ -773,7 +774,7 @@ typedef enum {
 #define	EF2_HYPERSPACE			(1<<5)		// Used to both start the hyperspace effect on the predicted client and to let the vehicle know it can now jump into hyperspace (after turning to face the proper angle)
 #define	EF2_BRACKET_ENTITY		(1<<6)		// Draw as bracketed
 #define	EF2_SHIP_DEATH			(1<<7)		// "died in ship" mode
-#define	EF2_NOT_USED_1			(1<<8)		// not used
+#define	EF2_SCEPTER				(1<<8)		// holds Ragnos' scepter (SP's WP_SCEPTER) in the left hand: the Possessed Tavion bot (ai_main.c, cg_players.c)
 #define EF2_BOWCASTERSCOPE		(1<<9)      //[BowcasterScope]
 #define EF2_PLAYERHIT			(1<<10)     //[SPShield]
 #define	EF3_JETPACK_HOVER		(1<<11)

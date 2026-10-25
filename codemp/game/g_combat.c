@@ -548,11 +548,11 @@ void TossClientWeapon(gentity_t* self, vec3_t direction, const float speed)
 		int i = 0;
 		int weap = -1;
 
-		self->client->ps.stats[STAT_WEAPONS] &= ~(1 << weapon);
+		BG_TakeWeapon(self->client->ps.stats, weapon);
 
 		while (i < WP_NUM_WEAPONS)
 		{
-			if (self->client->ps.stats[STAT_WEAPONS] & 1 << i && i != WP_NONE)
+			if (BG_HasWeapon(self->client->ps.stats, i) && i != WP_NONE)
 			{
 				//this one's good
 				weap = i;
@@ -638,7 +638,7 @@ void TossClientItems(gentity_t* self)
 		{
 			weapon = client->pers.cmd.weapon;
 		}
-		if (!(client->ps.stats[STAT_WEAPONS] & 1 << weapon))
+		if (!(BG_HasWeapon(client->ps.stats, weapon)))
 		{
 			weapon = WP_NONE;
 		}
@@ -2934,6 +2934,50 @@ void G_ForceThrowCorpses(gentity_t* self, const qboolean pull, const int radius,
 	}
 }
 
+// award streaks (DH 2026-10-25, g_awardStreaks 1; 0 = the old awards): every 4th kill in a row without dying plays
+// "excellent", every 4th kill of a saber user with saber offense 3 or more (without dying) "impressive", and every 4th
+// death in a row without a kill "humiliation". The cgame plays them when the counters change (cg_awardsounds 1).
+#define AWARD_STREAK		4
+#define AWARD_STREAKS_ON	(g_awardStreaks.integer != 0)
+static int s_awardKills[MAX_CLIENTS];
+static int s_awardSaberKills[MAX_CLIENTS];
+static int s_awardDeaths[MAX_CLIENTS];
+
+static void G_AwardStreaks(gentity_t* self, gentity_t* attacker)
+{
+	if (!AWARD_STREAKS_ON || !self->client)
+	{
+		return;
+	}
+	if (self->s.number < MAX_CLIENTS)
+	{
+		s_awardKills[self->s.number] = 0;
+		s_awardSaberKills[self->s.number] = 0;
+		if (++s_awardDeaths[self->s.number] % AWARD_STREAK == 0)
+		{
+			self->client->ps.persistant[PERS_GAUNTLET_FRAG_COUNT]++;
+		}
+	}
+	if (!attacker || attacker == self || !attacker->client || attacker->s.number >= MAX_CLIENTS || OnSameTeam(self, attacker))
+	{
+		return;
+	}
+	const int a = attacker->s.number;
+
+	s_awardDeaths[a] = 0;
+	if (++s_awardKills[a] % AWARD_STREAK == 0)
+	{
+		attacker->client->ps.persistant[PERS_EXCELLENT_COUNT]++;
+		attacker->client->rewardTime = level.time + REWARD_SPRITE_TIME;
+	}
+	if (self->client->ps.weapon == WP_SABER && self->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE] >= FORCE_LEVEL_3
+		&& ++s_awardSaberKills[a] % AWARD_STREAK == 0)
+	{
+		attacker->client->ps.persistant[PERS_IMPRESSIVE_COUNT]++;
+		attacker->client->rewardTime = level.time + REWARD_SPRITE_TIME;
+	}
+}
+
 void player_die(gentity_t* self, const gentity_t* inflictor, gentity_t* attacker, const int damage, const int means_of_death)
 {
 	int killer = 0;
@@ -3484,6 +3528,8 @@ void player_die(gentity_t* self, const gentity_t* inflictor, gentity_t* attacker
 		self->client->ps.fd.suicides++;
 	}
 
+	G_AwardStreaks(self, attacker);
+
 	if (attacker && attacker->client)
 	{
 		if (self->s.number < MAX_CLIENTS)
@@ -3580,7 +3626,7 @@ void player_die(gentity_t* self, const gentity_t* inflictor, gentity_t* attacker
 				AddFatigueKillBonus(attacker, self, means_of_death);
 			}
 
-			if (means_of_death == MOD_FORCE_LIGHTNING && !(self->r.svFlags & SVF_BOT || self->s.eType == ET_NPC))
+			if (!AWARD_STREAKS_ON && means_of_death == MOD_FORCE_LIGHTNING && !(self->r.svFlags & SVF_BOT || self->s.eType == ET_NPC))
 			{
 				// play humiliation on player
 				attacker->client->ps.persistant[PERS_GAUNTLET_FRAG_COUNT]++;
@@ -3591,7 +3637,7 @@ void player_die(gentity_t* self, const gentity_t* inflictor, gentity_t* attacker
 
 			// check for two kills in a short amount of time
 			// if this is close enough to the last kill, give a reward sound
-			if (level.time - attacker->client->lastKillTime < CARNAGE_REWARD_TIME)
+			if (!AWARD_STREAKS_ON && level.time - attacker->client->lastKillTime < CARNAGE_REWARD_TIME)
 			{
 				// play excellent on player
 				attacker->client->ps.persistant[PERS_EXCELLENT_COUNT]++;
@@ -6600,6 +6646,83 @@ extern void AnimateStun(gentity_t* self, gentity_t* inflictor, vec3_t impact);
 
 extern void G_SetOnFire(gentity_t* self, gentity_t* attacker); // w_saber.c (burning)
 
+// as SP's G_ImmuneToGas: whoever holds the noghri stick (its own gas), droids, machines and the armoured or masked
+static qboolean G_ImmuneToGas(const gentity_t* ent)
+{
+	if (!ent->client)
+	{
+		return qtrue; // only affects living clients
+	}
+	if (ent->client->ps.weapon == WP_NOGHRI_STICK)
+	{
+		return qtrue;
+	}
+	switch (ent->client->NPC_class)
+	{
+	case CLASS_ATST:
+	case CLASS_GONK:
+	case CLASS_SAND_CREATURE:
+	case CLASS_INTERROGATOR:
+	case CLASS_MARK1:
+	case CLASS_MARK2:
+	case CLASS_GALAKMECH:
+	case CLASS_MOUSE:
+	case CLASS_PROBE:
+	case CLASS_PROTOCOL:
+	case CLASS_R2D2:
+	case CLASS_R5D2:
+	case CLASS_REMOTE:
+	case CLASS_SEEKER:
+	case CLASS_SENTRY:
+	case CLASS_SWAMPTROOPER:
+	case CLASS_TUSKEN:
+	case CLASS_CLONETROOPER:
+	case CLASS_BOBAFETT:
+	case CLASS_ROCKETTROOPER:
+	case CLASS_SABER_DROID:
+	case CLASS_ASSASSIN_DROID:
+	case CLASS_DROIDEKA:
+	case CLASS_HAZARD_TROOPER:
+	case CLASS_SBD:
+	case CLASS_VEHICLE:
+	case CLASS_MANDO:
+		return qtrue;
+	default:
+		break;
+	}
+	if (ent->s.number < MAX_CLIENTS)
+	{
+		// players and bots: the same, by their class
+		switch (ent->client->pers.botclass)
+		{
+		case BCLASS_GONK:
+		case BCLASS_MOUSE:
+		case BCLASS_PROTOCOL:
+		case BCLASS_R2D2:
+		case BCLASS_R5D2:
+		case BCLASS_GALAKMECH:
+		case BCLASS_SWAMPTROOPER:
+		case BCLASS_TUSKEN_RAIDER:
+		case BCLASS_TUSKEN_SNIPER:
+		case BCLASS_CLONETROOPER:
+		case BCLASS_BOBAFETT:
+		case BCLASS_MANDOLORIAN:
+		case BCLASS_MANDOLORIAN1:
+		case BCLASS_MANDOLORIAN2:
+		case BCLASS_ROCKETTROOPER:
+		case BCLASS_SABER_DROID:
+		case BCLASS_ASSASSIN_DROID:
+		case BCLASS_DROIDEKA:
+		case BCLASS_HAZARDTROOPER:
+		case BCLASS_SBD:
+			return qtrue;
+		default:
+			break;
+		}
+	}
+	return qfalse;
+}
+
 void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, vec3_t dir, vec3_t point, int damage,
 	int dflags, int mod)
 {
@@ -6617,6 +6740,11 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, vec3_t
 		&& mod != MOD_CRUSH && mod != MOD_TELEFRAG)
 	{
 		return; // charging Force Repulse: invincible, no knockback either (2026-10-12, DH)
+	}
+
+	if (mod == MOD_GAS && G_ImmuneToGas(targ))
+	{
+		return;
 	}
 
 	if (mod == MOD_SABER && targ->client && targ->client->saberBreakSafeTime > level.time)
@@ -8655,7 +8783,7 @@ void AddFatigueHurtBonusMax(const gentity_t* attacker,
 	}
 }
 
-static void AddNPCBlockPointBonus(const gentity_t* self)
+void AddNPCBlockPointBonus(const gentity_t* self)
 {
 	//get a small bonus
 	//add bonus

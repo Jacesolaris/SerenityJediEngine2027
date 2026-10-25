@@ -1745,6 +1745,7 @@ void G_ShutdownGame(const int restart)
 		trap->G2API_CleanGhoul2Models(&precachedKyle);
 		precachedKyle = NULL;
 	}
+	G_ScepterShutdown(); // the Possessed Tavion bot's scepter model (ai_main.c)
 
 	//	Com_Printf ("... ICARUS_Shutdown\n");
 	trap->ICARUS_Shutdown(); //Shut ICARUS down

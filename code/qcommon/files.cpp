@@ -30,6 +30,16 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
  *****************************************************************************/
 
 #include "q_shared.h"
+#include "q_profile.h"
+#include <cerrno>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#if defined(_WIN32)
+#include <io.h>
+#else
+#include <dirent.h>
+#endif
 #include "qcommon.h"
 
 #ifndef FINAL_BUILD
@@ -465,6 +475,162 @@ char* FS_BuildOSPath(const char* base, const char* game, const char* qpath) {
 }
 
 /*
+=================================================================================
+ Missing-file lookups during a map load (23/10/2026)
+
+ FS_FOpenFileRead tries every game folder (homepath / basepath, base / mod) with fopen for a name no pk3 before
+ that folder holds. A map load asks for thousands of names that exist nowhere (rend2's _n / _nh / _specGloss
+ versions of every texture, the .jpg / .png / .tga tries, sound and model variants) - an fopen per folder each.
+ While a load runs (FS_LookupCacheBegin .. FS_LookupCacheEnd, at most FS_LOOKUP_MAX_MS), each folder a file is
+ looked for in is listed once, and a name that is not in that listing (in any case) is not opened. A name that is
+ in it is opened exactly as before, so a file that is there is never missed; a folder that cannot be listed is
+ always opened as before. Any write, removal, rename or new folder through the file system clears the listings.
+ fs_lookupCache 0 = off.
+=================================================================================
+*/
+namespace {
+
+constexpr int FS_LOOKUP_MAX_MS = 120000;	// a load longer than this just stops using the listings
+
+struct fsFolderListing_t
+{
+	bool							complete = false;	// false: could not be listed - open as before
+	std::unordered_set<std::string>	names;				// lower case, files and folders
+};
+
+bool												fs_lookupActive = false;
+int													fs_lookupStartMs = 0;
+std::unordered_map<std::string, fsFolderListing_t>	fs_lookupFolders;	// lower-case OS folder path -> its listing
+int													fs_lookupSkipped = 0;
+
+std::string FS_LookupLower(const char* s, const size_t len)
+{
+	std::string out(s, len);
+	for (char& c : out)
+	{
+		c = (c == '\\') ? '/' : static_cast<char>(tolower(static_cast<unsigned char>(c)));
+	}
+	return out;
+}
+
+fsFolderListing_t FS_LookupListFolder(const std::string& folder)
+{
+	PROFILE_ZONE("Load: file system folder listing");
+	PROFILE_TEXT(folder.c_str());
+	fsFolderListing_t listing;
+#if defined(_WIN32)
+	_finddata_t info;
+	const std::string pattern = folder + "\\*";
+	errno = 0;
+	const intptr_t handle = _findfirst(pattern.c_str(), &info);
+	if (handle == -1)
+	{
+		listing.complete = (errno == ENOENT);	// the folder is not there: nothing can be opened in it
+		return listing;
+	}
+	do
+	{
+		listing.names.insert(FS_LookupLower(info.name, strlen(info.name)));
+		errno = 0;
+	} while (_findnext(handle, &info) == 0);
+	listing.complete = (errno == ENOENT);	// ENOENT = the end of the folder; anything else = not sure, open as before
+	_findclose(handle);
+#else
+	errno = 0;
+	DIR* dir = opendir(folder.c_str());
+	if (!dir)
+	{
+		listing.complete = (errno == ENOENT || errno == ENOTDIR);
+		return listing;
+	}
+	for (;;)
+	{
+		errno = 0;
+		const dirent* entry = readdir(dir);
+		if (!entry)
+		{
+			listing.complete = (errno == 0);
+			break;
+		}
+		listing.names.insert(FS_LookupLower(entry->d_name, strlen(entry->d_name)));
+	}
+	closedir(dir);
+#endif
+	return listing;
+}
+
+// FS_FOpenFileRead, before opening 'ospath' in a game folder: false = it is certainly not there
+bool FS_LookupMayExist(const char* ospath)
+{
+	if (!fs_lookupActive)
+	{
+		return true;
+	}
+	if (Sys_Milliseconds() - fs_lookupStartMs > FS_LOOKUP_MAX_MS)
+	{
+		FS_LookupCacheEnd();
+		return true;
+	}
+	const char* slash = strrchr(ospath, '/');
+	const char* backslash = strrchr(ospath, '\\');
+	if (!slash || (backslash && backslash > slash))
+	{
+		slash = backslash;
+	}
+	if (!slash || !slash[1])
+	{
+		return true;
+	}
+	const std::string folder(ospath, static_cast<size_t>(slash - ospath));
+	const std::string key = FS_LookupLower(folder.c_str(), folder.size());
+	auto it = fs_lookupFolders.find(key);
+	if (it == fs_lookupFolders.end())
+	{
+		it = fs_lookupFolders.emplace(key, FS_LookupListFolder(folder)).first;
+	}
+	if (!it->second.complete || it->second.names.count(FS_LookupLower(slash + 1, strlen(slash + 1))))
+	{
+		return true;
+	}
+	fs_lookupSkipped++;
+	return false;
+}
+
+} // namespace
+
+// the start of a map load (SV_SpawnServer; MP clients also CL_InitCGame): fresh listings
+void FS_LookupCacheBegin()
+{
+	static cvar_t* fs_lookupCache = nullptr;
+	if (!fs_lookupCache)
+	{
+		fs_lookupCache = Cvar_Get("fs_lookupCache", "1", CVAR_ARCHIVE);
+	}
+	fs_lookupFolders.clear();
+	fs_lookupSkipped = 0;
+	fs_lookupActive = fs_lookupCache->integer != 0;
+	fs_lookupStartMs = Sys_Milliseconds();
+}
+
+// the end of a map load (CL_InitCGame, before RE_EndRegistration), or the file system restarting
+void FS_LookupCacheEnd()
+{
+	if (fs_lookupActive)
+	{
+		Com_DPrintf("File system: %d folders listed, %d opens of missing files skipped this load\n",
+			static_cast<int>(fs_lookupFolders.size()), fs_lookupSkipped);
+	}
+	fs_lookupActive = false;
+	fs_lookupFolders.clear();
+}
+
+// something was written, removed, renamed or created: list the folders again when next needed
+void FS_LookupCacheFlush()
+{
+	fs_lookupFolders.clear();
+}
+
+/*
 ============
 FS_CreatePath
 
@@ -472,6 +638,7 @@ Creates any directories needed to store the given filename
 ============
 */
 static qboolean FS_CreatePath(char* OSPath) {
+	FS_LookupCacheFlush();	// the folder listings may be out of date now
 	char	path[MAX_OSPATH];
 
 	// make absolutely sure that it can't back up the path
@@ -532,6 +699,7 @@ Copy a fully specified file from one place to another
 // added extra param so behind-the-scenes copying in savegames doesn't clutter up the screen -slc
 void FS_CopyFile(char* fromOSPath, char* toOSPath, qboolean qbSilent = qfalse);
 void FS_CopyFile(char* fromOSPath, char* toOSPath, qboolean qbSilent) {
+	FS_LookupCacheFlush();	// the folder listings may be out of date now
 	FS_CheckFilenameIsMutable(fromOSPath, __func__);
 
 	if (!qbSilent)
@@ -602,6 +770,7 @@ FS_Remove
 ===========
 */
 void FS_Remove(const char* osPath) {
+	FS_LookupCacheFlush();	// the folder listings may be out of date now
 	FS_CheckFilenameIsMutable(osPath, __func__);
 
 	remove(osPath);
@@ -614,6 +783,7 @@ FS_HomeRemove
 ===========
 */
 void FS_HomeRemove(const char* homePath) {
+	FS_LookupCacheFlush();	// the folder listings may be out of date now
 	FS_CheckFilenameIsMutable(homePath, __func__);
 
 	remove(FS_BuildOSPath(fs_homepath->string,
@@ -634,6 +804,7 @@ void FS_DeleteUserGenFile(const char* filename) {
 // return: qtrue = OK
 //
 qboolean FS_MoveUserGenFile(const char* filename_src, const char* filename_dst) {
+	FS_LookupCacheFlush();	// the folder listings may be out of date now
 	FS_AssertInitialised();
 
 	// don't let sound stutter
@@ -759,6 +930,7 @@ FS_SV_FOpenFileWrite
 ===========
 */
 fileHandle_t FS_SV_FOpenFileWrite(const char* filename) {
+	FS_LookupCacheFlush();	// the folder listings may be out of date now
 	FS_AssertInitialised();
 
 	char* ospath = FS_BuildOSPath(fs_homepath->string, filename, "");
@@ -876,6 +1048,7 @@ FS_SV_Rename
 ===========
 */
 void FS_SV_Rename(const char* from, const char* to, qboolean safe) {
+	FS_LookupCacheFlush();	// the folder listings may be out of date now
 	FS_AssertInitialised();
 
 	// don't let sound stutter
@@ -908,6 +1081,7 @@ FS_Rename
 ===========
 */
 void FS_Rename(const char* from, const char* to) {
+	FS_LookupCacheFlush();	// the folder listings may be out of date now
 	FS_AssertInitialised();
 
 	// don't let sound stutter
@@ -974,6 +1148,7 @@ FS_FOpenFileWrite
 ===========
 */
 fileHandle_t FS_FOpenFileWrite(const char* filename, qboolean safe) {
+	FS_LookupCacheFlush();	// the folder listings may be out of date now
 	FS_AssertInitialised();
 
 	fileHandle_t f = FS_HandleForFile();
@@ -1014,6 +1189,7 @@ FS_FOpenFileAppend
 ===========
 */
 fileHandle_t FS_FOpenFileAppend(const char* filename) {
+	FS_LookupCacheFlush();	// the folder listings may be out of date now
 	FS_AssertInitialised();
 
 	fileHandle_t f = FS_HandleForFile();
@@ -1334,6 +1510,9 @@ long FS_FOpenFileRead(const char* filename, fileHandle_t* file, qboolean uniqueF
 				directory_t* dir = search->dir;
 
 				char* netpath = FS_BuildOSPath(dir->path, dir->gamedir, filename);
+				if (!FS_LookupMayExist(netpath)) {
+					continue;	// not in this folder's listing (map load): fopen would fail too
+				}
 				fsh[*file].handleFiles.file.o = fopen(netpath, "rb");
 				if (!fsh[*file].handleFiles.file.o) {
 					continue;
@@ -1682,6 +1861,7 @@ a null buffer will just return the file length without loading
 ============
 */
 long FS_ReadFile(const char* qpath, void** buffer) {
+	PROFILE_ZONE("Load: file read (FS_ReadFile)");
 	fileHandle_t	h = 0;
 
 	FS_AssertInitialised();
@@ -2713,6 +2893,7 @@ Frees all resources and closes all files
 */
 void FS_Shutdown()
 {
+	FS_LookupCacheEnd();
 	searchpath_t* next = nullptr;
 
 	for (int i = 0; i < MAX_FILE_HANDLES; i++) {
@@ -2902,6 +3083,7 @@ FS_Restart
 */
 void FS_Restart()
 {
+	FS_LookupCacheEnd();
 	// free anything we currently have loaded
 	FS_Shutdown();
 

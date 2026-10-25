@@ -69,6 +69,28 @@ void LoadJPG(const char* filename, unsigned char** pic, int* width, int* height)
 // Load raw image data from PNG image.
 void LoadPNG(const char* filename, byte** data, int* width, int* height);
 
+// Worker-safe JPG decode (tr_image_jpg.cpp) for the image prefetch: RGBA pixels exactly as LoadJPG
+// makes them, but in malloc() memory (free() them), no engine calls, nothing printed. Returns false on
+// any error or libjpeg warning: the caller then loads the file the normal way, which prints as before.
+bool R_DecodeJPGThreadSafe(const byte* data, size_t len, byte** pic, int* width, int* height);
+// Worker-safe PNG decode (tr_image_png.cpp) for the image prefetch: RGBA pixels exactly as LoadPNG, malloc'd
+// (free()), silent; false on anything unusual (LoadPNG then loads that file the normal way)
+bool R_DecodePNGThreadSafe(const byte* data, size_t len, byte** pic, int* width, int* height);
+
+// Image prefetch (tr_image_load.cpp). Remembers the JPGs each map loads, in order (imagecache/*.txt).
+// On the next load of that map they are read ahead and decoded on the render job workers in batches,
+// and R_LoadImage takes the finished pixels instead of decoding them itself. Only the decode moves:
+// every file is still read through the normal file system, so the image chosen never changes.
+// Off when r_threads is 0. Main thread only.
+void R_ImagePrefetch_Begin(const char* mapName, const char* rendererTag, qboolean loadStart = qfalse);	// RE_RegisterMedia_LevelLoadBegin (qtrue) / RE_LoadWorldMap
+void R_ImagePrefetch_End(qboolean saveList);								// RE_EndRegistration (qtrue)
+void R_ImagePrefetch_RendererShutdown(qboolean levelChange);				// RE_Shutdown: a map load's renderer flush keeps it
+
+// The renderer's job pool (tr_ghoul2.cpp): started with r_threads workers, or nullptr when r_threads
+// is 0 so callers run serially. Main thread only.
+namespace qjobs { class Pool; }
+qjobs::Pool* R_RenderJobPool();
+
 /*
 ================================================================================
  Image saving

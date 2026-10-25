@@ -104,6 +104,7 @@ extern qboolean PM_InKataAnim(const int anim);
 extern qboolean PM_InCartwheel(int anim);
 extern int G_PickPainAnim(const gentity_t* self, const vec3_t point, int hit_loc);
 extern qboolean PM_SaberInMassiveBounce(const int anim);
+extern cvar_t* in_joystick;
 
 //-------------------------------------------------------------------------
 static void G_Missile_Bounce_Effect(const gentity_t* ent, vec3_t org, vec3_t dir, const qboolean hit_world)
@@ -881,6 +882,14 @@ static void WP_HandleBoltBlock(gentity_t* ent, gentity_t* missile, vec3_t forwar
 	const qboolean npc_is_blocking = ((blocker->client->ps.ManualBlockingFlags & (1 << MBF_NPCBLOCKING)) != 0) ? qtrue : qfalse;
 	const qboolean accurate_missile_blocking = ((blocker->client->ps.ManualBlockingFlags & (1 << MBF_ACCURATEMISSILEBLOCKING)) != 0) ? qtrue : qfalse;
 
+	// a bolt that hits the blade during a swing is deflected, but the swing
+	// carries on (no parry / bounce / fatigue pose). A player holding attack keeps swinging too.
+	const qboolean keep_swing = (PM_SaberInAttack(blocker->client->ps.saberMove)
+		|| PM_SaberInTransitionAny(blocker->client->ps.saberMove)
+		|| PM_SaberInSpecialAttack(blocker->client->ps.torsoAnim)
+		|| ((blocker->s.number < MAX_CLIENTS || G_ControlledByPlayer(blocker))
+			&& blocker->client->pers.cmd.buttons & BUTTON_ATTACK)) ? qtrue : qfalse;
+
 	float slop_factor = (FATIGUE_AUTOBOLTBLOCK - 6) * ((float)FORCE_LEVEL_3 - G_GetDefenseLevel(blocker)) / FORCE_LEVEL_3;
 
 	// Save original speed
@@ -902,10 +911,18 @@ static void WP_HandleBoltBlock(gentity_t* ent, gentity_t* missile, vec3_t forwar
 		npc_reflection = qfalse;
 	}
 
-	if (accurate_missile_blocking)
+	if (in_joystick->integer && accurate_missile_blocking)
 	{
-		saber_block_reflection = qtrue;
-		bolt_block_reflection = qfalse;
+		if (level.time - blocker->client->ps.ManualblockStartTime < 500)
+		{
+			saber_block_reflection = qfalse;
+			bolt_block_reflection = qtrue;
+		}
+		else
+		{
+			saber_block_reflection = qtrue;
+			bolt_block_reflection = qfalse;
+		}
 		npc_reflection = qfalse;
 	}
 
@@ -974,18 +991,24 @@ static void WP_HandleBoltBlock(gentity_t* ent, gentity_t* missile, vec3_t forwar
 			}
 			else
 			{
-				// Low points: fatigued parry
-				WP_SaberFatiguedParryDirection(blocker, missile->currentOrigin, qtrue);
+				if (!keep_swing)
+				{
+					// Low points: fatigued parry
+					WP_SaberFatiguedParryDirection(blocker, missile->currentOrigin, qtrue);
+				}
 			}
 		}
 		else
 		{
-			// Good block
-			wp_saber_block_non_random_missile(blocker, missile->currentOrigin, qtrue);
+			if (!keep_swing)
+			{
+				// Good block
+				wp_saber_block_non_random_missile(blocker, missile->currentOrigin, qtrue);
+			}
 		}
 
 		// Block point cost
-		int cost = accurate_missile_blocking ? 2 : WP_SaberBlockCost(blocker, missile, missile->currentOrigin);
+		int cost = in_joystick->integer && accurate_missile_blocking ? 2 : WP_SaberBlockCost(blocker, missile, missile->currentOrigin);
 
 		if (G_GetBlockPoints(blocker) < cost)
 		{
@@ -1051,12 +1074,18 @@ static void WP_HandleBoltBlock(gentity_t* ent, gentity_t* missile, vec3_t forwar
 				}
 				else
 				{
-					WP_SaberFatiguedParryDirection(blocker, missile->currentOrigin, qtrue);
+					if (!keep_swing)
+					{
+						WP_SaberFatiguedParryDirection(blocker, missile->currentOrigin, qtrue);
+					}
 				}
 			}
 			else
 			{
-				WP_SaberBlockBolt(blocker, missile->currentOrigin, qtrue);
+				if (!keep_swing)
+				{
+					WP_SaberBlockBolt(blocker, missile->currentOrigin, qtrue);
+				}
 			}
 
 			// Block point cost
@@ -1124,16 +1153,22 @@ static void WP_HandleBoltBlock(gentity_t* ent, gentity_t* missile, vec3_t forwar
 				}
 				else
 				{
-					WP_SaberFatiguedParryDirection(blocker, missile->currentOrigin, qtrue);
+					if (!keep_swing)
+					{
+						WP_SaberFatiguedParryDirection(blocker, missile->currentOrigin, qtrue);
+					}
 				}
 			}
 			else
 			{
-				wp_saber_block_non_random_missile(blocker, missile->currentOrigin, qtrue);
+				if (!keep_swing)
+				{
+					wp_saber_block_non_random_missile(blocker, missile->currentOrigin, qtrue);
+				}
 			}
 
 			// Block point cost
-			int cost = accurate_missile_blocking ? 2 : WP_SaberBlockCost(blocker, missile, missile->currentOrigin);
+			int cost = in_joystick->integer && accurate_missile_blocking ? 2 : WP_SaberBlockCost(blocker, missile, missile->currentOrigin);
 
 			if (G_GetBlockPoints(blocker) < cost)
 			{

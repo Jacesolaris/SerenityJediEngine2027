@@ -22,6 +22,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #if !defined(FX_SCHEDULER_H_INC)
 #include "FxScheduler.h"
+#include "q_profile.h"
 #endif
 
 vec3_t WHITE = { 1.0f, 1.0f, 1.0f };
@@ -212,6 +213,7 @@ bool FX_ActiveFx()
 //-------------------------
 void FX_Add(const bool portal)
 {
+	PROFILE_ZONE("FX: update + draw effects");
 	int i = 0;
 	SEffectList* ef = nullptr;
 

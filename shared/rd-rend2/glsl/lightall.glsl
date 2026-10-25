@@ -455,6 +455,7 @@ uniform vec4 u_EnableTextures;
 uniform vec4 u_NormalScale;
 uniform vec4 u_SpecularScale;
 uniform float u_ParallaxBias;
+uniform vec4 u_SkinParams;
 
 #if defined(PER_PIXEL_LIGHTING) && defined(USE_CUBEMAP)
 uniform vec4 u_CubeMapInfo;
@@ -966,7 +967,8 @@ vec3 CalcDynamicLightContribution(
 			L /= sqrt(sqrLightDist);
 			sampleVector += L * tan(acos(dot(vertexNormal, -L)));
 			float distance = getLightDepth(sampleVector, light.radius);
-			attenuation *= pcfShadow(u_ShadowMap2, L, distance, i);
+			if (light.origin.w > 0.5)	// 0: no shadow map this frame (r_dlightShadowMax)
+				attenuation *= pcfShadow(u_ShadowMap2, L, distance, i);
 		#else
 			L /= sqrt(sqrLightDist);
 		#endif
@@ -1238,7 +1240,20 @@ void main()
 
 	vec3 reflectance = Fd + Fs;
 
-	out_Color.rgb  = lightColor * reflectance * (attenuation * NL);
+	if (u_SkinParams.w > 0.0)
+	{
+		// skin (shader stage keyword "skin r g b wrap"): diffuse lit from a softened normal, and light
+		// wrapping past the shadow edge more in red than in green and blue (the warm terminator of real skin)
+		vec3 Ns = normalize(mix(N, vertexNormal, 0.35));
+		float NLs = dot(Ns, L);
+		vec3 w = u_SkinParams.w * u_SkinParams.rgb;
+		vec3 wrapNL = clamp((vec3(NLs) + w) / (vec3(1.0) + w), 0.0, 1.0);
+		out_Color.rgb  = lightColor * attenuation * (Fd * wrapNL + Fs * NL);
+	}
+	else
+	{
+		out_Color.rgb  = lightColor * reflectance * (attenuation * NL);
+	}
 	out_Color.rgb += ambientColor * diffuse.rgb;
 
 	out_Color.rgb += CalcDynamicLightContribution(roughness, N, E, u_ViewOrigin, viewDir, NE, diffuse.rgb, specular.rgb, vertexNormal);

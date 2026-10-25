@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // tr_map.c
 
 #include "tr_local.h"
+#include "q_profile.h"
 
 #define JSON_IMPLEMENTATION
 #include "json.h"
@@ -186,6 +187,7 @@ R_LoadLightmaps
 
 static	void R_LoadLightmaps(world_t* worldData, lump_t* l, lump_t* surfs)
 {
+	PROFILE_ZONE("Load: BSP lightmaps");
 	byte* buf = NULL, * buf_p = NULL;
 	dsurface_t* surf = nullptr;
 	int			len = 0;
@@ -2119,6 +2121,7 @@ R_CreateWorldVBOs
 */
 static void R_CreateWorldVBOs(world_t* worldData)
 {
+	PROFILE_ZONE("Load: world VBOs");
 	int             i = 0, j = 0, k = 0;
 
 	int             numVerts = 0;
@@ -2364,6 +2367,7 @@ R_LoadSurfaces
 ===============
 */
 static	void R_LoadSurfaces(world_t* worldData, lump_t* surfs, lump_t* verts, lump_t* indexLump) {
+	PROFILE_ZONE("Load: BSP surfaces");
 	dsurface_t* in = nullptr;
 	msurface_t* out = nullptr;
 	drawVert_t* dv = nullptr;
@@ -2706,6 +2710,7 @@ R_LoadShaders
 =================
 */
 static	void R_LoadShaders(world_t* worldData, lump_t* l) {
+	PROFILE_ZONE("Load: BSP shaders");
 	int		i = 0, count = 0;
 	dshader_t* in = nullptr, * out = nullptr;
 
@@ -3542,6 +3547,7 @@ static void R_AssignCubemapsToWorldSurfaces(world_t* worldData)
 
 static void R_RenderAllCubemaps()
 {
+	PROFILE_ZONE("Load: render cubemaps");
 	R_IssuePendingRenderCommands();
 	R_InitNextFrame();
 
@@ -4734,6 +4740,12 @@ Called directly from cgame
 =================
 */
 void RE_LoadWorldMap(const char* name) {
+	PROFILE_ZONE("Load: world map (BSP)");
+#ifdef REND2_SP
+	R_ImagePrefetch_Begin(name, "r2_sp");	// this map's JPGs decoded ahead on the job workers
+#else
+	R_ImagePrefetch_Begin(name, "r2_mp");
+#endif
 	if (tr.worldMapLoaded)
 	{
 		ri.Error(ERR_DROP, "ERROR: attempted to redundantly load world map");
@@ -4783,6 +4795,7 @@ void RE_LoadWorldMap(const char* name) {
 	R_PushDebugGroup(AL_SCENE, "World loading");
 	R_PushDebugGroup(AL_VIEW, "Weather depth");
 	R_InitWeatherForMap();
+	R_GradeLoadForMap();	// colour grading: maps/<map>.grade
 
 	// Render all cubemaps
 	if (r_cubeMapping->integer && tr.numCubemaps)

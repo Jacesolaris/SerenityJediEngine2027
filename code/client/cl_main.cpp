@@ -36,6 +36,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // cl_main.c  -- client main loop
 
 #include "../server/exe_headers.h"
+#include "q_profile.h"
 
 #include "client.h"
 #include "client_ui.h"
@@ -219,6 +220,12 @@ void CL_MapLoading()
 
 	Con_Close();
 	Key_SetCatcher(0);
+
+	// the loading splash, not the menu that started the map, stays on screen while the game spawns (23/10/2026)
+	if (cls.uiStarted)
+	{
+		Menus_HideAllForMapLoad();
+	}
 
 	// if we are already connected to the local host, stay connected
 	if (cls.state >= CA_CONNECTED && !Q_stricmp(cls.servername, "localhost"))
@@ -875,6 +882,7 @@ float avgFrametime = 0.0;
 
 void CL_Frame(int msec, const float fractionMsec)
 {
+	PROFILE_ZONE("Client frame");
 	if (!com_cl_running->integer)
 	{
 		return;
@@ -1084,6 +1092,7 @@ CL_InitRenderer
 */
 static void CL_InitRenderer()
 {
+	PROFILE_ZONE("Load: renderer init");
 	// this sets up the renderer and calls R_Init
 	re.BeginRegistration(&cls.glconfig);
 

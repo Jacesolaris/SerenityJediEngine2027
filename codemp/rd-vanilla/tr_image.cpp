@@ -23,6 +23,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 // tr_image.c
 #include "tr_local.h"
+#include "q_profile.h"
 #include "../rd-common/tr_common.h"
 #include "rd-vanilla/glext.h"
 
@@ -547,6 +548,7 @@ image_t* R_Images_GetNextIteration()
 //
 static void R_Images_DeleteImageContents(image_t* pImage)
 {
+	R_SyncRenderThread();	// r_smp: GL here on the main thread
 	assert(pImage); // should never be called with NULL
 	if (pImage)
 	{
@@ -963,6 +965,8 @@ This is the only way any image_t are created
 */
 image_t* R_CreateImage(const char* name, const byte* pic, const int width, const int height, const GLenum format, const qboolean mipmap, const qboolean allow_picmip, const qboolean allow_tc, int gl_wrap_clamp_mode, const bool b_rectangle)
 {
+	R_SyncRenderThread();	// r_smp: GL here on the main thread
+	PROFILE_ZONE("Load: image create (upload + mipmaps)");
 	qboolean is_lightmap = qfalse;
 
 	if (strlen(name) >= MAX_QPATH)
@@ -1070,6 +1074,7 @@ Returns NULL if it fails, not a default image.
 */
 image_t* R_FindImageFile(const char* name, const qboolean mipmap, const qboolean allow_picmip, const qboolean allow_tc, int gl_wrap_clamp_mode)
 {
+	PROFILE_ZONE("Load: image (find + load)");
 	int width = 0, height = 0;
 	byte* pic = nullptr;
 

@@ -23,6 +23,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 // tr_map.c
 #include "tr_local.h"
+#include "q_profile.h"
 
 /*
 
@@ -160,6 +161,7 @@ constexpr auto LIGHTMAP_SIZE = 128;
 
 static void R_LoadLightmaps(const lump_t* l, const char* ps_map_name, world_t& worldData)
 {
+	PROFILE_ZONE("Load: BSP lightmaps");
 	static byte image[LIGHTMAP_SIZE * LIGHTMAP_SIZE * 4]; // off the stack (C6262)
 	memset(image, 0, sizeof(image)); // cleared each time, as the {} on the stack was
 	int j = 0;
@@ -1299,6 +1301,7 @@ R_LoadSurfaces
 */
 static void R_LoadSurfaces(const lump_t* surfs, const lump_t* verts, const lump_t* index_lump, world_t& worldData, const int index)
 {
+	PROFILE_ZONE("Load: BSP surfaces");
 	int numFaces = 0;
 	int numMeshes = 0;
 	int numTriSurfs = 0;
@@ -1509,6 +1512,7 @@ R_LoadShaders
 */
 static void R_LoadShaders(const lump_t* l, world_t& worldData)
 {
+	PROFILE_ZONE("Load: BSP shaders");
 	const dshader_t* in = reinterpret_cast<dshader_t*>(fileBase + l->fileofs);
 	if (l->filelen % sizeof * in)
 		Com_Error(ERR_DROP, "LoadMap: funny lump size in %s", worldData.name);
@@ -2101,6 +2105,9 @@ void RE_LoadWorldMap_Actual(const char* name, world_t& worldData, const int inde
 //
 void RE_LoadWorldMap(const char* name)
 {
+	R_SyncRenderThread();	// r_smp: the back end reads the world
+	PROFILE_ZONE("Load: world map (BSP)");
+	R_ImagePrefetch_Begin(name, "gl_mp");	// this map's JPGs decoded ahead on the job workers
 	ri.CM_SetUsingCache(qtrue);
 	RE_LoadWorldMap_Actual(name, s_worldData, 0);
 	ri.CM_SetUsingCache(qfalse);

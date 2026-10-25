@@ -3354,7 +3354,7 @@ static void CG_DrawBatteryCharge()
 static void CG_DrawSimpleSaberStyle(const centity_t* cent)
 {
 	uint32_t calc_color = 0;
-	char num[7] = { 0 };
+	char num[16] = { 0 }; // room for "BLASTER 20" (SS_BLASTER)
 	int weap_x = 16;
 
 	if (!cent->currentState.weapon) // We don't have a weapon right now
@@ -3397,6 +3397,7 @@ static void CG_DrawSimpleSaberStyle(const centity_t* cent)
 		Com_sprintf(num, sizeof num, "BLASTER %d",
 			SABERBLASTER_CLIP_SIZE - cg.snap->ps.ammo[SABERBLASTER_CLIP_SLOT]);
 		calc_color = CT_LTPINK;
+		weap_x = 60; // the longer text starts further left, or it runs off the screen
 		break;
 	case SS_TAVION:
 		Com_sprintf(num, sizeof num, "TAVION");
@@ -8271,7 +8272,7 @@ The HUD (health / armor / force / ammo / saber style frames and the weapon, forc
 out when the player is not in action and comes back fast when he is: an enemy close by and in sight (or after him),
 damage or a health / armor / ammo pickup, the saber being ignited or used (swings, blocks, parries, putting it away),
 holding block, a gun being fired, charged or aimed, a weapon change, the Force being used, sprint / jetpack / cloak
-fuel being used, or a select bar being opened. The crosshair and the radar are not part of it.
+fuel being used, or a select bar being opened. The crosshair is not part of it; the radar fades with it.
 The renderer does the fading (r_hudAlpha scales the alpha of everything drawn in 2D while it is below 1), so the
 menu-built parts of the HUD fade with the rest; it is set back to 1 straight after the HUD is drawn.
 =====================
@@ -8510,6 +8511,9 @@ static void CG_DynamicHudEnd(const float alpha)
 	}
 }
 
+// the HUD's fade this frame (set in CG_Draw2D), for the radar, which is drawn later but fades with the HUD
+static float cg_dynamicHudFrameAlpha = 1.0f;
+
 static void CG_Draw2D()
 {
 	char text[1024] = { 0 };
@@ -8651,6 +8655,7 @@ static void CG_Draw2D()
 	{
 		// the HUD: faded out when the player is not in action (cg_dynamicHud)
 		const float hud_alpha = CG_DynamicHudAlpha();
+		cg_dynamicHudFrameAlpha = hud_alpha;
 
 		if (hud_alpha > 0.0f)
 		{
@@ -8727,9 +8732,22 @@ static void CG_Draw2D()
 	{
 		CG_DrawCenterString();
 	}
+	// the radar fades with the dynamic HUD (still drawn when fully faded, so its missile lock warnings keep sounding)
+	const float radar_alpha = cg_dynamicHudFrameAlpha;
+	cg_dynamicHudFrameAlpha = 1.0f;
 	if (cg_drawRadar.integer)
 	{
+		if (radar_alpha < 1.0f)
+		{
+			cgi_Cvar_Set("r_hudAlpha", va("%.3f", radar_alpha > 0.0f ? radar_alpha : 0.0f));
+			cgi_R_SetColor(nullptr);
+		}
 		cg_draw_radar(y);
+		if (radar_alpha < 1.0f)
+		{
+			cgi_Cvar_Set("r_hudAlpha", "1");
+			cgi_R_SetColor(nullptr);
+		}
 	}
 
 	if (missionInfo_Updated)

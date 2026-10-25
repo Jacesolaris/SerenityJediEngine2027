@@ -25,6 +25,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // common.c -- misc functions used in client and server
 
 #include "q_shared.h"
+#include "q_profile.h"
 #include "qcommon.h"
 #include "qcommon/sstring.h"	// to get Gil's string class, because MS's doesn't compile properly in here
 #include "qcommon/stringed_ingame.h"
@@ -1518,6 +1519,7 @@ void G2Time_ReportTimers(void);
 
 void Com_Frame()
 {
+	PROFILE_FRAME();
 	try
 	{
 		int timeBeforeFirstEvents = 0, timeBeforeServer = 0, timeBeforeEvents = 0, timeBeforeClient = 0, timeAfter = 0;

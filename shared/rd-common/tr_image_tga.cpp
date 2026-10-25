@@ -25,6 +25,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #if defined(_JK2EXE) || defined(REND2_SP)	// SP renderers
 #include "server/exe_headers.h"
 #endif
+#include "q_profile.h"
 
 #include "rd-common/tr_common.h"
 
@@ -58,6 +59,7 @@ using TGAHeader_t = struct TGAHeader_s {
 
 void LoadTGA(const char* name, byte** pic, int* width, int* height)
 {
+	PROFILE_ZONE("Load: decode TGA");
 	char sErrorString[1024];
 	bool bFormatErrors = false;
 

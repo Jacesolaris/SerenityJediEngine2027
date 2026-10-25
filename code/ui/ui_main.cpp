@@ -33,6 +33,7 @@ USER INTERFACE MAIN
 #include <vector>
 
 #include "../server/exe_headers.h"
+#include "q_profile.h"
 
 #include "ui_local.h"
 
@@ -3236,6 +3237,7 @@ PlayerModel_BuildList
 // Build the list of player species/models from models/players
 static void UI_BuildPlayerModel_List(const qboolean inGameLoad)
 {
+	PROFILE_ZONE("Load: UI player model list");
 	static constexpr size_t DIR_LIST_SIZE = 16384;
 
 	// Allocate directory list on heap (avoid large stack usage)
@@ -3589,6 +3591,7 @@ UI_Init
 */
 void _UI_Init(const qboolean inGameLoad)
 {
+	PROFILE_ZONE("Load: UI init");
 	// Get the list of possible languages
 #ifndef JK2_MODE
 	uiInfo.languageCount = SE_GetNumLanguages(); // this does a dir scan, so use carefully
@@ -3902,6 +3905,8 @@ UI_LoadMenus
 */
 void UI_LoadMenus(const char* menuFile, const qboolean reset)
 {
+	PROFILE_ZONE("Load: UI menus");
+	PROFILE_TEXT(menuFile);
 	char* buffer = nullptr;
 	const char* holdBuffer = nullptr;
 
@@ -3963,8 +3968,8 @@ void UI_LoadMenus(const char* menuFile, const qboolean reset)
 	Com_Printf("--------------------- Client Initialization ---------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("---------- Genuine SerenityJediEngine-(Solaris Edition)SP--------\n");
-	Com_Printf("---------------------Build date 22/10/2026-----------------------\n"); // build date
-	Com_Printf("---------------------------Build 14------------------------------\n");
+	Com_Printf("---------------------Build date 25/10/2026-----------------------\n"); // build date
+	Com_Printf("---------------------------Build 16------------------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("------------------------LightSaber-------------------------------\n");
 	Com_Printf("-----------An elegant weapon for a more civilized age------------\n");
@@ -4646,6 +4651,7 @@ AssetCache
 */
 void AssetCache()
 {
+	PROFILE_ZONE("Load: UI asset cache");
 	//	int n;
 	uiInfo.uiDC.Assets.scrollBar = ui.R_RegisterShaderNoMip(ASSET_SCROLLBAR);
 	uiInfo.uiDC.Assets.scrollBarArrowDown = ui.R_RegisterShaderNoMip(ASSET_SCROLLBAR_ARROWDOWN);

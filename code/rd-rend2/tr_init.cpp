@@ -241,6 +241,9 @@ cvar_t* r_meshCloth;
 cvar_t* r_meshClothGravity;
 cvar_t* r_meshClothDrag;
 cvar_t* r_meshClothIter;
+cvar_t* r_meshClothLodNear;
+cvar_t* r_meshClothLodFar;
+cvar_t* r_threads;
 cvar_t* r_meshClothShape;
 cvar_t* r_meshClothInertia;
 cvar_t* r_meshClothMaxAccel;
@@ -1505,13 +1508,37 @@ typedef struct consoleCommand_s {
 	xcommand_t	func;
 } consoleCommand_t;
 
+bool R_MeshClothVisible(const float from[3], const float to[3]);	// tr_ghoul2.cpp
 // meshcloth_blast [strength] [radius]: test explosion 96 units in front of the camera
+// meshcloth_blast x y z strength radius: an explosion there (sent by the cgame for splash weapons, cg_clothExplosion)
 static void R_MeshClothBlast_f(void) {
+	if (ri.Cmd_Argc() >= 6) {
+		float o[3];
+		for (int k = 0; k < 3; k++) o[k] = (float)atof(ri.Cmd_Argv(1 + k));
+		MC_Blast(o, (float)atof(ri.Cmd_Argv(4)), (float)atof(ri.Cmd_Argv(5)), R_MeshClothVisible);	// walls stop it
+		return;
+	}
 	const float strength = ri.Cmd_Argc() > 1 ? (float)atof(ri.Cmd_Argv(1)) : 600.0f;
 	const float radius = ri.Cmd_Argc() > 2 ? (float)atof(ri.Cmd_Argv(2)) : 200.0f;
-	float c[3];
+	float c[3]{};
 	for (int k = 0; k < 3; k++) c[k] = tr.refdef.vieworg[k] + tr.refdef.viewaxis[0][k] * 96.0f;
 	MC_Blast(c, strength, radius);
+}
+
+// meshcloth_push x y z dirx diry dirz strength radius [coneDot] - sent by the cgame when someone uses force push
+// (strength > 0) or pull (< 0), so the capes and robes in front of them are blown about
+static void R_MeshClothPush_f(void) {
+	if (ri.Cmd_Argc() < 9) return;
+	float c[3], d[3];
+	for (int k = 0; k < 3; k++) {
+		c[k] = (float)atof(ri.Cmd_Argv(1 + k));
+		d[k] = (float)atof(ri.Cmd_Argv(4 + k));
+	}
+	const float len = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+	if (len < 1e-3f) return;
+	for (int k = 0; k < 3; k++) d[k] /= len;
+	const float coneDot = ri.Cmd_Argc() > 9 ? (float)atof(ri.Cmd_Argv(9)) : 0.4f;
+	MC_Push(c, d, (float)atof(ri.Cmd_Argv(7)), (float)atof(ri.Cmd_Argv(8)), coneDot);
 }
 
 static consoleCommand_t	commands[] = {
@@ -1527,10 +1554,12 @@ static consoleCommand_t	commands[] = {
 	{ "r_we",				R_WorldEffect_f },
 	{ "modellist",			R_Modellist_f },
 	{ "meshcloth_blast",	R_MeshClothBlast_f },
+	{ "meshcloth_push",	R_MeshClothPush_f },
 	{ "vbolist",			R_VBOList_f },
 	{ "capframes",			R_CaptureFrameData_f },
 	{ "r_weather",			R_WeatherEffect_f },
 	{ "weather",			R_SetWeatherEffect_f },
+	{ "grade",				R_Grade_f },	// colour grading (r_grade*)
 };
 
 static const size_t numCommands = ARRAY_LEN(commands);
@@ -1767,10 +1796,14 @@ static void R_Register(void)
 	r_noPrecacheGLA = ri_Cvar_Get_NoComm("r_noPrecacheGLA", "0", CVAR_CHEAT, "");
 #endif
 	r_noServerGhoul2 = ri_Cvar_Get_NoComm("r_noghoul2", "0", CVAR_CHEAT, "");
+	R_GradeRegisterCvars();	// colour grading (r_grade*)
 	r_meshCloth = ri.Cvar_Get("r_meshCloth", "1", CVAR_ARCHIVE);
-	r_meshClothGravity = ri.Cvar_Get("r_meshClothGravity", "650", CVAR_ARCHIVE);
+	r_meshClothGravity = ri.Cvar_Get("r_meshClothGravity", "700", CVAR_ARCHIVE);
 	r_meshClothDrag = ri.Cvar_Get("r_meshClothDrag", "1.4", CVAR_ARCHIVE);
 	r_meshClothIter = ri.Cvar_Get("r_meshClothIter", "6", CVAR_ARCHIVE);
+	r_meshClothLodNear = ri.Cvar_Get("r_meshClothLodNear", "600", CVAR_ARCHIVE);
+	r_meshClothLodFar = ri.Cvar_Get("r_meshClothLodFar", "1800", CVAR_ARCHIVE);
+	r_threads = ri.Cvar_Get("r_threads", "-1", CVAR_ARCHIVE_ND);
 	r_meshClothShape = ri.Cvar_Get("r_meshClothShape", "1", CVAR_ARCHIVE);
 	r_meshClothInertia = ri.Cvar_Get("r_meshClothInertia", "1", CVAR_ARCHIVE);
 	r_meshClothMaxAccel = ri.Cvar_Get("r_meshClothMaxAccel", "0", CVAR_ARCHIVE);
@@ -2340,6 +2373,8 @@ void RE_Shutdown(qboolean destroyWindow, qboolean restarting)
 
 	R_ShutdownBackEndFrameData();
 
+	R_ShutdownRenderJobs();	// job workers first: they may be using cloth state
+	R_ImagePrefetch_RendererShutdown(static_cast<qboolean>(!destroyWindow && !restarting));	// a map load's flush keeps its prefetch
 	R_MeshClothShutdown();
 
 	R_ShutdownWeatherSystem();
@@ -2393,6 +2428,7 @@ Touch all images to make sure they are resident
 */
 static void RE_EndRegistration(void)
 {
+	R_ImagePrefetch_End(qtrue);	// map loaded: save its JPG list for the next load, free what is left
 	R_IssuePendingRenderCommands();
 }
 
@@ -2447,6 +2483,8 @@ static void RE_SetRefractionProperties(float distortionAlpha, float distortionSt
 
 static void C_LevelLoadBegin(const char* psMapName, ForceReload_e eForceReload, qboolean bAllowScreenDissolve)
 {
+	// this map's JPGs/PNGs decoded ahead on the job workers from the start of the load (the game's entities load many)
+	R_ImagePrefetch_Begin(psMapName, "r2_sp", qtrue);
 	static char sPrevMapName[MAX_QPATH] = { 0 };
 	bool bDeleteModels = eForceReload == eForceReload_MODELS || eForceReload == eForceReload_ALL;
 

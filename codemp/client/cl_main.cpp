@@ -25,6 +25,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // cl_main.c  -- client main loop
 
 #include "client.h"
+#include "q_profile.h"
 
 #include <climits>
 #include "ghoul2/G2.h"
@@ -2269,6 +2270,7 @@ extern void SE_CheckForLanguageUpdates(void);
 
 void CL_Frame(int msec)
 {
+	PROFILE_ZONE("Client frame");
 	qboolean takeVideoFrame = qfalse;
 
 	if (!com_cl_running->integer)
@@ -2432,6 +2434,7 @@ CL_InitRenderer
 */
 static void CL_InitRenderer(void)
 {
+	PROFILE_ZONE("Load: renderer init");
 	// this sets up the renderer and calls R_Init
 	re->BeginRegistration(&cls.glconfig);
 

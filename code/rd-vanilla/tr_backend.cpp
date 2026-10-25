@@ -22,6 +22,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "../server/exe_headers.h"
+#include "q_profile.h"
 
 #include "tr_local.h"
 #include "tr_common.h"
@@ -61,10 +62,14 @@ void GL_Bind(image_t* image) {
 	if (!image) {
 		// (a shader whose image did not load, drawn every frame: named once, for developers)
 		static const shader_t* null_image_shader;
-		if (ri.Cvar_VariableIntegerValue("developer") && tess.shader != null_image_shader)
+		// (the console variable is only looked up when the shader changes: this may run on the render thread)
+		if (tess.shader != null_image_shader)
 		{
 			null_image_shader = tess.shader;
-			ri.Printf(PRINT_WARNING, S_COLOR_YELLOW "GL_Bind: NULL image in shader %s\n", tess.shader ? tess.shader->name : "?");
+			if (ri.Cvar_VariableIntegerValue("developer"))
+			{
+				ri.Printf(PRINT_WARNING, S_COLOR_YELLOW "GL_Bind: NULL image in shader %s\n", tess.shader ? tess.shader->name : "?");
+			}
 		}
 		texnum = tr.defaultImage->texnum;
 	}
@@ -78,7 +83,7 @@ void GL_Bind(image_t* image) {
 
 	if (glState.currenttextures[glState.currenttmu] != texnum) {
 		if (image) {
-			image->frameUsed = tr.frameCount;
+			image->frameUsed = RB_SMP(frameCount, tr.frameCount);
 		}
 		glState.currenttextures[glState.currenttmu] = texnum;
 		qglBindTexture(GL_TEXTURE_2D, texnum);
@@ -477,6 +482,7 @@ to actually render the visible surfaces for this view
 =================
 */
 static void RB_BeginDrawingView(void) {
+	PROFILE_ZONE("View setup + clear");
 	int clearBits = GL_DEPTH_BUFFER_BIT;
 
 	// sync with gl if needed
@@ -507,7 +513,7 @@ static void RB_BeginDrawingView(void) {
 		tr_stencilled = false;
 	}
 
-	if (skyboxportal)
+	if (RB_SMP(skyboxportal, skyboxportal))
 	{
 		if (backEnd.refdef.rdflags & RDF_SKYBOXPORTAL)
 		{	// portal scene, clear whatever is necessary
@@ -614,11 +620,11 @@ static bool R_WorldCoordToScreenCoordFloat(vec3_t worldCoord, float* x, float* y
 	const int ycenter = glConfig.vidHeight / 2;
 
 	//AngleVectors (tr.refdef.viewangles, vfwd, vright, vup);
-	VectorCopy(tr.refdef.viewaxis[0], vfwd);
-	VectorCopy(tr.refdef.viewaxis[1], vright);
-	VectorCopy(tr.refdef.viewaxis[2], vup);
+	VectorCopy(RB_SMP(refdef, tr.refdef).viewaxis[0], vfwd);
+	VectorCopy(RB_SMP(refdef, tr.refdef).viewaxis[1], vright);
+	VectorCopy(RB_SMP(refdef, tr.refdef).viewaxis[2], vup);
 
-	VectorSubtract(worldCoord, tr.refdef.vieworg, local);
+	VectorSubtract(worldCoord, RB_SMP(refdef, tr.refdef).vieworg, local);
 
 	transformed[0] = DotProduct(local, vright);
 	transformed[1] = DotProduct(local, vup);
@@ -630,8 +636,8 @@ static bool R_WorldCoordToScreenCoordFloat(vec3_t worldCoord, float* x, float* y
 		return false;
 	}
 
-	const float xzi = xcenter / transformed[2] * (90.0 / tr.refdef.fov_x);
-	const float yzi = ycenter / transformed[2] * (90.0 / tr.refdef.fov_y);
+	const float xzi = xcenter / transformed[2] * (90.0 / RB_SMP(refdef, tr.refdef).fov_x);
+	const float yzi = ycenter / transformed[2] * (90.0 / RB_SMP(refdef, tr.refdef).fov_y);
 
 	*x = xcenter + xzi * transformed[0];
 	*y = ycenter - yzi * transformed[1];
@@ -1036,6 +1042,13 @@ static const void* RB_SetColor(const void* data) {
 	backEnd.color2D[1] = cmd->color[1] * 255;
 	backEnd.color2D[2] = cmd->color[2] * 255;
 	backEnd.color2D[3] = cmd->color[3] * 255;
+	// the dynamic HUD fade is applied when a 2D batch is drawn (RB_HudFadeStage), so quads with a different fade
+	// must not share a batch (it only changes when cgame starts and ends the HUD, so this flushes twice a frame at most)
+	if (cmd->hudFade != backEnd.hudFade2D && tess.numIndexes)
+	{
+		RB_EndSurface();
+	}
+	backEnd.hudFade2D = cmd->hudFade;
 
 	return cmd + 1;
 }
@@ -1320,6 +1333,7 @@ static bool RB_BloomActive()
 
 static void RB_BloomBrightPass(const int src_x, const int src_y)
 {
+	PROFILE_ZONE("Bloom bright pass");
 	const int w = backEnd.viewParms.viewportWidth;
 	const int h = backEnd.viewParms.viewportHeight;
 
@@ -1393,7 +1407,13 @@ static const void* RB_DrawSurfs(const void* data) {
 	backEnd.refdef = cmd->refdef;
 	backEnd.viewParms = cmd->viewParms;
 
-	RB_RenderDrawSurfList(cmd->drawSurfs, cmd->numDrawSurfs);
+	// skin every ghoul2 model, and simulate its cloth, on the job workers first (r_threads)
+	RB_G2PrepareDrawSurfs(cmd->drawSurfs, cmd->numDrawSurfs);
+
+	{
+		PROFILE_ZONE("Draw surfs: main pass");
+		RB_RenderDrawSurfList(cmd->drawSurfs, cmd->numDrawSurfs);
+	}
 
 	// Dynamic Glow/Flares:
 	/*
@@ -1424,6 +1444,7 @@ static const void* RB_DrawSurfs(const void* data) {
 
 		if (r_DynamicGlow->integer && r_Dynamic_AMD_Fix->integer == 0) // SJE: bloom alone skips the glow objects
 		{
+			PROFILE_ZONE("Draw surfs: glow pass");
 			RB_RenderDrawSurfList(cmd->drawSurfs, cmd->numDrawSurfs);
 		}
 
@@ -1435,7 +1456,13 @@ static const void* RB_DrawSurfs(const void* data) {
 			RB_BloomBrightPass(0, 0);
 		}
 
-		qglFinish();
+		// SJE: r_DynamicGlowFinish 0 skips this wait. OpenGL already runs commands in order, so the
+		// copy below sees the finished glow scene either way; the wait only stalls the CPU.
+		if (r_DynamicGlowFinish->integer)
+		{
+			PROFILE_ZONE("Glow: wait for GPU (glFinish)");
+			qglFinish();
+		}
 
 		// Copy the glow scene to texture.
 		qglDisable(GL_TEXTURE_2D);
@@ -1473,6 +1500,8 @@ static const void* RB_DrawSurfs(const void* data) {
 		RB_DrawGlowOverlay();
 	}
 
+	RB_G2FinishDrawSurfs();
+
 	return cmd + 1;
 }
 
@@ -1484,6 +1513,11 @@ RB_DrawBuffer
 */
 static const void* RB_DrawBuffer(const void* data) {
 	const auto cmd = static_cast<const drawBufferCommand_t*>(data);
+
+	if (R_SmpActive())
+	{
+		glState.finishCalled = qfalse;	// r_smp: RE_BeginFrame leaves the back end state alone
+	}
 
 	qglDrawBuffer(cmd->buffer);
 
@@ -1504,14 +1538,14 @@ static const void* RB_DrawBuffer(const void* data) {
 	}
 
 	// clear screen for debugging
-	if (!(backEnd.refdef.rdflags & RDF_NOWORLDMODEL) && tr.world && tr.refdef.rdflags & RDF_doLAGoggles)
+	if (!(backEnd.refdef.rdflags & RDF_NOWORLDMODEL) && tr.world && RB_SMP(refdef, tr.refdef).rdflags & RDF_doLAGoggles)
 	{
 		const fog_t* fog = &tr.world->fogs[tr.world->numfogs];
 
 		qglClearColor(fog->parms.color[0], fog->parms.color[1], fog->parms.color[2], 1.0f);
 		qglClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	}
-	else if (!(backEnd.refdef.rdflags & RDF_NOWORLDMODEL) && tr.world && tr.world->globalFog != -1 && tr.sceneCount)//don't clear during menus, wait for real scene
+	else if (!(backEnd.refdef.rdflags & RDF_NOWORLDMODEL) && tr.world && tr.world->globalFog != -1 && RB_SMP(sceneCount, tr.sceneCount))//don't clear during menus, wait for real scene
 	{
 		const fog_t* fog = &tr.world->fogs[tr.world->globalFog];
 
@@ -1621,6 +1655,7 @@ void RB_ShowImages(void) {
 // SJE: gamma/overbright as a final full-screen pass (r_gammaShaders) - ported from MP
 static void RB_GammaCorrectRender()
 {
+	PROFILE_ZONE("Gamma shader pass");
 	// SJE: GL_CLIENT_ALL_ATTRIB_BITS is 0xFFFFFFFF, so this pushes (and qglPopAttrib below restores) ALL server
 	// state - blend, alpha test, enables, texture bindings, active unit. RB_SetGL2D/GL_State/GL_SelectTexture
 	// below update the renderer's state cache, so the cache has to be put back too, or it no longer matches GL
@@ -1701,11 +1736,19 @@ RB_SwapBuffers
 =============
 */
 extern void RB_RenderWorldEffects();
+void R_ResetGhoul2RenderSurfaces();	// tr_ghoul2.cpp
+
 static const void* RB_SwapBuffers(const void* data)
 {
+	PROFILE_ZONE("Swap buffers command");
 	// finish any 2D drawing if needed
 	if (tess.numIndexes) {
 		RB_EndSurface();
+	}
+
+	if (!R_SmpActive())	// r_smp: each frame buffer has its own surfaces, reset by the front end (R_G2SmpNewFrame)
+	{
+		R_ResetGhoul2RenderSurfaces();	// this frame's ghoul2 surfaces are all drawn: reuse them next frame
 	}
 
 	// SJE: gamma/overbright post-process (r_gammaShaders)
@@ -1715,7 +1758,7 @@ static const void* RB_SwapBuffers(const void* data)
 	}
 
 	// texture swapping test
-	if (r_showImages->integer) {
+	if (r_showImages->integer && !backEnd.smp) {	// r_smp: it walks the image list, which the front end changes
 		RB_ShowImages();
 	}
 
@@ -1726,25 +1769,46 @@ static const void* RB_SwapBuffers(const void* data)
 	if (r_measureOverdraw->integer) {
 		long sum = 0;
 
-		const auto stencilReadback = static_cast<unsigned char*>(R_Malloc(glConfig.vidWidth * glConfig.vidHeight,
-			TAG_TEMP_WORKSPACE, qfalse));
-		qglReadPixels(0, 0, glConfig.vidWidth, glConfig.vidHeight, GL_STENCIL_INDEX, GL_UNSIGNED_BYTE, stencilReadback);
+		const auto stencilReadback = static_cast<unsigned char*>(malloc(static_cast<size_t>(glConfig.vidWidth) * glConfig.vidHeight));	// not R_Malloc: may run on the render thread (r_smp)
+		if (stencilReadback) {
+			qglReadPixels(0, 0, glConfig.vidWidth, glConfig.vidHeight, GL_STENCIL_INDEX, GL_UNSIGNED_BYTE, stencilReadback);
 
-		for (int i = 0; i < glConfig.vidWidth * glConfig.vidHeight; i++) {
-			sum += stencilReadback[i];
+			for (int i = 0; i < glConfig.vidWidth * glConfig.vidHeight; i++) {
+				sum += stencilReadback[i];
+			}
+
+			backEnd.pc.c_overDraw += sum;
+			free(stencilReadback);
 		}
-
-		backEnd.pc.c_overDraw += sum;
-		R_Free(stencilReadback);
 	}
 
-	if (!glState.finishCalled) {
+	// r_finish 0: no wait here either. Frames with no 3D view (menus, loading screens) never reach
+	// RB_BeginDrawingView, so they used to glFinish every swap - stalling map loads on the driver's uploads.
+	if (!glState.finishCalled && r_finish->integer) {
+		PROFILE_ZONE("Swap: wait for GPU (glFinish)");
 		qglFinish();
+	}
+
+	// r_smp: RE_BeginFrame's GL error check, done here on the render thread instead
+	if (backEnd.smp && !r_ignoreGLErrors->integer)
+	{
+		const GLenum err = qglGetError();
+		if (err != GL_NO_ERROR)
+		{
+			Com_Error(ERR_FATAL, "RE_BeginFrame() - glGetError() failed (0x%x)!\n", err);
+		}
 	}
 
 	GLimp_LogComment("***************** RB_SwapBuffers *****************\n\n\n");
 
-	ri.WIN_Present(&window);
+	if (R_SmpOnRenderThread())
+	{
+		R_SmpPresent();	// r_smp: only the buffer swap; WIN_Present's window changes are made on the main thread
+	}
+	else
+	{
+		ri.WIN_Present(&window);
+	}
 
 	backEnd.projection2D = qfalse;
 
@@ -1753,6 +1817,7 @@ static const void* RB_SwapBuffers(const void* data)
 
 static const void* RB_WorldEffects(const void* data)
 {
+	PROFILE_ZONE("Weather / world effects");
 	const auto cmd = static_cast<const setModeCommand_t*>(data);
 
 	// Always flush the tess buffer
@@ -1776,6 +1841,7 @@ RB_ExecuteRenderCommands
 ====================
 */
 void RB_ExecuteRenderCommands(const void* data) {
+	PROFILE_ZONE("R back end");
 	const int t1 = ri.Milliseconds();
 
 	while (true) {
@@ -1878,6 +1944,7 @@ extern bool g_bTextureRectangleHack;
 
 static void RB_BlurGlowTexture()
 {
+	PROFILE_ZONE("Glow blur");
 	qglDisable(GL_CLIP_PLANE0);
 	GL_Cull(CT_TWO_SIDED);
 
@@ -2053,6 +2120,7 @@ static void RB_BlurGlowTexture()
 // Draw the glow blur over the screen additively.
 static void RB_DrawGlowOverlay()
 {
+	PROFILE_ZONE("Glow overlay");
 	qglDisable(GL_CLIP_PLANE0);
 	GL_Cull(CT_TWO_SIDED);
 

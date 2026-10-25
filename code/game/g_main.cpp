@@ -22,6 +22,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "g_local.h"
+#include "q_profile.h"
 #include "g_pazaak.h"
 #include "g_functions.h"
 #include "Q3_Interface.h"
@@ -175,6 +176,7 @@ cvar_t* g_delayedShutdown;
 cvar_t* g_inactivity;
 cvar_t* g_debugMove;
 cvar_t* g_debugDamage;
+cvar_t* g_awardStreaks;
 cvar_t* g_weaponRespawn;
 cvar_t* g_subtitles;
 cvar_t* g_ICARUSDebug;
@@ -240,6 +242,7 @@ cvar_t* g_gripitems;
 cvar_t* g_stasistems;
 cvar_t* g_sentryexplode;
 cvar_t* g_saberBlasterAimArc; // SS_BLASTER (2026-10-14)
+cvar_t* g_saberBlasterAIFire; // SS_BLASTER (2026-10-24)
 cvar_t* g_saberBlasterAimRange;
 cvar_t* g_saberBlasterLockCharge;
 cvar_t* g_vehAutoAimLead;
@@ -702,6 +705,7 @@ static void G_InitCvars()
 	g_inactivity = gi.cvar("g_inactivity", "0", 0);
 	g_debugMove = gi.cvar("g_debugMove", "0", CVAR_CHEAT);
 	g_debugDamage = gi.cvar("g_debugDamage", "0", CVAR_CHEAT);
+	g_awardStreaks = gi.cvar("g_awardStreaks", "1", CVAR_ARCHIVE); // award sounds for kill / death / saber-3 kill streaks of 4 (0: the old awards)
 	g_ICARUSDebug = gi.cvar("g_ICARUSDebug", "0", CVAR_CHEAT);
 	g_timescale = gi.cvar("timescale", "1", 0);
 	g_npcdebug = gi.cvar("g_npcdebug", "0", 0);
@@ -747,6 +751,7 @@ static void G_InitCvars()
 	g_sentryexplode = gi.cvar("g_sentryexplode", "3", CVAR_ARCHIVE);
 	// SS_BLASTER (2026-10-14): pistol auto aim half angle (degrees) and range, saberlock charge time (ms)
 	g_saberBlasterAimArc = gi.cvar("g_saberBlasterAimArc", "30", CVAR_ARCHIVE);
+	g_saberBlasterAIFire = gi.cvar("g_saberBlasterAIFire", "2000", CVAR_ARCHIVE); // SS_BLASTER (2026-10-24): NPCs fire the pistol out of saber reach: average ms between bursts (0 = off)
 	g_saberBlasterAimRange = gi.cvar("g_saberBlasterAimRange", "4096", CVAR_ARCHIVE);
 	g_saberBlasterLockCharge = gi.cvar("g_saberBlasterLockCharge", "1500", CVAR_ARCHIVE);
 
@@ -2208,6 +2213,7 @@ constexpr auto BARRIER_REFUEL_RATE = 200; //seems fair;
 
 void G_RunFrame(const int levelTime)
 {
+	PROFILE_ZONE("G_RunFrame");
 	gentity_t* ent = nullptr;
 	int ents_inuse = 0; // someone's gonna be pissed I put this here...
 #if	AI_TIMERS

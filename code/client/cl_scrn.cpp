@@ -25,6 +25,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // cl_scrn.c -- master for refresh, status bar, console, chat, notify, etc
 
 #include "../server/exe_headers.h"
+#include "q_profile.h"
 
 #include "client.h"
 #include "client_ui.h"
@@ -539,6 +540,7 @@ text to the screen.
 */
 void SCR_UpdateScreen()
 {
+	PROFILE_ZONE("Screen update (cgame + renderer)");
 	static int recursive;
 
 	if (!scr_initialized)

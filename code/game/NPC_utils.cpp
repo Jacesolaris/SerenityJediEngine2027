@@ -1007,8 +1007,8 @@ static qboolean NPC_TargetVisible(const gentity_t* ent)
 	if (InFOV(ent, NPC, NPCInfo->stats.hfov, NPCInfo->stats.vfov) == qfalse)
 		return qfalse;
 
-	//Check for sight
-	if (NPC_ClearLOS(ent) == qfalse)
+	//Check for sight (Force Sight 3 senses through walls)
+	if (!NPC_SeesThroughWalls(NPC) && NPC_ClearLOS(ent) == qfalse)
 		return qfalse;
 
 	return qtrue;
@@ -1149,8 +1149,8 @@ static qboolean NPC_CheckPlayerDistance()
 	if (!NPC->client || NPC->client->enemyTeam != TEAM_PLAYER)
 		return qfalse;
 
-	//Must be within our FOV
-	if (InFOV(&g_entities[0], NPC, NPCInfo->stats.hfov, NPCInfo->stats.vfov) == qfalse)
+	//Must be within our FOV and in sight, not behind a wall (DH 2026-10-24)
+	if (NPC_CheckVisibility(&g_entities[0], CHECK_360 | CHECK_FOV) < VIS_FOV)
 		return qfalse;
 
 	const float distance = DistanceSquared(NPC->currentOrigin, NPC->enemy->currentOrigin);
@@ -1192,7 +1192,7 @@ static qboolean NPC_FindEnemy(const qboolean check_alerts = qfalse)
 		if (!isOfficerWithFlechette)
 		{
 			gentity_t* player = &g_entities[0];
-			if (NPC_CheckVisibility(player, CHECK_FOV) >= VIS_FOV)
+			if (NPC_CheckVisibility(player, CHECK_PVS | CHECK_360 | CHECK_FOV | CHECK_VISRANGE) >= VIS_FOV) // in sight, not through walls (DH 2026-10-24)
 			{
 				G_SetEnemy(NPC, player);
 				return qtrue;

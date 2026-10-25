@@ -376,6 +376,33 @@ An entity has an event value
 */
 #define	DEBUGNAME(x) if(cg_debugEvents.integer){CG_Printf(x"\n");}
 extern void cancel_firing(gentity_t* ent);
+// An explosion (a splash weapon's missile hit something): tell the renderer, whose mesh cloth then blows the
+// capes and robes near it outwards (renderer command meshcloth_blast). Sized roughly like each weapon's blast.
+// cg_clothExplosion scales it, 0 = off.
+static void CG_ClothBlast(const int weapon, const qboolean altFire, const vec3_t origin)
+{
+	float radius = 0.0f, strength = 0.0f;
+	switch (weapon)
+	{
+	case WP_ROCKET_LAUNCHER:	radius = 200.0f; strength = 800.0f; break;
+	case WP_THERMAL:			radius = 280.0f; strength = 1000.0f; break;
+	case WP_TRIP_MINE:
+	case WP_DET_PACK:			radius = 280.0f; strength = 1100.0f; break;
+	case WP_CONCUSSION:			if (!altFire) { radius = 200.0f; strength = 800.0f; } break;
+	case WP_REPEATER:			if (altFire) { radius = 160.0f; strength = 600.0f; } break;
+	case WP_FLECHETTE:			if (altFire) { radius = 160.0f; strength = 600.0f; } break;
+	case WP_DEMP2:				if (altFire) { radius = 200.0f; strength = 500.0f; } break;
+	default: break;
+	}
+	if (radius <= 0.0f || cg_clothExplosion.value <= 0.0f)
+	{
+		return;
+	}
+	cgi_SendConsoleCommand(va("meshcloth_blast %.0f %.0f %.0f %.0f %.0f\n", origin[0], origin[1], origin[2],
+		strength * cg_clothExplosion.value, radius));
+}
+
+
 void CG_EntityEvent(centity_t* cent, vec3_t position)
 {
 	const char* s = nullptr;
@@ -998,6 +1025,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 		else
 		{
 			cg_missile_hit_player(cent, es->weapon, position, cent->gent->pos1, cent->gent->alt_fire);
+			CG_ClothBlast(es->weapon, cent->gent->alt_fire, position);	// splash weapons blow mesh cloth
 		}
 		break;
 
@@ -1009,6 +1037,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 		else
 		{
 			cg_missile_hit_wall(cent, es->weapon, position, cent->gent->pos1, cent->gent->alt_fire);
+			CG_ClothBlast(es->weapon, cent->gent->alt_fire, position);	// splash weapons blow mesh cloth
 		}
 		break;
 

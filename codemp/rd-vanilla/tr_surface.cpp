@@ -320,7 +320,7 @@ static uint32_t ComputeFinalVertexColor(const byte* colors)
 				break;
 			}
 
-			byte* style_color = styleColors[styleIndex];
+			const byte* style_color = RB_SMP(styleColors, styleColors)[styleIndex];
 
 			r += static_cast<uint32_t>(*colors++) * static_cast<uint32_t>(*style_color++);
 			g += static_cast<uint32_t>(*colors++) * static_cast<uint32_t>(*style_color++);
@@ -1244,7 +1244,7 @@ static void RB_SurfaceElectricity()
 	// see if we should grow from start to end
 	if (e->renderfx & RF_GROW)
 	{
-		perc = 1.0f - (e->axis[0][2]/*endTime*/ - tr.refdef.time) / e->axis[0][1]/*duration*/;
+		perc = 1.0f - (e->axis[0][2]/*endTime*/ - RB_SMP(refdef, tr.refdef).time) / e->axis[0][1]/*duration*/;
 
 		if (perc > 1.0f)
 		{
@@ -2158,7 +2158,7 @@ static bool RB_TestZFlare(srfFlare_t* surf)
 
 	if (R_FlarePbosReady())
 	{
-		const int frame = tr.frameCount;
+		const int frame = RB_SMP(frameCount, tr.frameCount);
 		if (surf->pboQueued == frame + 1)
 		{
 			// already tested in an earlier view of this frame (portal / mirror): same answer

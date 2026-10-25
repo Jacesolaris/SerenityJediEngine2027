@@ -1733,10 +1733,13 @@ You can mix and match any of those options (example: find closest visible player
 
 FIXME: this should go through the snapshot and find the closest enemy
 */
-gentity_t* NPC_PickEnemy(const gentity_t* closestTo, const int enemyTeam, const qboolean checkVis,
+gentity_t* NPC_PickEnemy(const gentity_t* closestTo, const int enemyTeam, const qboolean checkVisIn,
 	const qboolean findPlayersFirst,
 	const qboolean findClosest)
 {
+	// only Force Sight 3 NPCs may pick an enemy they can't see (DH 2026-10-24)
+	const qboolean checkVis = (checkVisIn || !NPC_SeesThroughWalls(NPC)) ? qtrue : qfalse;
+
 	int num_choices = 0;
 	int choice[128]{}; //FIXME: need a different way to determine how many choices?
 	gentity_t* newenemy = nullptr;

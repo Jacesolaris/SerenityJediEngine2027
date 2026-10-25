@@ -137,8 +137,21 @@ static void LoadLengthforSong(const char* buffer, DynamicMusicSet_t* song)
 	tokenpointer = strrchr(token, '.');
 	*tokenpointer = '\0';
 
-	BG_SiegeGetPairedValue(buffer, token, TempLength);
-	song->fileLength = atoi(TempLength) * 1000;
+	if (BG_SiegeGetPairedValue(buffer, token, TempLength))
+	{
+		song->fileLength = atoi(TempLength) * 1000;
+	}
+	else
+	{
+		song->fileLength = 0;
+	}
+
+	if (song->fileLength <= 0)
+	{
+		//no (or bad) length for this music file, use default (a 0 length froze the game in TransitionBetweenState)
+		Com_Printf("LoadLengthforSong Warning: Couldn't find length for %s.\n", token);
+		song->fileLength = DMS_MUSICFILE_DEFAULT;
+	}
 
 	//find the song length for the transitions
 	for (; transNum > 0; transNum--)
@@ -316,10 +329,14 @@ static void TransitionBetweenState(void)
 
 	//find the closest transition point for this song state
 	int songTime = level.time - DMSData.dmStartTime;
-	while (songTime > oldSongGroup->fileLength)
+	if (oldSongGroup->fileLength > 0)
 	{
 		//convert the start time to be in relation to the file length
-		songTime -= oldSongGroup->fileLength;
+		//(guarded: with a 0 length this loop never ended and froze the game when the music changed state)
+		while (songTime > oldSongGroup->fileLength)
+		{
+			songTime -= oldSongGroup->fileLength;
+		}
 	}
 
 	//have the relative songTime, check to see if we're at one of the transition points

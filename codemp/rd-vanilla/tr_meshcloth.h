@@ -72,11 +72,25 @@ struct mcParams_t {
 	float	airDrag;		// 1/s drag on all motion relative to the air: capes trail when running and lift when falling
 	float	wind[3];		// world wind velocity, units/s (still air = 0 0 0)
 	float	gust;			// 0..1 how much the wind strength varies over time
+	float	flutter;		// 0..1 how much the wind ripples across the cloth (r_meshClothFlutter; 0 = it pushes it evenly)
 	float	timeSec;		// current time for gusts (filled in by MC_Apply)
 	int		floor;			// 1: floorPt / floorN hold the floor plane under the character (world)
 	float	floorPt[3];
 	float	floorN[3];
+	float	lodDist;		// distance level of detail: the character's distance from the camera
+	float	lodNear;		//   (scaled by the field of view). Beyond lodNear: half the constraint passes,
+	float	lodFar;			//   updated at most every 32 ms. Beyond lodFar: not simulated. 0 = no limit.
+	// water and rain (r_meshClothWater, r_meshClothRain); zero = dry, as before
+	int		water = 0;		// 1: the character stands in water up to waterZ (world height)
+	float	waterZ = 0.0f;
+	float	waterDrag = 0.0f;	// 1/s drag on cloth below waterZ; it also floats up gently there
+	float	wet = 0.0f;		// 0..1 how soaked the cloth is: wet cloth weighs up to twice as much
 };
+
+// Per character (instanceKey), eased over time, for the glue (main thread):
+//   outside: the weather wind fades in and out over ~0.4 s at a shelter edge instead of switching
+//   wet:     wetTarget 0 = dry, 1 = in the rain (soaks in ~8 s), 2 = in water (soaked at once); dries in ~45 s
+void MC_WeatherState( const void *instanceKey, int timeMs, bool outside, float wetTarget, float *outsideOut, float *wetOut );
 
 // Returns the 3x4 skinning matrix (model space) for a skeleton bone index.
 typedef const float ( *( *mcBoneFn_t )( void *ctx, int boneIndex ) )[4];
@@ -111,6 +125,41 @@ void MC_Apply( const void *surface, const void *instanceKey, int timeMs,
 // Drop instances not drawn for a while. Call about once a frame.
 void MC_Prune( int timeMs );
 
+// Threaded use (r_threads). MC_Apply = MC_Prepare + MC_Run.
+//   MC_Prepare: main thread only (finds or creates the cloth state).
+//   MC_Run:     any thread. All surfaces that share an instanceKey must run
+//               on the same thread, in draw order; different instanceKeys
+//               may run at the same time. It writes only that instance.
+//   MC_Prune / MC_Clear / MC_Blast / MC_LoadConfig: main thread, never
+//               while an MC_Run is going.
+struct mcRun_t {
+	void*		instance;
+	const void*	group;
+	int			surfIndex;
+};
+
+bool MC_Prepare(const void* surface, const void* instanceKey, int timeMs, mcRun_t* run);
+
+void MC_Run(const mcRun_t* run, const void* surface, int timeMs,
+	const vec3_t origin, const vec3_t axis[3],
+	const mcCapsule_t* capsulesWorld, int numCapsules,
+	const mcParams_t* params,
+	mcBoneFn_t boneFn, void* boneCtx,
+	float (*xyz)[4], float (*normal)[4]);
+
 // Push all cloth near a point outward, like the blast wave of an explosion.
 // strength: speed (units/s) given to cloth at the centre, fading to 0 at radius.
-void MC_Blast( const float center[3], float strength, float radius );
+// visible( from, to ): false when a wall is between them. Optional: without it a blast reaches cloth through walls.
+typedef bool ( *mcVisibleFn_t )( const float from[3], const float to[3] );
+void MC_Blast( const float center[3], float strength, float radius, mcVisibleFn_t visible = nullptr );
+// a force push (strength > 0) or pull (< 0) wave from center along dir: cloth within radius and inside the cone
+// (cos of its half angle: coneDot) is kicked away from (pull: toward) center, less with distance. Main thread.
+void MC_Push( const float center[3], const float dir[3], float strength, float radius, float coneDot );
+
+// Other characters push cloth (r_meshClothOthers). The glue lists every character's origin once a frame
+// (MC_SetCharacters; MC_CharactersListed says if this frame's list is there), then MC_NearCharacters
+// gives up to max standing-body capsules (world space) of the characters close to one character. Main thread.
+void MC_SetCharacters( int frameId, const float ( *origins )[3], int count );
+bool MC_CharactersListed( int frameId );
+int  MC_NearCharacters( const float origin[3], mcCapsule_t *out, int max );
+const int MC_MAX_OTHERS = 4;

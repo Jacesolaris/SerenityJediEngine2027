@@ -21,6 +21,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 #include "tr_local.h"
 #include "tr_allocator.h"
+#include "tr_weather.h"	// R_UpdateWeatherWind
 
 /*
 =====================
@@ -373,9 +374,11 @@ void	RE_SetColor(const float* rgba) {
 		r_hudAlpha = ri.Cvar_Get("r_hudAlpha", "1", CVAR_TEMP);
 #endif
 	}
-	if (r_hudAlpha&& r_hudAlpha->value < 1.0f)
+	// the fade is applied per shader stage in the backend (RB_HudFadeStage), so shaders that ignore the vertex alpha fade too
+	cmd->hudFade = 0.0f;
+	if (r_hudAlpha && r_hudAlpha->value < 1.0f)
 	{
-		cmd->color[3] *= r_hudAlpha->value > 0.0f ? r_hudAlpha->value : 0.0f;
+		cmd->hudFade = r_hudAlpha->value > 0.0f ? 1.0f - r_hudAlpha->value : 1.0f;
 	}
 }
 
@@ -550,6 +553,8 @@ void RE_BeginFrame(stereoFrame_t stereoFrame)
 	if (!tr.registered) {
 		return;
 	}
+
+	R_UpdateWeatherWind();	// weather wind, once a frame (mesh cloth, R_GetWindVector)
 
 	backEndData->previousFrame = backEndData->currentFrame;
 	int frameNumber = backEndData->realFrameNumber;

@@ -1719,6 +1719,12 @@ qboolean gG2_GBMUseSPMethod;
 
 static qboolean G2API_GetBoltMatrix_SPMethod(CGhoul2Info_v& ghoul2, const int modelIndex, const int boltIndex, mdxaBone_t* matrix, const vec3_t angles, const vec3_t position, const int frameNum, qhandle_t* modelList, const vec3_t scale)
 {
+	vec3_t noScale = { 0.0f, 0.0f, 0.0f };
+	if (!scale)
+	{
+		// no scale given (NULL): no scaling, instead of reading through a null pointer (2026-10-24)
+		scale = noScale;
+	}
 	assert(ghoul2.size() > modelIndex);
 
 	if (ghoul2.size() > modelIndex)
@@ -1781,6 +1787,12 @@ void G2_GetBoneMatrixLow(const CGhoul2Info& ghoul2, const int boneNum, const vec
 
 qboolean G2API_GetBoltMatrix(CGhoul2Info_v& ghoul2, const int modelIndex, const int boltIndex, mdxaBone_t* matrix, const vec3_t angles, const vec3_t position, const int frameNum, qhandle_t* modelList, vec3_t scale)
 {
+	vec3_t noScale = { 0.0f, 0.0f, 0.0f };
+	if (!scale)
+	{
+		// no scale given (NULL): no scaling, instead of reading through a null pointer (2026-10-24)
+		scale = noScale;
+	}
 	//	G2ERROR(ghoul2.IsValid(),"Invalid ghlInfo");
 	G2ERROR(matrix, "NULL matrix");
 	G2ERROR(modelIndex >= 0 && modelIndex < ghoul2.size(), "Invalid modelIndex");

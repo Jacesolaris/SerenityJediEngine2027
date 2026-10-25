@@ -10381,6 +10381,22 @@ static void PM_RemoveSprintFlag(qboolean removeFlag)
 	}
 }
 
+// bobCycle (footstep events, view bob) advanced by (int)(bobmove * msec): at high frame rates that is
+// under 1 every pmove and was truncated to 0, so the cycle crawled or stopped (no footsteps, no bob).
+// The fraction is carried per entity now, so the cycle runs at the same rate at any frame rate.
+static int PM_BobCycleStep(const float bobmove)
+{
+	static float s_bobFraction[MAX_GENTITIES];
+	const int n = pm->ps->clientNum;
+	const float step = bobmove * pml.msec + (n >= 0 && n < MAX_GENTITIES ? s_bobFraction[n] : 0.0f);
+	const int whole = static_cast<int>(step);
+	if (n >= 0 && n < MAX_GENTITIES)
+	{
+		s_bobFraction[n] = step - static_cast<float>(whole);
+	}
+	return whole;
+}
+
 static void PM_Footsteps(void)
 {
 	float bobmove = 0.0f;
@@ -10586,7 +10602,7 @@ static void PM_Footsteps(void)
 						//moving
 						old = pm->ps->bobCycle;
 						bobmove = 0.15f; // swim is a slow cycle
-						pm->ps->bobCycle = static_cast<int>(old + bobmove * pml.msec) & 255;
+						pm->ps->bobCycle = (old + PM_BobCycleStep(bobmove)) & 255;
 
 						// if we just crossed a cycle boundary, play an apropriate footstep event
 						if ((old + 64 ^ pm->ps->bobCycle + 64) & 128)
@@ -11757,7 +11773,7 @@ DoFootSteps:
 	// check for footstep / splash sounds
 	old = pm->ps->bobCycle;
 	bobmove = 0.3F;
-	pm->ps->bobCycle = static_cast<int>(old + bobmove * pml.msec) & 255;
+	pm->ps->bobCycle = (old + PM_BobCycleStep(bobmove)) & 255;
 
 	// if we just crossed a cycle boundary, play an apropriate footstep event
 	if ((old + 64 ^ pm->ps->bobCycle + 64) & 128)

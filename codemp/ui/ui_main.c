@@ -1597,8 +1597,8 @@ void UI_LoadMenus(const char* menuFile, const qboolean reset)
 	Com_Printf("--------------------- Client Initialization ---------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("---------- genuine SerenityJediEngine-(Solaris Edition)MP--------\n");
-	Com_Printf("---------------------Build date 22/10/2026-----------------------\n"); // build date
-	Com_Printf("---------------------------Build 14------------------------------\n");
+	Com_Printf("---------------------Build date 25/10/2026-----------------------\n"); // build date
+	Com_Printf("---------------------------Build 16------------------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("------------------------LightSaber-------------------------------\n");
 	Com_Printf("-----------An elegant weapon for a more civilized age------------\n");
@@ -2080,7 +2080,7 @@ static qboolean UI_HasSetSaberOnly(const char* info, const int gametype)
 
 	while (i < WP_NUM_WEAPONS)
 	{
-		if (!(wDisable & 1 << i) &&
+		if (!(WP_MASK_HAS(wDisable, i)) &&
 			i != WP_SABER && i != WP_NONE)
 		{
 			return qfalse;
@@ -6786,7 +6786,7 @@ static void UI_SiegeSetCvarsForClass(siegeClass_t* scl)
 	trap->Cvar_Set(va("ui_class_weapondesc%i", count), " "); // Blank it out to start with
 	while (i < WP_NUM_WEAPONS)
 	{
-		if (scl->weapons & 1 << i)
+		if (WP_MASK_HAS(scl->weapons, i))
 		{
 			if (i == WP_SABER)
 			{
@@ -7858,7 +7858,7 @@ static void UI_RunMenuScript(char** args)
 				{
 					if (i != WP_SABER)
 					{
-						weaponDisable |= (1 << i);
+						WP_MASK_ADD(weaponDisable, i);
 					}
 				}
 
@@ -9735,7 +9735,7 @@ static const char* UI_FeederItemText(float feederID, int index, int column,
 
 					while (i < WP_NUM_WEAPONS)
 					{
-						if (!(wDisable & 1 << i) && i != WP_SABER && i != WP_NONE)
+						if (!(WP_MASK_HAS(wDisable, i)) && i != WP_SABER && i != WP_NONE)
 						{
 							saberOnly = qfalse;
 						}

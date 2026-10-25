@@ -642,7 +642,8 @@ static qboolean NPC_CheckEnemyStealth_Smart(gentity_t* target)
 	// If the target is this close, then wake up regardless (if we're looking).
 	if ((target->client->ps.pm_flags & PMF_DUCKED) == 0 &&
 		(NPCInfo->scriptFlags & SCF_LOOK_FOR_ENEMIES) &&
-		target_dist_sq < (min_dist * min_dist))
+		target_dist_sq < (min_dist * min_dist) &&
+		(NPC_SeesThroughWalls(NPC) || NPC_ClearLOS(target))) // not through a wall (DH 2026-10-24)
 	{
 		G_SetEnemy(NPC, target);
 		NPCInfo->enemyLastSeenTime = level.time;
@@ -986,7 +987,8 @@ static qboolean NPC_CheckEnemyStealth(gentity_t* target)
 	// If the target is this close, then wake up regardless.
 	if (((target->client->ps.pm_flags & PMF_DUCKED) == 0) && // not ducking
 		((NPCInfo->scriptFlags & SCF_LOOK_FOR_ENEMIES) != 0) && // looking for enemies
-		(target_dist < (min_dist * min_dist))) // closer than min_dist
+		(target_dist < (min_dist * min_dist)) && // closer than min_dist
+		(NPC_SeesThroughWalls(NPC) || NPC_ClearLOS(target))) // not through a wall (DH 2026-10-24)
 	{
 		G_SetEnemy(NPC, target);
 		NPCInfo->enemyLastSeenTime = level.time;

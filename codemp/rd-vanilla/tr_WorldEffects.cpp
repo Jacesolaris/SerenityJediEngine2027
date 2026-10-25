@@ -38,6 +38,13 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "Ravl/CVec.h"
 #include "Ratl/vector_vs.h"
 #include "Ratl/bits_vs.h"
+#include <mutex>
+
+// r_smp: the render thread simulates and draws the weather (RB_RenderWorldEffects) while the game
+// and cgame ask about it (wind, outside) and change it. With r_smp on, every use takes this lock.
+// Changes that load images (RE_WorldEffectCommand) wait for the render thread instead.
+static std::recursive_mutex s_weMutex;
+#define WE_LOCK() std::unique_lock<std::recursive_mutex> weLock(s_weMutex, std::defer_lock); if (R_SmpActive()) weLock.lock()
 
 #include "rd-vanilla/glext.h"
 
@@ -350,18 +357,27 @@ ratl::vector_vs<CWindZone, MAX_WIND_ZONES> mWindZones;
 
 bool R_GetWindVector(vec3_t windVector)
 {
+	WE_LOCK();
 	VectorCopy(mGlobalWindDirection.v, windVector);
 	return true;
 }
 
 bool R_GetWindSpeed(float& windSpeed)
 {
+	WE_LOCK();
 	windSpeed = mGlobalWindSpeed;
 	return true;
 }
 
-static bool R_GetWindGusting()
+// refexport GetWindVector / GetWindGusting (the MP game and cgame ask through the engine for BOTH_WIND, as SP does)
+bool R_GetWindVectorAt(vec3_t windVector, vec3_t atpoint)
 {
+	return R_GetWindVector(windVector);
+}
+
+bool R_GetWindGusting(vec3_t atpoint)
+{
+	WE_LOCK();
 	return mGlobalWindSpeed > 1000.0f;
 }
 
@@ -539,6 +555,28 @@ public:
 			AddWeatherZone(tr.world->bmodels[0].bounds[0], tr.world->bmodels[0].bounds[1]);
 		}
 
+		// No brush in this map has inside/outside contents (no shader of the map carries those flags):
+		// the scan below would test every 32-unit cell of the weather zones (with no zones, the whole
+		// map: millions of point checks - the game froze for seconds, sound looping, the first time
+		// weather was switched on) and mark nothing. Same result, at once.
+		{
+			bool anyInsideOutside = false;
+			for (int i = 0; i < tr.world->numShaders; i++)
+			{
+				if (tr.world->shaders[i].contentFlags & (CONTENTS_INSIDE | CONTENTS_OUTSIDE))
+				{
+					anyInsideOutside = true;
+					break;
+				}
+			}
+			if (!anyInsideOutside)
+			{
+				mCacheInit = true;
+				SWeatherZone::mMarkedOutside = false;		// Assume All Is Outside, Except Solid
+				return;
+			}
+		}
+
 		// Iterate Over All Weather Zones
 		//--------------------------------
 		for (int zone = 0; zone < mWeatherZones.size(); zone++)
@@ -678,21 +716,25 @@ bool COutside::SWeatherZone::mMarkedOutside = false;
 
 void RE_AddWeatherZone(vec3_t mins, vec3_t maxs)
 {
+	R_SyncRenderThread();	// r_smp: map load
 	mOutside.AddWeatherZone(mins, maxs);
 }
 
 bool R_IsOutside(vec3_t pos)
 {
+	WE_LOCK();
 	return mOutside.PointOutside(pos);
 }
 
 static bool R_IsShaking()
 {
+	WE_LOCK();
 	return mOutside.mOutsideShake && mOutside.PointOutside(backEnd.viewParms.ori.origin);
 }
 
 float R_IsOutsideCausingPain(vec3_t pos)
 {
+	WE_LOCK();
 	return mOutside.mOutsidePain && mOutside.PointOutside(pos);
 }
 
@@ -1281,8 +1323,9 @@ void R_ShutdownWorldEffects()
 ////////////////////////////////////////////////////////////////////////////////////////
 void RB_RenderWorldEffects(void)
 {
+	WE_LOCK();
 	if (!tr.world ||
-		tr.refdef.rdflags & RDF_NOWORLDMODEL ||
+		RB_SMP(refdef, tr.refdef).rdflags & RDF_NOWORLDMODEL ||
 		backEnd.refdef.rdflags & RDF_SKYBOXPORTAL ||
 		!mParticleClouds.size())
 	{
@@ -1311,26 +1354,15 @@ void RB_RenderWorldEffects(void)
 	//----------------------------------------
 	if (!mOutside.Initialized())
 	{
-		mOutside.Cache();
+		// reads files and allocates: the main thread does it with r_smp (R_WorldEffectsSmpCache)
+		if (!R_SmpOnRenderThread())
+		{
+			mOutside.Cache();
+		}
 	}
 	else
 	{
-		// Update All Wind Zones
-		//-----------------------
-		if (!mFrozen)
-		{
-			mGlobalWindVelocity.Clear();
-			for (int wz = 0; wz < mWindZones.size(); wz++)
-			{
-				mWindZones[wz].Update();
-				if (mWindZones[wz].mGlobal)
-				{
-					mGlobalWindVelocity += mWindZones[wz].mCurrentVelocity;
-				}
-			}
-			mGlobalWindDirection = mGlobalWindVelocity;
-			mGlobalWindSpeed = VectorNormalize(mGlobalWindDirection.v);
-		}
+		// the wind zones change once a frame in R_WorldEffectsWind (RE_BeginFrame), with or without particles
 
 		// Update All Particle Clouds
 		//----------------------------
@@ -1406,6 +1438,8 @@ static qboolean WE_ParseVector(const char** text, const int count, float* v)
 
 void RE_WorldEffectCommand(const char* command)
 {
+	R_SyncRenderThread();	// r_smp: changes the weather and may load images: the render thread must be idle
+
 	if (!command)
 	{
 		return;
@@ -2022,6 +2056,7 @@ void RE_WorldEffectCommand(const char* command)
 
 float R_GetChanceOfSaberFizz()
 {
+	WE_LOCK();
 	float chance = 0.0f;
 	int numWater = 0;
 	for (int i = 0; i < mParticleClouds.size(); i++)
@@ -2041,11 +2076,67 @@ float R_GetChanceOfSaberFizz()
 
 bool R_IsRaining()
 {
+	WE_LOCK();
 	return !mParticleClouds.empty();
+}
+// mesh cloth (r_meshClothRain): rain is falling - a rain cloud (water drops falling as streaks), not snow or dust
+bool R_IsWetWeather()
+{
+	WE_LOCK();
+	for (int i = 0; i < mParticleClouds.size(); i++)
+	{
+		if (mParticleClouds[i].mWaterParticles && mParticleClouds[i].mOrientWithVelocity)
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 bool R_IsPuffing()
 {
 	//Eh? Don't want surfacesprites to know this?
 	return false;
+}
+// r_smp: RE_BeginFrame, main thread - the outside map cache (file reads, memory) that
+// RB_RenderWorldEffects makes the first time it draws weather on a map
+void R_WorldEffectsSmpCache()
+{
+	if (!R_SmpActive() || !tr.world || !mParticleClouds.size() || mOutside.Initialized())
+	{
+		return;
+	}
+	WE_LOCK();
+	mOutside.Cache();
+}
+
+// RE_BeginFrame, main thread, once a frame: the wind zones change here instead of only while weather
+// particles are drawn, so wind with no rain or snow (and while the weather is off screen) still blows
+// mesh cloth (tr_ghoul2.cpp MC_WeatherWind) and reaches R_GetWindVector. No world or no wind: nothing.
+void R_WorldEffectsWind()
+{
+	if (!tr.world || !mWindZones.size())
+	{
+		return;
+	}
+	WE_LOCK();
+	if (!mOutside.Initialized())
+	{
+		mOutside.Cache();	// R_IsOutside needs it, as the particles do
+	}
+	if (mFrozen)
+	{
+		return;
+	}
+	mGlobalWindVelocity.Clear();
+	for (int wz = 0; wz < mWindZones.size(); wz++)
+	{
+		mWindZones[wz].Update();
+		if (mWindZones[wz].mGlobal)
+		{
+			mGlobalWindVelocity += mWindZones[wz].mCurrentVelocity;
+		}
+	}
+	mGlobalWindDirection = mGlobalWindVelocity;
+	mGlobalWindSpeed = VectorNormalize(mGlobalWindDirection.v);
 }

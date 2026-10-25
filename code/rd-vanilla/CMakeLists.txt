@@ -117,6 +117,7 @@ if(BuildSPRdVanilla OR BuildJK2SPRdVanilla)
 		"${SPDir}/rd-vanilla/tr_model.cpp"
 		"${SharedDir}/rd-vanilla/tr_quicksprite.cpp"
 		"${SharedDir}/rd-vanilla/tr_quicksprite.h"
+		"${SharedDir}/rd-vanilla/tr_smp.cpp"
 		"${SPDir}/rd-vanilla/tr_scene.cpp"
 		"${SPDir}/rd-vanilla/tr_shade.cpp"
 		"${SPDir}/rd-vanilla/tr_shade_calc.cpp"

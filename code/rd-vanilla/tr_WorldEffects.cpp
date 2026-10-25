@@ -45,6 +45,13 @@ extern	cvar_t* g_Weather;
 #include "../Ravl/CVec.h"
 #include "Ratl/vector_vs.h"
 #include "Ratl/bits_vs.h"
+#include <mutex>
+
+// r_smp: the render thread simulates and draws the weather (RB_RenderWorldEffects) while the game
+// and cgame ask about it (wind, outside) and change it. With r_smp on, every use takes this lock.
+// Changes that load images (RE_WorldEffectCommand) wait for the render thread instead.
+static std::recursive_mutex s_weMutex;
+#define WE_LOCK() std::unique_lock<std::recursive_mutex> weLock(s_weMutex, std::defer_lock); if (R_SmpActive()) weLock.lock()
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // Defines
@@ -379,6 +386,7 @@ ratl::vector_vs<CWindZone*, MAX_WIND_ZONES>		mLocalWindZones;
 
 bool R_GetWindVector(vec3_t windVector, vec3_t atpoint)
 {
+	WE_LOCK();
 	VectorCopy(mGlobalWindDirection.v, windVector);
 	if (atpoint && mLocalWindZones.size())
 	{
@@ -396,6 +404,7 @@ bool R_GetWindVector(vec3_t windVector, vec3_t atpoint)
 
 bool R_GetWindSpeed(float& windSpeed, vec3_t atpoint)
 {
+	WE_LOCK();
 	windSpeed = mGlobalWindSpeed;
 	if (atpoint && mLocalWindZones.size())
 	{
@@ -690,6 +699,28 @@ public:
 
 		// all this piece of code does really is fill in the bool "SWeatherZone::mMarkedOutside", plus the mPointCache[] for each zone,
 		//	so we can diskload those. Maybe.
+		// No brush in this map has inside/outside contents (no shader of the map carries those flags):
+		// the scan below would test every 32-unit cell of the weather zones (with no zones, the whole
+		// map: millions of point checks - the game froze for seconds, sound looping, the first time
+		// weather was switched on) and mark nothing. Same result, at once.
+		{
+			bool anyInsideOutside = false;
+			for (int i = 0; i < tr.world->numShaders; i++)
+			{
+				if (tr.world->shaders[i].contentFlags & (CONTENTS_INSIDE | CONTENTS_OUTSIDE))
+				{
+					anyInsideOutside = true;
+					break;
+				}
+			}
+			if (!anyInsideOutside)
+			{
+				mCacheInit = true;
+				SWeatherZone::mMarkedOutside = false;		// Assume All Is Outside, Except Solid
+				return;
+			}
+		}
+
 		fileHandle_t f = ReadCachedWeatherFile();
 		if (f)
 		{
@@ -857,26 +888,31 @@ bool				COutside::SWeatherZone::mMarkedOutside = false;
 
 void R_AddWeatherZone(vec3_t mins, vec3_t maxs)
 {
+	R_SyncRenderThread();	// r_smp: map load
 	mOutside.AddWeatherZone(mins, maxs);
 }
 
 bool R_IsOutside(vec3_t pos)
 {
+	WE_LOCK();
 	return mOutside.PointOutside(pos);
 }
 
 bool R_IsShaking(vec3_t pos)
 {
+	WE_LOCK();
 	return mOutside.mOutsideShake && mOutside.PointOutside(pos);
 }
 
 float R_IsOutsideCausingPain(vec3_t pos)
 {
+	WE_LOCK();
 	return mOutside.mOutsidePain && mOutside.PointOutside(pos);
 }
 
 bool R_SetTempGlobalFogColor(vec3_t color)
 {
+	WE_LOCK();
 	if (tr.world && tr.world->globalFog != -1)
 	{
 		// If Non Zero, Try To Set The Color
@@ -1522,8 +1558,9 @@ void R_ShutdownWorldEffects()
 ////////////////////////////////////////////////////////////////////////////////////////
 void RB_RenderWorldEffects()
 {
+	WE_LOCK();
 	if (!tr.world ||
-		tr.refdef.rdflags & RDF_NOWORLDMODEL ||
+		RB_SMP(refdef, tr.refdef).rdflags & RDF_NOWORLDMODEL ||
 		backEnd.refdef.rdflags & RDF_SKYBOXPORTAL ||
 		!mParticleClouds.size() ||
 		ri.CL_IsRunningInGameCinematic())
@@ -1552,26 +1589,15 @@ void RB_RenderWorldEffects()
 	//----------------------------------------
 	if (!mOutside.Initialized())
 	{
-		mOutside.Cache();
+		// reads files and allocates: the main thread does it with r_smp (R_WorldEffectsSmpCache)
+		if (!R_SmpOnRenderThread())
+		{
+			mOutside.Cache();
+		}
 	}
 	else
 	{
-		// Update All Wind Zones
-		//-----------------------
-		if (!mFrozen)
-		{
-			mGlobalWindVelocity.Clear();
-			for (int wz = 0; wz < mWindZones.size(); wz++)
-			{
-				mWindZones[wz].Update();
-				if (mWindZones[wz].mGlobal)
-				{
-					mGlobalWindVelocity += mWindZones[wz].mCurrentVelocity;
-				}
-			}
-			mGlobalWindDirection = mGlobalWindVelocity;
-			mGlobalWindSpeed = VectorNormalize(mGlobalWindDirection.v);
-		}
+		// the wind zones change once a frame in R_WorldEffectsWind (RE_BeginFrame), with or without particles
 
 		// Update All Particle Clouds
 		//----------------------------
@@ -1643,6 +1669,8 @@ static qboolean WE_ParseVector(const char** text, const int count, float* v) {
 
 void RE_WorldEffectCommand(const char* command) // vanilla sp
 {
+	R_SyncRenderThread();	// r_smp: changes the weather and may load images: the render thread must be idle
+
 	if (!command)
 	{
 		return;
@@ -1660,6 +1688,36 @@ void RE_WorldEffectCommand(const char* command) // vanilla sp
 		return;
 	}
 
+	// The bare "r_weather" command (the menu's: "weather clear; wait 100; r_weather") or a number:
+	// the r_weather cvar picks the preset. 5 and 6 are the named fog commands below (they had no
+	// preset of their own here, so heavy rain fog and fog did nothing), and -1 is the menu's "Off":
+	// the menu has already cleared the weather, so there is nothing to add (it printed the list of
+	// valid commands, as if the value were wrong).
+	//
+	// The preset: a number given with the command is used as it is - a map's Weather/<mapname>.cfg ("r_weather 6",
+	// exec'd at map start). It used to read the r_weather cvar instead, but "r_weather 6" runs the r_weather command,
+	// which does not set the cvar, and SV_Map_ sets the cvar to 0 for every new map: every map file became "clear".
+	// The bare command uses the cvar. Named commands (a map's "rain", "fog" ...) have no preset (-1): before, the
+	// cvar turned them into its own preset, or into "clear" with r_weather 0.
+	int spPreset = -1;
+	if (!token[0] || (token[0] >= '0' && token[0] <= '9') || token[0] == '-')
+	{
+		if (g_Weather->integer < 0 || token[0] == '-')
+		{
+			COM_EndParseSession();
+			return;
+		}
+		spPreset = token[0] ? atoi(token) : g_Weather->integer;
+		if (spPreset == 5)
+		{
+			token = "heavyrainfog";
+		}
+		else if (spPreset == 6)
+		{
+			token = "fog";
+		}
+	}
+
 	// Clear - Removes All Particle Clouds And Wind Zones
 	//----------------------------------------------------
 	if (Q_stricmp(token, "clear") == 0)
@@ -1673,7 +1731,7 @@ void RE_WorldEffectCommand(const char* command) // vanilla sp
 		mLocalWindZones.clear();
 		mOutside.mOutsidePain = 0.0f;
 	}
-	else if (g_Weather->integer == 0)
+	else if (spPreset == 0)
 	{
 		for (int p = 0; p < mParticleClouds.size(); p++)
 		{
@@ -1716,7 +1774,7 @@ void RE_WorldEffectCommand(const char* command) // vanilla sp
 		CWindZone& nWind = mWindZones.push_back();
 		nWind.Initialize();
 	}
-	else if (g_Weather->integer == 8)
+	else if (spPreset == 8)
 	{
 		if (mWindZones.full())
 		{
@@ -1858,7 +1916,7 @@ void RE_WorldEffectCommand(const char* command) // vanilla sp
 		nCloud.mOrientWithVelocity = true;
 		nCloud.mWaterParticles = true;
 	}
-	else if (g_Weather->integer == 2)
+	else if (spPreset == 2)
 	{
 		if (mParticleClouds.full())
 		{
@@ -1906,7 +1964,7 @@ void RE_WorldEffectCommand(const char* command) // vanilla sp
 
 		mOutside.mOutsidePain = 0.1f;
 	}
-	else if (g_Weather->integer == 7)
+	else if (spPreset == 7)
 	{
 		if (mParticleClouds.full())
 		{
@@ -1971,7 +2029,7 @@ void RE_WorldEffectCommand(const char* command) // vanilla sp
 		nCloud.mColor = 0.75f;
 		nCloud.mWaterParticles = true;
 	}
-	else if (g_Weather->integer == 1)
+	else if (spPreset == 1)
 	{
 		if (mParticleClouds.full())
 		{
@@ -2002,7 +2060,7 @@ void RE_WorldEffectCommand(const char* command) // vanilla sp
 		nCloud.mColor = 0.75f;
 		nCloud.mWaterParticles = true;
 	}
-	else if (g_Weather->integer == 3)
+	else if (spPreset == 3)
 	{
 		if (mParticleClouds.full())
 		{
@@ -2045,7 +2103,7 @@ void RE_WorldEffectCommand(const char* command) // vanilla sp
 		nCloud.mSpawnRange.mMaxs[1] = 1500.0f;
 		nCloud.mSpawnRange.mMaxs[2] = 1500.0f;
 	}
-	else if (g_Weather->integer == 9)
+	else if (spPreset == 9)
 	{
 		if (mParticleClouds.full())
 		{
@@ -2099,7 +2157,7 @@ void RE_WorldEffectCommand(const char* command) // vanilla sp
 
 		nCloud.mRotationChangeNext = 0;
 	}
-	else if (g_Weather->integer == 4)
+	else if (spPreset == 4)
 	{
 		if (mParticleClouds.full())
 		{
@@ -2177,7 +2235,7 @@ void RE_WorldEffectCommand(const char* command) // vanilla sp
 
 		nCloud.mRotationChangeNext = 0;
 	}
-	else if (g_Weather->integer == 6)
+	else if (spPreset == 6)
 	{
 		if (mParticleClouds.full())
 		{
@@ -2227,7 +2285,7 @@ void RE_WorldEffectCommand(const char* command) // vanilla sp
 
 		nCloud.mRotationChangeNext = 0;
 	}
-	else if (g_Weather->integer == 5)
+	else if (spPreset == 5)
 	{
 		if (mParticleClouds.full())
 		{
@@ -2288,6 +2346,12 @@ void RE_WorldEffectCommand(const char* command) // vanilla sp
 	{
 		mOutside.mOutsidePain = !mOutside.mOutsidePain;
 	}
+	else if (spPreset < 0)
+	{
+		// a name this renderer doesn't have (maps send e.g. fx_wind "swirlingwind", fx_snow "lightsnow"): ignore it.
+		// With r_weather 0 it used to fall into the "clear" preset and wipe the weather the map had set up.
+		ri.Printf(PRINT_DEVELOPER, "R_WorldEffectCommand: unknown command '%s' ignored\n", token);
+	}
 	else
 	{
 		Com_Printf("Weather Effect: Please enter a valid command.\n");
@@ -2318,6 +2382,7 @@ void RE_WorldEffectCommand(const char* command) // vanilla sp
 
 float R_GetChanceOfSaberFizz()
 {
+	WE_LOCK();
 	float	chance = 0.0f;
 	int		numWater = 0;
 	for (int i = 0; i < mParticleClouds.size(); i++)
@@ -2337,10 +2402,66 @@ float R_GetChanceOfSaberFizz()
 
 bool R_IsRaining()
 {
+	WE_LOCK();
 	return !mParticleClouds.empty();
+}
+// mesh cloth (r_meshClothRain): rain is falling - a rain cloud (water drops falling as streaks), not snow or dust
+bool R_IsWetWeather()
+{
+	WE_LOCK();
+	for (int i = 0; i < mParticleClouds.size(); i++)
+	{
+		if (mParticleClouds[i].mWaterParticles && mParticleClouds[i].mOrientWithVelocity)
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 bool R_IsPuffing()
 {
 	return false;
+}
+// r_smp: RE_BeginFrame, main thread - the outside map cache (file reads, memory) that
+// RB_RenderWorldEffects makes the first time it draws weather on a map
+void R_WorldEffectsSmpCache()
+{
+	if (!R_SmpActive() || !tr.world || !mParticleClouds.size() || mOutside.Initialized())
+	{
+		return;
+	}
+	WE_LOCK();
+	mOutside.Cache();
+}
+
+// RE_BeginFrame, main thread, once a frame: the wind zones change here instead of only while weather
+// particles are drawn, so wind with no rain or snow (and while the weather is off screen) still blows
+// mesh cloth (tr_ghoul2.cpp MC_WeatherWind) and reaches R_GetWindVector. No world or no wind: nothing.
+void R_WorldEffectsWind()
+{
+	if (!tr.world || !mWindZones.size())
+	{
+		return;
+	}
+	WE_LOCK();
+	if (!mOutside.Initialized())
+	{
+		mOutside.Cache();	// R_IsOutside needs it, as the particles do
+	}
+	if (mFrozen)
+	{
+		return;
+	}
+	mGlobalWindVelocity.Clear();
+	for (int wz = 0; wz < mWindZones.size(); wz++)
+	{
+		mWindZones[wz].Update();
+		if (mWindZones[wz].mGlobal)
+		{
+			mGlobalWindVelocity += mWindZones[wz].mCurrentVelocity;
+		}
+	}
+	mGlobalWindDirection = mGlobalWindVelocity;
+	mGlobalWindSpeed = VectorNormalize(mGlobalWindDirection.v);
 }

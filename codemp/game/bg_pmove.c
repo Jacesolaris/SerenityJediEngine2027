@@ -694,6 +694,20 @@ static animNumber_t QINLINE PM_GetWeaponAimAnim(void)
 	}
 }
 
+// the swings of the noghri stick, the tusken staff and the tusken rifle's butt (as SP: one of the tusken staff
+// attacks, with the whole body when standing)
+static void PM_StartStickSwingAnim(const int anim)
+{
+	if (VectorCompare(pm->ps->velocity, vec3_origin) && pm->cmd.upmove >= 0)
+	{
+		PM_SetAnim(SETANIM_BOTH, anim, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART);
+	}
+	else
+	{
+		PM_SetAnim(SETANIM_TORSO, anim, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART);
+	}
+}
+
 static qboolean PM_CanAimGun(void)
 {
 	switch (pm->ps->weapon)
@@ -708,6 +722,8 @@ static qboolean PM_CanAimGun(void)
 	case WP_FLECHETTE:
 	case WP_ROCKET_LAUNCHER:
 	case WP_CONCUSSION:
+	case WP_NOGHRI_STICK:
+	case WP_TUSKEN_RIFLE:
 	case WP_BRYAR_OLD:
 		return qtrue;
 	default:;
@@ -6365,6 +6381,9 @@ static qboolean PM_IsGunner(void)
 {
 	switch (pm->ps->weapon)
 	{
+	case WP_NOGHRI_STICK:
+	case WP_TUSKEN_RIFLE:
+	case WP_TUSKEN_STAFF:
 	case WP_STUN_BATON:
 	case WP_MELEE:
 	case WP_BRYAR_PISTOL:
@@ -12169,6 +12188,10 @@ static void PM_Footsteps(void)
 						pm->ps->weapon == WP_DISRUPTOR ||
 						pm->ps->weapon == WP_DEMP2 ||
 						pm->ps->weapon == WP_REPEATER ||
+						pm->ps->weapon == WP_Z6_ROTARY_CANNON ||
+						pm->ps->weapon == WP_NOGHRI_STICK ||
+						pm->ps->weapon == WP_TUSKEN_RIFLE ||
+						pm->ps->weapon == WP_TUSKEN_STAFF ||
 						pm->ps->weapon == WP_CONCUSSION ||
 						pm->ps->weapon == WP_ROCKET_LAUNCHER ||
 						pm->ps->weapon == WP_BLASTER))
@@ -12480,6 +12503,10 @@ static void PM_Footsteps(void)
 							pm->ps->weapon == WP_DISRUPTOR ||
 							pm->ps->weapon == WP_DEMP2 ||
 							pm->ps->weapon == WP_REPEATER ||
+							pm->ps->weapon == WP_Z6_ROTARY_CANNON ||
+							pm->ps->weapon == WP_NOGHRI_STICK ||
+							pm->ps->weapon == WP_TUSKEN_RIFLE ||
+							pm->ps->weapon == WP_TUSKEN_STAFF ||
 							pm->ps->weapon == WP_CONCUSSION ||
 							pm->ps->weapon == WP_ROCKET_LAUNCHER ||
 							pm->ps->weapon == WP_BLASTER))
@@ -12954,7 +12981,7 @@ void PM_BeginWeaponChange(const int weapon)
 	}
 
 	// Player does not have this weapon
-	if ((pm->ps->stats[STAT_WEAPONS] & (1 << weapon)) == 0)
+	if ((BG_HasWeapon(pm->ps->stats, weapon)) == 0)
 	{
 		return;
 	}
@@ -13064,7 +13091,7 @@ void PM_FinishWeaponChange(void)
 		weapon = WP_NONE;
 	}
 
-	if (!(pm->ps->stats[STAT_WEAPONS] & 1 << weapon))
+	if (!(BG_HasWeapon(pm->ps->stats, weapon)))
 	{
 		weapon = WP_NONE;
 	}
@@ -14396,7 +14423,7 @@ static void PM_Weapon(void)
 
 		while (i < WP_NUM_WEAPONS)
 		{
-			if (pm->ps->stats[STAT_WEAPONS] & 1 << i && i != WP_NONE)
+			if (BG_HasWeapon(pm->ps->stats, i) && i != WP_NONE)
 			{
 				//this one's good
 				weap = i;
@@ -15148,7 +15175,7 @@ static void PM_Weapon(void)
 
 		if (pm->ps->isJediMaster || pm->ps->trueJedi)
 		{
-			pm->ps->stats[STAT_WEAPONS] = 1 << WP_SABER;
+			BG_SetOnlyWeapon(pm->ps->stats, WP_SABER);
 		}
 	}
 
@@ -15901,6 +15928,21 @@ static void PM_Weapon(void)
 				PM_StartTorsoAnim(WeaponAltAttackAnim2[pm->ps->weapon]);
 			}
 #endif
+			else if (pm->ps->weapon == WP_NOGHRI_STICK)
+			{
+				// the noghri stick's swing
+				PM_StartStickSwingAnim(BOTH_TUSKENATTACK1 + pm->cmd.serverTime / 50 % 3);
+			}
+			else if (pm->ps->weapon == WP_TUSKEN_RIFLE)
+			{
+				// the tusken rifle's butt bash
+				PM_StartStickSwingAnim(BOTH_TUSKENATTACK1 + pm->cmd.serverTime / 50 % 3);
+			}
+			else if (pm->ps->weapon == WP_TUSKEN_STAFF)
+			{
+				// the tusken staff's lunge (as SP)
+				PM_StartStickSwingAnim(BOTH_TUSKENLUNGE1);
+			}
 			else
 			{
 				PM_StartTorsoAnim(WeaponAltAttackAnim[pm->ps->weapon]);
@@ -15920,6 +15962,11 @@ static void PM_Weapon(void)
 				PM_StartTorsoAnim(WeaponAttackAnim2[pm->ps->weapon]);
 			}
 #endif
+			else if (pm->ps->weapon == WP_TUSKEN_STAFF)
+			{
+				// the tusken staff's swing
+				PM_StartStickSwingAnim(BOTH_TUSKENATTACK1 + pm->cmd.serverTime / 50 % 3);
+			}
 			else
 			{
 				PM_StartTorsoAnim(WeaponAttackAnim[pm->ps->weapon]);
@@ -16012,6 +16059,14 @@ static void PM_Weapon(void)
 	}
 	pm->ps->weaponTime += addTime;
 	pm->ps->lastShotTime = 3000; //so we know when the last time we fired our gun is
+
+	if ((pm->ps->weapon == WP_NOGHRI_STICK && pm->cmd.buttons & BUTTON_ALT_ATTACK
+		|| pm->ps->weapon == WP_TUSKEN_RIFLE && pm->cmd.buttons & BUTTON_ALT_ATTACK
+		|| pm->ps->weapon == WP_TUSKEN_STAFF) && pm->ps->torsoTimer > pm->ps->weaponTime)
+	{
+		// no dart or new swing until the swing is done
+		pm->ps->weaponTime = pm->ps->torsoTimer;
+	}
 }
 
 /*
@@ -19414,7 +19469,7 @@ static int PM_GetOkWeaponForVehicle(void)
 
 	while (i < WP_NUM_WEAPONS)
 	{
-		if (pm->ps->stats[STAT_WEAPONS] & 1 << i &&
+		if (BG_HasWeapon(pm->ps->stats, i) &&
 			PM_WeaponOkOnVehicle(i))
 		{
 			//this one's good
@@ -19942,7 +19997,9 @@ static void PM_SaberBlasterFilterCmd(void)
 	}
 	if (alt)
 	{
-		if (pm->cmd.buttons & BUTTON_ATTACK)
+		// SS_BLASTER (2026-10-24): test the reload flag, not the button: the attack button was already cleared just
+		// above, so the combo always took the fire branch and never reloaded (MP only; SP was fine)
+		if (reload)
 		{
 			// alt attack + attack reloads the pistol instead of a kata
 			pm_saberBlasterReload = qtrue;
@@ -20031,6 +20088,61 @@ static void WP_SaberBlasterThink(void)
 		PM_AddEventWithParm(EV_SABERBLASTER, SBE_FIRE);
 	}
 	// else: SBE_FIRE at the anim's SABERBLASTER_FIRE_FRAME (top of this function, a later pmove)
+}
+
+// BOTH_WIND, as SP (bg_panimate.cpp TorsoAgainstWindTest): a client standing still outside in a strong gust,
+// facing into it, braces against it with the torso. The wind comes from the renderer through the engine
+// (WE_GetWindGust, g_windAnim 0 = off); a dedicated server has no wind, so there it never happens. Runs after
+// PM_Weapon, so it wins over the idle weapon pose, and puts that pose back when the gust is over.
+static void PM_TorsoAgainstWind(void)
+{
+	vec3_t windDir, fwd, angs;
+	qboolean brace = qfalse;
+
+	if (pm->ps->clientNum < MAX_CLIENTS
+		&& pm->ps->pm_type == PM_NORMAL
+		&& pm->ps->stats[STAT_HEALTH] > 0
+		&& pm->ps->groundEntityNum != ENTITYNUM_NONE
+		&& !pm->ps->m_iVehicleNum
+		&& !pm->cmd.forwardmove && !pm->cmd.rightmove && !pm->cmd.upmove
+		&& !(pm->cmd.buttons & (BUTTON_ATTACK | BUTTON_ALT_ATTACK | BUTTON_BLOCK))
+		&& pm->ps->weaponTime <= 0
+		&& pm->ps->torsoTimer <= 0
+		&& !(pm->ps->PlayerEffectFlags & (1 << PEF_SPRINTING | 1 << PEF_WEAPONSPRINTING))
+		&& !(pm->ps->communicatingflags & 1 << CF_AIMINGGUN)
+		&& !(pm->ps->ManualBlockingFlags & 1 << MBF_HOLDINGBLOCK)
+		&& (pm->ps->weapon != WP_SABER || pm->ps->saberMove == LS_READY || pm->ps->saberMove == LS_NONE)
+		&& pm->animations && pm->animations[BOTH_WIND].numFrames > 0
+		&& trap->WE_GetWindGust(pm->ps->origin, windDir))
+	{
+		VectorSet(angs, 0.0f, pm->ps->viewangles[YAW], 0.0f);
+		AngleVectors(angs, fwd, NULL, NULL);
+		brace = -DotProduct(fwd, windDir) > 0.65f ? qtrue : qfalse;	// facing into the wind
+	}
+
+	if (brace)
+	{
+		if (pm->ps->torsoAnim != BOTH_WIND)
+		{
+			PM_StartTorsoAnim(BOTH_WIND);
+		}
+	}
+	else if (pm->ps->torsoAnim == BOTH_WIND && pm->ps->torsoTimer <= 0)
+	{
+		// the gust is over (or we moved): back to the idle pose
+		if (pm->ps->weapon == WP_SABER)
+		{
+			PM_SetSaberMove(LS_READY);
+		}
+		else if (pm->ps->weapon == WP_MELEE)
+		{
+			PM_StartTorsoAnim(pm->ps->legsAnim);
+		}
+		else
+		{
+			PM_StartTorsoAnim(PM_GetWeaponReadyAnim());
+		}
+	}
 }
 
 static void PmoveSingle(pmove_t* pmove)
@@ -20640,8 +20752,9 @@ static void PmoveSingle(pmove_t* pmove)
 	}
 
 	// make sure walking button is clear if they are running, to avoid
-	// proxy no-footsteps cheats
-	if (abs(pm->cmd.forwardmove) > 64 || abs(pm->cmd.rightmove) > 64)
+	// proxy no-footsteps cheats (players only: as SP, NPCs move with full cmd values and walk via ps->speed,
+	// so clearing it here made them play run anims at walk speed)
+	if (pm->ps->clientNum < MAX_CLIENTS && (abs(pm->cmd.forwardmove) > 64 || abs(pm->cmd.rightmove) > 64))
 	{
 		pm->cmd.buttons &= ~BUTTON_WALKING;
 	}
@@ -21327,6 +21440,7 @@ static void PmoveSingle(pmove_t* pmove)
 		// weapons
 		PM_Weapon();
 		WP_SaberBlasterThink(); // SS_BLASTER (2026-10-14)
+		PM_TorsoAgainstWind();	// BOTH_WIND against strong gusts, as in SP
 	}
 
 	PM_Use();

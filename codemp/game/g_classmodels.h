@@ -1309,6 +1309,7 @@ static const classModel_t classModels[] =
 	{ "tavion/blue", BCLASS_TAVION, BCLASS_NONE, BOTZIZE_NORMAL },
 	{ "tavion/red", BCLASS_TAVION, BCLASS_NONE, BOTZIZE_NORMAL },
 	{ "tavion_new", BCLASS_TAVION, BCLASS_NONE, BOTZIZE_NORMAL },
+	{ "tavion_new/possessed", BCLASS_TAVION, BCLASS_NONE, BOTZIZE_NORMAL },
 	{ "tavion_new/blue", BCLASS_TAVION, BCLASS_NONE, BOTZIZE_NORMAL },
 	{ "tavion_new/red", BCLASS_TAVION, BCLASS_NONE, BOTZIZE_NORMAL },
 	{ "tavion_new/main", BCLASS_TAVION, BCLASS_NONE, BOTZIZE_NORMAL },

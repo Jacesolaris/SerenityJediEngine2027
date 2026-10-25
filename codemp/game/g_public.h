@@ -1125,6 +1125,9 @@ typedef struct gameImport_s {
 	float		(*WE_GetChanceOfSaberFizz)(void);
 	//float		(*WE_IsOutsideCausingPain)(vec3_t pos);
 	//bool    	(*WE_IsOutside)(vec3_t pos);
+	// BOTH_WIND (bg_pmove.c PM_TorsoAgainstWind): qtrue when a strong gust blows at pos and pos is outside,
+	// dir = where it blows to. qfalse on a dedicated server (no wind there). Kept last: the engine fills it in.
+	qboolean(*WE_GetWindGust)(vec3_t pos, vec3_t dir);
 } gameImport_t;
 
 typedef struct gameExport_s {

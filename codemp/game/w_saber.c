@@ -3310,6 +3310,20 @@ int wp_saber_must_block(gentity_t* self, const gentity_t* atk, const qboolean ch
 
 	if (!(((self->client->ps.ManualBlockingFlags & 1 << MBF_HOLDINGBLOCK) != 0)))
 	{
+		// NPCs never hold the block button: as SP (wp_saber_must_block), they parry any hit they can
+		if (self->s.number >= MAX_CLIENTS && !G_ControlledByPlayer(self))
+		{
+			if (PM_SaberInMassiveBounce(self->client->ps.torsoAnim)
+				|| PM_SaberInBashedAnim(self->client->ps.torsoAnim)
+				|| PM_InGrappleMove(self->client->ps.torsoAnim)
+				|| PM_SaberInBrokenParry(self->client->ps.saberMove)
+				|| PM_KickMove(self->client->ps.saberMove)
+				|| BG_FullBodyTauntAnim(self->client->ps.torsoAnim))
+			{
+				return 0;
+			}
+			return self->client->ps.saberHolstered < 2 ? 1 : 0;
+		}
 		// Bots cheat-block here
 		if (self->r.svFlags & SVF_BOT)
 		{// 20% chance to check blocking, 80% is blocking
@@ -9579,7 +9593,7 @@ void WP_saberBackToOwner(gentity_t* saberent)
 	saberent->nextthink = level.time;
 }
 
-void thrownSaberBallistics(gentity_t* saberEnt, const gentity_t* saber_own, qboolean stuck);
+void WP_thrownSaberBallistics(gentity_t* saberEnt, const gentity_t* saber_own, qboolean stuck);
 
 void WP_thrownSaberTouch(gentity_t* saberent, gentity_t* other, const trace_t* trace)
 {
@@ -9613,7 +9627,7 @@ void WP_thrownSaberTouch(gentity_t* saberent, gentity_t* other, const trace_t* t
 			// Blade must be pointing INTO the wall
 			if (DotProduct(bladeDir, wallInward) > 0.5f)
 			{
-				thrownSaberBallistics(saberent, saber_own, qtrue);
+				WP_thrownSaberBallistics(saberent, saber_own, qtrue);
 				return;
 			}
 		}
@@ -9749,13 +9763,13 @@ static void WP_saberFirstThrown(gentity_t* saberent)
 
 	if (BG_HasYsalamiri(level.gametype, &saber_own->client->ps))
 	{
-		thrownSaberBallistics(saberent, saber_own, qfalse);
+		WP_thrownSaberBallistics(saberent, saber_own, qfalse);
 		goto runMin;
 	}
 
 	if (!BG_CanUseFPNow(level.gametype, &saber_own->client->ps, level.time, FP_SABERTHROW))
 	{
-		thrownSaberBallistics(saberent, saber_own, qfalse);
+		WP_thrownSaberBallistics(saberent, saber_own, qfalse);
 		goto runMin;
 	}
 
@@ -9770,13 +9784,13 @@ static void WP_saberFirstThrown(gentity_t* saberent)
 			WP_SaberThrowComeBack(saberent, saber_own);
 			goto runMin;
 		}
-		thrownSaberBallistics(saberent, saber_own, qfalse);
+		WP_thrownSaberBallistics(saberent, saber_own, qfalse);
 		goto runMin;
 	}
 
 	if (v_len >= SABER_MAX_THROW_DISTANCE * saber_own->client->ps.fd.forcePowerLevel[FP_SABERTHROW])
 	{
-		thrownSaberBallistics(saberent, saber_own, qfalse);
+		WP_thrownSaberBallistics(saberent, saber_own, qfalse);
 		goto runMin;
 	}
 
@@ -9798,7 +9812,7 @@ static void WP_saberFirstThrown(gentity_t* saberent)
 			else
 			{
 				G_RunObject(saberent);
-				thrownSaberBallistics(saberent, saber_own, qfalse);
+				WP_thrownSaberBallistics(saberent, saber_own, qfalse);
 			}
 			saberent->speed = 0;
 			saberent->genericValue5 = 0;
@@ -9810,7 +9824,7 @@ static void WP_saberFirstThrown(gentity_t* saberent)
 		{
 			// let go past 85% of the max throw distance: it falls to the ground
 			G_RunObject(saberent);
-			thrownSaberBallistics(saberent, saber_own, qfalse);
+			WP_thrownSaberBallistics(saberent, saber_own, qfalse);
 		}
 		else
 		{
@@ -10198,7 +10212,7 @@ static void WP_KnockdownAndDrain(gentity_t* hitEnt, gentity_t* pusher, int knock
 	}
 }
 
-static qboolean WP_AbsorbKick(gentity_t* hitEnt, gentity_t* pusher, vec3_t push_dir)
+qboolean WP_AbsorbKick(gentity_t* hitEnt, gentity_t* pusher, vec3_t push_dir)
 {
 	if (!hitEnt || !hitEnt->client || !pusher || !pusher->client)
 	{
@@ -11957,7 +11971,7 @@ void WP_SaberPositionUpdate(gentity_t* self, usercmd_t* ucmd)
 	{
 		//player wants to snap throw a grenade
 		if (self->client->ps.weaponTime <= 0 //not currently using a weapon
-			&& self->client->ps.stats[STAT_WEAPONS] & 1 << WP_THERMAL && self->client->ps.ammo[AMMO_THERMAL] > 0)
+			&& BG_HasWeapon(self->client->ps.stats, WP_THERMAL) && self->client->ps.ammo[AMMO_THERMAL] > 0)
 			//have a thermal
 		{
 			//throw!
@@ -15609,7 +15623,7 @@ qboolean HasSetSaberOnly(void)
 
 	while (i < WP_NUM_WEAPONS)
 	{
-		if (!(w_disable & 1 << i) &&
+		if (!(WP_MASK_HAS(w_disable, i)) &&
 			i != WP_SABER && i != WP_NONE)
 		{
 			return qfalse;
@@ -15932,7 +15946,7 @@ static qboolean WP_SaberTryStickInBodyDmg(gentity_t* owner, gentity_t* victim, c
 		}
 	}
 
-	thrownSaberBallistics(saberEnt, owner, qtrue);
+	WP_thrownSaberBallistics(saberEnt, owner, qtrue);
 	saberEnt->s.otherentityNum2 = victim->s.number;
 	VectorCopy(flight, saberEnt->s.angles2);
 	saberEnt->genericValue14 = level.time + Q_irand(2000, 5000);
@@ -16121,7 +16135,7 @@ static void WP_SaberBallisticsThink(gentity_t* saberEnt)
 	}
 }
 
-void thrownSaberBallistics(gentity_t* saberEnt, const gentity_t* saber_own, const qboolean stuck)
+void WP_thrownSaberBallistics(gentity_t* saberEnt, const gentity_t* saber_own, const qboolean stuck)
 {
 	//this function converts the saber from thrown saber that's being held on course by the force into a saber that's just ballastically moving.
 	const saberInfo_t* saber1 = BG_MySaber(saber_own->clientNum, 0);

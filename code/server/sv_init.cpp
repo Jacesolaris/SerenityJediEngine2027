@@ -22,6 +22,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "../server/exe_headers.h"
+#include "q_profile.h"
 
 #include "client/snd_music.h"	// didn't want to put this in snd_local because of rebuild times etc.
 #include "server.h"
@@ -204,6 +205,8 @@ clients along with it.
 */
 void SV_SpawnServer(const char* server, const ForceReload_e eForceReload, const qboolean bAllowScreenDissolve)
 {
+	PROFILE_ZONE("Load: SV_SpawnServer (whole map load)");
+	FS_LookupCacheBegin();	// the map load starts: missing files are looked for once per folder
 	int i = 0;
 	int checksum = 0;
 

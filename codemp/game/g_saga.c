@@ -110,7 +110,7 @@ static void G_SiegeRegisterWeaponsAndHoldables(const int team)
 				int j = 0;
 				while (j < WP_NUM_WEAPONS)
 				{
-					if (scl->weapons & 1 << j)
+					if (WP_MASK_HAS(scl->weapons, j))
 					{
 						//we use this weapon so register it.
 						RegisterItem(BG_FindItemForWeapon(j));

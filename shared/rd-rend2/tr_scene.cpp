@@ -21,6 +21,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
 #include "tr_local.h"
+#include "q_profile.h"
 
 int			r_firstSceneDrawSurf;
 
@@ -500,8 +501,11 @@ void RE_BeginScene(const refdef_t* fd)
 	tr.portalRenderedThisFrame = qfalse;
 
 	//ri.Printf(PRINT_ALL, "RE_BeginScene Frame: %i, skyportal: %i, entities: %i\n", backEndData->realFrameNumber, int(tr.world->skyboxportal && (tr.refdef.rdflags & RDF_SKYBOXPORTAL)), tr.refdef.num_entities);
-	R_GatherFrameViews(&tr.refdef);
+	{
+		PROFILE_ZONE("R: begin scene (views + constants)");
+		R_GatherFrameViews(&tr.refdef);
 	RB_UpdateConstants(&tr.refdef);
+	}
 
 	R_PushDebugGroup(AL_SCENE, va("Scene_%i", backEndData->currentFrame->currentScene));
 }
@@ -533,6 +537,7 @@ to handle mirrors,
 */
 void RE_RenderScene(const refdef_t* fd)
 {
+	PROFILE_ZONE("R front end: RenderScene");
 	int				startTime = 0;
 
 	if (!tr.registered) {

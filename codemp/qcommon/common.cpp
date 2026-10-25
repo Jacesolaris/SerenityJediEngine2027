@@ -25,6 +25,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // common.c -- misc functions used in client and server
 
 #include "qcommon/stringed_ingame.h"
+#include "q_profile.h"
 #include "qcommon/cm_public.h"
 #include "qcommon/game_version.h"
 #include "../server/NPCNav/navigator.h"
@@ -1607,6 +1608,7 @@ Com_Frame
 */
 void Com_Frame(void)
 {
+	PROFILE_FRAME();
 	try
 	{
 #ifdef G2_PERFORMANCE_ANALYSIS

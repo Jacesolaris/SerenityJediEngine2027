@@ -1898,7 +1898,7 @@ static qboolean CG_WeaponSelectable(const int i)
 		return qfalse;
 	}
 
-	if (!(cg.predictedPlayerState.stats[STAT_WEAPONS] & 1 << i))
+	if (!(BG_HasWeapon(cg.predictedPlayerState.stats, i)))
 	{
 		return qfalse;
 	}
@@ -1943,8 +1943,6 @@ void CG_DrawWeaponSelect(void)
 	// showing weapon select clears pickup item display, but not the blend blob
 	cg.itemPickupTime = 0;
 
-	const int bits = cg.predictedPlayerState.stats[STAT_WEAPONS];
-
 	// count the number of weapons owned
 	int count = 0;
 
@@ -1958,7 +1956,7 @@ void CG_DrawWeaponSelect(void)
 
 	for (i = 1; i < WP_NUM_WEAPONS; i++)
 	{
-		if (bits & 1 << i)
+		if (BG_HasWeapon(cg.predictedPlayerState.stats, i))
 		{
 			if (CG_WeaponSelectable(i) ||
 				i != WP_THERMAL && i != WP_TRIP_MINE)
@@ -2037,7 +2035,7 @@ void CG_DrawWeaponSelect(void)
 			i = LAST_USEABLE_WEAPON;
 		}
 
-		if (!(bits & 1 << i)) // Does he have this weapon?
+		if (!BG_HasWeapon(cg.predictedPlayerState.stats, i)) // Does he have this weapon?
 		{
 			if (i == WP_CONCUSSION)
 			{
@@ -2136,7 +2134,7 @@ void CG_DrawWeaponSelect(void)
 			i = 1;
 		}
 
-		if (!(bits & 1 << i)) // Does he have this weapon?
+		if (!BG_HasWeapon(cg.predictedPlayerState.stats, i)) // Does he have this weapon?
 		{
 			if (i == WP_CONCUSSION)
 			{
@@ -2300,7 +2298,7 @@ void CG_NextWeapon_f(void)
 		}
 		else if (cg.weaponSelect == WP_DET_PACK)
 		{
-			cg.weaponSelect = WP_BRYAR_OLD;
+			cg.weaponSelect = WP_CONCUSSION + 1; // the weapons after the concussion (droideka, Z-6, noghri stick, bryar old); the concussion was visited after the flechette
 		}
 		else
 		{
@@ -2388,7 +2386,7 @@ void CG_PrevWeapon_f(void)
 		{
 			cg.weaponSelect = WP_FLECHETTE;
 		}
-		else if (cg.weaponSelect == WP_BRYAR_OLD)
+		else if (cg.weaponSelect == WP_CONCUSSION + 1) // back over the concussion (visited before the flechette)
 		{
 			cg.weaponSelect = WP_DET_PACK;
 		}
@@ -2497,7 +2495,7 @@ void CG_Weapon_f(void)
 	}
 	else
 	{
-		if (cg.snap->ps.stats[STAT_WEAPONS] & 1 << WP_SABER)
+		if (BG_HasWeapon(cg.snap->ps.stats, WP_SABER))
 		{
 			num = WP_SABER;
 		}
@@ -2555,14 +2553,14 @@ void CG_Weapon_f(void)
 
 	cg.weaponSelectTime = cg.time;
 
-	if (!(cg.snap->ps.stats[STAT_WEAPONS] & 1 << num))
+	if (!(BG_HasWeapon(cg.snap->ps.stats, num)))
 	{
 		if (num == WP_SABER)
 		{
 			//don't have saber, try melee on the same slot
 			num = WP_MELEE;
 
-			if (!(cg.snap->ps.stats[STAT_WEAPONS] & 1 << num))
+			if (!(BG_HasWeapon(cg.snap->ps.stats, num)))
 			{
 				return;
 			}
@@ -2622,7 +2620,7 @@ void CG_WeaponClean_f(void)
 
 	if (num == WP_STUN_BATON)
 	{
-		if (cg.snap->ps.stats[STAT_WEAPONS] & 1 << WP_SABER)
+		if (BG_HasWeapon(cg.snap->ps.stats, WP_SABER))
 		{
 			num = WP_SABER;
 		}
@@ -2680,14 +2678,14 @@ void CG_WeaponClean_f(void)
 
 	cg.weaponSelectTime = cg.time;
 
-	if (!(cg.snap->ps.stats[STAT_WEAPONS] & 1 << num))
+	if (!(BG_HasWeapon(cg.snap->ps.stats, num)))
 	{
 		if (num == WP_SABER)
 		{
 			//don't have saber, try melee on the same slot
 			num = WP_MELEE;
 
-			if (!(cg.snap->ps.stats[STAT_WEAPONS] & 1 << num))
+			if (!(BG_HasWeapon(cg.snap->ps.stats, num)))
 			{
 				return;
 			}
@@ -3161,6 +3159,14 @@ void cg_missile_hit_wall(const int weapon, vec3_t origin, vec3_t dir, const qboo
 		FX_CloneWeaponHitWall(origin, dir);
 		break;
 
+	case WP_NOGHRI_STICK:
+		FX_NoghriShotWeaponHitWall(origin, dir);
+		break;
+
+	case WP_TUSKEN_RIFLE:
+		FX_TuskenShotWeaponHitWall(origin, dir);
+		break;
+
 	case WP_DISRUPTOR:
 		FX_DisruptorAltMiss(origin, dir);
 		break;
@@ -3277,6 +3283,14 @@ void cg_missile_hit_player(const int weapon, vec3_t origin, vec3_t dir, const qb
 
 	case WP_Z6_ROTARY_CANNON:
 		FX_CloneWeaponHitPlayer(origin, dir, humanoid);
+		break;
+
+	case WP_NOGHRI_STICK:
+		FX_NoghriShotWeaponHitPlayer(origin, dir);
+		break;
+
+	case WP_TUSKEN_RIFLE:
+		FX_TuskenShotWeaponHitPlayer(origin, dir);
 		break;
 
 	case WP_DISRUPTOR:
@@ -3449,9 +3463,9 @@ qboolean CG_CalcmuzzlePoint(const int entityNum, vec3_t muzzle)
 }
 
 // create one instance of all the weapons we are going to use so we can just copy this info into each clients gun ghoul2 object in fast way
-static void* g2WeaponInstances[MAX_WEAPONS];
-static void* g2WeaponInstances2[MAX_WEAPONS];
-void* g2HolsterWeaponInstances[MAX_WEAPONS];
+static void* g2WeaponInstances[WP_NUM_WEAPONS];
+static void* g2WeaponInstances2[WP_NUM_WEAPONS];
+void* g2HolsterWeaponInstances[WP_NUM_WEAPONS];
 
 void CG_InitG2Weapons(void)
 {
@@ -3463,7 +3477,7 @@ void CG_InitG2Weapons(void)
 	{
 		if (item->giType == IT_WEAPON)
 		{
-			assert(item->giTag < MAX_WEAPONS);
+			assert(item->giTag < WP_NUM_WEAPONS);
 
 			// initialise model
 			// (the Z6 rotary cannon in the hand: its model with a barrel bone, which CG_Z6SpinBarrel spins,
@@ -3504,25 +3518,20 @@ void CG_InitG2Weapons(void)
 				i++;
 			}
 
-			i++;
-
-			if (i == MAX_WEAPONS)
-			{
-				assert(0);
-				break;
-			}
+			i++; // (no stop at MAX_WEAPONS: this counts instances, not weapons, and there are more than 32 weapons)
 		}
 	}
 }
 
 void CG_ShutDownG2Weapons(void)
 {
-	for (int i = 0; i < MAX_WEAPONS; i++)
+	for (int i = 0; i < WP_NUM_WEAPONS; i++)
 	{
 		trap->G2API_CleanGhoul2Models(&g2WeaponInstances[i]);
 		trap->G2API_CleanGhoul2Models(&g2WeaponInstances2[i]);
 		trap->G2API_CleanGhoul2Models(&g2HolsterWeaponInstances[i]);
 	}
+	CG_ScepterShutdown();
 }
 
 void* CG_G2WeaponInstance(const centity_t* cent, const int weapon)
@@ -3670,7 +3679,7 @@ void CG_CopyG2WeaponInstance(const centity_t* cent, const int weapon_num, void* 
 		return;
 	}
 
-	if (weapon_num < 0 || weapon_num >= MAX_WEAPONS)
+	if (weapon_num < 0 || weapon_num >= WP_NUM_WEAPONS)
 	{
 		trap->Print("CG_CopyG2WeaponInstance: invalid weapon_num %d\n", weapon_num);
 		return;

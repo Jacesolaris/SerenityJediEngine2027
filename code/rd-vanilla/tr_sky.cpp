@@ -756,7 +756,7 @@ void RB_StageIteratorSky(void)
 		return;
 	}
 
-	if (skyboxportal && !(backEnd.refdef.rdflags & RDF_SKYBOXPORTAL))
+	if (RB_SMP(skyboxportal, skyboxportal) && !(backEnd.refdef.rdflags & RDF_SKYBOXPORTAL))
 	{
 		return;
 	}

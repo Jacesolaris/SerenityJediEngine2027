@@ -25,6 +25,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 //
 
 #include "b_local.h"
+#include "q_profile.h"
 #include "anims.h"
 #include "g_functions.h"
 #include "Q3_Interface.h"
@@ -2435,11 +2436,93 @@ NPC_Think
 Main NPC AI - called once per frame
 ===============
 */
+// SS_BLASTER (2026-10-24): an NPC on the blaster saber style shoots its left hand pistol at an enemy out of saber reach
+// and in sight - a short burst through the player's own fire path (Walk + Dash: auto aim, clip, anim), then a pause
+// (g_saberBlasterAIFire ms on average, shorter for higher ranks; 0 = never) - and reloads (Walk + Dash + Attack) when
+// the clip is empty and nobody is in saber reach. Close up it fights with the saber as before.
+static constexpr float NPC_BLASTER_SABER_REACH = 128.0f;
+static constexpr int NPC_BLASTER_BURST = 300;
+
+static void NPC_SaberBlaster(usercmd_t* cmd)
+{
+	const gclient_t* client = NPC->client;
+
+	if (!g_saberBlasterAIFire || g_saberBlasterAIFire->integer <= 0 || !client || client->ps.weapon != WP_SABER
+		|| client->ps.saberAnimLevel != SS_BLASTER || client->ps.saberInFlight || client->ps.saberLockTime >= level.time)
+	{
+		return;
+	}
+
+	gentity_t* enemy = NPC->enemy;
+	const float dist = enemy && enemy->client && enemy->health > 0
+		? Distance(NPC->currentOrigin, enemy->currentOrigin) : 99999.0f;
+
+	if (client->ps.ammo[SABERBLASTER_CLIP_SLOT] >= SABERBLASTER_CLIP_SIZE)
+	{
+		// empty clip: reload, unless someone is close enough to cut it down meanwhile
+		if (dist > NPC_BLASTER_SABER_REACH && client->ps.weaponTime <= 0)
+		{
+			cmd->buttons |= BUTTON_WALKING | BUTTON_DASH | BUTTON_ATTACK;
+		}
+		return;
+	}
+
+	if (dist <= NPC_BLASTER_SABER_REACH || dist >= 99999.0f || !NPC_ClearLOS(enemy))
+	{
+		return;
+	}
+
+	if (TIMER_Done(NPC, "saberBlasterBurst") && TIMER_Done(NPC, "saberBlasterNext"))
+	{
+		// rank: a captain waits about half as long as a civilian
+		const int rank = NPCInfo->rank < RANK_CIVILIAN ? RANK_CIVILIAN : NPCInfo->rank > RANK_CAPTAIN ? RANK_CAPTAIN : NPCInfo->rank;
+		const float scale = 1.25f - 0.75f * (rank - RANK_CIVILIAN) / static_cast<float>(RANK_CAPTAIN - RANK_CIVILIAN);
+		const int pause = static_cast<int>(g_saberBlasterAIFire->integer * scale);
+
+		TIMER_Set(NPC, "saberBlasterBurst", NPC_BLASTER_BURST);
+		TIMER_Set(NPC, "saberBlasterNext", NPC_BLASTER_BURST + Q_irand(pause / 2, pause * 3 / 2));
+	}
+
+	if (!TIMER_Done(NPC, "saberBlasterBurst"))
+	{
+		cmd->buttons |= BUTTON_WALKING | BUTTON_DASH;
+		cmd->buttons &= ~BUTTON_ATTACK; // attack held too would reload instead
+	}
+}
+
+// g_npcThinkLod: an NPC farther than this from the player, not fighting the player and not in a script or
+// cutscene, decides what to do every other game frame instead of every frame (it still moves every frame,
+// with the last decision). The far ones are split between the even and the odd frames by entity number, so
+// the AI of a big battle no longer lands all in the same frame. 0 = every NPC every frame, as before.
+// Returns the extra delay to add to nextBStateThink.
+extern bool in_camera;
+
+static int NPC_ThinkLodDelay(const gentity_t* npc)
+{
+	static cvar_t* lod = nullptr;
+	if (!lod)
+	{
+		lod = gi.cvar("g_npcThinkLod", "2048", CVAR_ARCHIVE);
+	}
+	const gentity_t* player = &g_entities[0];
+	if (!lod || lod->value <= 0.0f || in_camera || !player->client || !npc->NPC || !npc->client
+		|| npc->enemy == player || npc->NPC->behaviorState == BS_CINEMATIC
+		|| npc->m_iIcarusID != IIcarusInterface::ICARUS_INVALID && IIcarusInterface::GetIcarus()->IsRunning(npc->m_iIcarusID)
+		|| DistanceSquared(npc->currentOrigin, player->currentOrigin) < lod->value * lod->value)
+	{
+		return 0;
+	}
+	// next decision two game frames on; if that frame has the wrong parity for this NPC, one more
+	const int frame = level.time / (FRAMETIME / 2) + 2;
+	return FRAMETIME / 2 + ((frame + npc->s.number) & 1 ? FRAMETIME / 2 : 0);
+}
+
 #if	AI_TIMERS
 extern int AITime;
 #endif//	AI_TIMERS
 void NPC_Think(gentity_t* self)
 {
+	PROFILE_ZONE("NPC_Think");
 	vec3_t old_move_dir;
 
 	self->nextthink = level.time + FRAMETIME / 2;
@@ -2598,6 +2681,7 @@ void NPC_Think(gentity_t* self)
 			//NPCInfo->nextBStateThink = level.time + FRAMETIME;
 			NPCInfo->nextBStateThink = level.time + FRAMETIME / 2;
 		}
+		NPCInfo->nextBStateThink += NPC_ThinkLodDelay(NPC);
 
 		//nextthink is set before this so something in here can override it
 		NPC_ExecuteBState(self);
@@ -2631,6 +2715,7 @@ void NPC_Think(gentity_t* self)
 			//FIXME: firing angles (no aim offset) or regular angles?
 			NPC_UpdateAngles(qtrue, qtrue);
 			memcpy(&ucmd, &NPCInfo->last_ucmd, sizeof(usercmd_t));
+			NPC_SaberBlaster(&ucmd); // SS_BLASTER (2026-10-24): the left hand pistol out of saber reach
 			ClientThink(NPC->s.number, &ucmd);
 		}
 		else

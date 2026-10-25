@@ -1038,8 +1038,8 @@ static qboolean NPC_TargetVisible(gentity_t* ent)
 	if (InFOV(ent, NPCS.NPC, NPCS.NPCInfo->stats.hfov, NPCS.NPCInfo->stats.vfov) == qfalse)
 		return qfalse;
 
-	//Check for sight
-	if (NPC_ClearLOS4(ent) == qfalse)
+	//Check for sight (Force Sight 3 senses through walls)
+	if (!NPC_SeesThroughWalls(NPCS.NPC) && NPC_ClearLOS4(ent) == qfalse)
 		return qfalse;
 
 	return qtrue;
@@ -1196,8 +1196,8 @@ static qboolean NPC_CheckPlayerDistance(void)
 			continue;
 		}
 
-		//Must be within our FOV
-		if (InFOV(player, NPCS.NPC, NPCS.NPCInfo->stats.hfov, NPCS.NPCInfo->stats.vfov) == qfalse)
+		//Must be within our FOV and in sight, not behind a wall (DH 2026-10-24)
+		if (NPC_CheckVisibility(player, CHECK_360 | CHECK_FOV) < VIS_FOV)
 			continue;
 
 		const float distance = DistanceSquared(NPCS.NPC->r.currentOrigin, player->r.currentOrigin);

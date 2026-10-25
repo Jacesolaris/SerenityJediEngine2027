@@ -1158,6 +1158,58 @@ static int G_ComputeHitLocation(const gentity_t* target, const vec3_t impact_poi
 	}
 }
 
+// the noghri stick's dart (from SJE SP's G_SpawnNoghriGasCloud): a cloud of poison gas where it lands
+#define NOGHRI_GAS_DAMAGE_TIME	2500
+#define NOGHRI_GAS_LIFE			3000
+
+static void NoghriGasCloudThink(gentity_t* self)
+{
+	gentity_t* attacker = self->parent && self->parent->inuse ? self->parent : &g_entities[ENTITYNUM_WORLD];
+
+	self->nextthink = level.time + FRAMETIME;
+
+	if (self->parent && self->parent->inuse)
+	{
+		AddSightEvent(self->parent, self->r.currentOrigin, 200, AEL_DANGER, 50);
+	}
+
+	if (self->fx_time < level.time)
+	{
+		vec3_t up = { 0, 0, 1 };
+
+		G_PlayEffectID(G_EffectIndex("noghri_stick/gas_cloud"), self->r.currentOrigin, up);
+		self->fx_time = level.time + 250;
+	}
+
+	if (level.time - self->s.time <= NOGHRI_GAS_DAMAGE_TIME && !Q_irand(0, 1))
+	{
+		g_radius_damage(self->r.currentOrigin, attacker, Q_irand(1, 4), self->splashRadius, NULL, self, MOD_GAS);
+	}
+
+	if (level.time - self->s.time > NOGHRI_GAS_LIFE)
+	{
+		G_FreeEntity(self);
+	}
+}
+
+static void G_SpawnNoghriGasCloud(const gentity_t* missile, vec3_t origin)
+{
+	gentity_t* cloud = G_Spawn();
+	vec3_t up = { 0, 0, 1 };
+
+	cloud->classname = "noghri_gas";
+	cloud->r.svFlags |= SVF_NOCLIENT;
+	cloud->parent = missile->parent;
+	cloud->splashRadius = missile->splashRadius;
+	cloud->s.time = level.time;
+	G_SetOrigin(cloud, origin);
+	cloud->think = NoghriGasCloudThink;
+	cloud->nextthink = level.time + FRAMETIME;
+
+	G_PlayEffectID(G_EffectIndex("noghri_stick/gas_cloud"), origin, up);
+	cloud->fx_time = level.time + 250;
+}
+
 qboolean G_MissileImpact(gentity_t* ent, trace_t* trace)
 {
 	vec3_t   fwd;
@@ -1986,6 +2038,12 @@ killProj:
 		}
 	}
 
+	if (ent->s.weapon == WP_NOGHRI_STICK && !is_knocked_saber)
+	{
+		// as SP: the noghri stick's dart leaves a cloud of poison gas
+		G_SpawnNoghriGasCloud(ent, trace->endpos);
+	}
+
 	//
 	// G2 model parts free themselves
 	//
@@ -2369,10 +2427,18 @@ void WP_HandleBoltBlock(gentity_t* bolt, gentity_t* blocker, trace_t* trace, vec
 	const qboolean manual_blocking = ((blocker->client->ps.ManualBlockingFlags & (1 << MBF_HOLDINGBLOCK)) != 0) ? qtrue : qfalse;
 
 	const qboolean manual_proj_blocking = ((blocker->client->ps.ManualBlockingFlags & (1 << MBF_HOLDINGBLOCKANDATTACK)) != 0) ? qtrue : qfalse;
-	const qboolean accurate_missile_block = ((blocker->client->ps.ManualBlockingFlags & (1 << MBF_ACCURATEMISSILEBLOCKING)) != 0) ? qtrue : qfalse;
+	const qboolean accurate_missile_blocking = ((blocker->client->ps.ManualBlockingFlags & (1 << MBF_ACCURATEMISSILEBLOCKING)) != 0) ? qtrue : qfalse;
 
 	const int manual_run_blocking = manual_running_and_saberblocking(blocker);
 	const int npc_is_blocking = manual_npc_saberblocking(blocker);
+
+	// JKA mode works like base JKA: a bolt that hits the blade during a swing is deflected, but the swing
+	// carries on (no parry / bounce / fatigue pose). A player holding attack keeps swinging too.
+	const qboolean keep_swing = (PM_SaberInAttack(blocker->client->ps.saberMove)
+		|| PM_SaberInTransitionAny(blocker->client->ps.saberMove)
+		|| PM_SaberInSpecialAttack(blocker->client->ps.torsoAnim)
+		|| ((blocker->s.number < MAX_CLIENTS)
+			&& blocker->client->pers.cmd.buttons & BUTTON_ATTACK)) ? qtrue : qfalse;
 
 	// Visual effect for the bolt being blocked
 	G_MissileReflectEffect(blocker, trace->plane.normal);
@@ -2395,10 +2461,18 @@ void WP_HandleBoltBlock(gentity_t* bolt, gentity_t* blocker, trace_t* trace, vec
 		npc_reflection = qfalse;
 	}
 
-	if (accurate_missile_block)
+	if (in_joystick.integer && accurate_missile_blocking)
 	{
-		saber_block_reflection = qtrue;
-		bolt_block_reflection = qfalse;
+		if (level.time - blocker->client->ps.ManualblockStartTime < 500)
+		{
+			saber_block_reflection = qfalse;
+			bolt_block_reflection = qtrue;
+		}
+		else
+		{
+			saber_block_reflection = qtrue;
+			bolt_block_reflection = qfalse;
+		}
 		npc_reflection = qfalse;
 	}
 
@@ -2422,7 +2496,6 @@ void WP_HandleBoltBlock(gentity_t* bolt, gentity_t* blocker, trace_t* trace, vec
 		{
 			Com_Printf(S_COLOR_YELLOW "only randomly deflect away the bolt\n");
 		}
-
 		WP_BrokenBoltBlockKnockBack(blocker);
 		PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, punish, qtrue));
 	}
@@ -2455,16 +2528,22 @@ void WP_HandleBoltBlock(gentity_t* bolt, gentity_t* blocker, trace_t* trace, vec
 				}
 				else
 				{
-					WP_SaberFatiguedParryDirection(blocker, bolt->r.currentOrigin, qtrue);
+					if (!keep_swing)
+					{
+						WP_SaberFatiguedParryDirection(blocker, bolt->r.currentOrigin, qtrue);
+					}
 				}
 			}
 			else
 			{
-				WP_SaberBlockBolt(blocker, bolt->r.currentOrigin, qtrue);
+				if (!keep_swing)
+				{
+					WP_SaberBlockBolt(blocker, bolt->r.currentOrigin, qtrue);
+				}
 			}
 
 			// Block‑point cost
-			int cost = accurate_missile_block ? 2 : WP_SaberBlockCost(blocker, bolt, bolt->r.currentOrigin);
+			int cost = in_joystick.integer && accurate_missile_blocking ? 2 : WP_SaberBlockCost(blocker, bolt, bolt->r.currentOrigin);
 
 			if (G_GetBlockPoints(blocker) < cost)
 			{
@@ -2498,15 +2577,21 @@ void WP_HandleBoltBlock(gentity_t* bolt, gentity_t* blocker, trace_t* trace, vec
 				}
 				else
 				{
-					WP_SaberFatiguedParryDirection(blocker, bolt->r.currentOrigin, qtrue);
+					if (!keep_swing)
+					{
+						WP_SaberFatiguedParryDirection(blocker, bolt->r.currentOrigin, qtrue);
+					}
 				}
 			}
 			else
 			{
-				WP_SaberBlockBolt(blocker, bolt->r.currentOrigin, qtrue);
+				if (!keep_swing)
+				{
+					WP_SaberBlockBolt(blocker, bolt->r.currentOrigin, qtrue);
+				}
 			}
 
-			if (accurate_missile_block)
+			if (in_joystick.integer && accurate_missile_blocking)
 			{
 				block_points_used = 2.0f;
 			}
@@ -2570,16 +2655,22 @@ void WP_HandleBoltBlock(gentity_t* bolt, gentity_t* blocker, trace_t* trace, vec
 				}
 				else
 				{
-					WP_SaberFatiguedParryDirection(blocker, bolt->r.currentOrigin, qtrue);
+					if (!keep_swing)
+					{
+						WP_SaberFatiguedParryDirection(blocker, bolt->r.currentOrigin, qtrue);
+					}
 				}
 			}
 			else
 			{
-				wp_saber_block_non_random_missile(blocker, bolt->r.currentOrigin, qtrue);
+				if (!keep_swing)
+				{
+					wp_saber_block_non_random_missile(blocker, bolt->r.currentOrigin, qtrue);
+				}
 			}
 
 			// Block point cost
-			int cost = accurate_missile_block ? 2 : WP_SaberBlockCost(blocker, bolt, bolt->r.currentOrigin);
+			int cost = in_joystick.integer && accurate_missile_blocking ? 2 : WP_SaberBlockCost(blocker, bolt, bolt->r.currentOrigin);
 
 			if (G_GetBlockPoints(blocker) < cost)
 			{
@@ -2661,15 +2752,21 @@ void WP_HandleBoltBlock(gentity_t* bolt, gentity_t* blocker, trace_t* trace, vec
 				}
 				else
 				{
-					WP_SaberFatiguedParryDirection(blocker, bolt->r.currentOrigin, qtrue);
+					if (!keep_swing)
+					{
+						WP_SaberFatiguedParryDirection(blocker, bolt->r.currentOrigin, qtrue);
+					}
 				}
 			}
 			else
 			{
-				wp_saber_block_non_random_missile(blocker, bolt->r.currentOrigin, qtrue);
+				if (!keep_swing)
+				{
+					wp_saber_block_non_random_missile(blocker, bolt->r.currentOrigin, qtrue);
+				}
 			}
 
-			if (accurate_missile_block)
+			if (in_joystick.integer && accurate_missile_blocking)
 			{
 				block_points_used = 2.0f;
 			}
@@ -2718,6 +2815,5 @@ void WP_HandleBoltBlock(gentity_t* bolt, gentity_t* blocker, trace_t* trace, vec
 	bolt->activator = prev_owner;
 
 	// Manual missile‑blocking cooldown
-	blocker->client->ps.ManualMBlockingTime =
-		level.time + (600 - blocker->client->ps.fd.forcePowerLevel[FP_SABER_DEFENSE] * 200);
+	blocker->client->ps.ManualMBlockingTime = level.time + (600 - blocker->client->ps.fd.forcePowerLevel[FP_SABER_DEFENSE] * 200);
 }

@@ -59,6 +59,9 @@ vec3_t WP_muzzlePoint[WP_NUM_WEAPONS] =
 	{ 12, 6, -6 }, // WP_CONCUSSION
 	{ 12, 8, -6 }, // WP_DROIDEKA (right arm)
 	{ 12, 6, -6 }, // WP_Z6_ROTARY_CANNON
+	{ 12, 6, -6 }, // WP_NOGHRI_STICK
+	{ 12, 6, -6 }, // WP_TUSKEN_RIFLE
+	{ 12, 6, -6 }, // WP_TUSKEN_STAFF
 	{ 12, 6, -6 }, // WP_BRYAR_OLD,
 };
 
@@ -83,6 +86,9 @@ vec3_t WP_muzzlePoint2[WP_NUM_WEAPONS] =
 	{ 12, -6, -6 }, // WP_CONCUSSION
 	{ 12, -8, -6 }, // WP_DROIDEKA (left arm)
 	{ 12, -6, -6 }, // WP_Z6_ROTARY_CANNON
+	{ 12, -6, -6 }, // WP_NOGHRI_STICK
+	{ 12, -6, -6 }, // WP_TUSKEN_RIFLE
+	{ 12, -6, -6 }, // WP_TUSKEN_STAFF
 	{ 12, -6, -6 }, // WP_BRYAR_OLD,
 };
 
@@ -405,6 +411,60 @@ weaponData_t weaponData[WP_NUM_WEAPONS] =
 		5, //	int		altEnergyPerShot;	// Amount of energy used for alt-fire
 		150, //	int		altFireTime;		// Amount of time between alt-firings
 		8192, //	int		altRange;			// Range of alt-fire
+		0, //	int		chargeSubTime;		// ms interval for subtracting ammo during charge
+		0, //	int		altChargeSubTime;	// above for secondary
+		0, //	int		chargeSub;			// amount to subtract during charge on each interval
+		0, //	int		altChargeSub;		// above for secondary
+		0, //	int		maxCharge;			// stop subtracting once charged for this many ms
+		0 //	int		altMaxCharge;		// above for secondary
+	},
+	{
+		// WP_NOGHRI_STICK (from SJE SP's weapons.dat; the alt fire is the stick swing)
+		//		"Noghri Stick",	//	char	classname[32];		// Spawning name
+		AMMO_POWERCELL, //	int		ammoIndex;			// Index to proper ammo slot
+		5, //	int		ammoLow;			// Count when ammo is low
+		1, //	int		energyPerShot;		// Amount of energy used per shot
+		600, //	int		fireTime;			// Amount of time between firings
+		8192, //	int		range;				// Range of weapon
+		0, //	int		altEnergyPerShot;	// Amount of energy used for alt-fire
+		1000, //	int		altFireTime;		// Amount of time between alt-firings
+		64, //	int		altRange;			// Range of alt-fire
+		0, //	int		chargeSubTime;		// ms interval for subtracting ammo during charge
+		0, //	int		altChargeSubTime;	// above for secondary
+		0, //	int		chargeSub;			// amount to subtract during charge on each interval
+		0, //	int		altChargeSub;		// above for secondary
+		0, //	int		maxCharge;			// stop subtracting once charged for this many ms
+		0 //	int		altMaxCharge;		// above for secondary
+	},
+	{
+		// WP_TUSKEN_RIFLE (from SJE SP's weapons.dat; the primary fire shoots, the alt fire is the butt bash and costs no ammo)
+		//		"Tusken Rifle",	//	char	classname[32];		// Spawning name
+		AMMO_POWERCELL, //	int		ammoIndex;			// Index to proper ammo slot
+		15, //	int		ammoLow;			// Count when ammo is low
+		3, //	int		energyPerShot;		// Amount of energy used per shot
+		1000, //	int		fireTime;			// Amount of time between firings
+		8192, //	int		range;				// Range of weapon
+		0, //	int		altEnergyPerShot;	// Amount of energy used for alt-fire
+		600, //	int		altFireTime;		// Amount of time between alt-firings
+		64, //	int		altRange;			// Range of alt-fire
+		0, //	int		chargeSubTime;		// ms interval for subtracting ammo during charge
+		0, //	int		altChargeSubTime;	// above for secondary
+		0, //	int		chargeSub;			// amount to subtract during charge on each interval
+		0, //	int		altChargeSub;		// above for secondary
+		0, //	int		maxCharge;			// stop subtracting once charged for this many ms
+		0 //	int		altMaxCharge;		// above for secondary
+	},
+	{
+		// WP_TUSKEN_STAFF (from SJE SP's weapons.dat: no ammo)
+		//		"Tusken Staff",	//	char	classname[32];		// Spawning name
+		AMMO_NONE, //	int		ammoIndex;			// Index to proper ammo slot
+		5, //	int		ammoLow;			// Count when ammo is low
+		0, //	int		energyPerShot;		// Amount of energy used per shot
+		1000, //	int		fireTime;			// Amount of time between firings
+		78, //	int		range;				// Range of weapon
+		0, //	int		altEnergyPerShot;	// Amount of energy used for alt-fire
+		1000, //	int		altFireTime;		// Amount of time between alt-firings
+		96, //	int		altRange;			// Range of alt-fire
 		0, //	int		chargeSubTime;		// ms interval for subtracting ammo during charge
 		0, //	int		altChargeSubTime;	// above for secondary
 		0, //	int		chargeSub;			// amount to subtract during charge on each interval

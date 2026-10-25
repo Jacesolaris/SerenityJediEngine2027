@@ -58,6 +58,10 @@ uniform sampler2D u_LevelsMap;
 uniform vec4 u_Color;
 uniform vec2 u_AutoExposureMinMax;
 uniform vec3 u_ToneMinAvgMaxLinear;
+uniform vec4 u_Grade0;
+uniform vec4 u_Grade1;
+uniform vec4 u_Grade2;
+uniform vec4 u_Grade3;
 
 in vec2 var_TexCoords;
 
@@ -190,6 +194,55 @@ vec3 ACESFitted(vec3 color)
 }
 
 
+vec3 Uchimura(vec3 x)
+{
+	// Gran Turismo curve (H. Uchimura 2017): long linear section, gentle shoulder
+	const float P = 1.0, a = 1.0, m = 0.22, l = 0.4, c = 1.33, b = 0.0;
+	float l0 = ((P - m) * l) / a;
+	float S0 = m + l0, S1 = m + a * l0, C2 = (a * P) / (P - S1), CP = -C2 / P;
+	vec3 w0 = 1.0 - smoothstep(0.0, m, x);
+	vec3 w2 = step(m + l0, x);
+	vec3 w1 = 1.0 - w0 - w2;
+	vec3 T = m * pow(x / m, vec3(c)) + b;
+	vec3 S = P - (P - S1) * exp(CP * (x - S0));
+	vec3 L = m + a * (x - m);
+	return T * w0 + L * w1 + S * w2;
+}
+
+// colour grading (r_grade 1, see tr_postprocess.cpp)
+vec3 GradeAndTonemap(vec3 c, float whiteLevel)
+{
+	const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
+	// exposure and white balance (scene-linear)
+	c *= u_Grade0.x * u_Grade3.rgb;
+	// contrast in log2 space around middle grey
+	const float grey = 0.18;
+	c = grey * pow(max(c, vec3(1e-6)) / grey, vec3(u_Grade0.y));
+	// saturation
+	float y = dot(c, LUM);
+	c = max(vec3(0.0), mix(vec3(y), c, u_Grade0.z));
+	// split toning: shadow colour fades out by middle grey, highlight colour fades in above it
+	float t = smoothstep(0.0, 1.0, clamp(log2(max(y, 1e-6) / grey) * 0.25 + 0.5, 0.0, 1.0));
+	c *= mix(u_Grade1.rgb, u_Grade2.rgb, t);
+
+	// tone curve, normalised so the scene white level maps to 1
+	int curve = int(u_Grade1.w + 0.5);
+	if (curve == 1)
+		c = ACESFitted(c * 0.6) / ACESFitted(vec3(whiteLevel * 0.6)).g;
+	else if (curve == 2)
+		c = Uchimura(c) / Uchimura(vec3(whiteLevel)).g;
+	else
+		c = FilmicTonemap(c) / FilmicTonemap(vec3(whiteLevel));
+	c = clamp(c, 0.0, 1.0);
+
+	// black crush (display-referred)
+	c = max(vec3(0.0), c - u_Grade2.w) / (1.0 - u_Grade2.w);
+	// vignette
+	vec2 v = var_TexCoords - 0.5;
+	c *= 1.0 - u_Grade0.w * smoothstep(0.15, 0.75, dot(v, v) * 2.0);
+	return c;
+}
+
 void main()
 {
 	#if defined(USE_SMAA)
@@ -210,8 +263,15 @@ void main()
 	color.rgb *= u_ToneMinAvgMaxLinear.y / avgLum;
 	color.rgb = max(vec3(0.0), color.rgb - vec3(u_ToneMinAvgMaxLinear.x));
 
-	vec3 fWhite = 1.0 / FilmicTonemap(vec3(u_ToneMinAvgMaxLinear.z - u_ToneMinAvgMaxLinear.x));
-	color.rgb = FilmicTonemap(color.rgb) * fWhite;
+	if (u_Grade1.w < 0.0)
+	{
+		vec3 fWhite = 1.0 / FilmicTonemap(vec3(u_ToneMinAvgMaxLinear.z - u_ToneMinAvgMaxLinear.x));
+		color.rgb = FilmicTonemap(color.rgb) * fWhite;
+	}
+	else
+	{
+		color.rgb = GradeAndTonemap(color.rgb, u_ToneMinAvgMaxLinear.z - u_ToneMinAvgMaxLinear.x);
+	}
 
 	#if defined(USE_LINEAR_LIGHT)
 		color.rgb = LinearTosRGB(color.rgb);

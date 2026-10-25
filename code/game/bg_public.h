@@ -370,6 +370,7 @@ using persEnum_t = enum
 	PERS_KILLED,
 	// count of the number of times you died
 	// these were added for single player awards tracking
+	PERS_IMPRESSIVE_COUNT,			// two railgun hits in a row
 	PERS_GAUNTLET_FRAG_COUNT,
 	PERS_EXCELLENT_COUNT,
 	PERS_ACCURACY_SHOTS,
@@ -1143,6 +1144,7 @@ constexpr auto SABERBLASTER_RELOAD_TIME = 1000; // ms, alt attack + attack
 constexpr auto SABERBLASTER_CLIP_SLOT = AMMO_MAX; // unused ps.ammo[] slot: shots used from the clip (0 = full clip)
 int BG_NextSaberStyleInCycle(int style);
 extern cvar_t* g_saberBlasterAimArc;
+extern cvar_t* g_saberBlasterAIFire; // SS_BLASTER (2026-10-24)
 extern cvar_t* g_saberBlasterAimRange;
 extern cvar_t* g_saberBlasterLockCharge;
 

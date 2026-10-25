@@ -22,6 +22,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "../server/exe_headers.h"
+#include "q_profile.h"
 
 #include "server.h"
 /*
@@ -501,6 +502,7 @@ extern cvar_t* cl_newClock;
 
 void SV_Frame(int msec, const float fractionMsec)
 {
+	PROFILE_ZONE("Server frame (game)");
 	int startTime = 0;
 
 	// the menu kills the server with this cvar

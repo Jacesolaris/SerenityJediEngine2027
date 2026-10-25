@@ -1064,6 +1064,12 @@ static void G_SetClientSound(gentity_t* ent)
 		ent->client->ps.loopSound = G_SoundIndex("sound/weapons/force/protectloop.mp3");
 		ent->s.loopIsSoundset = qfalse;
 	}
+	else if (ent->client && ent->client->ps.eFlags2 & EF2_SCEPTER && ent->client->ps.torsoAnim == BOTH_SCEPTER_HOLD)
+	{
+		// Ragnos' scepter beam (the Possessed Tavion bot, ai_main.c): SP's loop while it fires
+		ent->client->ps.loopSound = G_SoundIndex("sound/weapons/scepter/loop.wav");
+		ent->s.loopIsSoundset = qfalse;
+	}
 	else if (ent->client)
 	{
 		ent->client->ps.loopSound = 0;
@@ -1495,10 +1501,10 @@ static void ClientTimerActions(gentity_t* ent, const int msec)
 		   WEAPON REMOVAL WHEN OUT OF AMMO
 		--------------------------------------------------------- */
 		if (client->ps.ammo[AMMO_THERMAL] == 0)
-			client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_THERMAL);
+			BG_TakeWeapon(client->ps.stats, WP_THERMAL);
 
 		if (client->ps.ammo[AMMO_TRIPMINE] == 0)
-			client->ps.stats[STAT_WEAPONS] &= ~(1 << WP_TRIP_MINE);
+			BG_TakeWeapon(client->ps.stats, WP_TRIP_MINE);
 
 		/* ---------------------------------------------------------
 		   PASSIVE HEALING / ARMOR REGEN (non-bots only)
@@ -2618,6 +2624,8 @@ static qboolean GunisLong(const gentity_t* ent)
 {
 	switch (ent->s.weapon)
 	{
+	case WP_NOGHRI_STICK:
+	case WP_TUSKEN_RIFLE:
 	case WP_BLASTER:
 	case WP_BOWCASTER:
 	case WP_REPEATER:
@@ -4597,6 +4605,8 @@ static qboolean IsGunner(const gentity_t* ent)
 {
 	switch (ent->s.weapon)
 	{
+	case WP_NOGHRI_STICK:
+	case WP_TUSKEN_RIFLE:
 	case WP_BRYAR_OLD:
 	case WP_BLASTER:
 	case WP_DISRUPTOR:
@@ -5134,6 +5144,28 @@ static void ClientThink_real(gentity_t* ent)
 				}
 			}
 		}
+	}
+
+	if (client && client->ps.eFlags2 & EF2_SCEPTER
+		&& client->saber[0].model[0] && !client->saber[1].model[0]
+		&& !(client->saber[0].saberFlags & SFL_TWO_HANDED))
+	{
+		// Ragnos' scepter is in her left hand (the Possessed Tavion bot, ai_main.c): she only fights in SS_DUAL, saber in
+		// the right hand, scepter in the left (DH 2026-10-24). Set every frame, so no style change (bots switch styles at
+		// random, g_client.c) sticks
+		client->ps.fd.saber_anim_levelBase = client->ps.fd.saberAnimLevel = SS_DUAL;
+		client->ps.fd.saberDrawAnimLevel = SS_DUAL;
+	}
+
+	// SS_BLASTER is Kyle Katarn's style only (DH 2026-10-24): anyone else is moved off it every frame, however he got it
+	// (bot style pick, NPC file, give all, setforceall); G_ValidSaberStyle refuses it too
+	if (client && (client->ps.fd.saberAnimLevel == SS_BLASTER || client->ps.fd.saber_anim_levelBase == SS_BLASTER)
+		&& !G_SaberBlasterKyleModel(ent))
+	{
+		client->ps.fd.saber_anim_levelBase = client->ps.fd.saberAnimLevel = SS_MEDIUM;
+		client->ps.fd.saberDrawAnimLevel = SS_MEDIUM;
+		client->saberCycleQueue = SS_MEDIUM;
+		client->saberStylesKnown &= ~(1 << SS_BLASTER);
 	}
 
 	if (client && !isFollowing && client->ps.eFlags2 & EF2_HELD_BY_MONSTER)

@@ -24,6 +24,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // tr_shade.c
 
 #include "tr_local.h"
+#include "q_profile.h"
 #include "rd-vanilla/tr_quicksprite.h"
 
 /*
@@ -223,6 +224,18 @@ void R_BindAnimatedImage(const textureBundle_t* bundle)
 	int		index = 0;
 
 	if (bundle->isVideoMap) {
+		if (R_SmpOnRenderThread())
+		{
+			// r_smp: the cinematic is decoded and uploaded on the main thread before the next
+			// frame (R_SmpRunCinematics); here only its texture is used
+			const int h = bundle->videoMapHandle;
+			if (h >= 0 && h < NUM_SCRATCH_IMAGES && tr.scratchImage[h])
+			{
+				R_SmpWantCinematic(h);
+				GL_Bind(tr.scratchImage[h]);
+			}
+			return;
+		}
 		ri.CIN_RunCinematic(bundle->videoMapHandle);
 		ri.CIN_UploadCinematic(bundle->videoMapHandle);
 		return;
@@ -1289,7 +1302,7 @@ static void ComputeColors(shaderStage_t* pStage, int forceRGBGen)
 		for (i = 0; i < tess.numVertexes; i++)
 		{
 			byteAlias_t* baDest = (byteAlias_t*)&tess.svars.colors[i],
-				* baSource = (byteAlias_t*)&styleColors[pStage->lightmapStyle];
+				* baSource = (byteAlias_t*)&RB_SMP(styleColors, styleColors)[pStage->lightmapStyle];
 			baDest->i = baSource->i;
 		}
 		break;
@@ -1560,6 +1573,63 @@ static vec4_t	GLFogOverrideColors[GLFOGOVERRIDE_MAX] =
 static const float logtestExp2 = sqrt(-log(1.0 / 255.0));
 extern bool tr_stencilled; //tr_backend.cpp
 
+// Dynamic HUD (cg_dynamicHud): RE_SetColor records how far the HUD is faded (r_hudAlpha) and each 2D stage fades here,
+// after its colours are computed. That way the fade also reaches shaders that ignore the vertex colour/alpha
+// (rgbGen/alphaGen identity, additive or unblended stages - the DF HUD rings and style icons), which used to stay
+// fully visible and then vanish at once.
+static int RB_HudFadeStage(int stateBits)
+{
+	if (!backEnd.projection2D || backEnd.hudFade2D <= 0.0f)
+	{
+		return stateBits;
+	}
+	const float keep = backEnd.hudFade2D >= 1.0f ? 0.0f : 1.0f - backEnd.hudFade2D;
+	const int src = stateBits & GLS_SRCBLEND_BITS;
+	const int dst = stateBits & GLS_DSTBLEND_BITS;
+	unsigned char* c = reinterpret_cast<unsigned char*>(tess.svars.colors);
+	const int n = tess.numVertexes * 4;
+
+	if (src == GLS_SRCBLEND_DST_COLOR && dst == GLS_DSTBLEND_ZERO || src == GLS_SRCBLEND_ZERO && dst == GLS_DSTBLEND_SRC_COLOR)
+	{ // filter (multiplies what is under it): fade towards white, which leaves the screen as it was
+		for (int i = 0; i < n; i += 4)
+		{
+			for (int k = 0; k < 3; k++)
+			{
+				c[i + k] = static_cast<unsigned char>(255.0f - (255.0f - c[i + k]) * keep);
+			}
+		}
+		return stateBits;
+	}
+	if (src == GLS_SRCBLEND_ONE && dst == GLS_DSTBLEND_ONE_MINUS_SRC_ALPHA)
+	{ // premultiplied alpha: fade colour and alpha together
+		for (int i = 0; i < n; i++)
+		{
+			c[i] = static_cast<unsigned char>(c[i] * keep);
+		}
+		return stateBits;
+	}
+	if (dst == GLS_DSTBLEND_ONE && src != GLS_SRCBLEND_SRC_ALPHA)
+	{ // additive (GL_ONE GL_ONE and the like): fade the colour that gets added
+		for (int i = 0; i < n; i += 4)
+		{
+			c[i + 0] = static_cast<unsigned char>(c[i + 0] * keep);
+			c[i + 1] = static_cast<unsigned char>(c[i + 1] * keep);
+			c[i + 2] = static_cast<unsigned char>(c[i + 2] * keep);
+		}
+		return stateBits;
+	}
+	if (src == 0 && dst == 0 || src == GLS_SRCBLEND_ONE && dst == GLS_DSTBLEND_ZERO)
+	{ // not blended: blend it by alpha while it fades
+		stateBits = stateBits & ~(GLS_SRCBLEND_BITS | GLS_DSTBLEND_BITS) | GLS_SRCBLEND_SRC_ALPHA | GLS_DSTBLEND_ONE_MINUS_SRC_ALPHA;
+	}
+	// alpha blended: fade the alpha (an alpha test would cut the image away instead of fading it, so drop it meanwhile)
+	for (int i = 3; i < n; i += 4)
+	{
+		c[i] = static_cast<unsigned char>(c[i] * keep);
+	}
+	return stateBits & ~GLS_ATEST_BITS;
+}
+
 static void RB_IterateStagesGeneric(const shaderCommands_t* input)
 {
 	int stage = 0;
@@ -1680,6 +1750,7 @@ static void RB_IterateStagesGeneric(const shaderCommands_t* input)
 		if (!input->fading)
 		{ //this means ignore this, while we do a fade-out
 			ComputeColors(pStage, forceRGBGen);
+			stateBits = RB_HudFadeStage(stateBits);
 		}
 		ComputeTexCoords(pStage);
 
@@ -1937,6 +2008,19 @@ void RB_EndSurface(void) {
 		return;
 	}
 
+	// profiler: one marker per batch drawn, named by what it is
+#if PROFILE_ENABLED
+	const int profKind = tess.shader == tr.shadowShader ? 0
+		: backEnd.projection2D ? 1
+		: tess.currentStageIteratorFunc == RB_StageIteratorSky ? 2
+		: backEnd.currentEntity == &tr.worldEntity ? 3 : 4;
+#endif
+	PROFILE_ZONE_IF("Draw batch: shadow volume", profKind == 0);
+	PROFILE_ZONE_IF("Draw batch: 2D / HUD", profKind == 1);
+	PROFILE_ZONE_IF("Draw batch: sky", profKind == 2);
+	PROFILE_ZONE_IF("Draw batch: world", profKind == 3);
+	PROFILE_ZONE_IF("Draw batch: models + effects", profKind == 4);
+
 	if (input->indexes[SHADER_MAX_INDEXES - 1] != 0) {
 		Com_Error(ERR_DROP, "RB_EndSurface() - SHADER_MAX_INDEXES hit");
 	}
@@ -1954,7 +2038,7 @@ void RB_EndSurface(void) {
 		return;
 	}
 
-	if (skyboxportal)
+	if (RB_SMP(skyboxportal, skyboxportal))
 	{
 		// world
 		if (!(backEnd.refdef.rdflags & RDF_SKYBOXPORTAL))
@@ -1967,7 +2051,7 @@ void RB_EndSurface(void) {
 		// portal sky
 		else
 		{
-			if (!drawskyboxportal)
+			if (!RB_SMP(drawskyboxportal, drawskyboxportal))
 			{
 				if (!(tess.currentStageIteratorFunc == RB_StageIteratorSky))
 				{	// /only/ process sky tris

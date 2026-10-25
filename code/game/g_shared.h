@@ -953,7 +953,9 @@ public:
 		saved_game.write<int8_t>(forced_rightmove);
 		saved_game.write<int32_t>(respawnTime);
 		saved_game.write<int32_t>(idleTime);
+		saved_game.write<int32_t>(rewardTime);
 		saved_game.write<int32_t>(airOutTime);
+		saved_game.write<int32_t>(lastKillTime);
 		saved_game.write<int32_t>(timeResidual);
 		saved_game.write<float>(facial_blink);
 		saved_game.write<float>(facial_timer);
@@ -1068,7 +1070,9 @@ public:
 		saved_game.read<int8_t>(forced_rightmove);
 		saved_game.read<int32_t>(respawnTime);
 		saved_game.read<int32_t>(idleTime);
+		saved_game.read<int32_t>(rewardTime);
 		saved_game.read<int32_t>(airOutTime);
+		saved_game.read<int32_t>(lastKillTime);
 		saved_game.read<int32_t>(timeResidual);
 		saved_game.read<float>(facial_blink);
 		saved_game.read<float>(facial_timer);

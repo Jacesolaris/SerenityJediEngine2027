@@ -129,6 +129,13 @@ static void C_GetLerpData(void)
 		// normal player
 		data->mAngles[PITCH] = 0.0f;
 		data->mAngles[ROLL] = 0.0f;
+		if (!VectorCompare(cg_entities[data->mEntityNum].turAngles, vec3_origin))
+		{
+			// the angles the model is drawn with (its legs' yaw, as the cgame's own bolt code uses, and SP's
+			// renderAngles): with the view yaw an effect bolted to a hand was turned by the torso's twist, the
+			// Possessed Tavion scepter beam well off target (2026-10-24)
+			VectorCopy(cg_entities[data->mEntityNum].turAngles, data->mAngles);
+		}
 	}
 	else if (cg_entities[data->mEntityNum].currentState.eType == ET_NPC)
 	{
@@ -419,7 +426,7 @@ centity_t cg_entities[MAX_GENTITIES];
 centity_t* cg_permanents[MAX_GENTITIES]; //rwwRMG - added
 int cg_numpermanents = 0;
 
-weaponInfo_t cg_weapons[MAX_WEAPONS];
+weaponInfo_t cg_weapons[WP_NUM_WEAPONS];
 itemInfo_t cg_items[MAX_ITEMS];
 
 int CG_CrosshairPlayer(void)

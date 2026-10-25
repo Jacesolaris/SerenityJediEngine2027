@@ -460,6 +460,12 @@ static qboolean npc_is_staff_style(const gentity_t* self)
 
 static qboolean npc_is_dual_style(const gentity_t* self)
 {
+	// holding two sabers (an NPC file's saber2, or a script's SET_SABER2 - e.g. Barriss in the Clone Wars
+	// mission): dual, whatever the NPC type. The names below are only the NPCs that start with two.
+	if (self->client && self->client->ps.dualSabers)
+	{
+		return qtrue;
+	}
 	if (!Q_stricmp("md_grievous", self->NPC_type)
 		|| !Q_stricmp("md_grievous4", self->NPC_type)
 		|| !Q_stricmp("md_grievous_robed", self->NPC_type)
@@ -2043,13 +2049,15 @@ static void Jedi_AdjustSaberAnimLevel(const gentity_t* self, const int new_level
 		}
 		else if (npc_is_dual_style(self))
 		{
-			//dual only
+			//dual only (and stay: the random style picked below used to replace it)
 			self->client->ps.saberAnimLevel = SS_DUAL;
+			return;
 		}
 		else if (npc_is_staff_style(self))
 		{
-			//staff only
+			//staff only (and stay: the random style picked below used to replace it)
 			self->client->ps.saberAnimLevel = SS_STAFF;
+			return;
 		}
 		else
 		{
@@ -2085,13 +2093,15 @@ static void Jedi_AdjustSaberAnimLevel(const gentity_t* self, const int new_level
 		}
 		else if (npc_is_dual_style(self))
 		{
-			//dual only
+			//dual only (and stay: the random style picked below used to replace it)
 			self->client->ps.saberAnimLevel = SS_DUAL;
+			return;
 		}
 		else if (npc_is_staff_style(self))
 		{
-			//staff only
+			//staff only (and stay: the random style picked below used to replace it)
 			self->client->ps.saberAnimLevel = SS_STAFF;
+			return;
 		}
 		else
 		{
@@ -10465,8 +10475,8 @@ static void JediHandleSpacing(gentity_t* self)
 					// Only allow this special if kata is allowed
 					if (Jedi_CanUseKata(self))
 					{
-						self->client->ps.saberMove = BOTH_LUNGE2_B__T_;
-						self->client->ps.weaponTime = level.time + 400;
+						self->client->ps.saberMove = LS_A_LUNGE; // was BOTH_LUNGE2_B__T_ (an anim number, out of range as a saber move)
+						self->client->ps.weaponTime = 400; // weaponTime counts down, it is not a time stamp
 						TIMER_Set(NPC, "noKata", jedi_get_kata_cooldown_duration());
 					}
 				}

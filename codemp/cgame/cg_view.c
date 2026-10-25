@@ -3014,6 +3014,9 @@ static qboolean Holding_Gun_And_Walking(void)
 		case WP_BOWCASTER:
 		case WP_REPEATER:
 		case WP_Z6_ROTARY_CANNON:
+		case WP_NOGHRI_STICK:
+		case WP_TUSKEN_RIFLE:
+		case WP_TUSKEN_STAFF:
 		case WP_DEMP2:
 		case WP_FLECHETTE:
 		case WP_ROCKET_LAUNCHER:
@@ -3053,6 +3056,9 @@ static qboolean Holding_Gun_And_Walking_And_Blocking(void)
 		case WP_BOWCASTER:
 		case WP_REPEATER:
 		case WP_Z6_ROTARY_CANNON:
+		case WP_NOGHRI_STICK:
+		case WP_TUSKEN_RIFLE:
+		case WP_TUSKEN_STAFF:
 		case WP_DEMP2:
 		case WP_FLECHETTE:
 		case WP_ROCKET_LAUNCHER:

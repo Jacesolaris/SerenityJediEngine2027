@@ -29,6 +29,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
  *
  *****************************************************************************/
 #include "../server/exe_headers.h"
+#include "q_profile.h"
 
 #include "sdl/sdl_sound.h"
 #include "snd_local.h"
@@ -2817,6 +2818,7 @@ Called once each time through the main loop
 */
 void S_Update()
 {
+	PROFILE_ZONE("Sound update");
 	if (s_pazaakMute && s_pazaakMute->modified)
 	{
 		s_pazaakMute->modified = qfalse;

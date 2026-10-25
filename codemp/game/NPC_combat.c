@@ -743,13 +743,13 @@ void G_SetEnemy(gentity_t* self, gentity_t* enemy)
 			!Q_strncmp(self->NPC_type, "imp", 3) &&
 			!(self->NPC->scriptFlags & SCF_FORCED_MARCH))
 		{
-			if (self->client->ps.stats[STAT_WEAPONS] & (1 << WP_BLASTER))
+			if (BG_HasWeapon(self->client->ps.stats, WP_BLASTER))
 			{
 				ChangeWeapon(self, WP_BLASTER);
 				self->client->ps.weapon = WP_BLASTER;
 				self->client->ps.weaponstate = WEAPON_READY;
 			}
-			else if (self->client->ps.stats[STAT_WEAPONS] & (1 << WP_BRYAR_PISTOL))
+			else if (BG_HasWeapon(self->client->ps.stats, WP_BRYAR_PISTOL))
 			{
 				ChangeWeapon(self, WP_BRYAR_PISTOL);
 				self->client->ps.weapon = WP_BRYAR_PISTOL;
@@ -1247,7 +1247,7 @@ HaveWeapon
 
 qboolean HaveWeapon(const int weapon)
 {
-	return NPCS.client->ps.stats[STAT_WEAPONS] & 1 << weapon;
+	return BG_HasWeapon(NPCS.client->ps.stats, weapon);
 }
 
 int NPC_HaveBetterWeapon(const int weapon)
@@ -1472,6 +1472,8 @@ float NPC_MaxDistSquaredForWeapon(void)
 	{
 	case WP_BLASTER: //scav rifle
 	case WP_DROIDEKA:
+	case WP_NOGHRI_STICK:
+	case WP_TUSKEN_RIFLE:
 		return 1024 * 1024; //should be shorter?
 
 	case WP_BRYAR_PISTOL: //prifle
@@ -1507,6 +1509,9 @@ float NPC_MaxDistSquaredForWeapon(void)
 		}
 		return 48 * 48;
 	}
+
+	case WP_TUSKEN_STAFF:
+		return 80 * 80; // a swing reaches 78
 
 	default:
 		return 1024 * 1024; //was 0
@@ -1654,10 +1659,13 @@ You can mix and match any of those options (example: find closest visible player
 
 FIXME: this should go through the snapshot and find the closest enemy
 */
-gentity_t* NPC_PickEnemy(const gentity_t* closestTo, const int enemyTeam, const qboolean checkVis,
+gentity_t* NPC_PickEnemy(const gentity_t* closestTo, const int enemyTeam, const qboolean checkVisIn,
 	const qboolean findPlayersFirst,
 	const qboolean findClosest)
 {
+	// only Force Sight 3 NPCs may pick an enemy they can't see (DH 2026-10-24)
+	const qboolean checkVis = (checkVisIn || !NPC_SeesThroughWalls(NPCS.NPC)) ? qtrue : qfalse;
+
 	int num_choices = 0;
 	int choice[128] = { 0 }; //FIXME: need a different way to determine how many choices?
 	gentity_t* newenemy = NULL;

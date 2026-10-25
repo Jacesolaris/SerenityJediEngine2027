@@ -302,6 +302,9 @@ vmCvar_t cg_saberEntMarks;
 vmCvar_t cg_paused;
 vmCvar_t cg_drawTimer;
 vmCvar_t cg_drawFPS;
+vmCvar_t cg_clothForcePush;
+vmCvar_t cg_clothExplosion;
+vmCvar_t cg_traceCull;
 vmCvar_t cg_drawSnapshot;
 vmCvar_t cg_drawAmmoWarning;
 vmCvar_t cg_drawCrosshair;
@@ -523,6 +526,9 @@ static cvarTable_t cvarTable[] = {
 	{ &cg_drawHUD, "cg_drawHUD", "1", 0 },
 	{ &cg_drawTimer, "cg_drawTimer", "0", CVAR_ARCHIVE },
 	{ &cg_drawFPS, "cg_drawFPS", "1", CVAR_ARCHIVE },
+	{ &cg_clothForcePush, "cg_clothForcePush", "1", CVAR_ARCHIVE },	// force push/pull blows capes and robes (0 = off, 2 = twice as strong)
+	{ &cg_clothExplosion, "cg_clothExplosion", "1", CVAR_ARCHIVE },	// explosions blow capes and robes (0 = off, 2 = twice as strong)
+	{ &cg_traceCull, "cg_traceCull", "1", CVAR_ARCHIVE },	// cgame traces skip entities their move can't reach (0 = test them all, as before)
 	{ &cg_drawSnapshot, "cg_drawSnapshot", "0", CVAR_ARCHIVE },
 	{ &cg_drawAmmoWarning, "cg_drawAmmoWarning", "1", CVAR_ARCHIVE },
 	{ &cg_drawCrosshair, "cg_drawCrosshair", "2", CVAR_ARCHIVE },

@@ -1960,6 +1960,21 @@ intptr_t CL_CgameSystemCalls(intptr_t* args)
 static void RE_InitRendererTerrain(const char* /*info*/)
 {}
 
+// BOTH_WIND (bg_pmove.c): a strong gust at pos, outside; never when the renderer has no wind
+static qboolean CL_WE_GetWindGust(vec3_t pos, vec3_t dir)
+{
+	static cvar_t* windAnim = Cvar_Get("g_windAnim", "1", CVAR_ARCHIVE);	// 0 = no BOTH_WIND in MP
+	if (!windAnim->integer || !re || !re->GetWindGusting || !re->GetWindVector || !re->IsOutside)
+	{
+		return qfalse;
+	}
+	if (!re->GetWindGusting(pos) || !re->IsOutside(pos))
+	{
+		return qfalse;
+	}
+	return re->GetWindVector(dir, pos) ? qtrue : qfalse;
+}
+
 void CL_BindCGame(void)
 {
 	static cgameImport_t cgi;
@@ -2179,6 +2194,7 @@ void CL_BindCGame(void)
 		cgi.G2API_GetSurfaceName = CL_G2API_GetSurfaceName;
 
 		cgi.ext.R_Font_StrLenPixels = re->ext.Font_StrLenPixels;
+		cgi.WE_GetWindGust = CL_WE_GetWindGust;
 
 		const auto GetCGameAPI = reinterpret_cast<GetCGameAPI_t>(cgvm->GetModuleAPI);
 		cgameExport_t* ret = GetCGameAPI(CGAME_API_VERSION, &cgi);

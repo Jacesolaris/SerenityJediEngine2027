@@ -49,6 +49,11 @@ typedef enum
 	WP_DROIDEKA, // the droideka's twin arm blasters (from MovieDuels SP), for droideka NPCs
 	WP_Z6_ROTARY_CANNON, // the Z-6 rotary cannon (from MovieDuels): before WP_BRYAR_OLD so it stays player usable (LAST_USEABLE_WEAPON);
 	// BRYAR_OLD, EMPLACED_GUN and TURRET moved up one (g_weaponDisable bits for them shift too)
+	WP_NOGHRI_STICK, // the noghri stick (from SJE SP): a poison dart that leaves a gas cloud, the alt fire swings the stick;
+	// also before WP_BRYAR_OLD so it stays player usable (BRYAR_OLD, EMPLACED_GUN and TURRET moved up one more)
+	WP_TUSKEN_RIFLE, // the tusken rifle (from SJE SP): the primary fire is a swing with the butt, the alt fire the shot
+	WP_TUSKEN_STAFF, // the tusken staff (gaffi stick, from SJE SP): swings only, the alt fire is the lunge
+	// both before WP_BRYAR_OLD too (BRYAR_OLD, EMPLACED_GUN and TURRET moved up two more)
 
 	WP_BRYAR_OLD,
 	WP_EMPLACED_GUN,
@@ -59,6 +64,20 @@ typedef enum
 
 //anything > this will be considered not player useable
 #define LAST_USEABLE_WEAPON			WP_BRYAR_OLD
+
+// owned weapons (2026-10-25, widened past 32 weapons): STAT_WEAPONS holds weapons 0-31, STAT_WEAPONS2 weapons 32-63
+// (the engine sends both in 32 bits, msg.cpp). Every owned-weapon bit goes through these: never 1 << weapon on
+// STAT_WEAPONS, that is undefined from weapon 32 on.
+#define WP_STAT_INDEX(w)			((w) < 32 ? STAT_WEAPONS : STAT_WEAPONS2)
+#define WP_STAT_BIT(w)				(1u << ((unsigned)(w) & 31u))
+#define BG_HasWeapon(stats, w)		(((unsigned)(stats)[WP_STAT_INDEX(w)] & WP_STAT_BIT(w)) != 0)
+#define BG_GiveWeapon(stats, w)		((stats)[WP_STAT_INDEX(w)] |= (int)WP_STAT_BIT(w))
+#define BG_TakeWeapon(stats, w)		((stats)[WP_STAT_INDEX(w)] &= ~(int)WP_STAT_BIT(w))
+#define BG_ClearWeapons(stats)		((stats)[STAT_WEAPONS] = 0, (stats)[STAT_WEAPONS2] = 0)
+#define BG_SetOnlyWeapon(stats, w)	(BG_ClearWeapons(stats), BG_GiveWeapon(stats, w))
+#define BG_HasAnyWeapon(stats)		((stats)[STAT_WEAPONS] != 0 || (stats)[STAT_WEAPONS2] != 0)
+#define WP_MASK_HAS(mask, w)		((w) < 32 && ((unsigned)(mask) & (1u << ((unsigned)(w) & 31u))) != 0) // a 32 bit weapon mask
+#define WP_MASK_ADD(mask, w)		((w) < 32 ? ((mask) |= (int)(1u << ((unsigned)(w) & 31u))) : (mask)) // (g_weaponDisable, siege class, NPC): weapons 32+ never in one
 #define WP_MELEEONLY		524283
 #define WP_SABERSONLY		524279
 #define WP_MELEESABERS		524275

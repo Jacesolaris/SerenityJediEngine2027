@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // tr_main.c -- main control flow for each frame
 
 #include "tr_local.h"
+#include "q_profile.h"
 #include "tr_weather.h"
 
 #include <string.h> // memcpy
@@ -1882,6 +1883,28 @@ void R_SortAndSubmitDrawSurfs(drawSurf_t* drawSurfs, int numDrawSurfs) {
 	R_AddDrawSurfCmd(drawSurfs, numDrawSurfs);
 }
 
+// r_sunShadowNpcDist (0 = off, every character casts a sun shadow as before): true when this character
+// is farther than that from the camera, so the sun shadow maps leave it out
+static bool R_SunShadowNpcDistSq(const trRefEntity_t* ent)
+{
+	static cvar_t* cv = nullptr;
+	if (!cv)
+	{
+#ifdef REND2_SP
+		cv = ri.Cvar_Get("r_sunShadowNpcDist", "1000", CVAR_ARCHIVE_ND);
+#else
+		cv = ri.Cvar_Get("r_sunShadowNpcDist", "1000", CVAR_ARCHIVE_ND, "Characters farther than this from the camera cast no sun shadow (0 = all do)");
+#endif
+	}
+	if (!cv || cv->value <= 0.0f || (ent->e.renderfx & (RF_FIRST_PERSON | RF_THIRD_PERSON)))
+	{
+		return false;
+	}
+	vec3_t d;
+	VectorSubtract(ent->e.origin, tr.refdef.vieworg, d);
+	return DotProduct(d, d) > cv->value * cv->value;
+}
+
 static void R_AddEntitySurface(const trRefdef_t* refdef, trRefEntity_t* ent, int entityNum)
 {
 	shader_t* shader = nullptr;
@@ -1930,6 +1953,13 @@ static void R_AddEntitySurface(const trRefdef_t* refdef, trRefEntity_t* ent, int
 		break;
 
 	case RT_MODEL:
+		// r_sunShadowNpcDist: ghoul2 characters farther than this from the camera cast no sun shadow (each
+		// of the 3 sun shadow maps redraws every character in it; far away their shadow is a few pixels)
+		if (tr.viewParms.viewParmType == VPT_SUN_SHADOWS && ent->e.ghoul2 && R_SunShadowNpcDistSq(ent))
+		{
+			return;
+		}
+
 		// we must set up parts of tr.ori for model culling
 		R_RotateForEntity(ent, &tr.viewParms, &tr.ori);
 
@@ -2057,9 +2087,15 @@ void R_GenerateDrawSurfs(viewParms_t* viewParms, trRefdef_t* refdef) {
 		return;
 	}
 
-	R_AddWorldSurfaces(viewParms, refdef);
+	{
+		PROFILE_ZONE("R: world surfaces");
+		R_AddWorldSurfaces(viewParms, refdef);
+	}
 
-	R_AddEntitySurfaces(refdef);
+	{
+		PROFILE_ZONE("R: entity surfaces");
+		R_AddEntitySurfaces(refdef);
+	}
 
 	R_AddPolygonSurfaces(refdef);
 
@@ -2153,7 +2189,10 @@ void R_RenderView(const viewParms_t* parms)
 
 	R_GenerateDrawSurfs(&tr.viewParms, &tr.refdef);
 
-	R_SortAndSubmitDrawSurfs(tr.refdef.drawSurfs + tr.refdef.fistDrawSurf, tr.refdef.numDrawSurfs - tr.refdef.fistDrawSurf);
+	{
+		PROFILE_ZONE("R: sort + submit");
+		R_SortAndSubmitDrawSurfs(tr.refdef.drawSurfs + tr.refdef.fistDrawSurf, tr.refdef.numDrawSurfs - tr.refdef.fistDrawSurf);
+	}
 
 	// draw main system development information (surface outlines, etc)
 	R_DebugGraphics();
@@ -2684,8 +2723,52 @@ static float CalcSplit(float n, float f, float i, float m)
 	return (n * pow(f / n, i / m) + (f - n) * i / m) / 2.0f;
 }
 
+// r_dlightShadowMax (default 4, 0 = every light, as before): with r_dlightMode 2 every dynamic light renders
+// a 6-sided shadow map of everything around it. A big saber battle has a light per blade, so 15 lights made
+// 90 shadow views a frame. Only the lights nearest the camera cast shadows; the others still light.
+static void R_PickShadowedDlights(trRefdef_t* refdef)
+{
+	static cvar_t* maxShadowed = nullptr;
+	if (!maxShadowed)
+	{
+#ifdef REND2_SP
+		maxShadowed = ri.Cvar_Get("r_dlightShadowMax", "4", CVAR_ARCHIVE_ND);
+#else
+		maxShadowed = ri.Cvar_Get("r_dlightShadowMax", "4", CVAR_ARCHIVE_ND, "Dynamic lights casting shadows (r_dlightMode 2), nearest the camera first; 0 = all");
+#endif
+	}
+	const int maxN = maxShadowed->integer;
+	for (int i = 0; i < refdef->num_dlights; i++)
+	{
+		refdef->dlights[i].noShadow = 0;
+	}
+	if (maxN <= 0 || refdef->num_dlights <= maxN)
+	{
+		return;
+	}
+	// keep the maxN nearest (distance to the light's edge), drop the rest
+	float dist[MAX_DLIGHTS];
+	for (int i = 0; i < refdef->num_dlights; i++)
+	{
+		dist[i] = Distance(refdef->vieworg, refdef->dlights[i].origin) - refdef->dlights[i].radius;
+	}
+	for (int i = 0; i < refdef->num_dlights; i++)
+	{
+		int nearer = 0;
+		for (int j = 0; j < refdef->num_dlights; j++)
+		{
+			if (dist[j] < dist[i] || (dist[j] == dist[i] && j < i))
+			{
+				nearer++;
+			}
+		}
+		refdef->dlights[i].noShadow = nearer >= maxN;
+	}
+}
+
 void R_GatherFrameViews(trRefdef_t* refdef)
 {
+	PROFILE_ZONE("R: gather views (shadows, portals, cubemaps)");
 	int mainFlags = 0;
 	// skyportal view
 	if (tr.world &&
@@ -2723,8 +2806,13 @@ void R_GatherFrameViews(trRefdef_t* refdef)
 		// dlight shadowmaps
 		if (refdef->num_dlights && r_dlightMode->integer >= 2)
 		{
+			R_PickShadowedDlights(refdef);
 			for (int i = 0; i < refdef->num_dlights; i++)
 			{
+				if (refdef->dlights[i].noShadow)
+				{
+					continue;
+				}
 				viewParms_t		shadowParms;
 				int j = 0;
 

@@ -2239,6 +2239,7 @@ typedef enum
 	MBF_MELEEDODGE,
 	MBF_BLOCKWALKING,
 	MBF_ACCURATEMISSILEBLOCKING,
+	MBF_NPCBLOCKSTANCE, // SP: NPC holds a block stance (DH 2026-10-24 SP NPC port)
 } ManualBlockingFlag_e;
 
 typedef enum

@@ -509,6 +509,9 @@ typedef struct centity_s {
 	qboolean		ikStatus;
 
 	qboolean		saberWasInFlight;
+	qboolean		scepterModel;	// Ragnos' scepter (EF2_SCEPTER) is in ghoul2 slot 2, her left hand (CG_ScepterUpdate)
+	int				scepterAnim;	// the torso anim its effects were last started for
+	int				scepterFxTime;	// when its beam effect is renewed
 	qboolean		saberBlasterPistol; // SS_BLASTER (2026-10-14): the left hand pistol model is in ghoul2 slot 2
 
 	float			smoothYaw;
@@ -1649,6 +1652,11 @@ typedef struct cgEffects_s {
 	fxHandle_t  cloneShotEffect; // the Z-6 rotary cannon (from MovieDuels): its bolts and their impacts
 	fxHandle_t  cloneWallImpactEffect;
 	fxHandle_t  cloneFleshImpactEffect;
+	fxHandle_t  noghriShotEffect; // the noghri stick (from SJE SP): its darts, their impact and the gas cloud
+	fxHandle_t  noghriImpactEffect;
+	fxHandle_t  tuskenShotEffect; // the tusken rifle (from SJE SP): its shot and the impacts
+	fxHandle_t  tuskenHitEffect;
+	fxHandle_t  tuskenHitWallEffect;
 
 	// EWEB
 	fxHandle_t  ewebShotEffect;
@@ -1934,7 +1942,7 @@ extern	centity_t		cg_entities[MAX_GENTITIES];
 extern	centity_t* cg_permanents[MAX_GENTITIES];
 extern	int				cg_numpermanents;
 
-extern	weaponInfo_t	cg_weapons[MAX_WEAPONS];
+extern	weaponInfo_t	cg_weapons[WP_NUM_WEAPONS];
 extern	itemInfo_t		cg_items[MAX_ITEMS];
 extern	markPoly_t		cg_markPolys[MAX_MARK_POLYS];
 
@@ -2350,6 +2358,7 @@ void CG_CreateBBRefEnts(entityState_t* s1, vec3_t origin);
 
 void CG_InitG2Weapons(void);
 void CG_ShutDownG2Weapons(void);
+void CG_ScepterShutdown(void); // cg_players.c: Ragnos' scepter model
 void CG_CopyG2WeaponInstance(const centity_t* cent, int weapon_num, void* to_ghoul2);
 void* CG_G2WeaponInstance(const centity_t* cent, int weapon);
 void CG_CheckPlayerG2Weapons(const playerState_t* ps, centity_t* cent);

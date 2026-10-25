@@ -19,6 +19,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "tr_local.h"
+#include "q_profile.h"
 #include "MikkTSpace/mikktspace.h"
 
 /*
@@ -109,6 +110,7 @@ void R_SetBSPTSpaceBasic(const SMikkTSpaceContext* pContext, const float* fvTang
 
 void R_CalcMikkTSpaceBSPSurface(int numSurfaces, packedVertex_t* vertices, glIndex_t* indices)
 {
+	PROFILE_ZONE("Load: tangents BSP (MikkTSpace)");
 	SMikkTSpaceInterface tangentSpaceInterface;
 
 	tangentSpaceInterface.m_getNumFaces = R_GetNumFaces;
@@ -185,6 +187,7 @@ void R_SetModelTSpaceBasic(const SMikkTSpaceContext* pContext, const float* fvTa
 
 void R_CalcMikkTSpaceMD3Surface(int numSurfaces, mdvVertex_t* verts, uint32_t* tangents, mdvSt_t* texcoords, glIndex_t* indices)
 {
+	PROFILE_ZONE("Load: tangents .md3 (MikkTSpace)");
 	SMikkTSpaceInterface tangentSpaceInterface;
 	tangentSpaceInterface.m_getNumFaces = R_GetNumFaces;
 	tangentSpaceInterface.m_getNumVerticesOfFace = R_GetNumVertices;
@@ -264,6 +267,7 @@ void R_SetGlmTSpaceBasic(const SMikkTSpaceContext* pContext, const float* fvTang
 
 void R_CalcMikkTSpaceGlmSurface(int numSurfaces, mdxmVertex_t* vertices, mdxmVertexTexCoord_t* textureCoordinates, uint32_t* tangents, glIndex_t* indices)
 {
+	PROFILE_ZONE("Load: tangents .glm (MikkTSpace)");
 	SMikkTSpaceInterface tangentSpaceInterface;
 
 	tangentSpaceInterface.m_getNumFaces = R_GetNumFaces;

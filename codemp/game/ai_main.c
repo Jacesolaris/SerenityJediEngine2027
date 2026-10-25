@@ -280,6 +280,9 @@ int MinimumAttackDistance[WP_NUM_WEAPONS] =
 	0, //WP_CONCUSSION,
 	0, //WP_DROIDEKA,
 	0, //WP_Z6_ROTARY_CANNON,
+	0, //WP_NOGHRI_STICK,
+	0, //WP_TUSKEN_RIFLE,
+	0, //WP_TUSKEN_STAFF,
 	0, //WP_BRYAR_OLD,
 	0, //WP_EMPLACED_GUN,
 	0 //WP_TURRET,
@@ -306,6 +309,9 @@ int MaximumAttackDistance[WP_NUM_WEAPONS] =
 	9999, //WP_CONCUSSION,
 	9999, //WP_DROIDEKA,
 	9999, //WP_Z6_ROTARY_CANNON,
+	1200, //WP_NOGHRI_STICK, (the darts are slow)
+	9999, //WP_TUSKEN_RIFLE,
+	100, //WP_TUSKEN_STAFF, (a swing reaches 78, the lunge 96, both from the edge of the bot)
 	9999, //WP_BRYAR_OLD,
 	9999, //WP_EMPLACED_GUN,
 	9999 //WP_TURRET,
@@ -332,6 +338,9 @@ int IdealAttackDistance[WP_NUM_WEAPONS] =
 	1000, //WP_CONCUSSION,
 	1000, //WP_DROIDEKA,
 	1000, //WP_Z6_ROTARY_CANNON,
+	350, //WP_NOGHRI_STICK, (close enough to finish them with the stick)
+	1000, //WP_TUSKEN_RIFLE,
+	50, //WP_TUSKEN_STAFF,
 	1000, //WP_BRYAR_OLD,
 	1000, //WP_EMPLACED_GUN,
 	1000 //WP_TURRET,
@@ -1783,6 +1792,759 @@ static void remove_color_escape_sequences(char* text)
 }
 
 /*
+=====================================================================================================================
+Ragnos' scepter for the Possessed Tavion bot (2026-10-23)
+
+SP's WP_SCEPTER (code/game/AI_Jedi.cpp: Tavion_StartScepterBeam, Tavion_StartScepterSlam, Tavion_ScepterDamage,
+Tavion_ScepterSlam and the BOTH_SCEPTER_* / BOTH_TAVION_SCEPTERGROUND steps of the Jedi special anims) for MP bots.
+
+MP has no free weapon number for it (MovieDuels' weapon bits are all used), so here the scepter is not a weapon:
+EF2_SCEPTER on the bot (G_ScepterSpawnCheck, from ClientSpawn) says she holds it. The cgame puts its model in her
+left hand and plays its warmup and beam effects on its tip (cg_players.c, CG_ScepterUpdate). The attacks are SP's:
+- close in (enemy_dist <= SCEPTER_SLAM_DIST; SP: <= 0, 1 in 21): SCEPTER_SLAM_CHANCE every 100 ms of the ground slam,
+  BOTH_TAVION_SCEPTERGROUND. 1.2 s before its end the scepter hits the ground: everything within 300 is thrown
+  and knocked down, 20-30 damage within 150, breakables take 100
+- at range (up to SCEPTER_BEAM_DIST; SP: 50-384, 1 in 21): SCEPTER_BEAM_CHANCE of the beam, BOTH_SCEPTER_START, _HOLD, _STOP: from the
+  scepter's tip, 512 long, following the scepter as the anim sweeps it; a hit does 10-20 x (skill + 1) damage, throws
+  and 1 time in 3 knocks down (SP's g_spskill: the bot's skill, 1-2 easy, 3 medium, 4-5 hard)
+After each attack: SCEPTER_COOLDOWN ms with the sword only (DH 2026-10-24).
+enemy_dist is SP's: the distance less her saber length, 1.5 x her width and 16. While an attack plays she stands
+still and only turns to her enemy (SP: PMF_TIME_KNOCKBACK, pm_time and NPC_FaceEnemy; here her moves and buttons
+are cleared, bot_scepter_cmd). The beam's loop sound is G_SetClientSound's (g_active.c).
+Damage is MOD_FORCE_DARK (SP used MOD_SABER for the beam, but MP's MOD_SABER does 4x damage to non Jedi, and
+MOD_EXPLOSIVE_SPLASH for the slam, which MP does not have). Teammates are left alone in team games.
+The scepter's tip and handle come from her server model: the scepter model is in its slot 2 too, bolted to her left
+hand as in the cgame, and its "*flash" / "*weapon" bolts are read straight off it (bot_scepter_bolt, 2026-10-24);
+without the model they are her left hand and her view.
+=====================================================================================================================
+*/
+#define SCEPTER_BEAM_RANGE		512.0f
+#define SCEPTER_SLAM_RADIUS		300.0f
+// her attack pattern (DH 2026-10-24): the beam is her ranged attack, the slam her close one, then a cooldown with the
+// sword only. The rolls are every 100 ms while she can start an attack (SP rolled 1 in 21 for both)
+#define SCEPTER_SLAM_DIST		50.0f		// enemy_dist (SP's: less saber length and widths) up to this: the slam
+#define SCEPTER_BEAM_DIST		480.0f		// enemy_dist up to this (the beam reaches 512 from the tip): the beam
+#define SCEPTER_SLAM_CHANCE		4			// 1 chance in 4 per roll
+#define SCEPTER_BEAM_CHANCE		8			// 1 chance in 8 per roll
+#define SCEPTER_COOLDOWN		6000		// ms of sword only after an attack ends
+#define SCEPTER_BEAM_TURN		90.0f		// degrees a second her aim (and the beam) turns after her enemy while she attacks
+
+extern void G_Knockdown(gentity_t* self, gentity_t* attacker, const vec3_t push_dir, float strength, const qboolean breakSaberLock);
+extern qboolean G_EntIsBreakable(int entityNum);
+extern qboolean PM_InRoll(const playerState_t* ps);
+
+static int scepterNextCheck[MAX_CLIENTS];		// next attack roll
+static int scepterCooldown[MAX_CLIENTS];		// sword only until then (SCEPTER_COOLDOWN after her last attack)
+static int scepterAimTime[MAX_CLIENTS];		// her last aim turn (bot_scepter_think)
+static qboolean scepterWasAttacking[MAX_CLIENTS];	// she was in an attack last frame
+static int scepterNextDamage[MAX_CLIENTS];		// next beam damage check
+static qboolean scepterSlamDone[MAX_CLIENTS];	// this slam has hit the ground (SP: NPC->count)
+
+static qboolean scepterModelTried = qfalse;
+static void* scepterG2 = NULL;					// the scepter model, copied into her server ghoul2 slot 2 (bot_scepter_attach)
+static int scepterFlashBolt = -1;				// its "*flash" bolt (the tip), in the copy too
+static int scepterHandleBolt = -1;				// its "*weapon" bolt (the slam's handle)
+
+static qboolean bot_scepter_model(const char* model)
+{
+	// the models that get the scepter (bots only): SP's tavion_sith_sword NPC (customSkin possessed)
+	return model && !Q_stricmp(model, "tavion_new/possessed") ? qtrue : qfalse;
+}
+
+static qboolean bot_scepter_anim(const int anim)
+{
+	return anim == BOTH_SCEPTER_START || anim == BOTH_SCEPTER_HOLD || anim == BOTH_SCEPTER_STOP
+		|| anim == BOTH_TAVION_SCEPTERGROUND ? qtrue : qfalse;
+}
+
+// SP's g_spskill for a bot: 0 (easy) for bot skill 1-2, 1 (medium) for 3, 2 (hard) for 4-5
+static int bot_scepter_skill(const int clientNum)
+{
+	const bot_state_t* bs = clientNum >= 0 && clientNum < MAX_CLIENTS ? botstates[clientNum] : NULL;
+	const float skill = bs && bs->inuse ? bs->settings.skill : 3.0f;
+
+	if (skill <= 2.0f)
+	{
+		return 0;
+	}
+	if (skill < 4.0f)
+	{
+		return 1;
+	}
+	return 2;
+}
+
+// the scepter model: SP's WP_SCEPTER world model, models/weapons2/sith_scepter/sith_scepter_w.glm (its *weapon and *flash
+// tags are the handle and the tip). weapons.dat's sith_scepter.md3 is the first person (view) model: an .md3 is not a
+// Ghoul2 model, so it can't be bolted to her hand or carry the beam effects (MP's rule, as for every weapon: the world
+// model is the .md3's name with _w.glm). If that file is not there, the scepter folders are searched for a .glm, a
+// world model (_w) before others, never sith_scepter_only.glm (an unused model on its own skeleton) (2026-10-24)
+static const char* bot_ScepterModelPath(void)
+{
+	static char path[MAX_QPATH];
+	static qboolean searched = qfalse;
+	static const char* const worldModel = "models/weapons2/sith_scepter/sith_scepter_w.glm";
+	char list[4096];
+	char dirList[8192];
+	fileHandle_t f = 0;
+
+	if (searched)
+	{
+		return path[0] ? path : NULL;
+	}
+	searched = qtrue;
+	path[0] = '\0';
+
+	if (trap->FS_Open(worldModel, &f, FS_READ) > 0)
+	{
+		Q_strncpyz(path, worldModel, sizeof path);
+	}
+	if (f)
+	{
+		trap->FS_Close(f);
+	}
+
+	for (int pass = 0; pass < 2 && !path[0]; pass++)
+	{
+		const int numDirs = pass ? trap->FS_GetFileList("models/weapons2", "/", dirList, sizeof dirList) : 1;
+		const char* dirName = dirList;
+
+		for (int d = 0; d < numDirs && !path[0]; d++)
+		{
+			char dir[MAX_QPATH];
+
+			if (pass)
+			{
+				const char* name = dirName;
+				dirName += strlen(dirName) + 1;
+				if (!Q_stristr(name, "scepter") || !Q_stricmp(name, "sith_scepter"))
+				{
+					continue; // sith_scepter itself was the first pass
+				}
+				Com_sprintf(dir, sizeof dir, "models/weapons2/%s", name);
+			}
+			else
+			{
+				Q_strncpyz(dir, "models/weapons2/sith_scepter", sizeof dir);
+			}
+
+			const int numFiles = trap->FS_GetFileList(dir, ".glm", list, sizeof list);
+			const char* file = list;
+			const char* pick = NULL;
+			int pickScore = -1;
+
+			for (int i = 0; i < numFiles; i++, file += strlen(file) + 1)
+			{
+				if (Q_stristr(file, "_only"))
+				{
+					continue;
+				}
+				const int score = (Q_stristr(file, "_w.glm") ? 2 : 0) + (Q_stristr(file, "scepter") ? 1 : 0);
+				if (score > pickScore)
+				{
+					pick = file;
+					pickScore = score;
+				}
+			}
+			if (pick)
+			{
+				Com_sprintf(path, sizeof path, "%s/%s", dir, pick);
+			}
+		}
+	}
+
+	if (path[0])
+	{
+		Com_Printf("sith_scepter: %s\n", path);
+		return path;
+	}
+	Com_Printf(S_COLOR_YELLOW "sith_scepter: no scepter model found (%s)\n", worldModel);
+	return NULL;
+}
+
+// the scepter model, once: bolted to bolt 1 of the model it is copied into (her "*l_hand", SetupGameGhoul2Model)
+static void bot_scepter_load_model(void)
+{
+	if (scepterModelTried)
+	{
+		return;
+	}
+	scepterModelTried = qtrue;
+
+	const char* model = bot_ScepterModelPath();
+	if (model)
+	{
+		trap->G2API_InitGhoul2Model(&scepterG2, model, 0, 0, 0, 0, 0);
+	}
+	if (!scepterG2)
+	{
+		Com_Printf(S_COLOR_YELLOW "Scepter: no model, the beam and slam come from the left hand\n");
+		return;
+	}
+	trap->G2API_SetBoltInfo(scepterG2, 0, 1);
+	scepterFlashBolt = trap->G2API_AddBolt(scepterG2, 0, "*flash");
+	scepterHandleBolt = trap->G2API_AddBolt(scepterG2, 0, "*weapon");
+}
+
+// G_ShutdownGame
+void G_ScepterShutdown(void)
+{
+	if (scepterG2 && trap->G2API_HaveWeGhoul2Models(scepterG2))
+	{
+		trap->G2API_CleanGhoul2Models(&scepterG2);
+	}
+	scepterG2 = NULL;
+	scepterModelTried = qfalse;
+	scepterFlashBolt = scepterHandleBolt = -1;
+}
+
+// the scepter in her server model too, slot 2 (a single saber user's free slot, as in the cgame), so its tip and handle
+// are the real ones as the anims move it (SP: the NPC's weaponModel[1] and genericBolt1). Her ghoul2 is rebuilt on
+// a model change, so this is checked each time
+static qboolean bot_scepter_attach(gentity_t* self)
+{
+	bot_scepter_load_model();
+	if (!scepterG2 || !self->ghoul2 || self->client->saber[1].model[0])
+	{
+		return qfalse;
+	}
+	if (!trap->G2API_HasGhoul2ModelOnIndex(&self->ghoul2, 2))
+	{
+		trap->G2API_CopySpecificGhoul2Model(scepterG2, 0, self->ghoul2, 2);
+	}
+	return trap->G2API_HasGhoul2ModelOnIndex(&self->ghoul2, 2) ? qtrue : qfalse;
+}
+
+// where the scepter's tip (tip qtrue) or handle is at time, and which way the tip points (SP: the scepter model's
+// "*flash" / "*weapon" bolt, ORIGIN and NEGATIVE_X); without the model, her left hand and her view
+static qboolean bot_scepter_bolt(gentity_t* self, const int time, const qboolean tip, vec3_t org, vec3_t dir)
+{
+	mdxaBone_t bolt;
+	vec3_t angles;
+	int model = 2;
+	int boltNum = tip ? scepterFlashBolt : scepterHandleBolt;
+
+	if (!self->client || !self->ghoul2)
+	{
+		return qfalse;
+	}
+
+	if (!bot_scepter_attach(self) || boltNum < 0)
+	{
+		model = 0;
+		boltNum = trap->G2API_AddBolt(self->ghoul2, 0, "*l_hand");
+		if (boltNum < 0)
+		{
+			return qfalse;
+		}
+	}
+
+	VectorSet(angles, 0.0f, self->client->ps.viewangles[YAW], 0.0f);
+	if (!trap->G2API_GetBoltMatrix(self->ghoul2, model, boltNum, &bolt, angles, self->client->ps.origin, time, NULL,
+		self->modelScale))
+	{
+		return qfalse;
+	}
+
+	BG_GiveMeVectorFromMatrix(&bolt, ORIGIN, org);
+	if (dir)
+	{
+		// at what she looks at, not along the staff as SP: MD's hold anim points the staff up and away in MP and the
+		// beam missed by far (DH 2026-10-24). Her view follows her enemy at SCEPTER_BEAM_TURN (bot_scepter_think),
+		// and the cgame aims the beam the same way (CG_ScepterBeam)
+		vec3_t eye, fwd, end;
+		trace_t tr;
+
+		VectorCopy(self->client->ps.origin, eye);
+		eye[2] += self->client->ps.viewheight;
+		AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
+		VectorMA(eye, 2048.0f, fwd, end);
+		trap->Trace(&tr, eye, NULL, NULL, end, self->s.number, MASK_SHOT, qfalse, 0, 0);
+		VectorSubtract(tr.endpos, org, dir);
+		if (VectorNormalize(dir) < 1.0f)
+		{
+			VectorCopy(fwd, dir);
+		}
+	}
+	return qtrue;
+}
+
+// SP's Tavion_ScepterDamage: the beam, three samples 25 ms apart so its sweep doesn't skip past anyone
+static void bot_scepter_beam_damage(gentity_t* self, const gentity_t* enemy)
+{
+	qboolean hit = qfalse;
+	qboolean impact = qfalse;
+	int lastHit = ENTITYNUM_NONE;
+	const int skill = bot_scepter_skill(self->s.number);
+
+	for (int time = level.time - 25; time <= level.time + 25 && !hit; time += 25)
+	{
+		vec3_t base, dir, tip;
+		trace_t trace;
+
+		if (!bot_scepter_bolt(self, time, qtrue, base, dir))
+		{
+			return;
+		}
+		VectorMA(base, SCEPTER_BEAM_RANGE, dir, tip);
+		trap->Trace(&trace, base, vec3_origin, vec3_origin, tip, self->s.number, MASK_SHOT, qfalse, 0, 0);
+		if (trace.fraction >= 1.0f || trace.entityNum == ENTITYNUM_NONE)
+		{
+			continue;
+		}
+
+		gentity_t* traceEnt = &g_entities[trace.entityNum];
+
+		if (!impact)
+		{
+			// SP played this for every sample; once a check is plenty of events
+			G_PlayEffectID(G_EffectIndex("scepter/impact.efx"), trace.endpos, trace.plane.normal);
+			impact = qtrue;
+		}
+
+		if (traceEnt->takedamage
+			&& trace.entityNum != lastHit
+			&& traceEnt != self
+			&& (!traceEnt->client || traceEnt == enemy || !OnSameTeam(self, traceEnt)))
+		{
+			const int dmg = Q_irand(10, 20) * (skill + 1);
+
+			G_Damage(traceEnt, self, self, dir, trace.endpos, dmg, DAMAGE_NO_KNOCKBACK, MOD_FORCE_DARK);
+			if (traceEnt->client && traceEnt->inuse)
+			{
+				G_Throw(traceEnt, dir, Q_flrand(50.0f, 80.0f));
+				if (traceEnt->health > 0 && !Q_irand(0, 2))
+				{
+					G_Knockdown(traceEnt, self, dir, 300, qtrue);
+				}
+			}
+			hit = qtrue;
+			lastHit = trace.entityNum;
+		}
+	}
+}
+
+// SP's Tavion_ScepterSlam
+static void bot_scepter_slam(gentity_t* self)
+{
+	static int radiusEnts[128];
+	vec3_t handle, bottom, mins = { 0 }, maxs = { 0 };
+	trace_t trace;
+	const float halfRad = SCEPTER_SLAM_RADIUS / 2.0f;
+	const int skill = bot_scepter_skill(self->s.number);
+
+	if (!bot_scepter_bolt(self, level.time, qfalse, handle, NULL))
+	{
+		return;
+	}
+	VectorCopy(handle, bottom);
+	bottom[2] -= 128.0f;
+	trap->Trace(&trace, handle, vec3_origin, vec3_origin, bottom, self->s.number, MASK_SHOT, qfalse, 0, 0);
+	G_PlayEffectID(G_EffectIndex("scepter/slam.efx"), trace.endpos, trace.plane.normal);
+
+	for (int i = 0; i < 3; i++)
+	{
+		mins[i] = trace.endpos[i] - SCEPTER_SLAM_RADIUS;
+		maxs[i] = trace.endpos[i] + SCEPTER_SLAM_RADIUS;
+	}
+
+	const int numEnts = trap->EntitiesInBox(mins, maxs, radiusEnts, 128);
+
+	for (int i = 0; i < numEnts; i++)
+	{
+		gentity_t* radiusEnt;
+		vec3_t entDir;
+
+		if (radiusEnts[i] < 0 || radiusEnts[i] >= MAX_GENTITIES)
+		{
+			continue;
+		}
+		radiusEnt = &g_entities[radiusEnts[i]];
+
+		if (!radiusEnt->inuse || radiusEnt == self || radiusEnt->flags & FL_NO_KNOCKBACK)
+		{
+			continue;
+		}
+
+		if (!radiusEnt->client)
+		{
+			// breakables in range take some damage too
+			if (G_EntIsBreakable(radiusEnt->s.number))
+			{
+				G_Damage(radiusEnt, self, self, NULL, radiusEnt->r.currentOrigin, 100, 0, MOD_FORCE_DARK);
+			}
+			continue;
+		}
+
+		if (radiusEnt->client->ps.eFlags2 & EF2_HELD_BY_MONSTER || OnSameTeam(self, radiusEnt))
+		{
+			continue;
+		}
+
+		VectorSubtract(radiusEnt->r.currentOrigin, trace.endpos, entDir);
+		const float dist = VectorNormalize(entDir);
+		if (dist > SCEPTER_SLAM_RADIUS)
+		{
+			continue;
+		}
+
+		if (dist < halfRad)
+		{
+			// close enough to be hurt, too
+			G_Damage(radiusEnt, self, self, NULL, radiusEnt->r.currentOrigin, Q_irand(20, 30), DAMAGE_NO_KNOCKBACK,
+				MOD_FORCE_DARK);
+			if (!radiusEnt->inuse || !radiusEnt->client)
+			{
+				continue;
+			}
+		}
+
+		if (radiusEnt->client->NPC_class != CLASS_RANCOR && radiusEnt->client->NPC_class != CLASS_ATST)
+		{
+			float throwStr;
+
+			if (skill > 1)
+			{
+				throwStr = 10.0f + (SCEPTER_SLAM_RADIUS - dist) / 2.0f;
+				if (throwStr > 150.0f)
+				{
+					throwStr = 150.0f;
+				}
+			}
+			else
+			{
+				throwStr = 10.0f + (SCEPTER_SLAM_RADIUS - dist) / 4.0f;
+				if (throwStr > 85.0f)
+				{
+					throwStr = 85.0f;
+				}
+			}
+			entDir[2] += 0.1f;
+			VectorNormalize(entDir);
+			G_Throw(radiusEnt, entDir, throwStr);
+			if (radiusEnt->health > 0
+				&& (dist < halfRad || radiusEnt->client->ps.groundEntityNum != ENTITYNUM_NONE))
+			{
+				// within reach of the scepter, or on the shaking ground
+				G_Knockdown(radiusEnt, self, vec3_origin, 500, qtrue);
+			}
+		}
+	}
+}
+
+// SP: an NPC_SetAnim with OVERRIDE | HOLD, plus the stand-still lock (pm_time + PMF_TIME_KNOCKBACK, no velocity)
+static void bot_scepter_set_anim(gentity_t* self, const int anim, const int addTime)
+{
+	gclient_t* cl = self->client;
+
+	cl->ps.legsTimer = cl->ps.torsoTimer = 0;
+	G_SetAnim(self, NULL, SETANIM_BOTH, anim, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
+	cl->ps.torsoTimer += addTime;
+	cl->ps.pm_time = cl->ps.torsoTimer;
+	cl->ps.pm_flags |= PMF_TIME_KNOCKBACK;
+	cl->ps.weaponTime = cl->ps.torsoTimer;
+	cl->ps.saberMove = cl->ps.saberBounceMove = LS_READY;
+	cl->ps.saberBlocked = BLOCKED_NONE;
+	VectorClear(cl->ps.velocity);
+	self->painDebounceTime = level.time + cl->ps.torsoTimer;
+}
+
+// is she in one of her scepter attacks (an anim that still plays, or a step still to take)
+static qboolean bot_scepter_attacking(const gentity_t* self)
+{
+	const gclient_t* cl = self->client;
+
+	if (!cl || !(cl->ps.eFlags2 & EF2_SCEPTER) || self->health <= 0 || cl->ps.pm_type == PM_DEAD)
+	{
+		return qfalse;
+	}
+	if (cl->ps.torsoAnim == BOTH_SCEPTER_START || cl->ps.torsoAnim == BOTH_SCEPTER_HOLD)
+	{
+		return qtrue; // the next step comes from bot_scepter_frame
+	}
+	return bot_scepter_anim(cl->ps.torsoAnim) && cl->ps.torsoTimer > 0 ? qtrue : qfalse;
+}
+
+// can she start an attack now (a free moment on the ground, as SP's Jedi_CombatDistance)
+static qboolean bot_scepter_can_start(const gentity_t* self)
+{
+	const gclient_t* cl = self->client;
+	const animation_t* anims = bgAllAnims[self->localAnimIndex].anims;
+
+	if (cl->ps.weapon != WP_SABER
+		|| cl->ps.saberInFlight
+		|| cl->ps.groundEntityNum == ENTITYNUM_NONE
+		|| cl->ps.m_iVehicleNum
+		|| cl->ps.saberLockTime > level.time
+		|| cl->ps.weaponTime > 0
+		|| cl->ps.torsoTimer > 0
+		|| cl->ps.legsTimer > 0
+		|| cl->ps.fd.forceGripBeingGripped > level.time
+		|| cl->ps.eFlags2 & EF2_HELD_BY_MONSTER
+		|| cl->ps.userInt3 & 1 << FLAG_FROZEN
+		|| PM_InKnockDown(&cl->ps)
+		|| PM_InRoll(&cl->ps))
+	{
+		return qfalse;
+	}
+
+	// her model must have the scepter anims
+	if (!anims[BOTH_SCEPTER_START].numFrames || !anims[BOTH_SCEPTER_HOLD].numFrames
+		|| !anims[BOTH_SCEPTER_STOP].numFrames || !anims[BOTH_TAVION_SCEPTERGROUND].numFrames)
+	{
+		return qfalse;
+	}
+	return qtrue;
+}
+
+// SP's Jedi_CombatDistance: now and then, the slam close in or the beam at mid range
+static void bot_scepter_try_attack(bot_state_t* bs, gentity_t* self)
+{
+	const int n = self->s.number;
+	const gentity_t* enemy = bs->currentEnemy;
+	vec3_t eye, enemyEye;
+	trace_t trace;
+
+	if (level.time < scepterNextCheck[n] || level.time < scepterCooldown[n])
+	{
+		return;
+	}
+	scepterNextCheck[n] = level.time + 100;
+
+	if (!enemy || !enemy->inuse || !enemy->client || enemy->health <= 0 || enemy == self
+		|| !bot_scepter_can_start(self))
+	{
+		return;
+	}
+
+	const float saberLength = self->client->saber[0].blade[0].lengthMax;
+	const float enemyDist = Distance(self->client->ps.origin, enemy->r.currentOrigin)
+		- (saberLength + self->r.maxs[0] * 1.5f + 16.0f);
+
+	if (enemyDist > SCEPTER_BEAM_DIST)
+	{
+		return;
+	}
+	if (Q_irand(1, enemyDist <= SCEPTER_SLAM_DIST ? SCEPTER_SLAM_CHANCE : SCEPTER_BEAM_CHANCE) != 1)
+	{
+		return;
+	}
+
+	// she has to see him
+	VectorCopy(self->client->ps.origin, eye);
+	eye[2] += self->client->ps.viewheight;
+	VectorCopy(enemy->r.currentOrigin, enemyEye);
+	if (enemy->client)
+	{
+		enemyEye[2] += enemy->client->ps.viewheight;
+	}
+	trap->Trace(&trace, eye, NULL, NULL, enemyEye, self->s.number, MASK_SOLID | CONTENTS_BODY, qfalse, 0, 0);
+	if (trace.fraction < 1.0f && trace.entityNum != enemy->s.number)
+	{
+		return;
+	}
+
+	if (enemyDist <= SCEPTER_SLAM_DIST)
+	{
+		// SP's Tavion_StartScepterSlam
+		G_SoundOnEnt(self, CHAN_ITEM, "sound/weapons/scepter/slam_warmup.wav");
+		bot_scepter_set_anim(self, BOTH_TAVION_SCEPTERGROUND, 0);
+		scepterSlamDone[n] = qfalse;
+	}
+	else
+	{
+		// SP's Tavion_StartScepterBeam
+		G_SoundOnEnt(self, CHAN_ITEM, "sound/weapons/scepter/beam_warmup.wav");
+		bot_scepter_set_anim(self, BOTH_SCEPTER_START, 200);
+		scepterNextDamage[n] = 0;
+	}
+}
+
+// every server frame, before her command: the attack steps (SP: NPC_Jedi's BOTH_SCEPTER_* / SCEPTERGROUND handling),
+// or the roll for a new attack
+static void bot_scepter_frame(bot_state_t* bs)
+{
+	gentity_t* self = &g_entities[bs->client];
+	gclient_t* cl = self->client;
+	const int n = bs->client;
+
+	if (!cl || !(cl->ps.eFlags2 & EF2_SCEPTER) || self->health <= 0 || cl->ps.pm_type == PM_DEAD)
+	{
+		return;
+	}
+
+	if (!bot_scepter_attacking(self))
+	{
+		if (scepterWasAttacking[n])
+		{
+			// an attack just ended: the sword only for a while
+			scepterWasAttacking[n] = qfalse;
+			scepterCooldown[n] = level.time + SCEPTER_COOLDOWN;
+		}
+		bot_scepter_try_attack(bs, self);
+		return;
+	}
+	scepterWasAttacking[n] = qtrue;
+
+	switch (cl->ps.torsoAnim)
+	{
+	case BOTH_SCEPTER_START:
+		if (cl->ps.torsoTimer <= 100)
+		{
+			// the beam starts (the cgame shows it while the hold plays)
+			bot_scepter_set_anim(self, BOTH_SCEPTER_HOLD, 200);
+		}
+		break;
+	case BOTH_SCEPTER_HOLD:
+		if (cl->ps.torsoTimer <= 100)
+		{
+			bot_scepter_set_anim(self, BOTH_SCEPTER_STOP, 0);
+		}
+		else if (level.time >= scepterNextDamage[n] || scepterNextDamage[n] > level.time + 1000)
+		{
+			scepterNextDamage[n] = level.time + 100;
+			bot_scepter_beam_damage(self, bs->currentEnemy);
+		}
+		break;
+	case BOTH_TAVION_SCEPTERGROUND:
+		if (cl->ps.torsoTimer <= 1200 && !scepterSlamDone[n])
+		{
+			scepterSlamDone[n] = qtrue;
+			bot_scepter_slam(self);
+		}
+		break;
+	default:
+		break;
+	}
+}
+
+// her think while she attacks: no other AI, she turns to her enemy (SP: NPC_FaceEnemy)
+static qboolean bot_scepter_think(bot_state_t* bs)
+{
+	const gentity_t* self = &g_entities[bs->client];
+	const gentity_t* enemy = bs->currentEnemy;
+
+	if (!bot_scepter_attacking(self))
+	{
+		return qfalse;
+	}
+
+	if (enemy && enemy->inuse && enemy->client && enemy->health > 0)
+	{
+		vec3_t dir, angles, enemyChest;
+		const int n = bs->client;
+		int dt = level.time - scepterAimTime[n];
+
+		VectorCopy(enemy->r.currentOrigin, enemyChest);
+		enemyChest[2] += enemy->client->ps.viewheight * 0.5f;
+		VectorSubtract(enemyChest, bs->eye, dir);
+		vectoangles(dir, angles);
+
+		// the beam aims where she looks, so her aim turns at most SCEPTER_BEAM_TURN a second: it sweeps after a
+		// target on the move instead of locking on
+		if (dt <= 0 || dt > 200)
+		{
+			dt = 50;
+		}
+		scepterAimTime[n] = level.time;
+		for (int i = PITCH; i <= YAW; i++)
+		{
+			const float maxTurn = SCEPTER_BEAM_TURN * dt / 1000.0f;
+			float delta = AngleSubtract(angles[i], self->client->ps.viewangles[i]);
+
+			if (delta > maxTurn)
+			{
+				delta = maxTurn;
+			}
+			else if (delta < -maxTurn)
+			{
+				delta = -maxTurn;
+			}
+			angles[i] = AngleMod(self->client->ps.viewangles[i] + delta);
+		}
+		angles[ROLL] = 0.0f;
+		VectorCopy(angles, bs->goalAngles);
+		VectorCopy(angles, bs->ideal_viewangles);
+	}
+	return qtrue;
+}
+
+// her command: no taunts while she holds the scepter (SP: Jedi_Taunt), and while she attacks she stands still and does
+// nothing else (her view still turns)
+static void bot_scepter_cmd(const bot_state_t* bs, usercmd_t* ucmd)
+{
+	const gentity_t* self = &g_entities[bs->client];
+
+	if (!self->client || !(self->client->ps.eFlags2 & EF2_SCEPTER))
+	{
+		return;
+	}
+	ucmd->buttons &= ~(BUTTON_GLOAT | BUTTON_FLOURISH | BUTTON_GESTURE);
+	if (!bot_scepter_attacking(self))
+	{
+		return;
+	}
+	ucmd->forwardmove = ucmd->rightmove = ucmd->upmove = 0;
+	ucmd->buttons = 0;
+	ucmd->generic_cmd = 0;
+}
+
+// ClientSpawn: the scepter for the Possessed Tavion bot (EF2_SCEPTER), and her attack timers reset
+void G_ScepterSpawnCheck(gentity_t* ent)
+{
+	if (!ent || !ent->client)
+	{
+		return;
+	}
+
+	gclient_t* cl = ent->client;
+	const int n = ent->s.number;
+	char userinfo[MAX_INFO_STRING];
+	char model[MAX_QPATH];
+
+	cl->ps.eFlags2 &= ~EF2_SCEPTER;
+
+	// her model from her userinfo: client->modelname is still empty at a bot's first spawn
+	trap->GetUserinfo(n, userinfo, sizeof userinfo);
+	Q_strncpyz(model, Info_ValueForKey(userinfo, "model"), sizeof model);
+	if (!model[0])
+	{
+		Q_strncpyz(model, cl->modelname, sizeof model);
+	}
+	if (n >= 0 && n < MAX_CLIENTS)
+	{
+		scepterNextCheck[n] = level.time + 2000; // not the moment she arrives
+		scepterCooldown[n] = 0;
+		scepterWasAttacking[n] = qfalse;
+		scepterNextDamage[n] = 0;
+		scepterSlamDone[n] = qtrue;
+	}
+
+	if (trap->Cvar_VariableIntegerValue("developer"))
+	{
+		Com_Printf("Scepter check: %s, model \"%s\", bot %i, saber2 \"%s\" -> %s\n", cl->pers.netname, model,
+			ent->r.svFlags & SVF_BOT ? 1 : 0, cl->saber[1].model,
+			ent->r.svFlags & SVF_BOT && bot_scepter_model(model) && !cl->saber[1].model[0] ? "scepter" : "none");
+	}
+
+	if (!(ent->r.svFlags & SVF_BOT) || !bot_scepter_model(model) || cl->saber[1].model[0])
+	{
+		// bots only (the attacks are AI), and her left hand must be free
+		return;
+	}
+
+	cl->ps.eFlags2 |= EF2_SCEPTER;
+
+	// SP's NPC_TavionScepter_Precache (the warmup and beam effects are the cgame's)
+	G_EffectIndex("scepter/slam.efx");
+	G_EffectIndex("scepter/impact.efx");
+	G_SoundIndex("sound/weapons/scepter/loop.wav");
+	G_SoundIndex("sound/weapons/scepter/slam_warmup.wav");
+	G_SoundIndex("sound/weapons/scepter/beam_warmup.wav");
+	bot_scepter_attach(ent);
+}
+
+/*
 ==============
 BotAI
 ==============
@@ -1848,7 +2610,11 @@ static int bot_ai(const int client, const float thinktime)
 	qboolean lowSkill = (bs->settings.skill <= 3 ? qtrue : qfalse);
 	qboolean notSaber = (bs->cur_ps.weapon != WP_SABER ? qtrue : qfalse);
 
-	if (lowSkill == qtrue || notSaber == qtrue)
+	if (bot_scepter_think(bs))
+	{
+		// in a scepter attack (the Possessed Tavion bot): she only turns to her enemy
+	}
+	else if (lowSkill == qtrue || notSaber == qtrue)
 	{
 		standard_bot_ai(bs);
 	}
@@ -1978,6 +2744,9 @@ int bot_ai_setup_client(const int client, const struct bot_settings_s* settings)
 	bs->botWeaponWeights[WP_CONCUSSION] = 15;
 	bs->botWeaponWeights[WP_DROIDEKA] = 12;
 	bs->botWeaponWeights[WP_Z6_ROTARY_CANNON] = 12;
+	bs->botWeaponWeights[WP_NOGHRI_STICK] = 0; // the noghri's weapon: only bots whose personality asks for it
+	bs->botWeaponWeights[WP_TUSKEN_RIFLE] = 0; // the tuskens' weapons: only bots whose personality asks for them
+	bs->botWeaponWeights[WP_TUSKEN_STAFF] = 0;
 	bs->botWeaponWeights[WP_BRYAR_OLD] = 19;
 
 	BotUtilizePersonality(bs);
@@ -3351,7 +4120,7 @@ static int favorite_weapon(bot_state_t* bs, const gentity_t* target, const qbool
 	for (int i = 0; i < WP_NUM_WEAPONS; i++)
 	{
 		if (have_check &&
-			!(bs->cur_ps.stats[STAT_WEAPONS] & 1 << i))
+			!(BG_HasWeapon(bs->cur_ps.stats, i)))
 		{
 			//check to see if we actually have this weapon.
 			continue;
@@ -3364,7 +4133,7 @@ static int favorite_weapon(bot_state_t* bs, const gentity_t* target, const qbool
 			continue;
 		}
 
-		if (ignore_weaps & 1 << i)
+		if (WP_MASK_HAS(ignore_weaps, i))
 		{
 			//check to see if this weapon is on our ignored weapons list
 			continue;
@@ -3442,13 +4211,13 @@ void reset_wp_timers(bot_state_t* bs);
 
 static qboolean have_heavy_weapon(const int weapons)
 {
-	if (weapons & 1 << WP_SABER
-		|| weapons & 1 << WP_ROCKET_LAUNCHER
-		|| weapons & 1 << WP_THERMAL
-		|| weapons & 1 << WP_TRIP_MINE
-		|| weapons & 1 << WP_DET_PACK
-		|| weapons & 1 << WP_CONCUSSION
-		|| weapons & 1 << WP_FLECHETTE)
+	if (WP_MASK_HAS(weapons, WP_SABER)
+		|| WP_MASK_HAS(weapons, WP_ROCKET_LAUNCHER)
+		|| WP_MASK_HAS(weapons, WP_THERMAL)
+		|| WP_MASK_HAS(weapons, WP_TRIP_MINE)
+		|| WP_MASK_HAS(weapons, WP_DET_PACK)
+		|| WP_MASK_HAS(weapons, WP_CONCUSSION)
+		|| WP_MASK_HAS(weapons, WP_FLECHETTE))
 	{
 		return qtrue;
 	}
@@ -4253,7 +5022,7 @@ static int favorite_weapons(const bot_state_t* bs, const gentity_t* target, cons
 	for (int i = 0; i < WP_NUM_WEAPONS; i++)
 	{
 		if (have_check &&
-			!(bs->cur_ps.stats[STAT_WEAPONS] & 1 << i))
+			!(BG_HasWeapon(bs->cur_ps.stats, i)))
 		{
 			//check to see if we actually have this weapon.
 			continue;
@@ -4266,7 +5035,7 @@ static int favorite_weapons(const bot_state_t* bs, const gentity_t* target, cons
 			continue;
 		}
 
-		if (ignore_weaps & 1 << i)
+		if (WP_MASK_HAS(ignore_weaps, i))
 		{
 			//check to see if this weapon is on our ignored weapons list
 			continue;
@@ -4355,13 +5124,13 @@ static int numberof_siege_basic_classes(const int team, const int base_class)
 
 static qboolean have_heavy_weapons(const int weapons)
 {
-	if (weapons & 1 << WP_SABER
-		|| weapons & 1 << WP_ROCKET_LAUNCHER
-		|| weapons & 1 << WP_THERMAL
-		|| weapons & 1 << WP_TRIP_MINE
-		|| weapons & 1 << WP_DET_PACK
-		|| weapons & 1 << WP_CONCUSSION
-		|| weapons & 1 << WP_FLECHETTE)
+	if (WP_MASK_HAS(weapons, WP_SABER)
+		|| WP_MASK_HAS(weapons, WP_ROCKET_LAUNCHER)
+		|| WP_MASK_HAS(weapons, WP_THERMAL)
+		|| WP_MASK_HAS(weapons, WP_TRIP_MINE)
+		|| WP_MASK_HAS(weapons, WP_DET_PACK)
+		|| WP_MASK_HAS(weapons, WP_CONCUSSION)
+		|| WP_MASK_HAS(weapons, WP_FLECHETTE))
 	{
 		return qtrue;
 	}
@@ -4395,7 +5164,7 @@ static int find_heavy_weapon_classse(const int team, const int index, const qboo
 		else
 		{
 			//look for saber
-			if (stm->classes[i]->weapons & 1 << WP_SABER)
+			if (WP_MASK_HAS(stm->classes[i]->weapons, WP_SABER))
 			{
 				if (index == num_heavy_weap_classes)
 				{
@@ -4543,7 +5312,7 @@ int bot_select_choice_weapon(bot_state_t* bs, const int weapon, const int dosele
 	while (i < WP_NUM_WEAPONS)
 	{
 		if (i == weapon &&
-			(bs->cur_ps.stats[STAT_WEAPONS] & (1 << i)) &&
+			(BG_HasWeapon(bs->cur_ps.stats, i)) &&
 			bs->cur_ps.ammo[weaponData[i].ammoIndex] >= weaponData[i].energyPerShot)
 		{
 			hasit = 1;
@@ -4652,7 +5421,7 @@ static qboolean attack_local_breakables(bot_state_t* bs)
 					siege_defend_from_attackers(bs);
 				}
 			}
-			else if (test->flags & FL_DMG_BY_SABER_ONLY && !(bs->cur_ps.stats[STAT_WEAPONS] & 1 << WP_SABER))
+			else if (test->flags & FL_DMG_BY_SABER_ONLY && !(BG_HasWeapon(bs->cur_ps.stats, WP_SABER)))
 			{
 				//This is only damaged by sabers and we don't have a saber
 				should_switcha_siege_classes(bs, qtrue);
@@ -5162,7 +5931,8 @@ static void WPTouchRoutine(bot_state_t* bs)
 	if (bs->isCamper && bot_camp.integer && (bot_is_a_chicken_wuss(bs) || BotCTFGuardDuty(bs) || bs->isCamper == 2) && (
 		bs
 		->wpCurrent->flags & WPFLAG_SNIPEORCAMP || bs->wpCurrent->flags & WPFLAG_SNIPEORCAMPSTAND) &&
-		bs->cur_ps.weapon != WP_SABER && bs->cur_ps.weapon != WP_MELEE && bs->cur_ps.weapon != WP_STUN_BATON)
+		bs->cur_ps.weapon != WP_SABER && bs->cur_ps.weapon != WP_MELEE && bs->cur_ps.weapon != WP_STUN_BATON &&
+		bs->cur_ps.weapon != WP_TUSKEN_STAFF)
 	{
 		int last_num = 0;
 		//if we're a camper and a chicken then camp
@@ -5191,8 +5961,8 @@ static void WPTouchRoutine(bot_state_t* bs)
 			}
 		}
 	}
-	else if ((bs->cur_ps.weapon == WP_SABER || bs->cur_ps.weapon == WP_STUN_BATON || bs->cur_ps.weapon == WP_MELEE) &&
-		bs->isCamping > level.time)
+	else if ((bs->cur_ps.weapon == WP_SABER || bs->cur_ps.weapon == WP_STUN_BATON || bs->cur_ps.weapon == WP_MELEE ||
+		bs->cur_ps.weapon == WP_TUSKEN_STAFF) && bs->isCamping > level.time)
 	{
 		//don't snipe/camp with a melee weapon, that would be silly
 		bs->isCamping = 0;
@@ -5914,6 +6684,25 @@ static qboolean bot_vehicle_with_enemy(const bot_state_t* bs, const gentity_t* v
 	return pass_loved_one_check(bs, pilot) ? qtrue : qfalse;
 }
 
+// Force Sight level 3 lets a bot sense enemies through walls; everyone else needs a clear line of sight (DH 2026-10-24)
+#define BOT_FORCE_SIGHT_RANGE	2048.0f
+
+static qboolean bot_sees_through_walls(const bot_state_t* bs)
+{
+	const playerState_t* ps = &level.clients[bs->client].ps;
+
+	return (ps->fd.forcePowersKnown & (1 << FP_SEE)) && ps->fd.forcePowerLevel[FP_SEE] >= FORCE_LEVEL_3 ? qtrue : qfalse;
+}
+
+static qboolean bot_enemy_in_sight(bot_state_t* bs, vec3_t org)
+{
+	if (org_visible(bs->eye, org, -1))
+	{
+		return qtrue;
+	}
+	return bot_sees_through_walls(bs) && Distance(bs->eye, org) < BOT_FORCE_SIGHT_RANGE ? qtrue : qfalse;
+}
+
 //update the currentEnemy visual data for the current enemy.
 static void enemy_visual_update(bot_state_t* bs)
 {
@@ -5938,13 +6727,23 @@ static void enemy_visual_update(bot_state_t* bs)
 
 	trap->Trace(&tr, bs->eye, NULL, NULL, enemy_origin, bs->client, MASK_PLAYERSOLID, qfalse, 0, 0);
 
-	if (tr.entityNum == bs->currentEnemy->s.number && in_field_of_vision(bs->viewangles, 90, a) && !bot_mind_tricked(
+	// hearing him only counts when nothing is in the way: no seeing through walls (DH 2026-10-24)
+	if (tr.entityNum == bs->currentEnemy->s.number && (in_field_of_vision(bs->viewangles, 90, a) && !bot_mind_tricked(
 		bs->client, bs->currentEnemy->s.number)
-		|| bot_can_hear(bs, bs->currentEnemy, dist))
+		|| bot_can_hear(bs, bs->currentEnemy, dist)))
 	{
 		//spotted him
 		bs->frame_Enemy_Len = TargetDistance(bs, bs->currentEnemy, enemy_origin);
 		bs->frame_Enemy_Vis = 1;
+		VectorCopy(enemy_origin, bs->lastEnemySpotted);
+		VectorCopy(bs->currentEnemy->s.angles, bs->lastEnemyAngles);
+		bs->enemySeenTime = level.time + 2000;
+	}
+	else if (bot_sees_through_walls(bs) && dist < BOT_FORCE_SIGHT_RANGE)
+	{
+		// Force Sight 3: knows where he is behind the wall, but he is not in sight to shoot at
+		bs->frame_Enemy_Len = TargetDistance(bs, bs->currentEnemy, enemy_origin);
+		bs->frame_Enemy_Vis = 0;
 		VectorCopy(enemy_origin, bs->lastEnemySpotted);
 		VectorCopy(bs->currentEnemy->s.angles, bs->lastEnemyAngles);
 		bs->enemySeenTime = level.time + 2000;
@@ -6106,8 +6905,7 @@ static int scan_for_enemies(bot_state_t* bs)
 			}
 
 			if (distcheck < closest && (in_field_of_vision(bs->viewangles, 90, a) && !bot_mind_tricked(bs->client, i) ||
-				bot_can_hear(bs, &g_entities[i], distcheck)) && org_visible(
-					bs->eye, g_entities[i].client->ps.origin, -1))
+				bot_can_hear(bs, &g_entities[i], distcheck)) && bot_enemy_in_sight(bs, g_entities[i].client->ps.origin))
 			{
 				if (bot_mind_tricked(bs->client, i))
 				{
@@ -6213,7 +7011,7 @@ static void advanced_scanfor_enemies(bot_state_t* bs)
 			if (distcheck < closestdist && (in_field_of_vision(bs->viewangles, 90, a)
 				&& !bot_mind_tricked(bs->client, i)
 				|| bot_can_hear(bs, &g_entities[i], distcheck))
-				&& org_visible(bs->eye, enemy_origin, -1))
+				&& bot_enemy_in_sight(bs, enemy_origin))
 			{
 				if (!has_enemy_dist || distcheck < has_enemy_dist - 128 || current_enemy_num == i)
 				{
@@ -6349,8 +7147,7 @@ static void advanced_scanfor_enemies(bot_state_t* bs)
 
 			if (distcheck < closestdist && (in_field_of_vision(bs->viewangles, 90, a) && !bot_mind_tricked(
 				bs->client, i)
-				|| bot_can_hear(bs, &g_entities[i], distcheck)) && org_visible(
-					bs->eye, g_entities[i].client->ps.origin, -1))
+				|| bot_can_hear(bs, &g_entities[i], distcheck)) && bot_enemy_in_sight(bs, g_entities[i].client->ps.origin))
 			{
 				if (bot_mind_tricked(bs->client, i))
 				{
@@ -6433,6 +7230,7 @@ int bot_get_weapon_range(const bot_state_t* bs)
 	{
 	case WP_STUN_BATON:
 	case WP_MELEE:
+	case WP_TUSKEN_STAFF:
 		return BWEAPONRANGE_MELEE;
 	case WP_SABER:
 		return BWEAPONRANGE_SABER;
@@ -6450,6 +7248,7 @@ int bot_get_weapon_range(const bot_state_t* bs)
 	case WP_THERMAL:
 	case WP_TRIP_MINE:
 	case WP_DET_PACK:
+	case WP_TUSKEN_RIFLE:
 		return BWEAPONRANGE_LONG;
 	default:
 		return BWEAPONRANGE_MID;
@@ -7697,7 +8496,7 @@ static int bot_has_associated(const bot_state_t* bs, const wpobject_t* wp)
 
 	if (as->item->giType == IT_WEAPON)
 	{
-		if (bs->cur_ps.stats[STAT_WEAPONS] & 1 << as->item->giTag)
+		if (BG_HasWeapon(bs->cur_ps.stats, as->item->giTag))
 		{
 			return 1;
 		}
@@ -9131,7 +9930,7 @@ void bot_behave_attack_basic(bot_state_t* bs, const gentity_t* target)
 	VectorCopy(ang, bs->goalAngles);
 
 	//check to see if there's a detpack in the immediate area of the target.
-	if (bs->cur_ps.stats[STAT_WEAPONS] & 1 << WP_DET_PACK)
+	if (BG_HasWeapon(bs->cur_ps.stats, WP_DET_PACK))
 	{
 		//only check if you got det packs.
 		bot_weapon_detpack(bs, target);
@@ -9485,7 +10284,7 @@ static int bot_sp_power(bot_state_t* bs, vec3_t toEnemyAngles)
 	const qboolean enemyStunned = enemy->client->ps.userInt3 & 1 << FLAG_FROZEN
 		|| enemy->client->ps.weaponTime > 500 ? qtrue : qfalse;
 
-	int cand[NUM_FORCE_POWERS];
+	int cand[NUM_FORCE_POWERS] = { 0 };
 	int n = 0;
 	if (!enemyStunned && dist < 700 && bot_sp_power_ready(bs, FP_STASIS, 10))
 		cand[n++] = FP_STASIS;
@@ -10028,6 +10827,22 @@ static void Enhanced_saber_combat_handling(bot_state_t* bs)
 	}
 }
 
+// the noghri stick's tactic (SJE): a saber user just deflects the darts, so a bot puts them at his feet instead,
+// where the gas cloud they leave still gets him
+static void bot_noghri_stick_aim(const bot_state_t* bs, vec3_t headlevel)
+{
+	const gentity_t* enemy = bs->currentEnemy;
+
+	if (bs->cur_ps.weapon != WP_NOGHRI_STICK || !enemy || !enemy->client || bs->frame_Enemy_Len < 128)
+	{
+		return;
+	}
+	if (enemy->client->ps.weapon == WP_SABER && !enemy->client->ps.saberHolstered)
+	{
+		headlevel[2] = enemy->client->ps.origin[2] + enemy->r.mins[2] + 4.0f;
+	}
+}
+
 //should we be "leading" our aim with this weapon? And if
 //so, by how much?
 float bot_weapon_can_lead(const bot_state_t* bs)
@@ -10039,6 +10854,10 @@ float bot_weapon_can_lead(const bot_state_t* bs)
 	case WP_BLASTER:
 	case WP_DROIDEKA:
 	case WP_Z6_ROTARY_CANNON:
+		return 0.95f;
+	case WP_NOGHRI_STICK:
+		return 0.8f; // the darts are slow
+	case WP_TUSKEN_RIFLE:
 		return 0.95f;
 	case WP_BOWCASTER:
 		return 0.95f;
@@ -10321,6 +11140,21 @@ static int should_secondary_fire(const bot_state_t* bs)
 	}
 	if (weap == WP_BLASTER && bs->frame_Enemy_Len < 300)
 	{
+		return 1;
+	}
+	if (weap == WP_NOGHRI_STICK && bs->frame_Enemy_Len < 80)
+	{
+		// up close: swing the stick
+		return 1;
+	}
+	if (weap == WP_TUSKEN_RIFLE && bs->frame_Enemy_Len < 80)
+	{
+		// the tusken rifle: up close the alt fire bashes with the butt, further out the primary shoots
+		return 1;
+	}
+	if (weap == WP_TUSKEN_STAFF && bs->frame_Enemy_Len > 80)
+	{
+		// the tusken staff: lunge in from a little further out, swing up close
 		return 1;
 	}
 	if (weap == WP_ROCKET_LAUNCHER && bs->frame_Enemy_Len > 250)
@@ -10716,7 +11550,7 @@ static int BotTryAnotherWeapon(bot_state_t* bs)
 	while (i < WP_NUM_WEAPONS)
 	{
 		if (bs->cur_ps.ammo[weaponData[i].ammoIndex] >= weaponData[i].energyPerShot &&
-			bs->cur_ps.stats[STAT_WEAPONS] & 1 << i)
+			BG_HasWeapon(bs->cur_ps.stats, i))
 		{
 			bs->virtualWeapon = i;
 			bot_select_weapon(bs->client, i);
@@ -10757,7 +11591,7 @@ static qboolean bot_weapon_selectable(const bot_state_t* bs, const int weapon)
 	// Check if bot has the weapon and enough ammo
 	// ------------------------------------------------------------
 	if (bs->cur_ps.ammo[weaponData[weapon].ammoIndex] >= weaponData[weapon].energyPerShot &&
-		(bs->cur_ps.stats[STAT_WEAPONS] & (1 << weapon)))
+		(BG_HasWeapon(bs->cur_ps.stats, weapon)))
 	{
 		return qtrue;
 	}
@@ -10776,7 +11610,7 @@ static int bot_select_ideal_weapon(bot_state_t* bs)
 	{
 		if (bs->cur_ps.ammo[weaponData[i].ammoIndex] >= weaponData[i].energyPerShot &&
 			bs->botWeaponWeights[i] > bestweight &&
-			bs->cur_ps.stats[STAT_WEAPONS] & 1 << i)
+			BG_HasWeapon(bs->cur_ps.stats, i))
 		{
 			if (i == WP_THERMAL)
 			{
@@ -10797,7 +11631,7 @@ static int bot_select_ideal_weapon(bot_state_t* bs)
 		i++;
 	}
 
-	if (bs->currentEnemy && bs->frame_Enemy_Len < 300 && bs->cur_ps.stats[STAT_WEAPONS] & 1 << WP_SABER)
+	if (bs->currentEnemy && bs->frame_Enemy_Len < 300 && BG_HasWeapon(bs->cur_ps.stats, WP_SABER))
 	{
 		bestweapon = WP_SABER;
 		bestweight = 1;
@@ -11468,13 +12302,13 @@ static qboolean bot_buy_item(bot_state_t* bs, const char* msg)
 				}
 
 				// Already have weapon
-				if (bs->cur_ps.stats[STAT_WEAPONS] & (1 << tag))
+				if (BG_HasWeapon(bs->cur_ps.stats, tag))
 				{
 					return qfalse;
 				}
 
 				// Give weapon
-				bs->cur_ps.stats[STAT_WEAPONS] |= (1 << tag);
+				BG_GiveWeapon(bs->cur_ps.stats, tag);
 
 				// Fallthrough to ammo purchase for this weapon
 				tag = weaponData[tag].ammoIndex;
@@ -11808,6 +12642,7 @@ static int bot_weapon_blockable(const int weapon)
 	{
 	case WP_STUN_BATON:
 	case WP_MELEE:
+	case WP_TUSKEN_STAFF:
 		return 0;
 	case WP_DISRUPTOR:
 		return 0;
@@ -12528,7 +13363,7 @@ static const botJetParms_t* bot_jet_parms(const bot_state_t* bs)
 
 static qboolean bot_boba_has_weapon(const bot_state_t* bs, const int wp)
 {
-	if (!(bs->cur_ps.stats[STAT_WEAPONS] & 1 << wp))
+	if (!(BG_HasWeapon(bs->cur_ps.stats, wp)))
 	{
 		return qfalse;
 	}
@@ -12939,6 +13774,161 @@ void bot_check_speak(gentity_t* self, const qboolean moving);
 extern void AngleClamp(vec3_t ang);
 //the main AI loop.
 //please don't be too frightened.
+/*
+Bots go for the holocrons they can see, in every game mode (admins place them anywhere with addholocron) (DH 2026-10-24).
+A bot spots a holocron in front of it within BOT_HOLOCRON_SIGHT, walks to it and picks it up. It only leaves a fight for
+one that is closer than its enemy, and gives up on a holocron it can't get closer to (on a ledge, behind a gap).
+*/
+#define BOT_HOLOCRON_SIGHT		1024.0f	// how far a bot spots a holocron
+#define BOT_HOLOCRON_GIVEUP		5000	// ms without getting closer before the bot gives that holocron up
+#define BOT_HOLOCRON_IGNORE		15000	// ms a given up holocron is left alone
+
+static int bot_holocron_target[MAX_CLIENTS];		// entity number + 1, 0 = none
+static int bot_holocron_progress_time[MAX_CLIENTS];
+static float bot_holocron_best_dist[MAX_CLIENTS];
+static int bot_holocron_ignore[MAX_CLIENTS];		// entity number + 1
+static int bot_holocron_ignore_time[MAX_CLIENTS];
+
+// can this bot pick that holocron up right now (the same checks as HolocronTouch)
+static qboolean bot_holocron_wanted(const bot_state_t* bs, const gentity_t* holo)
+{
+	const playerState_t* ps = &level.clients[bs->client].ps;
+
+	if (!holo->inuse || holo->s.eType != ET_HOLOCRON || holo->s.modelIndex == 0 || holo->enemy)
+	{
+		return qfalse;
+	}
+	if (holo->count < 0 || holo->count >= NUM_FORCE_POWERS || ps->holocronsCarried[holo->count])
+	{
+		return qfalse;
+	}
+	if (ps->holocronCantTouch == holo->s.number && ps->holocronCantTouchTime > level.time)
+	{
+		return qfalse;
+	}
+	if (level.gametype != GT_HOLOCRON && ps->holocronGlobalCooldown > level.time)
+	{
+		return qfalse;
+	}
+	if (bot_holocron_ignore[bs->client] == holo->s.number + 1 && bot_holocron_ignore_time[bs->client] > level.time)
+	{
+		return qfalse;
+	}
+	return qtrue;
+}
+
+// sets goalPosition to a holocron the bot has seen and returns qtrue while it goes for one
+static qboolean bot_holocron_goal(bot_state_t* bs)
+{
+	const int c = bs->client;
+	gentity_t* holo = NULL;
+	float dist;
+
+	if (c < 0 || c >= MAX_CLIENTS)
+	{
+		return qfalse;
+	}
+	if (g_entities[c].health < 1 || bs->cur_ps.pm_type == PM_DEAD || bs->cur_ps.m_iVehicleNum)
+	{
+		bot_holocron_target[c] = 0;
+		return qfalse;
+	}
+
+	// keep going for the one it already saw while it can still take it
+	if (bot_holocron_target[c])
+	{
+		holo = &g_entities[bot_holocron_target[c] - 1];
+
+		if (!bot_holocron_wanted(bs, holo))
+		{
+			holo = NULL;
+		}
+	}
+
+	if (!holo)
+	{
+		float best = BOT_HOLOCRON_SIGHT;
+
+		bot_holocron_target[c] = 0;
+
+		for (int i = MAX_CLIENTS; i < level.num_entities; i++)
+		{
+			gentity_t* ent = &g_entities[i];
+			vec3_t dir, ang;
+
+			if (ent->s.eType != ET_HOLOCRON || !bot_holocron_wanted(bs, ent))
+			{
+				continue;
+			}
+
+			VectorSubtract(ent->r.currentOrigin, bs->eye, dir);
+			dist = VectorLength(dir);
+
+			if (dist >= best)
+			{
+				continue;
+			}
+
+			vectoangles(dir, ang);
+
+			if (!in_field_of_vision(bs->viewangles, 180, ang) ||
+				!org_visible(bs->eye, ent->r.currentOrigin, c))
+			{
+				continue;
+			}
+
+			best = dist;
+			holo = ent;
+		}
+
+		if (!holo)
+		{
+			return qfalse;
+		}
+
+		bot_holocron_target[c] = holo->s.number + 1;
+		bot_holocron_best_dist[c] = Distance(bs->origin, holo->r.currentOrigin);
+		bot_holocron_progress_time[c] = level.time;
+	}
+
+	dist = Distance(bs->origin, holo->r.currentOrigin);
+
+	if (dist < bot_holocron_best_dist[c] - 16.0f)
+	{
+		bot_holocron_best_dist[c] = dist;
+		bot_holocron_progress_time[c] = level.time;
+	}
+	else if (level.time - bot_holocron_progress_time[c] > BOT_HOLOCRON_GIVEUP || dist > BOT_HOLOCRON_SIGHT * 1.5f)
+	{
+		// can't get to it: leave it alone for a while
+		bot_holocron_ignore[c] = holo->s.number + 1;
+		bot_holocron_ignore_time[c] = level.time + BOT_HOLOCRON_IGNORE;
+		bot_holocron_target[c] = 0;
+		return qfalse;
+	}
+
+	// in a fight only go for one that is closer than the enemy
+	if (bs->currentEnemy && bs->currentEnemy->client && bs->currentEnemy->health > 0 &&
+		Distance(bs->origin, bs->currentEnemy->r.currentOrigin) < dist)
+	{
+		bot_holocron_progress_time[c] = level.time;
+		return qfalse;
+	}
+
+	VectorCopy(holo->r.currentOrigin, bs->goalPosition);
+	bs->DestIgnore = holo->s.number;
+
+	// sitting on something a little higher, close by: jump up to it
+	if (holo->r.currentOrigin[2] - bs->origin[2] > 32.0f && holo->r.currentOrigin[2] - bs->origin[2] < 128.0f &&
+		DistanceHorizontal(bs->origin, holo->r.currentOrigin) < 96.0f && bs->cur_ps.groundEntityNum != ENTITYNUM_NONE)
+	{
+		bot_obstacle_jump_time[c] = level.time + 400; // this jump is allowed (bot_calm_movement)
+		bs->jumpTime = level.time + 100;
+	}
+
+	return qtrue;
+}
+
 void standard_bot_ai(bot_state_t* bs)
 {
 	const int saberNum = 0;
@@ -13059,7 +14049,7 @@ void standard_bot_ai(bot_state_t* bs)
 				VectorSubtract(vehicle->client->ps.origin, bs->origin, v);
 				VectorNormalize(v);
 				vectoangles(v, bs->goalAngles);
-				MoveTowardIdealAngles(bs);
+				move_toward_ideal_angles(bs);
 				trap->EA_Move(bs->client, v, 5000.0f);
 
 				if (bs->noUseTime < (level.time - 400))
@@ -13708,7 +14698,7 @@ void standard_bot_ai(bot_state_t* bs)
 				int weaponCount = 0;
 				for (int i = 0; i < WP_NUM_WEAPONS; i++)
 				{
-					if (bs->cur_ps.stats[STAT_WEAPONS] & (1 << i))
+					if (BG_HasWeapon(bs->cur_ps.stats, i))
 					{
 						weaponCount++;
 					}
@@ -14491,6 +15481,7 @@ void standard_bot_ai(bot_state_t* bs)
 		{
 			VectorCopy(bs->currentEnemy->r.currentOrigin, headlevel);
 		}
+		bot_noghri_stick_aim(bs, headlevel);
 
 		if (!bs->frame_Enemy_Vis)
 		{
@@ -14819,6 +15810,9 @@ void standard_bot_ai(bot_state_t* bs)
 			}
 		}
 	}
+
+	// go for a holocron it can see, in any game mode (DH 2026-10-24)
+	bot_holocron_goal(bs);
 
 	if (bs->beStill < level.time && !waiting_for_now(bs, bs->goalPosition) && !fj_halt)
 	{
@@ -15271,7 +16265,7 @@ void Enhanced_bot_ai(bot_state_t* bs)
 				VectorSubtract(vehicle->client->ps.origin, bs->origin, v);
 				VectorNormalize(v);
 				vectoangles(v, bs->goalAngles);
-				MoveTowardIdealAngles(bs);
+				move_toward_ideal_angles(bs);
 				trap->EA_Move(bs->client, v, 5000.0f);
 
 				if (bs->noUseTime < (level.time - 400))
@@ -15920,7 +16914,7 @@ void Enhanced_bot_ai(bot_state_t* bs)
 				int weaponCount = 0;
 				for (int i = 0; i < WP_NUM_WEAPONS; i++)
 				{
-					if (bs->cur_ps.stats[STAT_WEAPONS] & (1 << i))
+					if (BG_HasWeapon(bs->cur_ps.stats, i))
 					{
 						weaponCount++;
 					}
@@ -16637,6 +17631,7 @@ void Enhanced_bot_ai(bot_state_t* bs)
 		{
 			VectorCopy(bs->currentEnemy->r.currentOrigin, headlevel);
 		}
+		bot_noghri_stick_aim(bs, headlevel);
 
 		if (!bs->frame_Enemy_Vis)
 		{
@@ -17003,6 +17998,9 @@ void Enhanced_bot_ai(bot_state_t* bs)
 			}
 		}
 	}
+
+	// go for a holocron it can see, in any game mode (DH 2026-10-24)
+	bot_holocron_goal(bs);
 
 	if (bs->beStill < level.time &&
 		!waiting_for_now(bs, bs->goalPosition) &&
@@ -18587,6 +19585,64 @@ The last word on a bot's move this frame, like a singleplayer NPC moves:
 - bot_idlewalk: he walks while he has no enemy (not in CTF / Siege, where he has somewhere to be).
 ==================
 */
+// SS_BLASTER (2026-10-24): a bot on the blaster saber style shoots its left hand pistol at an enemy out of saber reach
+// and in sight - a short burst through the player's own fire path (Walk + Dash: auto aim, clip, anim), then a pause
+// (g_saberBlasterAIFire ms on average, shorter for better bots; 0 = never) - and reloads (Walk + Dash + Attack) when
+// the clip is empty and nobody is in saber reach. Close up he fights with the saber as before.
+#define BOT_BLASTER_SABER_REACH	128.0f
+#define BOT_BLASTER_BURST		300
+static int bot_blaster_burst_end[MAX_CLIENTS];
+static int bot_blaster_next_burst[MAX_CLIENTS];
+
+static void bot_saber_blaster(const bot_state_t* bs, usercmd_t* ucmd)
+{
+	const int client = bs->client;
+	const playerState_t* ps = &g_entities[client].client->ps;
+
+	if (g_saberBlasterAIFire.integer <= 0 || ps->weapon != WP_SABER || ps->fd.saberAnimLevel != SS_BLASTER
+		|| ps->saberInFlight || ps->saberLockTime >= level.time)
+	{
+		bot_blaster_burst_end[client] = 0;
+		return;
+	}
+
+	const float dist = bs->currentEnemy && bs->currentEnemy->client
+		? Distance(ps->origin, bs->currentEnemy->client->ps.origin) : 99999.0f;
+
+	if (ps->ammo[SABERBLASTER_CLIP_SLOT] >= SABERBLASTER_CLIP_SIZE)
+	{
+		// empty clip: reload, unless someone is close enough to cut him down meanwhile
+		bot_blaster_burst_end[client] = 0;
+		if (dist > BOT_BLASTER_SABER_REACH && ps->weaponTime <= 0)
+		{
+			ucmd->buttons |= BUTTON_WALKING | BUTTON_DASH | BUTTON_ATTACK;
+		}
+		return;
+	}
+
+	if (!bs->currentEnemy || !bs->frame_Enemy_Vis || dist <= BOT_BLASTER_SABER_REACH)
+	{
+		bot_blaster_burst_end[client] = 0;
+		return;
+	}
+
+	if (level.time >= bot_blaster_burst_end[client] && level.time >= bot_blaster_next_burst[client])
+	{
+		// skill 1..5: a skill 5 bot waits about half as long as a skill 3 one
+		const float skill = bs->settings.skill < 1.0f ? 1.0f : bs->settings.skill > 5.0f ? 5.0f : bs->settings.skill;
+		const int pause = (int)(g_saberBlasterAIFire.integer * (0.5f + (5.0f - skill) * 0.25f));
+
+		bot_blaster_burst_end[client] = level.time + BOT_BLASTER_BURST;
+		bot_blaster_next_burst[client] = bot_blaster_burst_end[client] + Q_irand(pause / 2, pause * 3 / 2);
+	}
+
+	if (level.time < bot_blaster_burst_end[client])
+	{
+		ucmd->buttons |= BUTTON_WALKING | BUTTON_DASH;
+		ucmd->buttons &= ~BUTTON_ATTACK; // attack held too would reload instead
+	}
+}
+
 #define BOT_IDLEWALK_STAIRS_HEIGHT	20.0f	// bot_idlewalk: a next waypoint this much higher / lower = stairs, run them
 static void bot_calm_movement(bot_state_t* bs, usercmd_t* ucmd)
 {
@@ -18809,6 +19865,7 @@ int bot_ai_startframe(const int time)
 			bs->forceMove_Up = 0;
 		}
 
+		bot_scepter_frame(bs); // the Possessed Tavion bot's scepter attacks (their steps, or the roll for a new one)
 		bot_update_input(botstates[i], time, elapsed_time);
 
 		usercmd_t* ucmd = &bs->lastucmd;
@@ -18835,8 +19892,10 @@ int bot_ai_startframe(const int time)
 		}
 
 		bot_calm_movement(bs, ucmd);
+		bot_saber_blaster(bs, ucmd); // SS_BLASTER (2026-10-24): the left hand pistol out of saber reach
 		bot_boba_flight_cmd(bs, ucmd); // Boba Fett classes: jetpack flight, flamethrower (after the jump filters)
 		G_FighterAI_BotCmd(&g_entities[bs->client], ucmd); // in a ship the fighter AI flies: its moves, not his own
+		bot_scepter_cmd(bs, ucmd); // in a scepter attack she stands still
 
 		trap->BotUserCommand(botstates[i]->client, &botstates[i]->lastucmd);
 	}

@@ -1148,7 +1148,7 @@ static qboolean Initialize(Vehicle_t* p_veh)
 	//initialize to blaster, just since it's a basic weapon and there's no lightsaber crap...?
 	parent->client->ps.weapon = WP_BLASTER;
 	parent->client->ps.weaponstate = WEAPON_READY;
-	parent->client->ps.stats[STAT_WEAPONS] |= 1 << WP_BLASTER;
+	BG_GiveWeapon(parent->client->ps.stats, WP_BLASTER);
 
 	//Initialize to landed (wings closed, gears down) animation
 	{

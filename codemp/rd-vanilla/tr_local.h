@@ -917,9 +917,27 @@ using backEndCounters_t = struct backEndCounters_s {
 	int		msec;			// total msec for backend run
 };
 
+// r_smp: front end state the back end reads, as it was when the frame was handed over
+// (R_SmpCaptureFrameState). The front end changes the live values while the frame is drawn.
+using smpFrameState_t = struct {
+	trRefdef_t	refdef;				// tr.refdef: the frame's last scene
+	int			frameCount;			// tr.frameCount
+	int			sceneCount;			// tr.sceneCount
+	int			skyboxportal;
+	int			drawskyboxportal;
+	color4ub_t	styleColors[MAX_LIGHT_STYLES];
+	float		timescale;			// the timescale cvar (the back end used to read it itself)
+	int			dynamicGlow;		// r_DynamicGlow: the first pass deletes ghoul2 surfaces the glow pass would draw, both must agree
+};
+
+// the back end's view of those values: the frame's copy when it runs on the render thread,
+// else the live ones (r_smp 0, or a list drawn on the main thread after a sync)
+#define RB_SMP(field, live)	( backEnd.smp ? backEnd.smp->field : ( live ) )
+
 // all state modified by the back end is seperated
 // from the front end state
 using backEndState_t = struct backEndState_s {
+	const smpFrameState_t* smp;		// r_smp: this frame's copy of the front end's state, else nullptr
 	trRefdef_t	refdef;
 	viewParms_t	viewParms;
 	orientationr_t	ori;		// Can't use or as it is a c++ reserved word DREWS 2/2/2002
@@ -930,6 +948,7 @@ using backEndState_t = struct backEndState_s {
 
 	qboolean	projection2D;	// if qtrue, drawstretchpic doesn't need to change modes
 	byte		color2D[4];
+	float		hudFade2D;	// dynamic HUD fade of the current 2D colour (see RB_HudFadeStage)
 	qboolean	vertexes2D;		// shader needs to be finished
 	trRefEntity_t	entity2D;	// currentEntity will point at this when doing 2D rendering
 };
@@ -1219,6 +1238,10 @@ extern cvar_t* r_meshCloth;
 extern cvar_t* r_meshClothGravity;
 extern cvar_t* r_meshClothDrag;
 extern cvar_t* r_meshClothIter;
+extern cvar_t* r_meshClothLodNear;		// cloth beyond this distance: half the passes, updated at most every 32 ms (0 = off)
+extern cvar_t* r_meshClothLodFar;		// cloth beyond this distance: not simulated (0 = off)
+extern cvar_t* r_threads;				// renderer job workers: -1 automatic, 0 off (draws exactly as before), N workers
+extern cvar_t* r_DynamicGlowFinish;	// 1: wait for the GPU before copying the glow (old behaviour), 0: no wait (default)
 extern cvar_t* r_meshClothShape;
 extern cvar_t* r_meshClothInertia;
 extern cvar_t* r_meshClothMaxAccel;
@@ -1692,12 +1715,27 @@ public:
 		surfaceData = nullptr;
 		alternateTex = nullptr;
 		goreChain = nullptr;
+		smpXyz = nullptr;
+		smpNormal = nullptr;
 	}
 #endif
+
+	// r_smp: skinned (and cloth simulated) by the front end into this frame's memory, 4 floats
+	// per vertex like tess.xyz / tess.normal. The back end then never touches the bone cache.
+	const float* smpXyz = nullptr;
+	const float* smpNormal = nullptr;
 };
 
 void R_AddGhoulSurfaces(trRefEntity_t* ent);
 void RB_SurfaceGhoul(CRenderableSurface* surf);
+
+// threaded ghoul2 skinning + mesh cloth (tr_ghoul2.cpp), around each draw list
+void RB_G2PrepareDrawSurfs(drawSurf_t* drawSurfs, int numDrawSurfs);
+void RB_G2FinishDrawSurfs();
+void R_ShutdownRenderJobs();
+// r_smp: the same work done by the front end for one view (R_AddDrawSurfCmd), and a new frame's memory
+void R_G2SmpPrepareDrawSurfs(drawSurf_t* drawSurfs, int numDrawSurfs);
+void R_G2SmpNewFrame(int frame);
 /*
 Ghoul2 Insert End
 */
@@ -1762,6 +1800,7 @@ using renderCommandList_t = struct renderCommandList_s {
 using setColorCommand_t = struct setColorCommand_s {
 	int		commandId;
 	float	color[4];
+	float	hudFade;	// dynamic HUD: how far this 2D colour is faded (0 = not at all, 1 = gone)
 };
 
 using drawBufferCommand_t = struct drawBufferCommand_s {
@@ -1846,17 +1885,44 @@ using backEndData_t = struct backEndData_s {
 	srfPoly_t* polys;//[MAX_POLYS];
 	polyVert_t* polyVerts;//[MAX_POLYVERTS];
 	renderCommandList_t	commands;
+	smpFrameState_t	smp;			// r_smp only (R_SmpCaptureFrameState)
 };
 
 extern	int		max_polys;
 extern	int		max_polyverts;
 
-extern	backEndData_t* backEndData;
+extern	backEndData_t* backEndData;	// the frame the front end is filling (with r_smp: one of two)
 
 void* R_GetCommandBuffer(const unsigned int bytes);
 void RB_ExecuteRenderCommands(const void* data);
 
 void R_IssuePendingRenderCommands();
+
+/*
+r_smp (tr_smp.cpp): the back end on its own thread. r_smp 0 (default) = everything as before,
+these return at once. With r_smp 1 the front end fills one backEndData while the back end
+draws the other, and any main thread GL call must come after R_SyncRenderThread().
+*/
+#define SMP_FRAMES	2
+extern cvar_t* r_smp;
+qboolean R_SmpActive();							// the render thread is running
+qboolean R_SmpOnRenderThread();					// called on the render thread
+void R_SmpInit();								// R_Init, after the GL context and backEndData exist
+void R_SmpShutdown();							// RE_Shutdown, before any GL is freed
+void R_SyncRenderThread();						// main thread: render thread idle, GL context here
+void R_SmpWaitIdle();							// main thread: the last frame is drawn (GL context stays put)
+void R_SmpWaitRenderThread();					// main thread: render thread idle, GL context stays put
+void R_SmpEndFrame(const void* cmds);			// R_IssueRenderCommands at the end of a frame
+void R_SmpForceMainThreadFrame();				// this frame must be drawn on the main thread (video capture)
+void R_SmpPresent();							// render thread, RB_SwapBuffers: swap the window's buffers
+int R_SmpFrame();								// which backEndData the front end is filling
+int R_SmpLastBackEndMsec();						// back end time of the last frame drawn
+void R_SmpWantCinematic(int handle);				// render thread: a video map was drawn, decode its next picture
+void R_SmpRunCinematics();						// RE_BeginFrame: decode + upload the video maps the back end asked for
+void R_WorldEffectsSmpCache();					// tr_WorldEffects.cpp, RE_BeginFrame: the weather's outside cache
+void R_WorldEffectsWind();						// tr_WorldEffects.cpp, RE_BeginFrame: the wind zones, once a frame
+backEndData_t* R_SmpAllocBackEndData();			// tr_init.cpp: a second backEndData like the first
+void R_SmpCaptureFrameState(smpFrameState_t* fs);	// tr_init.cpp: front end state the back end reads
 
 void R_AddDrawSurfCmd(drawSurf_t* drawSurfs, const int numDrawSurfs);
 

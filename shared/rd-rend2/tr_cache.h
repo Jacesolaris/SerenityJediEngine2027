@@ -2,6 +2,8 @@
 
 #include <qcommon/q_shared.h>
 #include <vector>
+#include <cstdint>
+#include <unordered_map>
 
 /*
  * This stores the loaded file information that we need on retrieval
@@ -83,6 +85,15 @@ private:
 	FileCache::iterator	FindFile(const char* name);
 
 	AssetCache assets;
+	std::unordered_multimap<uint32_t, size_t> assetIndex;	// path hash -> index in assets: GetModelHandle runs thousands of times a frame (G2_SetupModelPointers)
+	// GetModelHandle results per exact name string; cleared with the assets (assets are only ever added or all cleared)
+	struct HandleMemo
+	{
+		char name[MAX_QPATH];
+		qhandle_t handle;
+	};
+	static constexpr int HANDLE_MEMO_SIZE = 1024;
+	HandleMemo handleMemo[HANDLE_MEMO_SIZE]{};
 	FileCache files;
 };
 

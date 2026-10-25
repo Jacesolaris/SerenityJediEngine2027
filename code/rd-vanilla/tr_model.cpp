@@ -25,6 +25,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // tr_models.c -- model loading and caching
 
 #include "../server/exe_headers.h"
+#include "q_profile.h"
 
 #include "tr_common.h"
 #include "tr_local.h"
@@ -357,6 +358,9 @@ static qboolean gbAllowScreenDissolve = qtrue;
 //
 void RE_RegisterMedia_LevelLoadBegin(const char* psMapName, const ForceReload_e eForceReload, const qboolean bAllowScreenDissolve)
 {
+	R_SyncRenderThread();	// r_smp: frees images and models the back end may use
+	// this map's JPGs/PNGs decoded ahead on the job workers from the start of the load (the game's entities load many)
+	R_ImagePrefetch_Begin(psMapName, "gl_sp", qtrue);
 	gbAllowScreenDissolve = bAllowScreenDissolve;
 
 	tr.numBSPModels = 0;
@@ -413,6 +417,7 @@ int RE_RegisterMedia_GetLevel()
 
 void RE_RegisterMedia_LevelLoadEnd(void)
 {
+	R_SyncRenderThread();	// r_smp: frees images and models the back end may use
 	RE_RegisterModels_LevelLoadEnd(qfalse);
 	RE_RegisterImages_LevelLoadEnd();
 	ri.SND_RegisterAudio_LevelLoadEnd(qfalse);
@@ -761,6 +766,7 @@ fail:
 qboolean gbInsideRegisterModel = qfalse;
 qhandle_t RE_RegisterModel(const char* name)
 {
+	PROFILE_ZONE("Load: model register");
 	gbInsideRegisterModel = qtrue;	// !!!!!!!!!!!!!!
 
 	const qhandle_t q = RE_RegisterModel_Actual(name);
@@ -780,6 +786,7 @@ R_LoadMD3
 */
 static qboolean R_LoadMD3(model_t* mod, int lod, void* buffer, const char* name, qboolean& bAlreadyCached)
 {
+	PROFILE_ZONE("Load: model .md3");
 	int j = 0;
 	md3Header_t* pinmodel = nullptr;
 	md3Surface_t* surf = nullptr;
@@ -966,6 +973,7 @@ static qboolean R_LoadMD3(model_t* mod, int lod, void* buffer, const char* name,
 ** RE_BeginRegistration
 */
 void RE_BeginRegistration(glconfig_t* glconfigOut) {
+	PROFILE_ZONE("Load: renderer begin registration");
 	ri.Hunk_ClearToMark();
 
 	R_Init();

@@ -23,6 +23,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "../server/exe_headers.h"
+#include "q_profile.h"
 
 #include "tr_common.h"
 #include "tr_local.h"
@@ -2715,6 +2716,7 @@ Sets shader->sortedIndex
 ==============
 */
 static void SortNewShader(void) {
+	R_SyncRenderThread();	// r_smp: the render thread decodes sort keys with tr.sortedShaders
 	int		i = 0;
 
 	shader_t* newShader = tr.shaders[tr.numShaders - 1];
@@ -3376,6 +3378,7 @@ most world construction surfaces.
 */
 shader_t* R_FindShader(const char* name, const int* lightmapIndexes, const byte* styles, const qboolean mipRawImage)
 {
+	PROFILE_ZONE("Load: shader find/parse");
 	char		stripped_name[MAX_QPATH];
 	const char* shader_text = nullptr;
 	shader_t* sh = nullptr;
@@ -3700,6 +3703,7 @@ constexpr auto MAX_SHADER_FILES = 8192;
 
 static void ScanAndLoadShaderFiles()
 {
+	PROFILE_ZONE("Load: scan .shader files");
 	// These arrays are huge — make them static to avoid 32 KB+ stack usage.
 	static char* buffers[MAX_SHADER_FILES];
 	int num_shader_files = 0;

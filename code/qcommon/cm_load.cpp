@@ -24,6 +24,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // cmodel.c -- model loading
 
 #include "cm_local.h"
+#include "q_profile.h"
 #include "qcommon/ojk_saved_game.h"
 #include "qcommon/ojk_saved_game_helper.h"
 
@@ -858,6 +859,7 @@ static void CM_LoadMap_Actual(const char* name, const qboolean clientload, int* 
 //
 void CM_LoadMap(const char* name, const qboolean clientload, int* checksum, const qboolean sub_bsp)
 {
+	PROFILE_ZONE("Load: collision map (CM_LoadMap)");
 	if (sub_bsp)
 	{
 		Com_DPrintf("^5CM_LoadMap->CMLoadSubBSP(%s, %i)\n", name, qfalse);
