@@ -1037,6 +1037,7 @@ using trGlobals_t = struct trGlobals_s {
 	float					identityLight;		// 1.0 / ( 1 << overbrightBits )
 	int						identityLightByte;	// identityLight * 255
 	int						overbrightBits;		// r_overbrightBits->integer, but set to 0 if no hw gamma
+	float						overbright;		// r_overBrightBits->value, scalable (0.5 = half a step); overbrightBits is 1 when it is above 0
 
 	orientationr_t			ori;					// for current entity
 

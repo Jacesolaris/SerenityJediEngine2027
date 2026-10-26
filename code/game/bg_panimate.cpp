@@ -6242,6 +6242,24 @@ static bool PM_AnimSpeedUnchanged(const float playing, const float wanted)
 	return fabsf(playing - wanted) <= 0.05f * fabsf(wanted);
 }
 
+
+// Dying in water (DH 2026-10-25): BOTH_DEATH19, played 25% slower (PM_SetAnimFinal); the body floats from its frame
+// 20 (bg_pmove PM_WaterMove) and ragdolls from its frame 45 (G_RagDoll). Returns how many of its frames have played,
+// or -1 when the legs are not in it.
+float PM_WaterDeathFrame(const gentity_t* gent)
+{
+	if (!gent || !gent->client || gent->client->ps.legsAnim != BOTH_DEATH19 || !ValidAnimFileIndex(gent->client->clientInfo.animFileIndex))
+	{
+		return -1.0f;
+	}
+	const animation_t& a = level.knownAnimFileSets[gent->client->clientInfo.animFileIndex].animations[BOTH_DEATH19];
+	const float msPerFrame = fabsf(a.frameLerp) / 0.75f;
+	if (msPerFrame <= 0.0f)
+	{
+		return -1.0f;
+	}
+	return (a.numFrames - 1) - gent->client->ps.legsAnimTimer / msPerFrame;
+}
 void PM_SetAnimFinal(int* torso_anim, int* legs_anim, const int setAnimParts, int anim, const int setAnimFlags,
 	int* torso_anim_timer,
 	int* legs_anim_timer, gentity_t* gent, int blendTime) // default blendTime=350
@@ -6322,6 +6340,13 @@ void PM_SetAnimFinal(int* torso_anim, int* legs_anim, const int setAnimParts, in
 	// Lower Offensive Skill Slows Down The Saber Start Attack Animations
 	//--------------------------------------------------------------------
 	PM_SaberStartTransAnim(gent->client->ps.saberAnimLevel, anim, &time_scale_mod, gent, gent->userInt3);
+
+	// dying in water: the death anim plays 25% slower, then the body ragdolls and floats (DH 2026-10-25)
+	extern qboolean BG_InDeathAnim(int anim);
+	if (gent->health <= 0 && gent->waterlevel >= 2 && BG_InDeathAnim(anim))
+	{
+		time_scale_mod *= 0.75f;
+	}
 
 	// SETUP VALUES FOR INCOMMING ANIMATION
 	//======================================

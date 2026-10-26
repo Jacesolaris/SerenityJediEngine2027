@@ -1425,29 +1425,30 @@ void R_SetColorMappings()
 	int i = 0;
 
 	// setup the overbright lighting
-	tr.overbrightBits = r_overBrightBits->integer;
+	tr.overbright = r_overBrightBits->value;	// scalable: 0.5 = half a step (DH 2026-10-25)
 	if (!glConfig.deviceSupportsGamma && !glConfigExt.doGammaCorrectionWithShaders)
 	{
-		tr.overbrightBits = 0; // need hardware gamma for overbright
+		tr.overbright = 0.0f; // need hardware gamma for overbright
 	}
 
 	// never overbright in windowed mode (SJE: unless gamma is done with shaders, which does not touch the desktop)
 	if (!glConfig.isFullscreen && !glConfigExt.doGammaCorrectionWithShaders)
 	{
-		tr.overbrightBits = 0;
+		tr.overbright = 0.0f;
 	}
 
-	if (tr.overbrightBits > 1)
+	if (tr.overbright > 1.0f)
 	{
-		tr.overbrightBits = 1;
+		tr.overbright = 1.0f;
 	}
 
-	if (tr.overbrightBits < 0)
+	if (!(tr.overbright > 0.0f))
 	{
-		tr.overbrightBits = 0;
+		tr.overbright = 0.0f;
 	}
 
-	tr.identityLight = 1.0f / (1 << tr.overbrightBits);
+	tr.overbrightBits = tr.overbright > 0.0f ? 1 : 0;
+	tr.identityLight = 1.0f / powf(2.0f, tr.overbright);
 	tr.identityLightByte = 255 * tr.identityLight;
 
 	if (r_intensity->value < 1.0f)
@@ -1466,7 +1467,7 @@ void R_SetColorMappings()
 
 	const float g = r_gamma->value;
 
-	const int shift = tr.overbrightBits;
+	const float obScale = powf(2.0f, tr.overbright);
 
 	if (!glConfigExt.doGammaCorrectionWithShaders)
 	{
@@ -1481,7 +1482,7 @@ void R_SetColorMappings()
 			{
 				inf = 255 * pow(i / 255.0f, 1.0f / g) + 0.5f;
 			}
-			inf <<= shift;
+			inf = static_cast<int>(inf * obScale);
 			if (inf < 0)
 			{
 				inf = 0;
@@ -1515,7 +1516,7 @@ void R_SetGammaCorrectionLUT()
 	if (glConfigExt.doGammaCorrectionWithShaders)
 	{
 		int inf = 0;
-		const int shift = tr.overbrightBits;
+		const float obScale = powf(2.0f, tr.overbright);
 		const float g = r_gamma->value;
 		byte gamma_corrected[64]{};
 
@@ -1530,7 +1531,7 @@ void R_SetGammaCorrectionLUT()
 				inf = static_cast<int>(255.0f * pow(static_cast<float>(i) / 63.0f, 1.0f / g) + 0.5f);
 			}
 
-			gamma_corrected[i] = Com_Clampi(0, 255, inf << shift);
+			gamma_corrected[i] = Com_Clampi(0, 255, static_cast<int>(inf * obScale));
 		}
 
 		const auto lut_table = static_cast<byte*>(ri.Hunk_AllocateTempMemory(64 * 64 * 64 * 3));

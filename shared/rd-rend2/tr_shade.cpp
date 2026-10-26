@@ -463,7 +463,7 @@ static void ComputeShaderColors(shaderStage_t* pStage, vec4_t baseColor, vec4_t 
 		&& !((blend & GLS_DSTBLEND_BITS) == GLS_DSTBLEND_ONE_MINUS_SRC_COLOR)
 		&& (backEnd.framePostProcessed || !tr.world))
 	{
-		float scale = 1 << tr.overbrightBits;
+		float scale = powf(2.0f, tr.overbright);
 
 		baseColor[0] *= scale;
 		baseColor[1] *= scale;

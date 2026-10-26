@@ -669,6 +669,7 @@ extern vmCvar_t cg_updatedDataPadForcePower2;
 extern vmCvar_t cg_updatedDataPadForcePower3;
 extern vmCvar_t cg_updatedDataPadObjective;
 extern vmCvar_t cg_drawBreath;
+extern vmCvar_t cg_drawAirBar;
 extern vmCvar_t cg_roffdebug;
 #ifndef FINAL_BUILD
 extern	vmCvar_t		cg_roffval1;

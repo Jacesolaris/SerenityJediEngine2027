@@ -34,6 +34,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 /// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// ///
 
 #include "g_local.h"
+extern float BG_WaterDeathFrame(const playerState_t* ps, const animation_t* anims);	// bg_panimate.c
 #include "bg_saga.h"
 #include "g_pazaak.h"
 #include <assert.h>
@@ -454,6 +455,22 @@ static void P_WorldEffects(gentity_t* ent)
 				ent->pain_debounce_time = level.time + 200;
 
 				G_Damage(ent, NULL, NULL, NULL, NULL, ent->damage, DAMAGE_NO_ARMOR, MOD_WATER);
+				if (ent->health > 0)
+				{	// the last 4 hits before drowning: BOTH_PAIN16, 17, 18, then BOTH_CHOKE3 (then BOTH_DEATH19) (DH 2026-10-25)
+					static const int drownPain[4] = { BOTH_PAIN16, BOTH_PAIN17, BOTH_PAIN18, BOTH_CHOKE3 };
+					int hitsLeft = 0, dmg = ent->damage, total = 0;
+
+					while (total < ent->health && hitsLeft < 5)
+					{	// each hit does 2 more, at most 15
+						dmg = dmg + 2 < 15 ? dmg + 2 : 15;
+						total += dmg;
+						hitsLeft++;
+					}
+					if (hitsLeft >= 1 && hitsLeft <= 4)
+					{
+						G_SetAnim(ent, NULL, SETANIM_TORSO, drownPain[4 - hitsLeft], SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
+					}
+				}
 			}
 		}
 	}
@@ -5932,6 +5949,15 @@ static void ClientThink_real(gentity_t* ent)
 				trap->SendServerCommand(-1, va("print \"%s ^7survived with ^5%d ^7health and ^5%d ^7shield\n\"",
 					ent->client->pers.netname, ent->client->ps.stats[STAT_HEALTH],
 					ent->client->ps.stats[STAT_ARMOR]));
+
+				// "you are a worthy adversary" for the duel winner only, challenger or challenged (DH 2026-10-25)
+				if (g_duelWinSound.integer && !(ent->r.svFlags & SVF_BOT))
+				{
+					gentity_t* te = G_TempEntity(ent->client->ps.origin, EV_GLOBAL_SOUND);
+					te->s.eventParm = G_SoundIndex("sound/player/Quin.mp3");
+					te->r.svFlags |= SVF_SINGLECLIENT | SVF_BROADCAST;
+					te->r.singleClient = ent->s.number;
+				}
 			}
 			else
 			{
@@ -8175,6 +8201,17 @@ void ClientEndFrame(gentity_t* ent)
 
 	// burn from lava, etc
 	P_WorldEffects(ent);
+	{	// breath bar (cg_drawAirBar): air left while it is being used up under water
+		const int airLeft = ent->client->airOutTime - level.time;
+		ent->client->ps.stats[STAT_AIR] = airLeft < 11900 ? 1 + (airLeft > 0 ? (airLeft < 12000 ? airLeft : 12000) : 0) / 100 : 0;
+	}
+	if (ent->client->ps.pm_type == PM_DEAD && ent->waterlevel >= 2
+		&& (ent->client->ps.legsAnim == BOTH_DEATH19
+			? BG_WaterDeathFrame(&ent->client->ps, bgAllAnims[ent->localAnimIndex].anims) >= 45.0f	// BOTH_DEATH19: from its frame 45
+			: ent->client->ps.legsTimer <= 0))	// after the death anim
+	{	// dead in water: ragdoll (the body floats, bg_pmove PM_WaterMove) (DH 2026-10-25)
+		ent->client->ps.eFlags |= EF_RAG;
+	}
 
 	// apply all the damage taken this frame
 	P_DamageFeedback(ent);

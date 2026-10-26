@@ -104,12 +104,12 @@ R_ColorShiftLightingBytes
 void R_ColorShiftLightingBytes(byte in[4], byte out[4])
 {
 	// shift the color data based on overbright range
-	const int shift = Q_max(0, r_mapOverBrightBits->integer - tr.overbrightBits);
+	const float scale = powf(2.0f, Q_max(0.0f, r_mapOverBrightBits->value - tr.overbright));
 
 	// shift the data based on overbright range
-	int r = in[0] << shift;
-	int g = in[1] << shift;
-	int b = in[2] << shift;
+	int r = static_cast<int>(in[0] * scale);
+	int g = static_cast<int>(in[1] * scale);
+	int b = static_cast<int>(in[2] * scale);
 
 	// normalize by color instead of saturating to white
 	if ((r | g | b) > 255) {
@@ -120,6 +120,13 @@ void R_ColorShiftLightingBytes(byte in[4], byte out[4])
 		b = b * 255 / max;
 	}
 
+	// r_fullbright between 0 and 1: the lighting goes that far towards full bright (1 = white, as before)
+	const float fb = r_fullbright->value > 0.0f ? (r_fullbright->value < 1.0f ? r_fullbright->value : 1.0f) : 0.0f;
+	if (fb > 0.0f) {
+		r = r + static_cast<int>((255 - r) * fb);
+		g = g + static_cast<int>((255 - g) * fb);
+		b = b + static_cast<int>((255 - b) * fb);
+	}
 	out[0] = r;
 	out[1] = g;
 	out[2] = b;
@@ -135,12 +142,12 @@ R_ColorShiftLightingBytes
 static void R_ColorShiftLightingBytes(byte in[3])
 {
 	// shift the color data based on overbright range
-	const int shift = Q_max(0, r_mapOverBrightBits->integer - tr.overbrightBits);
+	const float scale = powf(2.0f, Q_max(0.0f, r_mapOverBrightBits->value - tr.overbright));
 
 	// shift the data based on overbright range
-	int r = in[0] << shift;
-	int g = in[1] << shift;
-	int b = in[2] << shift;
+	int r = static_cast<int>(in[0] * scale);
+	int g = static_cast<int>(in[1] * scale);
+	int b = static_cast<int>(in[2] * scale);
 
 	// normalize by color instead of saturating to white
 	if ((r | g | b) > 255) {
@@ -151,6 +158,13 @@ static void R_ColorShiftLightingBytes(byte in[3])
 		b = b * 255 / max;
 	}
 
+	// r_fullbright between 0 and 1: the lighting goes that far towards full bright (1 = white, as before)
+	const float fb = r_fullbright->value > 0.0f ? (r_fullbright->value < 1.0f ? r_fullbright->value : 1.0f) : 0.0f;
+	if (fb > 0.0f) {
+		r = r + static_cast<int>((255 - r) * fb);
+		g = g + static_cast<int>((255 - g) * fb);
+		b = b + static_cast<int>((255 - b) * fb);
+	}
 	in[0] = r;
 	in[1] = g;
 	in[2] = b;

@@ -1796,6 +1796,17 @@ qboolean G_RagDoll(gentity_t* ent, vec3_t forcedAngles)
 	// ------------------------------------------------------------
 	VectorCopy(ent->client->ps.origin, usedOrg);
 
+	// dying in water (BOTH_DEATH19): the ragdoll starts at its frame 45, not before (DH 2026-10-25)
+	extern float PM_WaterDeathFrame(const gentity_t* gent);
+	if (!ent->client->isRagging && ent->waterlevel >= 2 && ent->client->ps.legsAnim == BOTH_DEATH19)
+	{
+		if (PM_WaterDeathFrame(ent) < 45.0f)
+		{
+			return qfalse;
+		}
+		ent->client->isRagging = qtrue;
+	}
+
 	if (ent->client->isRagging == qfalse)
 	{
 		// If held by a client, always allow rag
@@ -1817,6 +1828,12 @@ qboolean G_RagDoll(gentity_t* ent, vec3_t forcedAngles)
 			{
 				inSomething = qtrue;
 			}
+		}
+
+		// dead in water: always ragdoll, the body floats (bg_pmove PM_WaterMove) (DH 2026-10-25)
+		if (ent->waterlevel >= 2 && ent->client->ps.legsAnim != BOTH_DEATH19 && ent->client->ps.legsAnimTimer <= 0)	// after the death anim
+		{
+			inSomething = qtrue;
 		}
 
 		// Broadsword > 1: always rag on death (except disallowed classes)

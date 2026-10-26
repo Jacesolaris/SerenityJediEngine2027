@@ -3527,6 +3527,12 @@ static void CG_SetLerpFrameAnimation(centity_t* cent, clientInfo_t* ci, lerpFram
 
 		animSpeed *= anim_speed_mult;
 
+		// dying in water: the death anim plays 25% slower, then the body ragdolls and floats (DH 2026-10-25)
+		if (BG_InDeathAnim(new_animation) && (CG_PointContents(cent->lerpOrigin, -1) & CONTENTS_WATER))
+		{
+			animSpeed *= 0.75f;
+		}
+
 		PM_SaberStartTransAnim(cent->currentState.number, cent->currentState.fireflag, cent->currentState.weapon, new_animation, &animSpeed, cent->currentState.userInt3);
 
 		if (torso_only)

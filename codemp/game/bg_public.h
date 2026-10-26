@@ -704,6 +704,7 @@ typedef enum {
 	STAT_MAX_DODGE,		//maximum number of dodge points allowed.
 	STAT_AMMOPOOL,
 	STAT_SABER_WEAR,		//breakable saber staffs: 0-100 wear (101: broken by a heavy hit), the HUD tints the saber style icon by it
+	STAT_AIR,				// air left under water for the breath bar: 0 = breathing, else 1 + tenths of seconds (0..120) (DH 2026-10-25)
 	STAT_WEAPONS2 = 14		// owned weapons 32-63 (msg.cpp sends it in 32 bits like STAT_WEAPONS), see BG_HasWeapon
 } statIndex_t;
 

@@ -669,6 +669,22 @@ static void P_WorldEffects(gentity_t* ent)
 				ent->painDebounceTime = level.time + 200;
 
 				G_Damage(ent, nullptr, nullptr, nullptr, nullptr, ent->damage, DAMAGE_NO_ARMOR, MOD_WATER);
+				if (ent->health > 0)
+				{	// the last 4 hits before drowning: BOTH_PAIN16, 17, 18, then BOTH_CHOKE3 (then BOTH_DEATH19) (DH 2026-10-25)
+					static const int drownPain[4] = { BOTH_PAIN16, BOTH_PAIN17, BOTH_PAIN18, BOTH_CHOKE3 };
+					int hitsLeft = 0, dmg = ent->damage, total = 0;
+
+					while (total < ent->health && hitsLeft < 5)
+					{	// each hit does 2 more, at most 15
+						dmg = dmg + 2 < 15 ? dmg + 2 : 15;
+						total += dmg;
+						hitsLeft++;
+					}
+					if (hitsLeft >= 1 && hitsLeft <= 4)
+					{
+						NPC_SetAnim(ent, SETANIM_TORSO, drownPain[4 - hitsLeft], SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+					}
+				}
 			}
 		}
 	}

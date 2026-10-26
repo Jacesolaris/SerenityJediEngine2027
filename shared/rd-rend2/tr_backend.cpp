@@ -3277,7 +3277,7 @@ static const void* RB_PostProcess(const void* data)
 		}
 	}
 
-	float exposure = r_cameraExposure->value + tr.overbrightBits;
+	float exposure = r_cameraExposure->value + tr.overbright;
 
 	if (srcFbo)
 	{

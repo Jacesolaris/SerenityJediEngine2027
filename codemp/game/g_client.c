@@ -1355,6 +1355,62 @@ static void BodySink(gentity_t* ent)
 	ent->takedamage = qfalse;
 }
 
+// a body left dead in water (DH 2026-10-25): once its death anim is done it ragdolls (EF_RAG) and rises to
+// the water surface, then BodySink takes over at the corpse removal time
+static void BodyRag(gentity_t* body);
+extern float BG_WaterDeathFrame(const playerState_t* ps, const animation_t* anims);	// bg_panimate.c
+
+static void BodyFloat(gentity_t* body)
+{
+	vec3_t top;
+	int k;
+
+	VectorCopy(body->r.currentOrigin, top);
+	for (k = 0; k < 128 && (trap->PointContents(top, body->s.number) & CONTENTS_WATER); k++)
+	{
+		top[2] += 8.0f;
+	}
+	top[2] -= 24.0f;	// lie in the surface
+	if (k > 0 && top[2] > body->r.currentOrigin[2] + 1.0f)
+	{
+		VectorCopy(body->r.currentOrigin, body->s.pos.trBase);
+		body->s.pos.trType = TR_LINEAR_STOP;
+		body->s.pos.trTime = level.time;
+		body->s.pos.trDuration = (int)((top[2] - body->r.currentOrigin[2]) / 60.0f * 1000.0f);
+		VectorSet(body->s.pos.trDelta, 0.0f, 0.0f, 60.0f);
+		top[2] = body->r.currentOrigin[2] + body->s.pos.trDuration * 0.06f;
+		VectorCopy(top, body->r.currentOrigin);	// where it ends up, for traces
+		trap->LinkEntity((sharedEntity_t*)body);
+	}
+	if (body->genericValue3 > level.time)
+	{	// BOTH_DEATH19: the ragdoll starts at its frame 45
+		body->think = BodyRag;
+		body->nextthink = body->genericValue3;
+		return;
+	}
+	BodyRag(body);
+}
+
+// the floating body becomes a ragdoll (EF_RAG), then BodySink takes over at the corpse removal time
+static void BodyRag(gentity_t* body)
+{
+	body->s.eFlags |= EF_RAG;
+	if (g_corpseRemovalTime.integer)
+	{
+		body->think = BodySink;
+		body->nextthink = body->timestamp + g_corpseRemovalTime.integer * 1000;
+		if (body->nextthink <= level.time)
+		{
+			body->nextthink = level.time + 1000;
+		}
+	}
+	else
+	{
+		body->think = NULL;
+		body->nextthink = 0;
+	}
+}
+
 /*
 =============
 CopyToBodyQue
@@ -1438,6 +1494,26 @@ static qboolean CopyToBodyQue(gentity_t* ent)
 	{
 		body->s.pos.trType = TR_STATIONARY;
 	}
+	int floatDelay = 0;
+	if (ent->waterlevel >= 2)
+	{	// dead in water: the body stays put while its death anim plays, then BodyFloat ragdolls it and floats it up
+		// (DH 2026-10-25)
+		if (ent->client->ps.legsAnim == BOTH_DEATH19)
+		{	// BOTH_DEATH19: floats from its frame 20, ragdolls from its frame 45 (genericValue3: when)
+			const float frame = BG_WaterDeathFrame(&ent->client->ps, bgAllAnims[ent->localAnimIndex].anims);
+			const float msPerFrame = fabs(bgAllAnims[ent->localAnimIndex].anims[BOTH_DEATH19].frameLerp) / 0.75f;
+			floatDelay = frame < 20.0f ? (int)((20.0f - frame) * msPerFrame) + 1 : 1;
+			body->genericValue3 = level.time + (frame < 45.0f ? (int)((45.0f - frame) * msPerFrame) : 0);
+		}
+		else
+		{
+			floatDelay = ent->client->ps.legsTimer > 0 ? ent->client->ps.legsTimer : 1;
+			body->genericValue3 = 0;
+		}
+		body->physicsObject = qfalse;
+		body->s.pos.trType = TR_STATIONARY;
+		VectorClear(body->s.pos.trDelta);
+	}
 
 	body->s.event = 0;
 
@@ -1481,6 +1557,11 @@ static qboolean CopyToBodyQue(gentity_t* ent)
 	{
 		body->nextthink = level.time + g_corpseRemovalTime.integer * 1000;
 		body->think = BodySink;
+	}
+	if (floatDelay > 0)
+	{	// in water: ragdoll and float once the death anim is done (it hands over to BodySink)
+		body->think = BodyFloat;
+		body->nextthink = level.time + floatDelay;
 	}
 
 	body->die = body_die;

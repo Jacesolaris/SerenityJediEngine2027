@@ -2599,11 +2599,12 @@ static void RenderSurfaces(CRenderSurface& RS, const trRefEntity_t* ent, int ent
 			newSurf->boneCache = RS.boneCache;
 			newSurf->dlightBits = dlightBits;
 
-			// render shadows?
-			if (r_shadows->integer == 2
-				&& (RS.renderfx & (RF_NOSHADOW | RF_DEPTHHACK))
-				&& shader->sort == SS_OPAQUE)
-				newSurf->genShadows = qtrue;
+			// render shadows? No stencil shadow volumes for Ghoul2 models in rend2 (DH 2026-10-25): the old test was
+			// inverted (it asked for RF_NOSHADOW | RF_DEPTHHACK), so only menu models (RF_NOSHADOW) and first person
+			// views got them, and rend2 builds the volumes from tess.xyz, which GPU-skinned surfaces don't fill. Result:
+			// hard black shards over the menu character (SJE character creation, cg_shadows 2). Characters in a level
+			// never got these volumes, so nothing changes there.
+			newSurf->genShadows = qfalse;
 
 			R_AddDrawSurf(
 				(surfaceType_t*)newSurf,
@@ -4146,8 +4147,20 @@ static mcR2Inst_t* MC_R2Instance(const void* key, const mdxmSurface_t* surface, 
 		}
 		mcR2Inst_t in;
 		in.numVerts = surface->numVerts;
-		in.vbo = R_CreateVBO(nullptr, sizeof(g2GoreVert_t) * surface->numVerts, VBO_USAGE_DYNAMIC,
+		// the vertices, then the constant block the model VBOs end with (R_LoadMDXM): white vertex colour, lightmap
+		// coordinates and light direction, read with an instance step rate. Without it the colour attribute read the
+		// cloth positions: dark, see-through capes in rend2's main menu character views (DH 2026-10-25).
+		const int vertBytes = static_cast<int>(sizeof(g2GoreVert_t)) * surface->numVerts;
+		const int constBytes = static_cast<int>(sizeof(vec4_t) + sizeof(vec2_t) + sizeof(uint32_t));
+		in.vbo = R_CreateVBO(nullptr, vertBytes + constBytes, VBO_USAGE_DYNAMIC,
 			va("meshcloth_vbo_%d", (int)mcR2Insts.size()));
+		{
+			byte constData[sizeof(vec4_t) + sizeof(vec2_t) + sizeof(uint32_t)] = {};
+			const vec4_t white = { 1.0f, 1.0f, 1.0f, 1.0f };
+			memcpy(constData, white, sizeof(vec4_t));	// lightmap coordinates and light direction stay 0
+			R_BindVBO(in.vbo);
+			qglBufferSubData(GL_ARRAY_BUFFER, vertBytes, constBytes, constData);
+		}
 		VBO_t* vbo = in.vbo;
 		vbo->offsets[ATTR_INDEX_POSITION] = offsetof(g2GoreVert_t, position);
 		vbo->offsets[ATTR_INDEX_NORMAL] = offsetof(g2GoreVert_t, normal);
@@ -4167,6 +4180,25 @@ static mcR2Inst_t* MC_R2Instance(const void* key, const mdxmSurface_t* surface, 
 		vbo->sizes[ATTR_INDEX_BONE_WEIGHTS] = sizeof(byte);
 		vbo->sizes[ATTR_INDEX_BONE_INDEXES] = sizeof(byte);
 		vbo->sizes[ATTR_INDEX_TANGENT] = sizeof(uint32_t);
+		const int ofsColor = vertBytes;
+		const int ofsLMCoords = vertBytes + static_cast<int>(sizeof(vec4_t));
+		const int ofsLightDir = ofsLMCoords + static_cast<int>(sizeof(vec2_t));
+		vbo->offsets[ATTR_INDEX_COLOR] = ofsColor;
+		vbo->strides[ATTR_INDEX_COLOR] = sizeof(vec4_t);
+		vbo->sizes[ATTR_INDEX_COLOR] = sizeof(vec4_t);
+		vbo->stepRates[ATTR_INDEX_COLOR] = MAX_INSTANCES;
+		const int lmAttrs[] = { ATTR_INDEX_TEXCOORD1, ATTR_INDEX_TEXCOORD2, ATTR_INDEX_TEXCOORD3, ATTR_INDEX_TEXCOORD4 };
+		for (const int a : lmAttrs)
+		{
+			vbo->offsets[a] = ofsLMCoords;
+			vbo->strides[a] = sizeof(vec2_t);
+			vbo->sizes[a] = sizeof(vec2_t);
+			vbo->stepRates[a] = MAX_INSTANCES;
+		}
+		vbo->offsets[ATTR_INDEX_LIGHTDIRECTION] = ofsLightDir;
+		vbo->strides[ATTR_INDEX_LIGHTDIRECTION] = sizeof(uint32_t);
+		vbo->sizes[ATTR_INDEX_LIGHTDIRECTION] = sizeof(uint32_t);
+		vbo->stepRates[ATTR_INDEX_LIGHTDIRECTION] = MAX_INSTANCES;
 		mcR2Insts.push_back(in);
 		reuse = &mcR2Insts.back();
 	}
@@ -4564,6 +4596,12 @@ static bool RB_MeshClothDraw(CRenderableSurface* surf)
 	{
 		return false;
 	}
+	// Draw what is batched so far first: creating and uploading the cloth buffers binds them, and the batch
+	// (surfaces of the same shader drawn just before, e.g. the robe's shoulder pieces) would then be drawn
+	// from the cloth buffer instead of the model's - pieces next to the cloak went missing in the SJE MP
+	// character menu (DH 2026-10-25).
+	RB_EndSurface();
+	RB_BeginSurface(tess.shader, tess.fogNum, tess.cubemapIndex);
 	mcR2Surf_t* rs = MC_R2Surface(surface);
 	if (!rs)
 	{
@@ -4576,8 +4614,6 @@ static bool RB_MeshClothDraw(CRenderableSurface* surf)
 	}
 
 	// draw on its own: these buffers can't be merged with the model's
-	RB_EndSurface();
-	RB_BeginSurface(tess.shader, tess.fogNum, tess.cubemapIndex);
 	R_BindVBO(in->vbo);
 	R_BindIBO(rs->ibo);
 	tess.externalIBO = rs->ibo;

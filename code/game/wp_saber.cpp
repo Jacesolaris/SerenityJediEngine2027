@@ -16468,18 +16468,15 @@ void WP_ResistForcePush(gentity_t* self, const gentity_t* pusher, const qboolean
 		parts = SETANIM_TORSO;
 	}
 
-	if (self->client->ps.forcePowerLevel[FP_ABSORB] > FORCE_LEVEL_2)
-	{
-		NPC_SetAnim(self, parts, BOTH_RESISTPUSH, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-	}
-	else if (self->client->ps.saber[0].type == SABER_SINGLE_YODA)
+	if ((self->client->NPC_class == CLASS_YODA) || (self->client->ps.saber[0].type == SABER_SINGLE_YODA))
 	{
 		NPC_SetAnim(self, parts, BOTH_YODA_RESISTFORCE, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 	}
 	else
 	{
-		NPC_SetAnim(self, parts, BOTH_RESISTPUSH2, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+		NPC_SetAnim(self, parts, BOTH_RESISTPUSH, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 	}
+
 	self->client->ps.powerups[PW_MEDITATE] = level.time + self->client->ps.torsoAnimTimer + 1000;
 
 	if (!no_penalty)

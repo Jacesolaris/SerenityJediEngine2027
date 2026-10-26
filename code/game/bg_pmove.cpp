@@ -2854,6 +2854,24 @@ static void PM_WaterMove()
 #endif
 	PM_Friction();
 
+	// a dead body in water floats up to the surface and drifts about slowly once the death anim is done; it
+	// ragdolls there (DH 2026-10-25)
+	extern float PM_WaterDeathFrame(const gentity_t* gent);
+	if (pm->ps->pm_type == PM_DEAD
+		&& (pm->ps->legsAnim == BOTH_DEATH19 ? PM_WaterDeathFrame(pm->gent) >= 20.0f : pm->ps->legsAnimTimer <= 0))	// BOTH_DEATH19: from its frame 20
+	{
+		const float drift = pm->cmd.serverTime * 0.00025f + pm->ps->clientNum * 1.7f;
+
+		wishvel[0] = cosf(drift) * 8.0f;
+		wishvel[1] = sinf(drift) * 8.0f;
+		wishvel[2] = pm->waterlevel >= 3 ? 60.0f : 8.0f;	// up while under, then bob at the surface
+		VectorCopy(wishvel, wishdir);
+		wishspeed = VectorNormalize(wishdir);
+		PM_Accelerate(wishdir, wishspeed, pm_wateraccelerate);
+		PM_SlideMove(qfalse);
+		return;
+	}
+
 	scale = PM_CmdScale(&pm->cmd);
 	//
 	// user intentions

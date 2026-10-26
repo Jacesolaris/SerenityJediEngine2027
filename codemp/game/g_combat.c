@@ -3864,7 +3864,12 @@ void player_die(gentity_t* self, const gentity_t* inflictor, gentity_t* attacker
 
 		static int death_anim;
 
-		const int anim = G_PickDeathAnim(self, self->pos1, damage, HL_NONE);
+		int anim = G_PickDeathAnim(self, self->pos1, damage, HL_NONE);
+
+		if (anim >= 1 && self->waterlevel >= 2 && BG_HasAnimation(self->localAnimIndex, BOTH_DEATH19))
+		{	// dying in water: BOTH_DEATH19, then float and ragdoll (BG_WaterDeathFrame) (DH 2026-10-25)
+			anim = BOTH_DEATH19;
+		}
 
 		if (anim >= 1)
 		{
@@ -3887,6 +3892,11 @@ void player_die(gentity_t* self, const gentity_t* inflictor, gentity_t* attacker
 				//not disconnecting
 				G_SetAnim(self, NULL, SETANIM_BOTH, anim,
 					SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART, 0);
+				if (self->waterlevel >= 2)
+				{	// dying in water: the death anim plays 25% slower (cg_players.c), then the body ragdolls and floats (DH 2026-10-25)
+					self->client->ps.legsTimer = self->client->ps.legsTimer * 4 / 3;
+					self->client->ps.torsoTimer = self->client->ps.torsoTimer * 4 / 3;
+				}
 			}
 
 			self->client->ps.pm_type = s_pm_type;

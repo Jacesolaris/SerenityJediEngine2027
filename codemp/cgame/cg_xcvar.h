@@ -286,6 +286,7 @@ XCVAR_DEF(in_joystick, "1", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(cg_scaleJoystickSensitivity, "1", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(cg_debugHealthBars, "0", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(cg_drawblockpointbar, "0", NULL, CVAR_ARCHIVE)
+XCVAR_DEF(cg_drawAirBar, "1", NULL, CVAR_ARCHIVE) // blue breath bar above the HUD while air runs out under water (DH 2026-10-25)
 XCVAR_DEF(cg_drawfatiguepointbar, "0", NULL, CVAR_ARCHIVE)
 
 #undef XCVAR_DEF

@@ -5536,19 +5536,15 @@ void WP_ResistForcePush(gentity_t* self, const gentity_t* pusher, const qboolean
 		parts = SETANIM_TORSO;
 	}
 
-	if (self->client->ps.fd.forcePowerLevel[FP_ABSORB] > FORCE_LEVEL_2)
+	if ((self->client->pers.botclass == BCLASS_YODA) || (self->client->saber[0].type == SABER_SINGLE_YODA))
 	{
-		G_SetAnim(self, &self->client->pers.cmd, parts, BOTH_RESISTPUSH, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
-	}
-	else if (self->client->saber[0].type == SABER_SINGLE_YODA)
-	{
-		G_SetAnim(self, &self->client->pers.cmd, parts, BOTH_YODA_RESISTFORCE,
-			SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
+		G_SetAnim(self, &self->client->pers.cmd, parts, BOTH_YODA_RESISTFORCE, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
 	}
 	else
 	{
-		G_SetAnim(self, &self->client->pers.cmd, parts, BOTH_RESISTPUSH2, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
+		G_SetAnim(self, &self->client->pers.cmd, parts, BOTH_RESISTPUSH, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
 	}
+
 	self->client->ps.powerups[PW_MEDITATE] = level.time + self->client->ps.torsoTimer + 1000;
 
 	if (!no_penalty)

@@ -69,14 +69,14 @@ BLOCK "StringFileInfo"
 BEGIN
 BLOCK "040904b0"
 BEGIN
-VALUE "Comments", "Raven Software"
-VALUE "CompanyName", "Activision Inc"
-VALUE "FileDescription", "Singleplayer"
+VALUE "Comments", "SerenityJediEngine2027 Contributors"
+VALUE "CompanyName", "SJE Team"
+VALUE "FileDescription", "SerenityJediEngine2027-SP"
 VALUE "FileVersion", VERSION_STRING
-VALUE "InternalName", "SJE SP Game"
-VALUE "LegalCopyright", "Copyright (C) 2026"
+VALUE "InternalName", "SerenityJediEngine2027 Game"
+VALUE "LegalCopyright", "Copyright (C) 2027 SJE Team"
 VALUE "OriginalFilename", "SerenityJediEngine2027-gamex86.dll"
-VALUE "ProductName", "Singleplayer"
+VALUE "ProductName", "SerenityJediEngine2027 Game"
 VALUE "ProductVersion", VERSION_STRING
 END
 END

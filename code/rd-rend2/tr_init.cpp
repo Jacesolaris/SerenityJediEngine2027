@@ -1401,11 +1401,11 @@ static void GfxInfo_f(void)
 	}
 	if (glConfig.deviceSupportsGamma)
 	{
-		ri.Printf(PRINT_ALL, "GAMMA: hardware w/ %d overbright bits\n", tr.overbrightBits);
+		ri.Printf(PRINT_ALL, "GAMMA: hardware w/ %g overbright bits\n", tr.overbright);
 	}
 	else
 	{
-		ri.Printf(PRINT_ALL, "GAMMA: software w/ %d overbright bits\n", tr.overbrightBits);
+		ri.Printf(PRINT_ALL, "GAMMA: software w/ %g overbright bits\n", tr.overbright);
 	}
 
 	ri.Printf(PRINT_ALL, "texturemode: %s\n", r_textureMode->string);
@@ -1614,7 +1614,7 @@ static void R_Register(void)
 	r_colorMipLevels = ri_Cvar_Get_NoComm("r_colorMipLevels", "0", CVAR_LATCH, "");
 	r_detailTextures = ri_Cvar_Get_NoComm("r_detailtextures", "1", CVAR_ARCHIVE | CVAR_LATCH, "");
 	r_texturebits = ri_Cvar_Get_NoComm("r_texturebits", "0", CVAR_ARCHIVE | CVAR_LATCH, "");
-	r_overBrightBits = ri_Cvar_Get_NoComm("r_overBrightBits", "0", CVAR_ARCHIVE | CVAR_LATCH, "");
+	r_overBrightBits = ri_Cvar_Get_NoComm("r_overBrightBits", "0.2", CVAR_ARCHIVE | CVAR_LATCH, "");
 	r_simpleMipMaps = ri_Cvar_Get_NoComm("r_simpleMipMaps", "1", CVAR_ARCHIVE | CVAR_LATCH, "");
 	r_vertexLight = ri_Cvar_Get_NoComm("r_vertexLight", "0", CVAR_ARCHIVE | CVAR_LATCH, "");
 	r_uiFullScreen = ri_Cvar_Get_NoComm("r_uifullscreen", "0", 0, "");
@@ -1690,8 +1690,8 @@ static void R_Register(void)
 	//
 	// temporary latched variables that can only change over a restart
 	//
-	r_fullbright = ri_Cvar_Get_NoComm("r_fullbright", "0", CVAR_LATCH | CVAR_CHEAT, "");
-	r_mapOverBrightBits = ri_Cvar_Get_NoComm("r_mapOverBrightBits", "0", CVAR_LATCH, "");
+	r_fullbright = ri_Cvar_Get_NoComm("r_fullbright", "0.2", CVAR_LATCH | CVAR_CHEAT, "");
+	r_mapOverBrightBits = ri_Cvar_Get_NoComm("r_mapOverBrightBits", "0.2", CVAR_LATCH, "");
 	r_intensity = ri_Cvar_Get_NoComm("r_intensity", "1", CVAR_LATCH, "");
 	r_singleShader = ri_Cvar_Get_NoComm("r_singleShader", "0", CVAR_CHEAT | CVAR_LATCH, "");
 

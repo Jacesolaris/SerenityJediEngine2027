@@ -10297,6 +10297,25 @@ static void CG_DrawFlagStatus()
 	}
 }
 
+// breath bar (DH 2026-10-25, cg_drawAirBar): while the player uses up air under water, a blue bar above the
+// HUD shrinks towards its middle as the air runs out (12 seconds of air; empty = drowning)
+#define AIRBAR_W			296.0f
+#define AIRBAR_H			8.0f
+#define AIRBAR_X			((SCREEN_WIDTH - AIRBAR_W) * 0.5f)
+#define AIRBAR_Y			420.0f
+
+static void CG_DrawAirBar(float frac)
+{
+	vec4_t fill = { 0.15f, 0.4f, 1.0f, 0.9f };
+	vec4_t back = { 0.0f, 0.0f, 0.0f, 0.4f };
+
+	if (frac < 0.0f) frac = 0.0f;
+	if (frac > 1.0f) frac = 1.0f;
+	CG_FillRect(AIRBAR_X, AIRBAR_Y, AIRBAR_W, AIRBAR_H, back);
+	CG_FillRect(AIRBAR_X + AIRBAR_W * (1.0f - frac) * 0.5f, AIRBAR_Y, AIRBAR_W * frac, AIRBAR_H, fill);
+	CG_DrawRect(AIRBAR_X, AIRBAR_Y, AIRBAR_W, AIRBAR_H, 0.5f, colorTable[CT_BLACK]);
+}
+
 //draw meter showing sprint fuel when it's not full
 #define SPFUELBAR_H			100.0f
 #define SPFUELBAR_W			5.0f
@@ -11783,6 +11802,11 @@ static void CG_Draw2D(void)
 	{
 		//draw it as long as it isn't full
 		CG_DrawSprintFuel();
+	}
+	if (cg_drawAirBar.integer && cg.snap->ps.stats[STAT_AIR] > 0 && cg.snap->ps.stats[STAT_HEALTH] > 0
+		&& cg.predictedPlayerState.pm_type != PM_SPECTATOR)
+	{
+		CG_DrawAirBar((cg.snap->ps.stats[STAT_AIR] - 1) / 120.0f);
 	}
 
 	if (cg.snap->ps.cloakFuel < 100)

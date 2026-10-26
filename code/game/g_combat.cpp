@@ -5875,6 +5875,10 @@ void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 			AddSightEvent(attacker, self->currentOrigin, 384, AEL_DISCOVERED, 10);
 		}
 
+		if (anim >= 0 && self->waterlevel >= 2)
+		{	// dying in water: BOTH_DEATH19, then float and ragdoll (PM_WaterDeathFrame) (DH 2026-10-25)
+			anim = BOTH_DEATH19;
+		}
 		if (anim >= 0) //can be -1 if it fails, -2 if it's already in a death anim
 		{
 			NPC_SetAnim(self, SETANIM_BOTH, anim, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);

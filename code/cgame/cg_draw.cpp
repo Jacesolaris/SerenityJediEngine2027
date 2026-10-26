@@ -1240,6 +1240,25 @@ constexpr auto SPFUELBAR_W = 5.0f;
 #define SPFUELBAR_X			(SCREEN_WIDTH-SPFUELBAR_W-4.0f)
 constexpr auto SPFUELBAR_Y = 240.0f;
 
+// breath bar (DH 2026-10-25, cg_drawAirBar): while the player uses up air under water, a blue bar above the
+// HUD shrinks towards its middle as the air runs out (12 seconds of air; empty = drowning)
+#define AIRBAR_W			296.0f
+#define AIRBAR_H			8.0f
+#define AIRBAR_X			((SCREEN_WIDTH - AIRBAR_W) * 0.5f)
+#define AIRBAR_Y			420.0f
+
+static void CG_DrawAirBar(float frac)
+{
+	vec4_t fill = { 0.15f, 0.4f, 1.0f, 0.9f };
+	vec4_t back = { 0.0f, 0.0f, 0.0f, 0.4f };
+
+	if (frac < 0.0f) frac = 0.0f;
+	if (frac > 1.0f) frac = 1.0f;
+	CG_FillRect(AIRBAR_X, AIRBAR_Y, AIRBAR_W, AIRBAR_H, back);
+	CG_FillRect(AIRBAR_X + AIRBAR_W * (1.0f - frac) * 0.5f, AIRBAR_Y, AIRBAR_W * frac, AIRBAR_H, fill);
+	CG_DrawRect(AIRBAR_X, AIRBAR_Y, AIRBAR_W, AIRBAR_H, 0.5f, colorTable[CT_BLACK]);
+}
+
 static void CG_DrawSprintFuel()
 {
 	vec4_t aColor{};
@@ -8678,6 +8697,16 @@ static void CG_Draw2D()
 			}
 
 			CG_DynamicHudEnd(hud_alpha);
+		}
+		// breath bar: the game's air timer (P_WorldEffects) while it is being used up - outside the dynamic HUD,
+		// so it shows even when the HUD has faded out
+		if (cg_drawAirBar.integer && g_entities[cg.snap->ps.clientNum].client)
+		{
+			const int airLeft = g_entities[cg.snap->ps.clientNum].client->airOutTime - level.time;
+			if (airLeft < 11900)
+			{
+				CG_DrawAirBar(airLeft / 12000.0f);
+			}
 		}
 		CG_DrawAmmoWarning();
 

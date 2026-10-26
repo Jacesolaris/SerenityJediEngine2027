@@ -345,6 +345,7 @@ vmCvar_t cg_updatedDataPadForcePower2;
 vmCvar_t cg_updatedDataPadForcePower3;
 vmCvar_t cg_updatedDataPadObjective;
 vmCvar_t cg_drawBreath;
+vmCvar_t cg_drawAirBar;
 vmCvar_t cg_roffdebug;
 #ifndef FINAL_BUILD
 vmCvar_t	cg_roffval1;
@@ -573,6 +574,7 @@ static cvarTable_t cvarTable[] = {
 	{ &cg_errorDecay, "cg_errordecay", "100", 0 },
 
 	{ &cg_drawBreath, "cg_drawBreath", "0", CVAR_ARCHIVE }, // Added 11/07/02
+	{ &cg_drawAirBar, "cg_drawAirBar", "1", CVAR_ARCHIVE }, // blue breath bar above the HUD while air runs out under water (DH 2026-10-25)
 	{ &cg_roffdebug, "cg_roffdebug", "0" },
 #ifndef FINAL_BUILD
 	{ &cg_roffval1, "cg_roffval1", "0" },

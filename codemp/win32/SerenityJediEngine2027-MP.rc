@@ -80,12 +80,12 @@ BLOCK "StringFileInfo"
 BEGIN
 BLOCK "040904b0"
 BEGIN
-VALUE "Comments", "Contributors"
-VALUE "FileDescription", "Multiplayer"
+VALUE "Comments", "SerenityJediEngine2027 Contributors"
+VALUE "FileDescription", "SerenityJediEngine2027-MP"
 VALUE "FileVersion", VERSION_STRING
-VALUE "InternalName", "SJE MP"
-VALUE "OriginalFilename", "SerenityJediEngine2027-MP.exe"
-VALUE "ProductName", "Multiplayer"
+VALUE "InternalName", "SerenityJediEngine2027 MP"
+VALUE "OriginalFilename", "SerenityJediEngine2027-MP.x86_64.exe"
+VALUE "ProductName", "SerenityJediEngine2027 Multiplayer"
 VALUE "ProductVersion", VERSION_STRING
 END
 END
