@@ -2856,13 +2856,13 @@ static void CG_AddCEntity(centity_t* cent)
 		PROFILE_ZONE("cgame: general entity");
 		CG_General(cent);
 	}
-		break;
+	break;
 	case ET_PLAYER:
 	{
 		PROFILE_ZONE("cgame: player or NPC (CG_Player)");
 		CG_Player(cent);
 	}
-		break;
+	break;
 	case ET_ITEM:
 		CG_Item(cent);
 		break;
@@ -2871,7 +2871,7 @@ static void CG_AddCEntity(centity_t* cent)
 		PROFILE_ZONE("cgame: missile");
 		CG_Missile(cent);
 	}
-		break;
+	break;
 	case ET_MOVER:
 		CG_Mover(cent);
 		break;

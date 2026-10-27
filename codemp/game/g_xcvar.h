@@ -208,6 +208,11 @@ XCVAR_DEF(g_dodgemulti, "10.0", NULL, CVAR_LATCH, qfalse)
 
 XCVAR_DEF(g_ffaRespawnTimer, "1", NULL, CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_deathfx, "1", NULL, CVAR_ARCHIVE, qtrue)
+XCVAR_DEF(g_droidBodyVanish, "1", NULL, CVAR_ARCHIVE, qtrue)
+XCVAR_DEF(g_monsterGrab, "1", NULL, CVAR_ARCHIVE, qtrue) // wampa / rancor players and bots grab, hold and eat like SP (0 = off)
+XCVAR_DEF(g_rancorPit, "1", NULL, CVAR_ARCHIVE, qtrue) // a rancor always lives on g_rancorPitMap and respawns after it dies (0 = off)
+XCVAR_DEF(g_rancorPitMap, "mp/duel7", NULL, CVAR_ARCHIVE, qfalse)
+XCVAR_DEF(g_rancorPitRespawn, "30", NULL, CVAR_ARCHIVE, qfalse) // seconds after the rancor dies
 
 XCVAR_DEF(g_Enhanced_saberTweaks, "0", NULL, CVAR_NONE, qtrue)
 
@@ -233,6 +238,7 @@ XCVAR_DEF(g_WeaponRemovalTime, "10", NULL, CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_remove_unused_weapons, "1", NULL, CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(com_outcast, "0", NULL, CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_AllowLedgeGrab, "1", NULL, CVAR_ARCHIVE, qtrue)
+XCVAR_DEF(g_ledgeGrabMinAir, "16", NULL, CVAR_ARCHIVE, qtrue) // a ledge is grabbed only with the feet this high off the floor (DH 2026-10-26; 0 = old)
 XCVAR_DEF(g_attackskill, "3", NULL, CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_saberLockCinematicCamera, "1", NULL, CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_saberdebug, "0", NULL, CVAR_ARCHIVE, qtrue)

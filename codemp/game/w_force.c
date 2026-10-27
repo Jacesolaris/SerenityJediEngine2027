@@ -210,7 +210,8 @@ const int forcePowerMinRank[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] = //0 == n
 		999, //FP_DEADLYSIGHT
 		999, //FP_BLAST
 		999, //FP_INSANITY
-		999 //FP_BLINDING
+		999, //FP_BLINDING
+		999 //FP_DARK_STASIS
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -241,7 +242,8 @@ const int forcePowerMinRank[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] = //0 == n
 		15, //FP_DEADLYSIGHT
 		10, //FP_BLAST
 		15, //FP_INSANITY
-		10 //FP_BLINDING
+		10, //FP_BLINDING
+		10 //FP_DARK_STASIS
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -272,7 +274,8 @@ const int forcePowerMinRank[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] = //0 == n
 		15, //FP_DEADLYSIGHT
 		10, //FP_BLAST
 		15, //FP_INSANITY
-		10 //FP_BLINDING
+		10, //FP_BLINDING
+		10 //FP_DARK_STASIS
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -303,7 +306,8 @@ const int forcePowerMinRank[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] = //0 == n
 		15, //FP_DEADLYSIGHT
 		10, //FP_BLAST
 		15, //FP_INSANITY
-		10 //FP_BLINDING
+		10, //FP_BLINDING
+		10 //FP_DARK_STASIS
 		//NUM_FORCE_POWERS
 	}
 };
@@ -1034,8 +1038,8 @@ int ForcePowerUsableOn(const gentity_t* attacker, const gentity_t* other, const 
 	if (!other)                     // FIX 1: prevent NULL dereference
 		return 0;
 
-	if (other->client && other->client->repulseChargeStart)
-		return 0; // charging Force Repulse: no power works on him (2026-10-12, DH)
+	if (other->client && (other->client->repulseChargeStart || other->client->ps.fd.forcePowersActive & 1 << FP_DARK_STASIS))
+		return 0; // charging Force Repulse (2026-10-12) or Dark Stasis active (2026-10-27): no power works on him, DH
 
 	if (other->client &&            // FIX 2: safe to dereference now
 		(other->client->ps.inAirAnim ||
@@ -1665,6 +1669,13 @@ void WP_ForcePowerStart(const gentity_t* self, const forcePowers_t forcePower, i
 		hearable = qtrue;
 		hearDist = 256;
 		duration = 1000 * self->client->ps.fd.forcePowerLevel[forcePower];
+		self->client->ps.fd.forcePowersActive |= 1 << forcePower;
+		break;
+	case FP_DARK_STASIS:
+		// on as long as its victims are held (sjeDarkStasisTime): the caster's red screen (cgame)
+		hearable = qtrue;
+		hearDist = 512;
+		duration = 1000 + 1000 * Com_Clampi(0, FORCE_LEVEL_3, self->client->ps.fd.forcePowerLevel[forcePower]);
 		self->client->ps.fd.forcePowersActive |= 1 << forcePower;
 		break;
 	case FP_STASIS:
@@ -7715,6 +7726,123 @@ void ForceStasis(gentity_t* self)
 }
 
 // ------------------------------------------------------------------------------------------------------------------
+// FP_DARK_STASIS (dark side, 2026-10-27): the repulse throw without the lift, and the rage sounds. Every enemy (players,
+// bots, NPCs - saber users too) and every flying missile in an arc around the caster is held in stasis, drawn red
+// (FLAG_DARKSTASIS); the caster's screen is tinted red while it lasts (cgame). Level 1 = 120 degrees in front, level 2
+// = 180 degrees, level 3 = all round. Force Absorb soaks it up. As SJE SP / MD SP (ForceDarkStasis in wp_saber.cpp),
+// with the MP stasis times.
+// ------------------------------------------------------------------------------------------------------------------
+static const int sjeDarkStasisTime[NUM_FORCE_POWER_LEVELS] = { 0, 2000, 3000, 4000 };	// SP 4/6/8 s
+static const int sjeDarkStasisRadius[NUM_FORCE_POWER_LEVELS] = { 0, 512, 768, 1024 };
+static const float sjeDarkStasisArc[NUM_FORCE_POWER_LEVELS] = { 1.0f, 0.5f, 0.0f, -1.1f };	// smallest dot with the flat view
+
+static void SJE_DarkStasisOne(gentity_t* self, gentity_t* ent, const int lvl)
+{
+	if (!SJE_ValidEnemy(self, ent, FP_DARK_STASIS) || SJE_Absorbed(ent, FP_DARK_STASIS, lvl))
+	{
+		return;
+	}
+	SJE_Freeze(ent, sjeDarkStasisTime[lvl]);
+	ent->client->ps.userInt3 |= 1 << FLAG_DARKSTASIS; // g_active.c clears it with the freeze
+	G_PlayBoltedEffect(G_EffectIndex("force/rage2"), ent, "thoracic");
+	if (ent->s.eType == ET_NPC)
+	{
+		G_AddVoiceEvent(ent, Q_irand(EV_PUSHED1, EV_PUSHED3), 2000);
+	}
+}
+
+void ForceDarkStasis(gentity_t* self)
+{
+	if (!SJE_PowerReady(self, FP_DARK_STASIS) || self->client->ps.fd.forcePowersActive & 1 << FP_DARK_STASIS)
+	{
+		return;
+	}
+	const int lvl = SJE_Level(self, FP_DARK_STASIS);
+	const float radius = sjeDarkStasisRadius[lvl];
+	const float minDot = sjeDarkStasisArc[lvl];
+	const vec3_t flatAngles = { 0.0f, self->client->ps.viewangles[YAW], 0.0f };
+	static int list[MAX_GENTITIES]; // static: 16 KB (C6262)
+	vec3_t mins = { 0 }, maxs = { 0 }, eye, viewFwd, fwd;
+
+	WP_ForcePowerStart(self, FP_DARK_STASIS, 0);
+	SJE_CastAnim(self, BOTH_SUPERPUSH, "sound/weapons/force/rage.mp3", "force/drain_hand");
+	G_PlayBoltedEffect(G_EffectIndex("force/drain_hand"), self, "*r_hand");
+	if (!(self->client->ps.fd.forcePowersActive & (1 << FP_RAGE | 1 << FP_ABSORB)))
+	{
+		G_Sound(self, TRACK_CHANNEL_3, rageLoopSound); // WP_ForcePowerStop mutes it
+	}
+	self->client->ps.saberMove = self->client->ps.saberBounceMove = LS_READY;
+	self->client->ps.saberBlocked = BLOCKED_NONE;
+	// no attacking until the throw is over (BG_SetAnimFinal keeps every other torso anim off it till then)
+	if (self->client->ps.weaponTime < 1000)
+	{
+		self->client->ps.weaponTime = 1000;
+	}
+	if (self->client->ps.weaponTime < self->client->ps.torsoTimer)
+	{
+		self->client->ps.weaponTime = self->client->ps.torsoTimer;
+	}
+
+	// the arc is around the caster, whatever way the view is pitched
+	SJE_EyePoint(self, eye, viewFwd);
+	AngleVectors(flatAngles, fwd, NULL, NULL);
+	for (int i = 0; i < 3; i++)
+	{
+		mins[i] = self->client->ps.origin[i] - radius;
+		maxs[i] = self->client->ps.origin[i] + radius;
+	}
+	const int num = trap->EntitiesInBox(mins, maxs, list, MAX_GENTITIES);
+	for (int e = 0; e < num; e++)
+	{
+		gentity_t* ent = &g_entities[list[e]];
+		vec3_t v = { 0 }, center, dir;
+
+		if (!ent->inuse || ent == self)
+		{
+			continue;
+		}
+		// the distance from the edge of its box
+		for (int i = 0; i < 3; i++)
+		{
+			if (self->client->ps.origin[i] < ent->r.absmin[i])
+			{
+				v[i] = ent->r.absmin[i] - self->client->ps.origin[i];
+			}
+			else if (self->client->ps.origin[i] > ent->r.absmax[i])
+			{
+				v[i] = self->client->ps.origin[i] - ent->r.absmax[i];
+			}
+		}
+		if (VectorLength(v) >= radius)
+		{
+			continue;
+		}
+		VectorAdd(ent->r.absmin, ent->r.absmax, center);
+		VectorScale(center, 0.5f, center);
+		VectorSubtract(center, self->client->ps.origin, dir);
+		dir[2] = 0.0f;
+		if (VectorNormalize(dir) > 0.0f && DotProduct(dir, fwd) < minDot)
+		{
+			continue; // outside the arc
+		}
+		if (ent->s.eType == ET_MISSILE)
+		{
+			// every flying missile but his own: held in the air (g_missile.c keeps its flight for later)
+			if (ent->s.pos.trType != TR_STATIONARY && ent->r.ownerNum != self->s.number && SJE_ClearShot(self, ent))
+			{
+				G_StasisMissile(self, ent, viewFwd);
+			}
+			continue;
+		}
+		if (!ent->client || !SJE_ClearShot(self, ent))
+		{
+			continue;
+		}
+		SJE_DarkStasisOne(self, ent, lvl);
+	}
+}
+
+// ------------------------------------------------------------------------------------------------------------------
 // FP_DESTRUCTION / FP_BLAST: a force projectile (SP: rocket_proj with the concussion / repeater alt look)
 // ------------------------------------------------------------------------------------------------------------------
 static void SJE_FireForceProjectile(gentity_t* self, const qboolean blast)
@@ -8554,6 +8682,15 @@ void WP_ForcePowerStop(gentity_t* self, const forcePowers_t forcePower)
 		}
 
 		self->client->ps.activeForcePass = 0;
+		break;
+	case FP_DARK_STASIS:
+		// its rage loop (rage and absorb have their own on this track)
+		if (was_active & 1 << forcePower
+			&& !(self->client->ps.fd.forcePowersActive & (1 << FP_RAGE | 1 << FP_ABSORB)))
+		{
+			G_MuteSound(self->client->ps.fd.killSoundEntIndex[TRACK_CHANNEL_3 - 50], CHAN_VOICE);
+		}
+		self->client->ps.fd.forcePowerDebounce[forcePower] = level.time + 1000;
 		break;
 	case FP_RAGE:
 		if (self->client->ps.fd.forcePowerLevel[forcePower] < FORCE_LEVEL_2)
@@ -9438,6 +9575,7 @@ static int WP_DoSpecificPower(gentity_t* self, const usercmd_t* ucmd, const forc
 	case FP_BLAST:
 	case FP_INSANITY:
 	case FP_BLINDING:
+	case FP_DARK_STASIS:
 		powerSucceeded = 0; //always 0 for nonhold powers
 		if (self->client->ps.fd.forceButtonNeedRelease)
 		{
@@ -9469,6 +9607,9 @@ static int WP_DoSpecificPower(gentity_t* self, const usercmd_t* ucmd, const forc
 			break;
 		case FP_INSANITY:
 			ForceInsanity(self);
+			break;
+		case FP_DARK_STASIS:
+			ForceDarkStasis(self);
 			break;
 		default:
 			ForceBlinding(self);

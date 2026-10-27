@@ -154,6 +154,10 @@ static uniformInfo_t uniformsInfo[] =
 	{ "u_Grade1",				GLSL_VEC4, 1 },
 	{ "u_Grade2",				GLSL_VEC4, 1 },
 	{ "u_Grade3",				GLSL_VEC4, 1 },
+	{ "u_GrassPushers",		GLSL_VEC4, 16 },
+	{ "u_GrassParams",		GLSL_VEC4, 1 },
+	{ "u_GrassWaves",		GLSL_VEC4, 8 },
+	{ "u_GrassWaveParams",	GLSL_VEC4, 1 },
 };
 
 static void GLSL_PrintProgramInfoLog(GLuint object, qboolean developerOnly)
@@ -1057,9 +1061,11 @@ void GLSL_SetUniforms(shaderProgram_t* program, UniformData* uniformData)
 
 		case GLSL_VEC4:
 		{
-			assert(data->numElements == 1);
 			GLfloat* value = (GLfloat*)(data + 1);
-			GLSL_SetUniformVec4(program, data->index, value);
+			if (data->numElements > 1)
+				GLSL_SetUniformVec4N(program, data->index, value, data->numElements);
+			else
+				GLSL_SetUniformVec4(program, data->index, value);
 			data = reinterpret_cast<UniformData*>(value + data->numElements * 4);
 			break;
 		}
@@ -1254,6 +1260,30 @@ void GLSL_SetUniformVec4(shaderProgram_t* program, int uniformNum, const vec4_t 
 	VectorCopy4(v, compare);
 
 	qglUniform4f(uniforms[uniformNum], v[0], v[1], v[2], v[3]);
+}
+
+void GLSL_SetUniformVec4N(shaderProgram_t* program, int uniformNum, const float* v, int numVec4s)
+{
+	GLint* uniforms = program->uniforms;
+	float* compare = (float*)(program->uniformBuffer + program->uniformBufferOffsets[uniformNum]);
+
+	if (uniforms[uniformNum] == -1)
+		return;
+
+	if (uniformsInfo[uniformNum].type != GLSL_VEC4)
+		return;
+
+	if (numVec4s > uniformsInfo[uniformNum].size)
+		numVec4s = uniformsInfo[uniformNum].size;
+
+	if (memcmp(compare, v, sizeof(vec4_t) * numVec4s) == 0)
+	{
+		return;
+	}
+
+	memcpy(compare, v, sizeof(vec4_t) * numVec4s);
+
+	qglUniform4fv(uniforms[uniformNum], numVec4s, v);
 }
 
 void GLSL_SetUniformFloatN(shaderProgram_t* program, int uniformNum, const float* v, int numFloats)

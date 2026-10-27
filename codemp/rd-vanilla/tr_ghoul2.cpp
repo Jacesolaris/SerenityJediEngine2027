@@ -3951,7 +3951,7 @@ static const char* const mcColliderBones[][2] = {
 	{ "pelvis", "thoracic" },{ "thoracic", "cervical" },{ "cervical", "cranium" },
 	{ "lfemurYZ", "ltibia" },{ "ltibia", "ltalus" },{ "rfemurYZ", "rtibia" },{ "rtibia", "rtalus" },
 	{ "lhumerus", "lradius" },{ "lradius", "lhand" },{ "rhumerus", "rradius" },{ "rradius", "rhand" },
-	{ "lclavical", "lhumerus" }, { "rclavical", "rhumerus" }	// shoulders (hard 2: grid-simulated cloth only)
+	{ "lclavical", "lhumerus" },{ "rclavical", "rhumerus" }	// shoulders (hard 2: grid-simulated cloth only)
 };
 static const float mcColliderRadius[] = { 6.0f, 4.5f, 3.8f, 5.0f, 3.8f, 5.0f, 3.8f, 2.5f, 2.2f, 2.5f, 2.2f, 4.2f, 4.2f };
 static const int MC_NUM_COLLIDERS = sizeof(mcColliderRadius) / sizeof(mcColliderRadius[0]);
@@ -4002,6 +4002,12 @@ static const float (*MC_BoneFn(void* ctx, const int boneIndex))[4]
 	return static_cast<CBoneCache*>(ctx)->EvalRender(boneIndex).matrix;
 }
 
+// saber hilt colliders (r_meshClothHilt, r_meshClothHiltLen / HiltBack / HiltRadius), set up by MC_SolverParams
+static cvar_t* mc_hilt = nullptr;
+static cvar_t* mc_hiltLen = nullptr;
+static cvar_t* mc_hiltBack = nullptr;
+static cvar_t* mc_hiltRadius = nullptr;
+
 // saber hilt collider: the hand bolt tag (*r_hand, *l_hand) is skinned like the engine skins it
 // for bolts; the hilt lies along the blade direction (the bolt's minus Y = the tag triangle's
 // longest side) and reaches a little behind the fist and well in front of it
@@ -4050,14 +4056,14 @@ static bool MC_HiltCapsule(const mdxmSurface_t* clothSurf, CBoneCache* bones, co
 	if (VectorNormalize(dir) < 1e-4f) return false;
 	VectorScale(dir, -1.0f, dir);	// blade direction
 	vec3_t la, lb;
-	VectorMA(p[MDX_TAG_ORIGIN], -4.0f, dir, la);
-	VectorMA(p[MDX_TAG_ORIGIN], 9.0f, dir, lb);
+	VectorMA(p[MDX_TAG_ORIGIN], -(mc_hiltBack ? mc_hiltBack->value : 4.0f), dir, la);
+	VectorMA(p[MDX_TAG_ORIGIN], mc_hiltLen ? mc_hiltLen->value : 9.0f, dir, lb);
 	for (int r = 0; r < 3; r++)
 	{
 		cap.a[r] = ent->e.origin[r] + axis[0][r] * la[0] + axis[1][r] * la[1] + axis[2][r] * la[2];
 		cap.b[r] = ent->e.origin[r] + axis[0][r] * lb[0] + axis[1][r] * lb[1] + axis[2][r] * lb[2];
 	}
-	cap.r = 1.6f;
+	cap.r = mc_hiltRadius && mc_hiltRadius->value > 0.1f ? mc_hiltRadius->value : 1.6f;
 	cap.hard = 1;
 	return true;
 }
@@ -4109,6 +4115,39 @@ static bool MC_WaterHeight(const vec3_t origin, float* z)
 	}
 	*z = p[2];
 	return true;
+}
+
+// Mesh cloth solver settings, main thread (2026-10-27, from the meshcloth author's newer branch):
+//  r_meshClothXPBD      1 = XPBD solver (stiffness no longer changes with r_meshClothIter; 'stretch' works), 0 = old
+//  r_meshClothXPBDIter  XPBD passes per substep (1 = same cost as the old solver)
+//  r_meshClothFriction  scales every surface's friction / sfriction (1 = the config's, 0 = frictionless)
+//  r_meshClothLift      -2 = each surface's 'lift', -1 = no limit, N = units a cape may rise above its attached edge
+//  r_meshClothEdgeCol   1 = cloth edges are pushed off arms, fists and hilts too (no forearm through a cape)
+//  r_meshClothHilt      1 = saber hilt colliders; r_meshClothHiltLen / HiltBack / HiltRadius set their size
+static void MC_SolverParams(mcParams_t& prm)
+{
+	static cvar_t* xp = nullptr;
+	static cvar_t* xi = nullptr;
+	static cvar_t* fr = nullptr;
+	static cvar_t* li = nullptr;
+	static cvar_t* ec = nullptr;
+	if (!xp)
+	{
+		xp = ri.Cvar_Get("r_meshClothXPBD", "1", CVAR_ARCHIVE_ND, "Mesh cloth solver: 1 XPBD (stiffness independent of substeps), 0 old projection");
+		xi = ri.Cvar_Get("r_meshClothXPBDIter", "1", CVAR_ARCHIVE_ND, "Mesh cloth XPBD solver passes per substep (1-8)");
+		fr = ri.Cvar_Get("r_meshClothFriction", "1", CVAR_ARCHIVE_ND, "Scales mesh cloth friction on the body and floor (0 frictionless)");
+		li = ri.Cvar_Get("r_meshClothLift", "-2", CVAR_ARCHIVE_ND, "How high mesh cloth may rise above its attached edge: -2 per surface, -1 no limit, N units");
+		ec = ri.Cvar_Get("r_meshClothEdgeCol", "1", CVAR_ARCHIVE_ND, "Mesh cloth edges collide with arms, fists and saber hilts (1 on, 0 off)");
+		mc_hilt = ri.Cvar_Get("r_meshClothHilt", "1", CVAR_ARCHIVE_ND, "Saber hilts push mesh cloth (1 on, 0 off)");
+		mc_hiltLen = ri.Cvar_Get("r_meshClothHiltLen", "9", CVAR_ARCHIVE_ND, "Mesh cloth hilt collider length in front of the fist");
+		mc_hiltBack = ri.Cvar_Get("r_meshClothHiltBack", "4", CVAR_ARCHIVE_ND, "Mesh cloth hilt collider length behind the fist");
+		mc_hiltRadius = ri.Cvar_Get("r_meshClothHiltRadius", "1.6", CVAR_ARCHIVE_ND, "Mesh cloth hilt collider thickness");
+	}
+	prm.xpbd = xp ? xp->integer : 0;
+	prm.xpbdIters = xi ? xi->integer : 1;
+	prm.frictionScale = fr && fr->value > 0.0f ? fr->value : 0.0f;
+	prm.liftLimit = li ? li->value : -2.0f;
+	prm.edgeCol = ec ? ec->integer : 0;
 }
 
 // The weather on one character's cloth (key: its bone cache, the cloth's own key), main thread:
@@ -4328,6 +4367,7 @@ static bool RB_MeshClothPrepare(CBoneCache* bones, const mdxmSurface_t* surface,
 
 	prm.gust = r_meshClothGust->value;
 	MC_WeatherWind(ent, bones, timeMs, prm);
+	MC_SolverParams(prm);
 	prm.timeSec = 0.0f;
 
 	MC_LodParams(ent, prm);
@@ -4415,9 +4455,12 @@ static void RB_MeshClothRun(CBoneCache* bones, const mdxmSurface_t* surface, con
 		}
 	}
 
-	// saber hilts in both hands
-	if (MC_HiltCapsule(surface, bones, "*r_hand", ent, axis, caps[ncaps])) ncaps++;
-	if (MC_HiltCapsule(surface, bones, "*l_hand", ent, axis, caps[ncaps])) ncaps++;
+	// saber hilts in both hands (r_meshClothHilt)
+	if (!mc_hilt || mc_hilt->integer)
+	{
+		if (MC_HiltCapsule(surface, bones, "*r_hand", ent, axis, caps[ncaps])) ncaps++;
+		if (MC_HiltCapsule(surface, bones, "*l_hand", ent, axis, caps[ncaps])) ncaps++;
+	}
 	// nearby characters (r_meshClothOthers)
 	for (int i = 0; i < cp.numOthers; i++)
 	{
@@ -4589,7 +4632,6 @@ static void G2_SkinSurface(const mdxmSurface_t* surface, CBoneCache* bones, floa
 					3]);
 			}
 		}
-
 	}
 }
 

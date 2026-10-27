@@ -913,7 +913,7 @@ static void WP_HandleBoltBlock(gentity_t* ent, gentity_t* missile, vec3_t forwar
 
 	if (in_joystick->integer && accurate_missile_blocking)
 	{
-		if (level.time - blocker->client->ps.ManualblockStartTime < 500)
+		if (level.time - blocker->client->ps.ManualblockStartTime < 1500)
 		{
 			saber_block_reflection = qfalse;
 			bolt_block_reflection = qtrue;
@@ -952,7 +952,7 @@ static void WP_HandleBoltBlock(gentity_t* ent, gentity_t* missile, vec3_t forwar
 			gi.Printf(S_COLOR_YELLOW "GOES TO CROSSHAIR\n");
 		}
 
-		if (level.time - blocker->client->ps.ManualBlockingTime < 6000)
+		if (level.time - blocker->client->ps.ManualblockStartTime < 3000)
 		{
 			// Good: recent manual block, accurate to crosshair
 			vectoangles(forward, angs);

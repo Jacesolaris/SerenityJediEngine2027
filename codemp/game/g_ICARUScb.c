@@ -4501,6 +4501,11 @@ void G_SetWeapon(gentity_t* self, const int wp)
 		G_DebugPrint(WL_ERROR, "Q3_SetWeapon: '%s' is not a player/NPC!\n", self->targetname);
 		return;
 	}
+	if ((unsigned)wp >= WP_NUM_WEAPONS)
+	{
+		G_DebugPrint(WL_ERROR, "Q3_SetWeapon: bad weapon %d for '%s'\n", wp, self->targetname);
+		return;
+	}
 
 	if (self->NPC)
 	{
@@ -4518,14 +4523,14 @@ void G_SetWeapon(gentity_t* self, const int wp)
 			//make sure the cgame-side knows this
 			self->client->ps.weapon = WP_MELEE;
 			self->client->ps.stats[STAT_WEAPONS] = WP_MELEE; //remove all the player's weapons.
-		self->client->ps.stats[STAT_WEAPONS2] = 0;
+			self->client->ps.stats[STAT_WEAPONS2] = 0;
 			SetSpawnWeapon(WP_MELEE);
 		}
 		else
 		{
 			self->client->ps.weapon = WP_NONE;
 			self->client->ps.stats[STAT_WEAPONS] = WP_NONE; // remove all the npc's weapons.
-		self->client->ps.stats[STAT_WEAPONS2] = 0;
+			self->client->ps.stats[STAT_WEAPONS2] = 0;
 			SetSpawnWeapon(WP_NONE);
 		}
 		return;

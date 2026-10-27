@@ -5323,3 +5323,288 @@ void SP_NPC_Droid_Assassin(gentity_t* self)
 
 	SP_NPC_spawner(self);
 }
+
+// The rancor that lives on mp/duel7 (2026-10-26): when the map starts a rancor NPC spawns in the pit, and
+// g_rancorPitRespawn seconds after it dies a new one spawns, over and over. g_rancorPit 0 = off,
+// g_rancorPitMap = the map (default mp/duel7). Called every frame from G_RunFrame.
+static int rancorPitNextCheck = 0;
+static int rancorPitRespawnTime = 0;
+static int rancorPitLastTime = 0;
+static qboolean rancorPitSpawnedOnce = qfalse;
+static qboolean rancorPitPrecached = qfalse;
+static char rancorPitMapName[MAX_QPATH];
+
+static qboolean G_RancorPitIsMap(void)
+{
+	const char* name = level.mapname;
+	const char* want = g_rancorPitMap.string;
+	size_t len;
+
+	if (!want[0])
+	{
+		return qfalse;
+	}
+	if (!Q_stricmpn(name, "maps/", 5))
+	{
+		name += 5;
+	}
+	len = strlen(want);
+	if (Q_stricmpn(name, want, (int)len))
+	{
+		return qfalse;
+	}
+	return (qboolean)(!name[len] || !Q_stricmp(name + len, ".bsp"));
+}
+
+static qboolean G_RancorPitAlive(void)
+{
+	int i;
+
+	for (i = MAX_CLIENTS; i < level.num_entities; i++)
+	{
+		const gentity_t* ent = &g_entities[i];
+		if (ent->inuse && ent->NPC && ent->client && ent->client->NPC_class == CLASS_RANCOR && ent->health > 0)
+		{
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+// Rancor-sized room (2026-10-26 fix: the first version checked a box smaller than the rancor,
+// so it could spawn half inside a wall or a doorway). Solid + monster clip, not players.
+#define RANCORPIT_MASK (MASK_SOLID | CONTENTS_MONSTERCLIP)
+#define RANCORPIT_HALFWIDTH 72.0f
+#define RANCORPIT_HEIGHT 150.0f
+
+// drops spot onto the floor below it; qfalse when there is no floor within 512 units
+static qboolean G_RancorPitFloor(vec3_t spot)
+{
+	vec3_t start, end;
+	trace_t tr;
+
+	VectorCopy(spot, start);
+	start[2] += 32;
+	VectorCopy(spot, end);
+	end[2] -= 512;
+	trap->Trace(&tr, start, NULL, NULL, end, ENTITYNUM_NONE, RANCORPIT_MASK, qfalse, 0, 0);
+	if (tr.startsolid || tr.allsolid || tr.fraction >= 1.0f)
+	{
+		return qfalse;
+	}
+	VectorCopy(tr.endpos, spot);
+	return qtrue;
+}
+
+// pos = a floor point: room for the whole rancor standing there
+static qboolean G_RancorPitRoom(const vec3_t pos)
+{
+	static const vec3_t mins = { -RANCORPIT_HALFWIDTH, -RANCORPIT_HALFWIDTH, 0 };
+	static const vec3_t maxs = { RANCORPIT_HALFWIDTH, RANCORPIT_HALFWIDTH, RANCORPIT_HEIGHT };
+	vec3_t start;
+	trace_t tr;
+
+	VectorCopy(pos, start);
+	start[2] += 18; // step height, so a bumpy floor does not count as a wall
+	trap->Trace(&tr, start, mins, maxs, start, ENTITYNUM_NONE, RANCORPIT_MASK, qfalse, 0, 0);
+	return (qboolean)!(tr.startsolid || tr.allsolid);
+}
+
+static qboolean G_RancorPitNobodyNear(const vec3_t spot)
+{
+	int i;
+
+	for (i = 0; i < level.num_entities; i++)
+	{
+		const gentity_t* ent = &g_entities[i];
+		if (ent->inuse && ent->client && ent->health > 0)
+		{
+			const float dx = ent->r.currentOrigin[0] - spot[0];
+			const float dy = ent->r.currentOrigin[1] - spot[1];
+			if (dx * dx + dy * dy < 192.0f * 192.0f && fabs(ent->r.currentOrigin[2] - spot[2]) < 160.0f)
+			{
+				return qfalse;
+			}
+		}
+	}
+	return qtrue;
+}
+
+// a straight, open line between the two floor points (so the spot is in the same pit, not behind a wall)
+static qboolean G_RancorPitClearLine(const vec3_t a, const vec3_t b)
+{
+	vec3_t start, end;
+	trace_t tr;
+
+	VectorCopy(a, start);
+	start[2] += 64;
+	VectorCopy(b, end);
+	end[2] += 64;
+	trap->Trace(&tr, start, NULL, NULL, end, ENTITYNUM_NONE, RANCORPIT_MASK, qfalse, 0, 0);
+	return (qboolean)(tr.fraction >= 1.0f && !tr.startsolid && !tr.allsolid);
+}
+
+static qboolean G_RancorPitSpawn(void)
+{
+	vec3_t spots[64], center, spot, face;
+	int numSpots = 0, i, ring, step;
+	gentity_t* found = NULL;
+	gentity_t* spawner;
+	qboolean ok = qfalse;
+
+	// the middle of the deathmatch spawn points is the middle of the pit
+	while ((found = G_Find(found, FOFS(classname), "info_player_deathmatch")) != NULL && numSpots < 64)
+	{
+		VectorCopy(found->s.origin, spots[numSpots]);
+		numSpots++;
+	}
+	if (!numSpots)
+	{
+		while ((found = G_Find(found, FOFS(classname), "info_player_start")) != NULL && numSpots < 64)
+		{
+			VectorCopy(found->s.origin, spots[numSpots]);
+			numSpots++;
+		}
+	}
+	if (!numSpots)
+	{
+		return qfalse;
+	}
+
+	VectorClear(center);
+	for (i = 0; i < numSpots; i++)
+	{
+		VectorAdd(center, spots[i], center);
+	}
+	VectorScale(center, 1.0f / numSpots, center);
+	if (!G_RancorPitFloor(center))
+	{
+		// no floor under the middle: start from the spawn point nearest to it
+		int best = 0;
+		float bestDist = -1.0f;
+		for (i = 0; i < numSpots; i++)
+		{
+			const float d = DistanceSquared(spots[i], center);
+			if (bestDist < 0.0f || d < bestDist)
+			{
+				bestDist = d;
+				best = i;
+			}
+		}
+		VectorCopy(spots[best], center);
+		if (!G_RancorPitFloor(center))
+		{
+			return qfalse;
+		}
+	}
+
+	// open floor nearest the middle: the middle itself, then rings further out (16 directions each),
+	// with room for the whole rancor, nobody close by and a clear line back to the middle
+	for (ring = 0; ring <= 10 && !ok; ring++)
+	{
+		const float radius = ring * 40.0f;
+		const int dirs = ring ? 16 : 1;
+		const int first = Q_irand(0, 15);
+		for (step = 0; step < dirs; step++)
+		{
+			const float ang = (float)((first + step) % 16) * (2.0f * (float)M_PI / 16.0f);
+			VectorCopy(center, spot);
+			spot[0] += cosf(ang) * radius;
+			spot[1] += sinf(ang) * radius;
+			spot[2] += 48;
+			if (!G_RancorPitFloor(spot) || fabs(spot[2] - center[2]) > 96.0f)
+			{
+				continue;
+			}
+			if (G_RancorPitRoom(spot) && G_RancorPitNobodyNear(spot) && (!ring || G_RancorPitClearLine(center, spot)))
+			{
+				ok = qtrue;
+				break;
+			}
+		}
+	}
+
+	if (!ok)
+	{
+		// a cramped map: any spawn point with room
+		const int first = Q_irand(0, numSpots - 1);
+		for (i = 0; i < numSpots; i++)
+		{
+			VectorCopy(spots[(first + i) % numSpots], spot);
+			if (G_RancorPitFloor(spot) && G_RancorPitRoom(spot) && G_RancorPitNobodyNear(spot))
+			{
+				ok = qtrue;
+				break;
+			}
+		}
+	}
+	if (!ok)
+	{
+		return qfalse; // try again next second
+	}
+
+	spot[2] += 40; // NPC origin above the floor; the spawn code settles it down
+	VectorSubtract(center, spot, face);
+	if (VectorLengthSquared(face) < 1.0f)
+	{
+		face[0] = Q_flrand(-1.0f, 1.0f);
+		face[1] = Q_flrand(-1.0f, 1.0f);
+	}
+	face[2] = 0;
+
+	spawner = G_Spawn();
+	if (!spawner)
+	{
+		return qfalse;
+	}
+	spawner->think = G_FreeEntity;
+	spawner->nextthink = level.time + FRAMETIME;
+	G_SetOrigin(spawner, spot);
+	VectorCopy(spawner->r.currentOrigin, spawner->s.origin);
+	spawner->s.angles[YAW] = vectoyaw(face);
+	spawner->NPC_type = G_NewString("rancor");
+	spawner->count = 1;
+	spawner->delay = 0;
+
+	return (qboolean)(NPC_Spawn_Do(spawner) != NULL);
+}
+
+void G_RancorPitThink(void)
+{
+	if (level.time < rancorPitLastTime || Q_stricmp(level.mapname, rancorPitMapName))
+	{
+		// new map / map_restart
+		rancorPitNextCheck = rancorPitRespawnTime = 0;
+		rancorPitSpawnedOnce = rancorPitPrecached = qfalse;
+		Q_strncpyz(rancorPitMapName, level.mapname, sizeof rancorPitMapName);
+	}
+	rancorPitLastTime = level.time;
+
+	if (!g_rancorPit.integer || level.intermissiontime || level.time < rancorPitNextCheck || !G_RancorPitIsMap())
+	{
+		return;
+	}
+	rancorPitNextCheck = level.time + 1000;
+
+	if (!rancorPitPrecached)
+	{
+		NPC_PrecacheByClassName("rancor");
+		rancorPitPrecached = qtrue;
+	}
+
+	if (G_RancorPitAlive())
+	{
+		rancorPitRespawnTime = 0;
+		return;
+	}
+
+	if (!rancorPitRespawnTime)
+	{
+		rancorPitRespawnTime = level.time + (rancorPitSpawnedOnce ? g_rancorPitRespawn.integer * 1000 : 2000);
+	}
+	if (level.time >= rancorPitRespawnTime && G_RancorPitSpawn())
+	{
+		rancorPitSpawnedOnce = qtrue;
+		rancorPitRespawnTime = 0;
+	}
+}

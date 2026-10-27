@@ -310,6 +310,7 @@ int force_power_dark_light[NUM_FORCE_POWERS] = //0 == neutral
 	FORCE_LIGHTSIDE, //FP_BLAST,//Instant
 	FORCE_DARKSIDE, //FP_INSANITY
 	FORCE_LIGHTSIDE, //FP_BLINDING
+	FORCE_DARKSIDE, //FP_DARK_STASIS
 	//NUM_FORCE_POWERS
 };
 
@@ -344,7 +345,8 @@ int force_power_needed[NUM_FORCE_POWERS] =
 	90, //FP_DEADLYSIGHT
 	30, //FP_BLAST,//Instant
 	50, //FP_INSANITY
-	20 //FP_BLINDING
+	20, //FP_BLINDING
+	50 //FP_DARK_STASIS
 	//NUM_FORCE_POWERS
 };
 
@@ -379,7 +381,8 @@ int force_power_neededlevel1[NUM_FORCE_POWERS] =
 	90, //FP_DEADLYSIGHT
 	30, //FP_BLAST,//Instant
 	50, //FP_INSANITY
-	20 //FP_BLINDING
+	20, //FP_BLINDING
+	50 //FP_DARK_STASIS
 	//NUM_FORCE_POWERS
 };
 
@@ -414,7 +417,8 @@ int force_power_neededlevel2[NUM_FORCE_POWERS] =
 	90, //FP_DEADLYSIGHT
 	30, //FP_BLAST,//Instant
 	50, //FP_INSANITY
-	20 //FP_BLINDING
+	20, //FP_BLINDING
+	50 //FP_DARK_STASIS
 	//NUM_FORCE_POWERS
 };
 
@@ -15712,6 +15716,75 @@ static void WP_SaberBlasterKyleOnly(gentity_t* ent)
 	}
 }
 
+// No SS_BLASTER in cutscenes (DH 2026-10-27): while the camera runs a cinematic, Kyle (player, NPC or bot) uses
+// another single-saber style; he gets SS_BLASTER back when the cutscene ends
+static qboolean saberBlasterCinematicHeld[MAX_GENTITIES];
+static qboolean saberBlasterCinematicAddedMedium[MAX_GENTITIES];
+
+static void WP_SaberBlasterCinematic(gentity_t* ent)
+{
+	playerState_t* ps = &ent->client->ps;
+	const int ent_num = ent->s.number;
+
+	if (in_camera)
+	{
+		if (ps->saberAnimLevel != SS_BLASTER)
+		{
+			return;
+		}
+		int style = SS_MEDIUM;
+		if (!(ps->saberStylesKnown & 1 << SS_MEDIUM))
+		{
+			for (style = SS_FAST; style <= SS_TAVION; style++)
+			{
+				if (ps->saberStylesKnown & 1 << style)
+				{
+					break;
+				}
+			}
+			if (style > SS_TAVION)
+			{
+				// he knows no other single style: lend him Medium for the cutscene
+				style = SS_MEDIUM;
+				ps->saberStylesKnown |= 1 << SS_MEDIUM;
+				saberBlasterCinematicAddedMedium[ent_num] = qtrue;
+			}
+		}
+		ps->saberAnimLevel = style;
+		saberBlasterCinematicHeld[ent_num] = qtrue;
+		return;
+	}
+
+	if (!saberBlasterCinematicHeld[ent_num])
+	{
+		return;
+	}
+	saberBlasterCinematicHeld[ent_num] = qfalse;
+	if (saberBlasterCinematicAddedMedium[ent_num])
+	{
+		saberBlasterCinematicAddedMedium[ent_num] = qfalse;
+		ps->saberStylesKnown &= ~(1 << SS_MEDIUM);
+	}
+	if (ps->saberStylesKnown & 1 << SS_BLASTER
+		&& ps->saberAnimLevel != SS_DUAL
+		&& ps->saberAnimLevel != SS_STAFF
+		&& !ps->dualSabers)
+	{
+		ps->saberAnimLevel = SS_BLASTER;
+	}
+}
+
+// the player's ClientThink_real returns early while the camera runs, before WP_SaberBlasterThink: it calls this instead
+void WP_SaberBlasterCinematicThink(gentity_t* ent)
+{
+	if (!ent || !ent->client)
+	{
+		return;
+	}
+	WP_SaberBlasterCinematic(ent);
+	WP_SaberBlasterUpdatePistolModel(ent);
+}
+
 void WP_SaberBlasterThink(gentity_t* ent, usercmd_t* ucmd)
 {
 	const qboolean is_Ready_to_Reload = ((ent->client->buttons & BUTTON_WALKING) && (ent->client->buttons & BUTTON_DASH)) ? qtrue : qfalse;
@@ -15722,6 +15795,7 @@ void WP_SaberBlasterThink(gentity_t* ent, usercmd_t* ucmd)
 	const int ent_num = ent->s.number;
 
 	WP_SaberBlasterKyleOnly(ent);
+	WP_SaberBlasterCinematic(ent);
 	WP_SaberBlasterUpdatePistolModel(ent);
 	saberBlasterAltHeld[ent_num] = qfalse;
 
@@ -17061,7 +17135,7 @@ static qboolean ShouldPlayerResistForceThrow(const gentity_t* player, gentity_t*
 		return qfalse;
 	}
 
-	if (player->client && player->client->ps.repulseChargeStart)
+	if (player->client && (player->client->ps.repulseChargeStart || player->client->ps.forcePowersActive & 1 << FP_DARK_STASIS))
 	{
 		return qtrue; // charging Force Repulse: pushes and pulls don't move him (2026-10-12)
 	}
@@ -27901,6 +27975,291 @@ void ForceStasis(gentity_t* self)
 	}
 }
 
+//Dark Stasis (dark side): the repulse throw without the lift and the rage sounds. Every enemy (players, NPCs, saber
+//users too) and every flying missile in an arc around the caster is held in stasis, drawn red; the caster sees the
+//screen tinted red while it lasts. Level 1 = 120 degrees in front, level 2 = 180 degrees, level 3 = all round.
+int darkStasisTime[NUM_FORCE_POWER_LEVELS] =
+{
+	0, //none
+	4000,
+	6000,
+	8000
+};
+
+static const float darkStasisRadius[NUM_FORCE_POWER_LEVELS] =
+{
+	0, //none
+	512,
+	768,
+	1024
+};
+
+static const float darkStasisArc[NUM_FORCE_POWER_LEVELS] = //smallest dot of the flat view direction and the target
+{
+	1.0f, //none
+	0.5f, //120 degrees
+	0.0f, //180 degrees
+	-1.1f //all round
+};
+
+// the tables stop at level 3
+static int DarkStasisLevel(const int level)
+{
+	return level < FORCE_LEVEL_0 ? FORCE_LEVEL_0 : level > FORCE_LEVEL_3 ? FORCE_LEVEL_3 : level;
+}
+
+// one Dark Stasis victim: held like a stasis victim (stasisTime), drawn red (darkStasisTime)
+static void ForceDarkStasisHold(gentity_t* victim, const int duration)
+{
+	float currentFrame = 0.0f, animSpeed = 0.0f;
+	int junk = 0;
+
+	victim->client->ps.stasisTime = level.time + duration;
+	victim->client->ps.darkStasisTime = level.time + duration;
+	VectorClear(victim->client->ps.velocity);
+	player_Freeze(victim);
+
+	if (victim->client->NPC_class == CLASS_BOBAFETT ||
+		victim->client->NPC_class == CLASS_MANDO ||
+		victim->client->NPC_class == CLASS_ROCKETTROOPER)
+	{
+		// also disables npc jetpack
+		jet_fly_stop(victim);
+		if (victim->client->jetPackOn)
+		{
+			Jetpack_Off(victim);
+			victim->client->jetPackToggleTime = level.time + Q_irand(3000, 10000);
+		}
+	}
+
+	if (gi.G2API_HaveWeGhoul2Models(victim->ghoul2) && victim->playerModel >= 0)
+	{
+		gi.G2API_GetBoneAnimIndex(&victim->ghoul2[victim->playerModel], victim->rootBone,
+			level.time, &currentFrame, &junk, &junk, &junk, &animSpeed, nullptr);
+
+		gi.G2API_SetBoneAnimIndex(&victim->ghoul2[victim->playerModel], victim->rootBone,
+			currentFrame, currentFrame + 1,
+			BONE_ANIM_OVERRIDE_FREEZE, animSpeed, level.time, currentFrame, 100);
+		if (victim->headModel > 0)
+		{
+			gi.G2API_SetBoneAnimIndex(&victim->ghoul2[victim->headModel], victim->headRootBone,
+				currentFrame, currentFrame + 1,
+				BONE_ANIM_OVERRIDE_FREEZE, animSpeed, level.time, currentFrame, 100);
+		}
+	}
+
+	if (victim->chestBolt != -1)
+	{
+		G_PlayEffect(G_EffectIndex("force/rage2"), victim->playerModel, victim->chestBolt, victim->s.number,
+			victim->currentOrigin, duration, qtrue);
+	}
+	G_AddVoiceEvent(victim, Q_irand(EV_PUSHED1, EV_PUSHED3), 2000);
+}
+
+void ForceDarkStasis(gentity_t* self)
+{
+	if (self->health <= 0)
+	{
+		return;
+	}
+
+	if (PM_InLedgeMove(self->client->ps.legsAnim))
+	{
+		return;
+	}
+
+	if (PM_InGetUp(&self->client->ps) || PM_InForceGetUp(&self->client->ps))
+	{
+		return;
+	}
+
+	if (!WP_ForcePowerUsable(self, FP_DARK_STASIS, 0))
+	{
+		return;
+	}
+
+	if (self->client->ps.forcePowerDebounce[FP_DARK_STASIS] > level.time)
+	{
+		return;
+	}
+
+	if (!self->s.number && (cg.zoomMode || in_camera))
+	{
+		//can't use it when zoomed in or in cinematic
+		return;
+	}
+
+	if (self->client->ps.saberLockTime > level.time)
+	{
+		return;
+	}
+
+	const int power_level = DarkStasisLevel(self->client->ps.forcePowerLevel[FP_DARK_STASIS]);
+	const float radius = darkStasisRadius[power_level];
+	const float min_dot = darkStasisArc[power_level];
+	static gentity_t* entity_list[MAX_GENTITIES]; //static: too big for the stack (64 KB)
+	vec3_t forward, mins{}, maxs{}, eye;
+	const vec3_t flat_angles = { 0.0f, self->client->ps.viewangles[YAW], 0.0f };
+	int caught = 0;
+
+	//the arc is around the caster, whatever way the view is pitched
+	AngleVectors(flat_angles, forward, nullptr, nullptr);
+	VectorCopy(self->client->renderInfo.eyePoint, eye);
+
+	for (int i = 0; i < 3; i++)
+	{
+		mins[i] = self->currentOrigin[i] - radius;
+		maxs[i] = self->currentOrigin[i] + radius;
+	}
+	const int num_listed_entities = gi.EntitiesInBox(mins, maxs, entity_list, MAX_GENTITIES);
+
+	for (int e = 0; e < num_listed_entities; e++)
+	{
+		gentity_t* traceEnt = entity_list[e];
+		vec3_t ent_org, dir, v{};
+		trace_t tr;
+
+		if (!traceEnt || traceEnt == self || !traceEnt->inuse)
+		{
+			continue;
+		}
+
+		// the distance from the edge of its box
+		for (int i = 0; i < 3; i++)
+		{
+			if (self->currentOrigin[i] < traceEnt->absmin[i])
+			{
+				v[i] = traceEnt->absmin[i] - self->currentOrigin[i];
+			}
+			else if (self->currentOrigin[i] > traceEnt->absmax[i])
+			{
+				v[i] = self->currentOrigin[i] - traceEnt->absmax[i];
+			}
+		}
+		if (VectorLength(v) >= radius)
+		{
+			continue;
+		}
+
+		VectorAdd(traceEnt->absmin, traceEnt->absmax, ent_org);
+		VectorScale(ent_org, 0.5f, ent_org);
+		VectorSubtract(ent_org, self->currentOrigin, dir);
+		dir[2] = 0.0f;
+		if (VectorNormalize(dir) > 0.0f && DotProduct(dir, forward) < min_dot)
+		{
+			//outside the arc
+			continue;
+		}
+
+		const qboolean is_missile = traceEnt->s.eType == ET_MISSILE && traceEnt->s.pos.trType != TR_STATIONARY
+			? qtrue
+			: qfalse;
+
+		if (!is_missile)
+		{
+			if (!traceEnt->client || traceEnt->health <= 0)
+			{
+				continue;
+			}
+			if (traceEnt->client->NPC_class == CLASS_VEHICLE)
+			{
+				continue;
+			}
+			if (WP_IsScriptInvisible(traceEnt))
+			{// a script-invisible NPC (set_invisible) is not there: no force reaction
+				continue;
+			}
+			if (traceEnt->NPC && traceEnt->NPC->scriptFlags & SCF_NO_FORCE)
+			{
+				continue;
+			}
+			if (traceEnt->client->playerTeam == self->client->playerTeam &&
+				self->enemy != traceEnt &&
+				traceEnt->enemy != self)
+			{
+				//not my allies
+				continue;
+			}
+		}
+
+		if (!gi.inPVS(ent_org, eye))
+		{
+			continue;
+		}
+		gi.trace(&tr, eye, vec3_origin, vec3_origin, ent_org, self->s.number, MASK_SHOT, G2_NOCOLLIDE, 0);
+		if (tr.fraction < 1.0f && tr.entityNum != traceEnt->s.number)
+		{
+			//must have clear LOS
+			continue;
+		}
+
+		if (is_missile)
+		{
+			G_StasisMissile(self, traceEnt);
+			caught++;
+			continue;
+		}
+
+		int hold_level = power_level;
+		const int mod_power_level = wp_absorb_conversion(traceEnt, traceEnt->client->ps.forcePowerLevel[FP_ABSORB],
+			FP_DARK_STASIS, power_level, force_power_needed[FP_DARK_STASIS]);
+		if (mod_power_level != -1)
+		{
+			hold_level = mod_power_level;
+		}
+		if (hold_level <= 0)
+		{
+			continue;
+		}
+		ForceDarkStasisHold(traceEnt, darkStasisTime[hold_level]);
+		caught++;
+	}
+
+	//the caster: the repulse throw, standing (no lift), the red hands; WP_ForcePowerStart adds the rage sounds
+	int parts = SETANIM_TORSO;
+	if (!PM_InKnockDown(&self->client->ps))
+	{
+		if (!VectorLengthSquared(self->client->ps.velocity) && !(self->client->ps.pm_flags & PMF_DUCKED))
+		{
+			parts = SETANIM_BOTH;
+		}
+	}
+	NPC_SetAnim(self, parts, BOTH_SUPERPUSH, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART);
+	self->client->ps.saberMove = self->client->ps.saberBounceMove = LS_READY;
+	//don't finish whatever saber anim you may have been in
+	self->client->ps.saberBlocked = BLOCKED_NONE;
+
+	if (self->handLBolt != -1)
+	{
+		G_PlayEffect(G_EffectIndex("force/drain_hand"), self->playerModel, self->handLBolt, self->s.number,
+			self->currentOrigin, 300, qtrue);
+	}
+	if (self->handRBolt != -1)
+	{
+		G_PlayEffect(G_EffectIndex("force/drain_hand"), self->playerModel, self->handRBolt, self->s.number,
+			self->currentOrigin, 300, qtrue);
+	}
+
+	WP_ForcePowerStart(self, FP_DARK_STASIS, 0);
+
+	//no attacking until the throw is over (PM_SetAnimFinal keeps every other torso anim off it till then)
+	int cast_time = 1000;
+	if (ValidAnimFileIndex(self->client->clientInfo.animFileIndex))
+	{
+		cast_time = Q_max(cast_time, PM_AnimLength(self->client->clientInfo.animFileIndex, BOTH_SUPERPUSH));
+	}
+	self->client->ps.weaponTime = cast_time;
+	if (self->client->ps.forcePowersActive & 1 << FP_SPEED)
+	{
+		self->client->ps.weaponTime = floor(self->client->ps.weaponTime * g_timescale->value);
+	}
+
+	if (caught && d_slowmoaction->integer && (self->s.number < MAX_CLIENTS || G_ControlledByPlayer(self)))
+	{
+		G_StartStasisEffect(self);
+	}
+}
+
 void ForceGrasp(gentity_t* self)
 {
 	//FIXME: make enemy Jedi able to use this
@@ -28046,7 +28405,7 @@ void ForceGrasp(gentity_t* self)
 
 		traceEnt = &g_entities[tr.entityNum];
 	}
-	if (traceEnt && traceEnt->client && traceEnt->client->ps.repulseChargeStart)
+	if (traceEnt && traceEnt->client && (traceEnt->client->ps.repulseChargeStart || traceEnt->client->ps.forcePowersActive & 1 << FP_DARK_STASIS))
 	{
 		return; // charging Force Repulse: can't be gripped (2026-10-12)
 	}
@@ -28594,7 +28953,8 @@ int wp_absorb_conversion(const gentity_t* attacked, const int atd_abs_level, con
 		at_power != FP_PULL &&
 		at_power != FP_REPULSE &&
 		at_power != FP_GRASP &&
-		at_power != FP_STASIS)
+		at_power != FP_STASIS &&
+		at_power != FP_DARK_STASIS)
 	{
 		//Only these powers can be absorbed
 		return -1;
@@ -28981,6 +29341,18 @@ void WP_ForcePowerStart(gentity_t* self, const forcePowers_t force_power, int ov
 		self->client->ps.forcePowersActive |= 1 << force_power;
 		G_SoundOnEnt(self, CHAN_ITEM, "sound/weapons/force/absorbhit.mp3");
 		self->s.loopSound = G_SoundIndex("sound/weapons/force/protectloop.mp3");
+		break;
+	case FP_DARK_STASIS:
+		//held as long as its victims are
+		duration = darkStasisTime[DarkStasisLevel(self->client->ps.forcePowerLevel[force_power])];
+		self->client->ps.forcePowersActive |= 1 << force_power;
+		G_SoundOnEnt(self, CHAN_ITEM, "sound/weapons/force/rage.mp3");
+		self->s.loopSound = G_SoundIndex("sound/weapons/force/rageloop.wav");
+		if (self->chestBolt != -1)
+		{
+			G_PlayEffect(G_EffectIndex("force/rage2"), self->playerModel, self->chestBolt, self->s.number,
+				self->currentOrigin, duration, qtrue);
+		}
 		break;
 	case FP_BLAST:
 		break;
@@ -29742,6 +30114,18 @@ void WP_ForcePowerStop(gentity_t* self, const forcePowers_t force_power)
 		break;
 	case FP_DEADLYSIGHT:
 		self->s.loopSound = 0;
+		break;
+	case FP_DARK_STASIS:
+		if (!(self->client->ps.forcePowersActive & 1 << FP_RAGE))
+		{
+			//rage keeps its own loop and effect
+			self->s.loopSound = 0;
+			if (self->chestBolt != -1)
+			{
+				G_StopEffect("force/rage2", self->playerModel, self->chestBolt, self->s.number);
+			}
+		}
+		self->client->ps.forcePowerDebounce[force_power] = level.time + 1000;
 		break;
 	case FP_BLAST:
 		break;
@@ -31518,6 +31902,11 @@ static void WP_CheckForcedPowers(gentity_t* self, usercmd_t* ucmd)
 				ForceDeadlySight(self);
 				self->client->ps.forcePowersForced &= ~(1 << force_power);
 				break;
+			case FP_DARK_STASIS:
+				ForceDarkStasis(self);
+				//do only once
+				self->client->ps.forcePowersForced &= ~(1 << force_power);
+				break;
 			case FP_BLAST:
 				ForceBlast(self);
 				//do only once
@@ -31997,7 +32386,7 @@ void WP_InitForcePowers(gentity_t* ent)
 				| 1 << FP_SABER_DEFENSE | 1 << FP_SABER_OFFENSE | 1 << FP_RAGE | 1 << FP_DRAIN | 1 << FP_PROTECT | 1 <<
 				FP_ABSORB | 1 << FP_SEE | 1 << FP_STASIS | 1 << FP_DESTRUCTION | 1 << FP_GRASP
 				| 1 << FP_REPULSE | 1 << FP_LIGHTNING_STRIKE | 1 << FP_FEAR | 1 << FP_DEADLYSIGHT | 1 << FP_BLAST | 1 <<
-				FP_INSANITY | 1 << FP_BLINDING;
+				FP_INSANITY | 1 << FP_BLINDING | 1 << FP_DARK_STASIS;
 
 			ent->client->ps.forcePowerLevel[FP_HEAL] = FORCE_LEVEL_2;
 			ent->client->ps.forcePowerLevel[FP_LEVITATION] = FORCE_LEVEL_2;
@@ -32029,6 +32418,7 @@ void WP_InitForcePowers(gentity_t* ent)
 			ent->client->ps.forcePowerLevel[FP_BLAST] = FORCE_LEVEL_1;
 			ent->client->ps.forcePowerLevel[FP_INSANITY] = FORCE_LEVEL_1;
 			ent->client->ps.forcePowerLevel[FP_BLINDING] = FORCE_LEVEL_1;
+			ent->client->ps.forcePowerLevel[FP_DARK_STASIS] = FORCE_LEVEL_1;
 		}
 	}
 }

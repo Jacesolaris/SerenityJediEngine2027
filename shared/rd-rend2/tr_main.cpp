@@ -2436,10 +2436,11 @@ void R_SetupPshadowMaps(trRefdef_t* refdef)
 		}
 	}
 
-	// cap number of drawn pshadows
-	if (refdef->num_pshadows > MAX_DRAWN_PSHADOWS)
+	// cap number of drawn pshadows: cg_shadows 2 = the 8 nearest characters, 3 = up to 32 (DH 2026-10-26)
+	const int maxDrawnPshadows = r_shadows->integer == 2 ? 8 : MAX_DRAWN_PSHADOWS;
+	if (refdef->num_pshadows > maxDrawnPshadows)
 	{
-		refdef->num_pshadows = MAX_DRAWN_PSHADOWS;
+		refdef->num_pshadows = maxDrawnPshadows;
 	}
 
 	// next, fill up the rest of the shadow info
@@ -2465,6 +2466,13 @@ void R_SetupPshadowMaps(trRefdef_t* refdef)
 		if (shadow->viewRadius * 3.0f > shadow->lightRadius)
 		{
 			shadow->lightRadius = shadow->viewRadius * 3.0f;
+		}
+
+		// cg_shadows 3: the shadow reaches further (further down steps and ledges, and stays dark further from the
+		// feet) (DH 2026-10-26)
+		if (r_shadows->integer >= 3)
+		{
+			shadow->lightRadius = MAX(shadow->lightRadius, MAX(shadow->viewRadius * 5.0f, 256.0f));
 		}
 
 		VectorMA(shadow->viewOrigin, shadow->viewRadius, lightDir, shadow->lightOrigin);
@@ -2880,6 +2888,10 @@ void R_GatherFrameViews(trRefdef_t* refdef)
 					shadowParms.targetFboLayer = 0;
 
 #ifdef REND2_SP
+					// SP renders these views here, before RE_BeginScene opens the scene debug group: open the scene and
+					// view groups first, or every draw list warns "invalid layer order" (r_dlightMode 2, 2026-10-26)
+					R_PushDebugGroup(AL_SCENE, "Dlight shadows");
+					R_PushDebugGroup(AL_VIEW, va("Point light shadow %i, side %i", i, j));
 					R_RenderView(&shadowParms);
 
 					R_IssuePendingRenderCommands();
@@ -2900,8 +2912,9 @@ void R_GatherFrameViews(trRefdef_t* refdef)
 			}
 		}
 
-		// pshadow shadowmaps
-		if (r_shadows->integer == 4)
+		// pshadow shadowmaps: rend2 character shadows for cg_shadows 2 and 3 (stencil volumes can't be built from
+		// GPU-skinned ghoul2 models, so 2/3 drew nothing; 4 was the only setting with shadows) (DH 2026-10-26)
+		if (r_shadows->integer >= 2 && tr.pshadowArrayImage)
 		{
 			R_SetupPshadowMaps(refdef);
 

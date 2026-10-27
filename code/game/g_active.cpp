@@ -48,6 +48,7 @@ extern void ChangeWeapon(const gentity_t* ent, int new_weapon);
 extern void ScoreBoardReset();
 extern void wp_saber_update(gentity_t* self, const usercmd_t* ucmd);
 extern void WP_SaberBlasterThink(gentity_t* ent, usercmd_t* ucmd); // SS_BLASTER (2026-10-14)
+extern void WP_SaberBlasterCinematicThink(gentity_t* ent); // SS_BLASTER: none in cutscenes (2026-10-27)
 extern void wp_saber_start_missile_block_check(gentity_t* self, const usercmd_t* ucmd);
 extern void WP_ForcePowersUpdate(gentity_t* self, usercmd_t* ucmd);
 extern void WP_BlockPointsUpdate(const gentity_t* self);
@@ -7171,6 +7172,7 @@ extern void ForceTelepathy(gentity_t* ent);
 extern void ForceAbsorb(gentity_t* ent);
 extern void ForceHeal(gentity_t* ent);
 extern void ForceStasis(gentity_t* ent);
+extern void ForceDarkStasis(gentity_t* ent);
 extern void ForceDestruction(gentity_t* ent);
 extern void ForceRepulse(gentity_t* ent);
 extern void ForceGrasp(gentity_t* ent);
@@ -7251,6 +7253,9 @@ static void ProcessGenericCmd(gentity_t* ent, const byte cmd)
 		break;
 	case GENCMD_FORCE_DEADLYSIGHT:
 		ForceDeadlySight(ent);
+		break;
+	case GENCMD_FORCE_DARK_STASIS:
+		ForceDarkStasis(ent);
 		break;
 	case GENCMD_FORCE_BLAST:
 		ForceBlast(ent);
@@ -7817,6 +7822,8 @@ static void ClientThink_real(gentity_t* ent, usercmd_t* ucmd)
 		}
 		if (in_camera)
 		{
+			WP_SaberBlasterCinematicThink(ent); // Kyle leaves SS_BLASTER for the cutscene (DH 2026-10-27)
+
 			// watch the code here, you MUST "return" within this IF(), *unless* you're stopping the cinematic skip.
 			//
 			if (ClientCinematicThink(ent->client))

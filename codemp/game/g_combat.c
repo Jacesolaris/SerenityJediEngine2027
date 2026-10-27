@@ -2085,8 +2085,75 @@ static int G_DeathFXClass(const gentity_t* ent)
 		{
 			return npcClass;
 		}
+		switch (ent->client->pers.botclass)
+		{	// the small droids explode as their SP NPC class too (DH 2026-10-26)
+		case BCLASS_MOUSE:
+			return CLASS_MOUSE;
+		case BCLASS_PROBE:
+			return CLASS_PROBE;
+		case BCLASS_SEEKER:
+			return CLASS_SEEKER;
+		case BCLASS_SENTRY:
+			return CLASS_SENTRY;
+		case BCLASS_INTERROGATOR:
+			return CLASS_INTERROGATOR;
+		case BCLASS_MARK1:
+			return CLASS_MARK1;
+		case BCLASS_MARK2:
+			return CLASS_MARK2;
+		default:
+			break;
+		}
 	}
 	return ent->client->NPC_class;
+}
+
+// droid bodies (DH 2026-10-26, g_droidBodyVanish 1; 0 = old): as SP's DeadThink, a player or bot of a small droid
+// class (R2-D2, R5, gonk, mouse, probe, seeker, remote, sentry, interrogator, Mark I/II) explodes and its body is gone
+// a moment later, behind the explosion, and leaves no corpse on respawn. Bigger droids keep their body, as in SP.
+#define DROID_VANISH_DELAY	300
+
+static qboolean G_DroidBodyVanishes(const gentity_t* ent)
+{
+	if (!g_droidBodyVanish.integer || !ent->client || ent->s.number >= MAX_CLIENTS)
+	{
+		return qfalse;
+	}
+	switch (G_DeathFXClass(ent))
+	{
+	case CLASS_R2D2:
+	case CLASS_R5D2:
+	case CLASS_GONK:
+	case CLASS_MOUSE:
+	case CLASS_PROBE:
+	case CLASS_SEEKER:
+	case CLASS_REMOTE:
+	case CLASS_SENTRY:
+	case CLASS_INTERROGATOR:
+	case CLASS_MARK1:
+	case CLASS_MARK2:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+// called every frame for a dead client (g_active.c): hides the droid once its time has come
+void G_DroidVanishThink(gentity_t* ent)
+{
+	gclient_t* client = ent->client;
+
+	if (!client || !client->droidVanishTime || level.time < client->droidVanishTime)
+	{
+		return;
+	}
+	client->droidVanishTime = 0;
+	client->ps.eFlags |= EF_NODRAW;
+	ent->s.eFlags |= EF_NODRAW;
+	ent->r.contents = 0;
+	ent->takedamage = qfalse;
+	client->noCorpse = qtrue;
+	trap->LinkEntity((sharedEntity_t*)ent);
 }
 
 // JKG probe wreck (2026-10-16): a destroyed probe droid leaves its burnt wreck (JKG's
@@ -4026,6 +4093,11 @@ void player_die(gentity_t* self, const gentity_t* inflictor, gentity_t* attacker
 		{
 			DeathFX(self);
 		}
+	}
+
+	if (G_DroidBodyVanishes(self))
+	{	// droid bodies: gone behind the explosion (G_DroidVanishThink)
+		self->client->droidVanishTime = level.time + DROID_VANISH_DELAY;
 	}
 
 	if (level.gametype == GT_POWERDUEL && !g_noPDuelCheck)
@@ -6134,9 +6206,9 @@ void G_Knockdown(gentity_t* self, gentity_t* attacker, const vec3_t push_dir, fl
 		return;
 	}
 
-	if (self->client->repulseChargeStart)
+	if (self->client->repulseChargeStart || self->client->ps.fd.forcePowersActive & 1 << FP_DARK_STASIS)
 	{
-		return; // charging Force Repulse: can't be knocked down
+		return; // charging Force Repulse or Dark Stasis active: can't be knocked down
 	}
 
 	if (self->client->NPC_class == CLASS_ROCKETTROOPER)
@@ -6746,10 +6818,10 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, vec3_t
 	if (!targ)
 		return;
 
-	if (targ->client && targ->client->repulseChargeStart && mod != MOD_TRIGGER_HURT && mod != MOD_SUICIDE
+	if (targ->client && (targ->client->repulseChargeStart || targ->client->ps.fd.forcePowersActive & 1 << FP_DARK_STASIS) && mod != MOD_TRIGGER_HURT && mod != MOD_SUICIDE
 		&& mod != MOD_CRUSH && mod != MOD_TELEFRAG)
 	{
-		return; // charging Force Repulse: invincible, no knockback either (2026-10-12, DH)
+		return; // charging Force Repulse (2026-10-12) or Dark Stasis active (2026-10-27): invincible, no knockback, DH
 	}
 
 	if (mod == MOD_GAS && G_ImmuneToGas(targ))

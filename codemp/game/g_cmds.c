@@ -118,7 +118,7 @@ DeathmatchScoreboardMessage
 */
 void DeathmatchScoreboardMessage(const gentity_t* ent)
 {
-	char string[1400];
+	char string[1400] = { 0 };
 	int i = 0;
 	int accuracy = 0;
 
@@ -974,7 +974,7 @@ void SetTeam(gentity_t* ent, const char* s)
 
 		if (g_teamForceBalance.integer && !g_jediVmerc.integer)
 		{
-			int counts[TEAM_NUM_TEAMS];
+			int counts[TEAM_NUM_TEAMS] = { 0 };
 
 			//JAC: Invalid clientNum was being used
 			counts[TEAM_BLUE] = TeamCount(ent - g_entities, TEAM_BLUE);
@@ -3899,7 +3899,7 @@ void Cmd_SaberAttackCycle_f(gentity_t* ent)
 void Cmd_EngageDuel_f(gentity_t* ent)
 {
 	trace_t tr;
-	vec3_t forward, fwd_org;
+	vec3_t forward, fwd_org = { 0 };
 
 	if (!g_privateDuel.integer)
 	{

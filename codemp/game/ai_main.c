@@ -10306,6 +10306,8 @@ static int bot_sp_power(bot_state_t* bs, vec3_t toEnemyAngles)
 		cand[n++] = FP_GRASP;
 	if (dist < 300 && bot_sp_power_ready(bs, FP_REPULSE, 20))
 		cand[n++] = FP_REPULSE;
+	if (!enemyStunned && dist < 512 && bot_sp_power_ready(bs, FP_DARK_STASIS, 10))
+		cand[n++] = FP_DARK_STASIS;
 	if (!n)
 	{
 		return -1;
@@ -12311,7 +12313,7 @@ static qboolean bot_buy_item(bot_state_t* bs, const char* msg)
 				BG_GiveWeapon(bs->cur_ps.stats, tag);
 
 				// Fallthrough to ammo purchase for this weapon
-				tag = weaponData[tag].ammoIndex;
+				tag = (unsigned)tag < WP_NUM_WEAPONS ? weaponData[tag].ammoIndex : AMMO_NONE;
 				// fallthrough
 
 			// ------------------------------------------------------------
@@ -13363,7 +13365,7 @@ static const botJetParms_t* bot_jet_parms(const bot_state_t* bs)
 
 static qboolean bot_boba_has_weapon(const bot_state_t* bs, const int wp)
 {
-	if (!(BG_HasWeapon(bs->cur_ps.stats, wp)))
+	if ((unsigned)wp >= WP_NUM_WEAPONS || !(BG_HasWeapon(bs->cur_ps.stats, wp)))
 	{
 		return qfalse;
 	}

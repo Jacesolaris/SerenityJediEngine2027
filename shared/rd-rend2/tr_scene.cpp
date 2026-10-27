@@ -27,6 +27,7 @@ int			r_firstSceneDrawSurf;
 
 int			r_numdlights;
 int			r_firstSceneDlight;
+static int	r_dlightsRadiusScaled;	// dlights up to here already had r_dlightRadius applied (or are menu lights)
 
 int			r_numentities;
 int			r_firstSceneEntity;
@@ -51,6 +52,7 @@ void R_InitNextFrame(void) {
 
 	r_numdlights = 0;
 	r_firstSceneDlight = 0;
+	r_dlightsRadiusScaled = 0;
 
 	r_numentities = 0;
 	r_firstSceneEntity = 0;
@@ -247,6 +249,10 @@ RE_AddDynamicLightToScene
 
 =====================
 */
+// rend2 look (DH 2026-10-26): r_dlightIntensity / r_dlightRadius scale every dynamic light (sabers, shots, explosions),
+// r_baseRoughness = surface roughness for textures without a material map (1 = matte as before)
+extern cvar_t* r_dlightRadius;
+
 static void RE_AddDynamicLightToScene(const vec3_t org, const float intensity, const float r, const float g, const float b, const int additive)
 {
 	if (!tr.registered)
@@ -265,7 +271,7 @@ static void RE_AddDynamicLightToScene(const vec3_t org, const float intensity, c
 	dlight_t* dl = &backEndData->dlights[r_numdlights++];
 
 	VectorCopy(org, dl->origin);
-	dl->radius = intensity;
+	dl->radius = intensity;	// r_dlightRadius is applied in RE_BeginScene, game views only (not menus)
 	dl->color[0] = r;
 	dl->color[1] = g;
 	dl->color[2] = b;
@@ -459,6 +465,18 @@ void RE_BeginScene(const refdef_t* fd)
 	tr.refdef.num_dlights = r_numdlights - r_firstSceneDlight;
 	tr.refdef.dlights = &backEndData->dlights[r_firstSceneDlight];
 
+	// r_dlightRadius only for game views: menu model views (RDF_NOWORLDMODEL) keep the menu's own light, or the
+	// character / saber menus wash out (DH 2026-10-27). Each light is scaled once, even if a skyportal scene
+	// begins twice with the same lights
+	for (int i = MAX(r_firstSceneDlight, r_dlightsRadiusScaled); i < r_numdlights; i++)
+	{
+		if (!(fd->rdflags & RDF_NOWORLDMODEL) && r_dlightRadius->value > 0.0f)
+		{
+			backEndData->dlights[i].radius *= r_dlightRadius->value;
+		}
+	}
+	r_dlightsRadiusScaled = MAX(r_dlightsRadiusScaled, r_numdlights);
+
 	// Add the decals here because decals add polys and we need to ensure
 	// that the polys are added before the the renderer is prepared
 	if (!(fd->rdflags & RDF_NOWORLDMODEL))
@@ -504,7 +522,7 @@ void RE_BeginScene(const refdef_t* fd)
 	{
 		PROFILE_ZONE("R: begin scene (views + constants)");
 		R_GatherFrameViews(&tr.refdef);
-	RB_UpdateConstants(&tr.refdef);
+		RB_UpdateConstants(&tr.refdef);
 	}
 
 	R_PushDebugGroup(AL_SCENE, va("Scene_%i", backEndData->currentFrame->currentScene));

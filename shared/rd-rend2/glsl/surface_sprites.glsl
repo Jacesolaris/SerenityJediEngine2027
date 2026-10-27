@@ -38,6 +38,15 @@ layout(std140) uniform SurfaceSprite
 	float u_FxAlphaEnd;
 };
 
+// Grass wind and bending (2026-10-26): characters near the grass (x, y, z, radius), and
+// x = how many, y = r_grassWind sway on all grass, z = r_grassPush strength
+uniform vec4 u_GrassPushers[16];
+uniform vec4 u_GrassParams;
+// Grass force waves (2026-10-27): force push, pull and repulse waves, two vec4 each: origin + seconds since it
+// started, flat direction + type (0 push, 1 pull, 2 repulse) + range; params x = how many, y = r_grassForceWave
+uniform vec4 u_GrassWaves[8];
+uniform vec4 u_GrassWaveParams;
+
 #if defined(VELOCITY_PASS)
 layout(std140) uniform TemporalInfo
 {
@@ -122,6 +131,84 @@ vec3 CalculateVertexOffset( in int vertex_id, in float sprite_time, in float fad
 	float angle = (attr_Position.x + attr_Position.y) * 0.02 + (sprite_time * 0.0015);
 	float windsway = mix(height* u_WindIdle * 0.075, 0.0, isLowerVertex);
 	offset.xy += vec2(cos(angle), sin(angle)) * windsway;
+
+	float upper = 1.0 - isLowerVertex;
+	if (u_GrassParams.y > 0.0)
+	{
+		// sway and gusts rolling across the field (also on grass with its own wind, that sway was too small to see)
+		offset.xy += vec2(cos(angle), sin(angle)) * (height * 0.12 * u_GrassParams.y * upper);
+		const vec2 gustDir = vec2(0.8, 0.6);
+		float gust = 0.5 + 0.5 * sin(sprite_time * 0.0009 - dot(attr_Position.xy, gustDir) * 0.006);
+		float flutter = 0.45 + 0.06 * sin(sprite_time * 0.006 + (attr_Position.x + attr_Position.y) * 0.05);
+		float lean = height * u_GrassParams.y * gust * gust * flutter * upper;
+		offset.xy += gustDir * lean;
+		offset.z -= 0.3 * lean;
+	}
+
+	// bend away from anyone standing in the grass
+	int numPushers = int(u_GrassParams.x);
+	if (numPushers > 0 && upper > 0.0)
+	{
+		vec2 bend = vec2(0.0);
+		float down = 0.0;
+		for (int i = 0; i < numPushers; i++)
+		{
+			vec4 p = u_GrassPushers[i];
+			float dz = attr_Position.z - p.z;
+			vec2 d = attr_Position.xy - p.xy;
+			float dist = length(d);
+			if (dz < -2.25 * p.w || dz > 1.25 * p.w || dist >= p.w)
+				continue;
+			float s = 1.0 - dist / p.w;
+			s = s * s * (3.0 - 2.0 * s);
+			float a = attr_Position.x * 12.9898 + attr_Position.y * 78.233;
+			vec2 dir = dist > 0.5 ? d / dist : vec2(cos(a), sin(a));
+			bend += dir * s;
+			down += s;
+		}
+		float len = length(bend);
+		if (len > 1.0)
+			bend /= len;
+		down = min(down, 1.0);
+		offset.xy += bend * (height * 0.9 * u_GrassParams.z);
+		offset.z = max(offset.z - down * height * 0.6 * u_GrassParams.z, height * 0.1);
+	}
+
+	// force push, pull and repulse waves running out through the grass (same numbers as rd-vanilla tr_surfacesprites.cpp)
+	int numWaves = int(u_GrassWaveParams.x);
+	if (numWaves > 0 && upper > 0.0)
+	{
+		vec2 bend = vec2(0.0);
+		float down = 0.0;
+		for (int i = 0; i < numWaves; i++)
+		{
+			vec4 wo = u_GrassWaves[i * 2];
+			vec4 wd = u_GrassWaves[i * 2 + 1];
+			float dz = attr_Position.z - wo.z;
+			vec2 d = attr_Position.xy - wo.xy;
+			float dist = length(d);
+			if (dz < -160.0 || dz > 96.0 || dist >= wd.w)
+				continue;
+			float a = attr_Position.x * 12.9898 + attr_Position.y * 78.233;
+			vec2 dir = dist > 0.5 ? d / dist : vec2(cos(a), sin(a));
+			float cone = 1.0;
+			if (wd.z < 1.5 && dist > 32.0)
+				cone = smoothstep(0.35, 0.75, dot(dir, wd.xy));
+			float tp = wo.w - dist / 1400.0; // seconds since the wave front passed this blade
+			if (tp <= 0.0 || cone <= 0.0)
+				continue;
+			// flattened at once, then it springs back with a little overshoot
+			float s = min(tp / 0.06, 1.0) * exp(-2.2 * tp) * cos(tp * 3.5) * cone * (1.0 - (dist * dist) / (wd.w * wd.w));
+			bend += dir * (wd.z > 0.5 && wd.z < 1.5 ? -s : s);
+			down += abs(s);
+		}
+		float len = length(bend);
+		if (len > 1.0)
+			bend /= len;
+		down = min(down, 1.0);
+		offset.xy += bend * (height * 1.2 * u_GrassWaveParams.y);
+		offset.z = max(offset.z - down * height * 0.7 * u_GrassWaveParams.y, height * 0.1);
+	}
 #endif
 	return offset;
 }

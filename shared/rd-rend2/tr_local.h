@@ -1559,6 +1559,10 @@ typedef enum
 	UNIFORM_GRADE1,
 	UNIFORM_GRADE2,
 	UNIFORM_GRADE3,
+	UNIFORM_GRASSPUSHERS,
+	UNIFORM_GRASSPARAMS,
+	UNIFORM_GRASSWAVES,
+	UNIFORM_GRASSWAVEPARAMS,
 
 	UNIFORM_COUNT
 } uniform_t;
@@ -3470,6 +3474,7 @@ void GLSL_SetUniformVec2(shaderProgram_t* program, int uniformNum, const vec2_t 
 void GLSL_SetUniformVec2N(shaderProgram_t* program, int uniformNum, const float* v, int numVec2s);
 void GLSL_SetUniformVec3(shaderProgram_t* program, int uniformNum, const vec3_t v);
 void GLSL_SetUniformVec4(shaderProgram_t* program, int uniformNum, const vec4_t v);
+void GLSL_SetUniformVec4N(shaderProgram_t* program, int uniformNum, const float* v, int numVec4s);
 void GLSL_SetUniformMatrix4x3(shaderProgram_t* program, int uniformNum, const float* matrix, int numElements = 1);
 void GLSL_SetUniformMatrix4x4(shaderProgram_t* program, int uniformNum, const float* matrix, int numElements = 1);
 void GLSL_SetUniforms(shaderProgram_t* program, UniformData* uniformData);

@@ -3029,6 +3029,22 @@ static void G_HeldByMonster(gentity_t* ent, usercmd_t* ucmd)
 		//NOTE: lookTarget is an entity number, so this presumes that client 0 is NOT a Rancor...
 	{
 		gentity_t* monster = &g_entities[ent->client->ps.lookTarget];
+		if (G_HeldByMonsterPlayer(ent, monster, ucmd))
+		{
+			// held by a wampa / rancor player or bot (NPC_AI_Wampa.c), or just let go by it
+			if (ent->client->ps.eFlags2 & EF2_HELD_BY_MONSTER)
+			{
+				VectorClear(ent->client->ps.velocity);
+				G_SetOrigin(ent, ent->client->ps.origin);
+				SetClientViewAngle(ent, ent->client->ps.viewangles);
+				G_SetAngles(ent, ent->client->ps.viewangles);
+				trap->LinkEntity((sharedEntity_t*)ent);
+				ucmd->forwardmove = 0;
+				ucmd->rightmove = 0;
+				ucmd->upmove = 0;
+			}
+			return;
+		}
 		if (monster && monster->client)
 		{
 			//take the monster's waypoint as your own
@@ -4952,6 +4968,8 @@ static void G_NoJumpTaunt(gentity_t* ent, const usercmd_t* ucmd)
 	client->noJumpTauntTime = level.time + NOJUMP_TAUNT_COOLDOWN;
 }
 
+extern void ForceDarkStasis(gentity_t* self); // w_force.c
+
 static void ClientThink_real(gentity_t* ent)
 {
 	if (!ent || !ent->client)
@@ -5190,6 +5208,12 @@ static void ClientThink_real(gentity_t* ent)
 		G_HeldByMonster(ent, ucmd);
 	}
 
+	// DH 2026-10-26: a wampa / rancor player or bot grabs, holds and eats like the SP AI (g_monsterGrab)
+	if (client && !isFollowing)
+	{
+		G_MonsterPlayerThink(ent, ucmd);
+	}
+
 	if (client && client->ps.clientNum < MAX_CLIENTS)
 	{
 		//player stuff
@@ -5372,12 +5396,18 @@ static void ClientThink_real(gentity_t* ent)
 		client->ps.eFlags &= ~EF_BODYPUSH;
 	}
 
+	// Dark Stasis' red look (FLAG_DARKSTASIS) goes with the freeze, whatever lifted it
+	if (!(client->ps.userInt3 & 1 << FLAG_FROZEN))
+	{
+		client->ps.userInt3 &= ~(1 << FLAG_DARKSTASIS);
+	}
+
 	// Unfreeze after stasis timer expires
 	if ((client->ps.userInt3 & (1 << FLAG_FROZEN)) &&
 		client->frozenTime < level.time)
 	{
 		// Remove frozen flag
-		client->ps.userInt3 &= ~(1 << FLAG_FROZEN);
+		client->ps.userInt3 &= ~(1 << FLAG_FROZEN | 1 << FLAG_DARKSTASIS);
 
 		// Unlock weapon logic
 		client->ps.weaponTime = 0;
@@ -7592,6 +7622,9 @@ static void ClientThink_real(gentity_t* ent)
 		case GENCMD_SURRENDER:
 			G_SetTauntAnim(ent, TAUNT_SURRENDER);
 			break;
+		case GENCMD_FORCE_DARK_STASIS:
+			ForceDarkStasis(ent);
+			break;
 		default:
 			break;
 		}
@@ -7898,6 +7931,8 @@ static void ClientThink_real(gentity_t* ent)
 		&& !(client->ps.eFlags2 & EF2_HELD_BY_MONSTER) //can't respawn while being eaten
 		&& ent->s.eType != ET_NPC)
 	{
+		G_DroidVanishThink(ent); // a dead small droid is gone behind its explosion (g_droidBodyVanish)
+
 		// wait for the attack button to be pressed
 		if (level.time > client->respawnTime && !gDoSlowMoDuel)
 		{

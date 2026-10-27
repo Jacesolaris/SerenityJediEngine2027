@@ -77,6 +77,7 @@ extern void ForceRage(gentity_t* self);
 extern void ForceProtect(gentity_t* self);
 extern void ForceAbsorb(gentity_t* self);
 extern void ForceStasis(gentity_t* self);
+extern void ForceDarkStasis(gentity_t* self);
 extern void ForceDestruction(gentity_t* self);
 extern void ForceFear(gentity_t* self);
 extern void ForceLightningStrike(gentity_t* self);
@@ -3460,6 +3461,15 @@ static void Jedi_CombatDistance(const int enemy_dist)
 							level.time)
 						{
 							ForceDestruction(NPC);
+							TIMER_Set(NPC, "attackDelay", NPC->client->ps.weaponTime);
+						}
+
+						//////////////////////  FP_DARK_STASIS  ////////////////////////////////////
+						else if (WP_ForcePowerUsable(NPC, FP_DARK_STASIS, 0) && !Q_irand(0, 2) && NPC->enemy
+							&& NPC->enemy->client && NPC->enemy->client->ps.stasisTime < level.time
+							&& DistanceSquared(NPC->enemy->currentOrigin, NPC->currentOrigin) < 512.0f * 512.0f)
+						{
+							ForceDarkStasis(NPC);
 							TIMER_Set(NPC, "attackDelay", NPC->client->ps.weaponTime);
 						}
 

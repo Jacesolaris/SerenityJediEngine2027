@@ -144,419 +144,417 @@ void R_ImageLoader_Init()
 ================================================================================
 */
 namespace {
+	constexpr int		PF_AHEAD_FILES = 64;					// listed files kept read ahead of the one asked for, decoding in the background
+	constexpr size_t	PF_AHEAD_BYTES = 16u * 1024 * 1024;		// compressed bytes allowed read ahead and not yet taken
+	constexpr size_t	PF_READY_BYTES = 192u * 1024 * 1024;	// decoded pixels allowed to wait (older leftovers dropped first)
+	constexpr int		PF_MAX_LIST = 16384;
+	constexpr int		PF_MAX_DECODERS = 8;
 
-constexpr int		PF_AHEAD_FILES = 64;					// listed files kept read ahead of the one asked for, decoding in the background
-constexpr size_t	PF_AHEAD_BYTES = 16u * 1024 * 1024;		// compressed bytes allowed read ahead and not yet taken
-constexpr size_t	PF_READY_BYTES = 192u * 1024 * 1024;	// decoded pixels allowed to wait (older leftovers dropped first)
-constexpr int		PF_MAX_LIST = 16384;
-constexpr int		PF_MAX_DECODERS = 8;
-
-// One per list entry. 'state', 'pic', 'width', 'height' change under s_dec.mutex (the decode threads write them);
-// 'data', 'len', 'png' are set by the main thread before the entry is queued.
-enum pfSlotState_t : unsigned char
-{
-	PF_UNREAD,	// not read yet
-	PF_QUEUED,	// read, waiting for or being decoded by a decode thread
-	PF_DONE,	// decoded: pic (or nullptr if the decode failed)
-	PF_GONE		// taken, dropped, failed or unreadable: LoadJPG / LoadPNG handle it
-};
-
-struct pfSlot_t
-{
-	pfSlotState_t	state = PF_UNREAD;
-	bool			png = false;	// PNG (by its listed name), else JPG
-	byte*			data = nullptr;	// the file (malloc'd), until a decode thread takes it
-	size_t			len = 0;
-	byte*			pic = nullptr;	// malloc'd RGBA from R_DecodeJPGThreadSafe / R_DecodePNGThreadSafe
-	int				width = 0;
-	int				height = 0;
-};
-
-struct pfState_t
-{
-	bool										active = false;	// between Begin and End
-	bool										keepOnce = false;	// started at the start of a load: survives that load's renderer flush
-	std::string									listPath;
-	std::vector<std::string>					list;			// the last load's JPGs and PNGs, in order
-	std::unordered_map<std::string, int>		where;			// key -> index in list
-	std::vector<pfSlot_t>						slots;			// one per list entry (never resized while decode threads run)
-	std::vector<char>							read;			// main thread: entry already read (or given up)
-	size_t										aheadBytes = 0;	// main thread: compressed bytes read and not yet taken or dropped
-	size_t										readyBytes = 0;	// s_dec.mutex: decoded pixels waiting
-	std::vector<std::string>					record;			// this load's JPGs and PNGs, in order
-	std::unordered_set<std::string>				recorded;
-	int											taken = 0;
-	int											readCalls = 0;	// read-ahead calls that read something
-	int											failed = 0;		// s_dec.mutex: decodes that failed (LoadJPG/LoadPNG did them)
-	int											dropped = 0;	// decoded but never asked for in time
-	double										waitSeconds = 0.0;	// main thread waiting for a decode to finish
-	std::unordered_set<std::string>				missing;		// names that found no image in this load
-	int											missLooked = 0;	// lookups that found nothing
-	int											missSkipped = 0;	// lookups not repeated thanks to 'missing'
-	double										missSeconds = 0.0;	// time spent in the lookups that found nothing
-};
-
-pfState_t s_pf;
-
-// The background decode threads. They live from the first file read in a load until R_ImagePrefetch_End,
-// and touch nothing but the slots they are given (no engine calls, no Z_Malloc, no printing).
-struct pfDecoder_t
-{
-	std::mutex					mutex;
-	std::condition_variable		wake;	// work queued, or quit
-	std::condition_variable		done;	// a slot finished decoding
-	std::deque<int>				queue;	// slot indexes waiting for a decode thread
-	std::vector<std::thread>	threads;
-	bool						quit = false;
-};
-
-pfDecoder_t s_dec;
-
-std::string PF_Key(const char* name)
-{
-	std::string k(name);
-	for (char& c : k)
+	// One per list entry. 'state', 'pic', 'width', 'height' change under s_dec.mutex (the decode threads write them);
+	// 'data', 'len', 'png' are set by the main thread before the entry is queued.
+	enum pfSlotState_t : unsigned char
 	{
-		c = (c == '\\') ? '/' : static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	}
-	return k;
-}
+		PF_UNREAD,	// not read yet
+		PF_QUEUED,	// read, waiting for or being decoded by a decode thread
+		PF_DONE,	// decoded: pic (or nullptr if the decode failed)
+		PF_GONE		// taken, dropped, failed or unreadable: LoadJPG / LoadPNG handle it
+	};
 
-bool PF_Decode(const pfSlot_t& slot, const byte* data, const size_t len, byte** pic, int* width, int* height)
-{
-	return slot.png ? R_DecodePNGThreadSafe(data, len, pic, width, height) : R_DecodeJPGThreadSafe(data, len, pic, width, height);
-}
-
-// s_dec.mutex held: a decode finished
-void PF_Finish(pfSlot_t& slot, const bool ok, byte* pic, const int width, const int height)
-{
-	slot.state = PF_DONE;
-	if (ok)
+	struct pfSlot_t
 	{
-		slot.pic = pic;
-		slot.width = width;
-		slot.height = height;
-		s_pf.readyBytes += static_cast<size_t>(width) * height * 4;
-	}
-	else
-	{
-		s_pf.failed++;
-	}
-}
+		pfSlotState_t	state = PF_UNREAD;
+		bool			png = false;	// PNG (by its listed name), else JPG
+		byte* data = nullptr;	// the file (malloc'd), until a decode thread takes it
+		size_t			len = 0;
+		byte* pic = nullptr;	// malloc'd RGBA from R_DecodeJPGThreadSafe / R_DecodePNGThreadSafe
+		int				width = 0;
+		int				height = 0;
+	};
 
-void PF_DecodeThread(const int number)
-{
-	char name[32];
-	snprintf(name, sizeof(name), "Image decode %d", number + 1);
-	PROFILE_THREAD(name);
-	(void)name;
-	qjobs::WorkerThreadFlag() = true;
-
-	std::unique_lock<std::mutex> lock(s_dec.mutex);
-	for (;;)
+	struct pfState_t
 	{
-		s_dec.wake.wait(lock, [] { return s_dec.quit || !s_dec.queue.empty(); });
-		if (s_dec.queue.empty())
+		bool										active = false;	// between Begin and End
+		bool										keepOnce = false;	// started at the start of a load: survives that load's renderer flush
+		std::string									listPath;
+		std::vector<std::string>					list;			// the last load's JPGs and PNGs, in order
+		std::unordered_map<std::string, int>		where;			// key -> index in list
+		std::vector<pfSlot_t>						slots;			// one per list entry (never resized while decode threads run)
+		std::vector<char>							read;			// main thread: entry already read (or given up)
+		size_t										aheadBytes = 0;	// main thread: compressed bytes read and not yet taken or dropped
+		size_t										readyBytes = 0;	// s_dec.mutex: decoded pixels waiting
+		std::vector<std::string>					record;			// this load's JPGs and PNGs, in order
+		std::unordered_set<std::string>				recorded;
+		int											taken = 0;
+		int											readCalls = 0;	// read-ahead calls that read something
+		int											failed = 0;		// s_dec.mutex: decodes that failed (LoadJPG/LoadPNG did them)
+		int											dropped = 0;	// decoded but never asked for in time
+		double										waitSeconds = 0.0;	// main thread waiting for a decode to finish
+		std::unordered_set<std::string>				missing;		// names that found no image in this load
+		int											missLooked = 0;	// lookups that found nothing
+		int											missSkipped = 0;	// lookups not repeated thanks to 'missing'
+		double										missSeconds = 0.0;	// time spent in the lookups that found nothing
+	};
+
+	pfState_t s_pf;
+
+	// The background decode threads. They live from the first file read in a load until R_ImagePrefetch_End,
+	// and touch nothing but the slots they are given (no engine calls, no Z_Malloc, no printing).
+	struct pfDecoder_t
+	{
+		std::mutex					mutex;
+		std::condition_variable		wake;	// work queued, or quit
+		std::condition_variable		done;	// a slot finished decoding
+		std::deque<int>				queue;	// slot indexes waiting for a decode thread
+		std::vector<std::thread>	threads;
+		bool						quit = false;
+	};
+
+	pfDecoder_t s_dec;
+
+	std::string PF_Key(const char* name)
+	{
+		std::string k(name);
+		for (char& c : k)
 		{
-			return;	// quit (End empties the queue first)
+			c = (c == '\\') ? '/' : static_cast<char>(tolower(static_cast<unsigned char>(c)));
 		}
-		const int index = s_dec.queue.front();
-		s_dec.queue.pop_front();
+		return k;
+	}
+
+	bool PF_Decode(const pfSlot_t& slot, const byte* data, const size_t len, byte** pic, int* width, int* height)
+	{
+		return slot.png ? R_DecodePNGThreadSafe(data, len, pic, width, height) : R_DecodeJPGThreadSafe(data, len, pic, width, height);
+	}
+
+	// s_dec.mutex held: a decode finished
+	void PF_Finish(pfSlot_t& slot, const bool ok, byte* pic, const int width, const int height)
+	{
+		slot.state = PF_DONE;
+		if (ok)
+		{
+			slot.pic = pic;
+			slot.width = width;
+			slot.height = height;
+			s_pf.readyBytes += static_cast<size_t>(width) * height * 4;
+		}
+		else
+		{
+			s_pf.failed++;
+		}
+	}
+
+	void PF_DecodeThread(const int number)
+	{
+		char name[32];
+		snprintf(name, sizeof(name), "Image decode %d", number + 1);
+		PROFILE_THREAD(name);
+		(void)name;
+		qjobs::WorkerThreadFlag() = true;
+
+		std::unique_lock<std::mutex> lock(s_dec.mutex);
+		for (;;)
+		{
+			s_dec.wake.wait(lock, [] { return s_dec.quit || !s_dec.queue.empty(); });
+			if (s_dec.queue.empty())
+			{
+				return;	// quit (End empties the queue first)
+			}
+			const int index = s_dec.queue.front();
+			s_dec.queue.pop_front();
+			pfSlot_t& slot = s_pf.slots[index];
+			byte* data = slot.data;
+			const size_t len = slot.len;
+			slot.data = nullptr;
+			lock.unlock();
+
+			byte* pic = nullptr;
+			int width = 0;
+			int height = 0;
+			bool ok;
+			{
+				PROFILE_ZONE("Load: image prefetch decode (background)");
+				ok = PF_Decode(slot, data, len, &pic, &width, &height);
+			}
+			free(data);
+
+			lock.lock();
+			PF_Finish(slot, ok, pic, width, height);
+			s_dec.done.notify_all();
+		}
+	}
+
+	// main thread: the decode threads for this load (as many as the render job pool has workers, at most 8)
+	bool PF_StartDecoders()
+	{
+		if (!s_dec.threads.empty())
+		{
+			return true;
+		}
+		qjobs::Pool* pool = R_RenderJobPool();
+		if (!pool)
+		{
+			return false;
+		}
+		const int count = (std::max)(1, (std::min)(pool->NumThreads(), PF_MAX_DECODERS));
+		s_dec.quit = false;
+		try
+		{
+			for (int i = 0; i < count; i++)
+			{
+				s_dec.threads.emplace_back(PF_DecodeThread, i);
+			}
+		}
+		catch (...)
+		{
+			// could not start a thread: the ones that did start still work; none = decode on the main thread
+		}
+		return !s_dec.threads.empty();
+	}
+
+	// main thread: stop the decode threads, freeing what was still waiting for one
+	void PF_StopDecoders()
+	{
+		{
+			std::lock_guard<std::mutex> lock(s_dec.mutex);
+			for (const int index : s_dec.queue)
+			{
+				pfSlot_t& slot = s_pf.slots[index];
+				free(slot.data);
+				slot.data = nullptr;
+				slot.state = PF_GONE;
+			}
+			s_dec.queue.clear();
+			s_dec.quit = true;
+		}
+		s_dec.wake.notify_all();
+		for (std::thread& t : s_dec.threads)
+		{
+			if (t.joinable())
+			{
+				t.join();
+			}
+		}
+		s_dec.threads.clear();
+		s_dec.quit = false;
+	}
+
+	// main thread: free the decoded pixels nobody asked for that sit before 'cursor' (the load has moved on)
+	void PF_DropBefore(const int cursor)
+	{
+		std::lock_guard<std::mutex> lock(s_dec.mutex);
+		for (int i = 0; i < cursor && s_pf.readyBytes > PF_READY_BYTES / 2; i++)
+		{
+			pfSlot_t& slot = s_pf.slots[i];
+			if (slot.state == PF_DONE)
+			{
+				if (slot.pic)
+				{
+					s_pf.readyBytes -= static_cast<size_t>(slot.width) * slot.height * 4;
+					free(slot.pic);
+					slot.pic = nullptr;
+					s_pf.dropped++;
+				}
+				slot.state = PF_GONE;
+				s_pf.aheadBytes -= (std::min)(s_pf.aheadBytes, slot.len);
+			}
+		}
+	}
+
+	// main thread: read list entry 'index' (the normal file system) and hand it to a decode thread
+	void PF_ReadOne(const int index)
+	{
+		s_pf.read[index] = 1;
 		pfSlot_t& slot = s_pf.slots[index];
-		byte* data = slot.data;
-		const size_t len = slot.len;
-		slot.data = nullptr;
-		lock.unlock();
-
-		byte* pic = nullptr;
-		int width = 0;
-		int height = 0;
-		bool ok;
+		void* buf = nullptr;
+		const long len = PF_RI FS_ReadFile(s_pf.list[index].c_str(), &buf);
+		byte* copy = nullptr;
+		if (len > 0 && buf)
 		{
-			PROFILE_ZONE("Load: image prefetch decode (background)");
-			ok = PF_Decode(slot, data, len, &pic, &width, &height);
+			copy = static_cast<byte*>(malloc(static_cast<size_t>(len)));
+			if (copy)
+			{
+				memcpy(copy, buf, static_cast<size_t>(len));
+			}
 		}
-		free(data);
+		if (buf)
+		{
+			PF_RI FS_FreeFile(buf);
+		}
+		if (!copy)
+		{
+			std::lock_guard<std::mutex> lock(s_dec.mutex);
+			slot.state = PF_GONE;	// gone since the list was written: LoadJPG will see the same
+			return;
+		}
+		const std::string& listed = s_pf.list[index];
+		slot.png = listed.size() > 4 && !Q_stricmp(listed.c_str() + listed.size() - 4, ".png");
+		slot.len = static_cast<size_t>(len);
+		s_pf.aheadBytes += slot.len;
 
-		lock.lock();
-		PF_Finish(slot, ok, pic, width, height);
-		s_dec.done.notify_all();
+		if (!PF_StartDecoders())
+		{
+			// no decode thread: decode here (what LoadJPG would have done, just from memory)
+			byte* pic = nullptr;
+			int width = 0;
+			int height = 0;
+			const bool ok = PF_Decode(slot, copy, slot.len, &pic, &width, &height);
+			free(copy);
+			std::lock_guard<std::mutex> lock(s_dec.mutex);
+			PF_Finish(slot, ok, pic, width, height);
+			return;
+		}
+		{
+			std::lock_guard<std::mutex> lock(s_dec.mutex);
+			slot.data = copy;
+			slot.state = PF_QUEUED;
+			s_dec.queue.push_back(index);
+		}
+		s_dec.wake.notify_one();
 	}
-}
 
-// main thread: the decode threads for this load (as many as the render job pool has workers, at most 8)
-bool PF_StartDecoders()
-{
-	if (!s_dec.threads.empty())
+	// main thread: make sure entry 'cursor' is read, and keep the next listed files read ahead (decoding in the background)
+	void PF_ReadAhead(const int cursor)
 	{
+		PROFILE_ZONE("Load: image prefetch read");
+		size_t ready;
+		{
+			std::lock_guard<std::mutex> lock(s_dec.mutex);
+			ready = s_pf.readyBytes;
+		}
+		if (ready > PF_READY_BYTES)
+		{
+			PF_DropBefore(cursor);
+			std::lock_guard<std::mutex> lock(s_dec.mutex);
+			ready = s_pf.readyBytes;
+		}
+		bool any = false;
+		const int count = static_cast<int>(s_pf.list.size());
+		for (int i = cursor; i < count && i < cursor + PF_AHEAD_FILES; i++)
+		{
+			if (s_pf.read[i])
+			{
+				continue;
+			}
+			if (i != cursor && (s_pf.aheadBytes >= PF_AHEAD_BYTES || ready > PF_READY_BYTES))
+			{
+				break;	// enough waiting: the one asked for is always read
+			}
+			PF_ReadOne(i);
+			any = true;
+		}
+		if (any)
+		{
+			s_pf.readCalls++;
+		}
+	}
+
+	// pixels for this JPG / PNG if the prefetch has them (waiting for its decode if it is still running), in the same
+	// kind of memory LoadJPG returns (LoadPNG's is the same kind; only the tag differs)
+	bool PF_Take(const char* name, byte** pic, int* width, int* height)
+	{
+		if (!s_pf.active || s_pf.list.empty())
+		{
+			return false;
+		}
+		const auto w = s_pf.where.find(PF_Key(name));
+		if (w == s_pf.where.end())
+		{
+			return false;	// not listed
+		}
+		const int index = w->second;
+		PF_ReadAhead(index);
+
+		byte* src = nullptr;
+		int srcWidth = 0;
+		int srcHeight = 0;
+		size_t len = 0;
+		{
+			std::unique_lock<std::mutex> lock(s_dec.mutex);
+			pfSlot_t& slot = s_pf.slots[index];
+			if (slot.state == PF_QUEUED)
+			{
+				PROFILE_ZONE("Load: image prefetch wait");
+				const auto start = std::chrono::steady_clock::now();
+				s_dec.done.wait(lock, [&slot] { return slot.state != PF_QUEUED; });
+				s_pf.waitSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+			}
+			if (slot.state != PF_DONE)
+			{
+				return false;	// unreadable, dropped, or already taken once (loaded twice)
+			}
+			src = slot.pic;
+			srcWidth = slot.width;
+			srcHeight = slot.height;
+			len = slot.len;
+			slot.pic = nullptr;
+			slot.state = PF_GONE;
+			if (src)
+			{
+				s_pf.readyBytes -= static_cast<size_t>(srcWidth) * srcHeight * 4;
+			}
+		}
+		s_pf.aheadBytes -= (std::min)(s_pf.aheadBytes, len);
+		if (!src)
+		{
+			return false;	// the decode failed (an error or warning): LoadJPG / LoadPNG load it and print as before
+		}
+
+		const size_t bytes = static_cast<size_t>(srcWidth) * srcHeight * 4;
+		byte* out = static_cast<byte*>(PF_ALLOC(static_cast<int>(bytes)));
+		memcpy(out, src, bytes);
+		free(src);
+		*pic = out;
+		*width = srcWidth;
+		*height = srcHeight;
+		s_pf.taken++;
 		return true;
 	}
-	qjobs::Pool* pool = R_RenderJobPool();
-	if (!pool)
-	{
-		return false;
-	}
-	const int count = (std::max)(1, (std::min)(pool->NumThreads(), PF_MAX_DECODERS));
-	s_dec.quit = false;
-	try
-	{
-		for (int i = 0; i < count; i++)
-		{
-			s_dec.threads.emplace_back(PF_DecodeThread, i);
-		}
-	}
-	catch (...)
-	{
-		// could not start a thread: the ones that did start still work; none = decode on the main thread
-	}
-	return !s_dec.threads.empty();
-}
 
-// main thread: stop the decode threads, freeing what was still waiting for one
-void PF_StopDecoders()
-{
+	void PF_Record(const char* name)
 	{
-		std::lock_guard<std::mutex> lock(s_dec.mutex);
-		for (const int index : s_dec.queue)
+		if (!s_pf.active || static_cast<int>(s_pf.record.size()) >= PF_MAX_LIST)
 		{
-			pfSlot_t& slot = s_pf.slots[index];
-			free(slot.data);
-			slot.data = nullptr;
-			slot.state = PF_GONE;
+			return;
 		}
-		s_dec.queue.clear();
-		s_dec.quit = true;
-	}
-	s_dec.wake.notify_all();
-	for (std::thread& t : s_dec.threads)
-	{
-		if (t.joinable())
+		if (s_pf.recorded.insert(PF_Key(name)).second)
 		{
-			t.join();
+			s_pf.record.emplace_back(name);
 		}
 	}
-	s_dec.threads.clear();
-	s_dec.quit = false;
-}
 
-// main thread: free the decoded pixels nobody asked for that sit before 'cursor' (the load has moved on)
-void PF_DropBefore(const int cursor)
-{
-	std::lock_guard<std::mutex> lock(s_dec.mutex);
-	for (int i = 0; i < cursor && s_pf.readyBytes > PF_READY_BYTES / 2; i++)
+	// R_LoadImage's call to an image loader: JPGs and PNGs go through the prefetch, and during a load a name that
+	// found no image is not looked for again
+	void PF_Load(const ImageLoaderFn loader, const char* name, byte** pic, int* width, int* height)
 	{
-		pfSlot_t& slot = s_pf.slots[i];
-		if (slot.state == PF_DONE)
+		if (!s_pf.active)
 		{
-			if (slot.pic)
+			loader(name, pic, width, height);
+			return;
+		}
+		std::string key = PF_Key(name);
+		if (s_pf.missing.count(key))
+		{
+			s_pf.missSkipped++;
+			return;
+		}
+		const bool prefetchable = loader == LoadJPG || loader == LoadPNG;
+		const auto start = std::chrono::steady_clock::now();
+		if (!prefetchable || !PF_Take(name, pic, width, height))
+		{
+			loader(name, pic, width, height);
+		}
+		if (*pic)
+		{
+			if (prefetchable)
 			{
-				s_pf.readyBytes -= static_cast<size_t>(slot.width) * slot.height * 4;
-				free(slot.pic);
-				slot.pic = nullptr;
-				s_pf.dropped++;
+				PF_Record(name);
 			}
-			slot.state = PF_GONE;
-			s_pf.aheadBytes -= (std::min)(s_pf.aheadBytes, slot.len);
+			return;
 		}
+		s_pf.missing.insert(std::move(key));
+		s_pf.missLooked++;
+		s_pf.missSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
 	}
-}
-
-// main thread: read list entry 'index' (the normal file system) and hand it to a decode thread
-void PF_ReadOne(const int index)
-{
-	s_pf.read[index] = 1;
-	pfSlot_t& slot = s_pf.slots[index];
-	void* buf = nullptr;
-	const long len = PF_RI FS_ReadFile(s_pf.list[index].c_str(), &buf);
-	byte* copy = nullptr;
-	if (len > 0 && buf)
-	{
-		copy = static_cast<byte*>(malloc(static_cast<size_t>(len)));
-		if (copy)
-		{
-			memcpy(copy, buf, static_cast<size_t>(len));
-		}
-	}
-	if (buf)
-	{
-		PF_RI FS_FreeFile(buf);
-	}
-	if (!copy)
-	{
-		std::lock_guard<std::mutex> lock(s_dec.mutex);
-		slot.state = PF_GONE;	// gone since the list was written: LoadJPG will see the same
-		return;
-	}
-	const std::string& listed = s_pf.list[index];
-	slot.png = listed.size() > 4 && !Q_stricmp(listed.c_str() + listed.size() - 4, ".png");
-	slot.len = static_cast<size_t>(len);
-	s_pf.aheadBytes += slot.len;
-
-	if (!PF_StartDecoders())
-	{
-		// no decode thread: decode here (what LoadJPG would have done, just from memory)
-		byte* pic = nullptr;
-		int width = 0;
-		int height = 0;
-		const bool ok = PF_Decode(slot, copy, slot.len, &pic, &width, &height);
-		free(copy);
-		std::lock_guard<std::mutex> lock(s_dec.mutex);
-		PF_Finish(slot, ok, pic, width, height);
-		return;
-	}
-	{
-		std::lock_guard<std::mutex> lock(s_dec.mutex);
-		slot.data = copy;
-		slot.state = PF_QUEUED;
-		s_dec.queue.push_back(index);
-	}
-	s_dec.wake.notify_one();
-}
-
-// main thread: make sure entry 'cursor' is read, and keep the next listed files read ahead (decoding in the background)
-void PF_ReadAhead(const int cursor)
-{
-	PROFILE_ZONE("Load: image prefetch read");
-	size_t ready;
-	{
-		std::lock_guard<std::mutex> lock(s_dec.mutex);
-		ready = s_pf.readyBytes;
-	}
-	if (ready > PF_READY_BYTES)
-	{
-		PF_DropBefore(cursor);
-		std::lock_guard<std::mutex> lock(s_dec.mutex);
-		ready = s_pf.readyBytes;
-	}
-	bool any = false;
-	const int count = static_cast<int>(s_pf.list.size());
-	for (int i = cursor; i < count && i < cursor + PF_AHEAD_FILES; i++)
-	{
-		if (s_pf.read[i])
-		{
-			continue;
-		}
-		if (i != cursor && (s_pf.aheadBytes >= PF_AHEAD_BYTES || ready > PF_READY_BYTES))
-		{
-			break;	// enough waiting: the one asked for is always read
-		}
-		PF_ReadOne(i);
-		any = true;
-	}
-	if (any)
-	{
-		s_pf.readCalls++;
-	}
-}
-
-// pixels for this JPG / PNG if the prefetch has them (waiting for its decode if it is still running), in the same
-// kind of memory LoadJPG returns (LoadPNG's is the same kind; only the tag differs)
-bool PF_Take(const char* name, byte** pic, int* width, int* height)
-{
-	if (!s_pf.active || s_pf.list.empty())
-	{
-		return false;
-	}
-	const auto w = s_pf.where.find(PF_Key(name));
-	if (w == s_pf.where.end())
-	{
-		return false;	// not listed
-	}
-	const int index = w->second;
-	PF_ReadAhead(index);
-
-	byte* src = nullptr;
-	int srcWidth = 0;
-	int srcHeight = 0;
-	size_t len = 0;
-	{
-		std::unique_lock<std::mutex> lock(s_dec.mutex);
-		pfSlot_t& slot = s_pf.slots[index];
-		if (slot.state == PF_QUEUED)
-		{
-			PROFILE_ZONE("Load: image prefetch wait");
-			const auto start = std::chrono::steady_clock::now();
-			s_dec.done.wait(lock, [&slot] { return slot.state != PF_QUEUED; });
-			s_pf.waitSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-		}
-		if (slot.state != PF_DONE)
-		{
-			return false;	// unreadable, dropped, or already taken once (loaded twice)
-		}
-		src = slot.pic;
-		srcWidth = slot.width;
-		srcHeight = slot.height;
-		len = slot.len;
-		slot.pic = nullptr;
-		slot.state = PF_GONE;
-		if (src)
-		{
-			s_pf.readyBytes -= static_cast<size_t>(srcWidth) * srcHeight * 4;
-		}
-	}
-	s_pf.aheadBytes -= (std::min)(s_pf.aheadBytes, len);
-	if (!src)
-	{
-		return false;	// the decode failed (an error or warning): LoadJPG / LoadPNG load it and print as before
-	}
-
-	const size_t bytes = static_cast<size_t>(srcWidth) * srcHeight * 4;
-	byte* out = static_cast<byte*>(PF_ALLOC(static_cast<int>(bytes)));
-	memcpy(out, src, bytes);
-	free(src);
-	*pic = out;
-	*width = srcWidth;
-	*height = srcHeight;
-	s_pf.taken++;
-	return true;
-}
-
-void PF_Record(const char* name)
-{
-	if (!s_pf.active || static_cast<int>(s_pf.record.size()) >= PF_MAX_LIST)
-	{
-		return;
-	}
-	if (s_pf.recorded.insert(PF_Key(name)).second)
-	{
-		s_pf.record.emplace_back(name);
-	}
-}
-
-// R_LoadImage's call to an image loader: JPGs and PNGs go through the prefetch, and during a load a name that
-// found no image is not looked for again
-void PF_Load(const ImageLoaderFn loader, const char* name, byte** pic, int* width, int* height)
-{
-	if (!s_pf.active)
-	{
-		loader(name, pic, width, height);
-		return;
-	}
-	std::string key = PF_Key(name);
-	if (s_pf.missing.count(key))
-	{
-		s_pf.missSkipped++;
-		return;
-	}
-	const bool prefetchable = loader == LoadJPG || loader == LoadPNG;
-	const auto start = std::chrono::steady_clock::now();
-	if (!prefetchable || !PF_Take(name, pic, width, height))
-	{
-		loader(name, pic, width, height);
-	}
-	if (*pic)
-	{
-		if (prefetchable)
-		{
-			PF_Record(name);
-		}
-		return;
-	}
-	s_pf.missing.insert(std::move(key));
-	s_pf.missLooked++;
-	s_pf.missSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-}
-
 } // namespace
 
 void R_ImagePrefetch_End(const qboolean saveList)

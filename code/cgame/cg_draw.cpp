@@ -8629,6 +8629,18 @@ static void CG_Draw2D()
 		//tint screen red
 		CG_DrawPic(0, 0, 640, 480, cgi_R_RegisterShader("gfx/2d/dmgsense"));
 	}
+	if (cg.snap->ps.forcePowersActive & 1 << FP_DARK_STASIS)
+	{
+		//Dark Stasis: the screen tinted red, pulsing, with the damage-sense ring round it
+		const float pulse = 0.5f + 0.5f * sin(cg.time * 0.006f);
+		const vec4_t dark_stasis_tint = { 0.55f, 0.0f, 0.0f, 0.16f + 0.12f * pulse };
+		const vec4_t dark_stasis_ring = { 1.0f, 0.75f + 0.25f * pulse, 0.75f + 0.25f * pulse, 1.0f };
+
+		CG_FillRect(0, 0, 640, 480, dark_stasis_tint);
+		cgi_R_SetColor(dark_stasis_ring);
+		CG_DrawPic(0, 0, 640, 480, cgi_R_RegisterShader("gfx/2d/dmgsense"));
+		cgi_R_SetColor(nullptr);
+	}
 	if (cg.snap->ps.forcePowersActive & 1 << FP_SEE)
 	{
 		//force sight is on

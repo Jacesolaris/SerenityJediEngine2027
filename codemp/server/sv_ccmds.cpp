@@ -1399,6 +1399,7 @@ const char* forceToggleNamePrints[NUM_FORCE_POWERS] = {
 	"BLAST",
 	"INSANITY",
 	"BLINDING",
+	"DARK STASIS",
 };
 
 static void SV_ForceToggle_f(void)

@@ -571,11 +571,11 @@ using cg_t = struct
 	short bracketedEntities[64];
 };
 
-constexpr auto MAX_SHOWPOWERS = 22;
+constexpr auto MAX_SHOWPOWERS = 23;
 extern int showPowers[MAX_SHOWPOWERS];
 extern const char* showPowersName[MAX_SHOWPOWERS];
 extern int force_icons[NUM_FORCE_POWERS];
-constexpr auto MAX_DPSHOWPOWERS = 26;
+constexpr auto MAX_DPSHOWPOWERS = 27;
 
 void Weapon_HookThink(gentity_t* ent);
 void Weapon_HookFree(gentity_t* ent);
@@ -734,6 +734,8 @@ extern vmCvar_t cg_holsterdebug;
 extern vmCvar_t cg_holsterdebug_boneindex;
 extern vmCvar_t cg_holsterdebug_posoffset;
 extern vmCvar_t cg_blasterHipPullIn; // SS_BLASTER (2026-10-15)
+extern vmCvar_t cg_saberLightRadius; // saber-only light (DH 2026-10-27)
+extern vmCvar_t cg_saberLightIntensity;
 extern vmCvar_t cg_holsterdebug_angoffset;
 extern vmCvar_t cg_fpls;
 extern vmCvar_t cg_trueroll;

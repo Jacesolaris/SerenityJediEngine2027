@@ -338,7 +338,6 @@ bool R_DecodeJPGThreadSafe(const byte* data, const size_t len, byte** pic, int* 
 	return true;
 }
 
-
 /* Expanded data destination object for stdio output */
 
 typedef struct my_destination_mgr_s {

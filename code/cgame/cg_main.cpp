@@ -425,6 +425,8 @@ vmCvar_t cg_ignitionSpeedvader;
 
 vmCvar_t cg_smoothCamera;
 vmCvar_t cg_speedTrail;
+vmCvar_t cg_saberLightRadius; // saber-only light (DH 2026-10-27): cg_saberLightRadius / cg_saberLightIntensity scale only lightsaber light, on top of r_dlightRadius / r_dlightIntensity
+vmCvar_t cg_saberLightIntensity;
 vmCvar_t cg_fovViewmodel;
 vmCvar_t cg_fovViewmodelAdjust;
 
@@ -659,6 +661,8 @@ static cvarTable_t cvarTable[] = {
 
 	{ &cg_smoothCamera, "cg_smoothCamera", "1", CVAR_ARCHIVE },
 	{ &cg_speedTrail, "cg_speedTrail", "0", CVAR_ARCHIVE },
+	{ &cg_saberLightRadius, "cg_saberLightRadius", "1.5", CVAR_ARCHIVE }, // saber light reach (1 = as before)
+	{ &cg_saberLightIntensity, "cg_saberLightIntensity", "1.2", CVAR_ARCHIVE }, // saber light strength (1 = as before)
 	{ &cg_fovViewmodel, "cg_fovViewmodel", "0", CVAR_ARCHIVE },
 	{ &cg_fovViewmodelAdjust, "cg_fovViewmodelAdjust", "1", CVAR_ARCHIVE },
 
@@ -2807,6 +2811,7 @@ void CG_Init(const int serverCommandSequence)
 		"gfx/mp/f_icon_lt_blast", //FP_BLAST
 		"gfx/mp/f_icon_dk_insanity", //FP_INSANITY,
 		"gfx/mp/f_icon_lt_blinding", //FP_BLINDING,
+		"gfx/mp/f_icon_dk_stasis", //FP_DARK_STASIS
 	};
 
 	// Precache inventory icons
@@ -4292,6 +4297,7 @@ int showPowers[MAX_SHOWPOWERS] =
 	FP_FEAR,
 	FP_DEADLYSIGHT,
 	FP_INSANITY,
+	FP_DARK_STASIS,
 };
 
 const char* showPowersName[MAX_SHOWPOWERS] =
@@ -4320,6 +4326,7 @@ const char* showPowersName[MAX_SHOWPOWERS] =
 	"SP_INGAME_FEAR2",
 	"SP_INGAME_DEADLYSIGHT2",
 	"SP_INGAME_INSANITY2",
+	"DARKSTASIS_NAME",
 };
 
 // Keep these with groups light side, core, and dark side
@@ -4356,6 +4363,7 @@ int showDataPadPowers[MAX_DPSHOWPOWERS] =
 	FP_FEAR,
 	FP_DEADLYSIGHT,
 	FP_INSANITY,
+	FP_DARK_STASIS,
 };
 
 /*
@@ -4802,6 +4810,20 @@ void CG_DPPrevForcePower_f()
 	cg.DataPadforcepowerSelect = original;
 }
 
+// a force power text: SP_INGAME, then SPMOD_INGAME; the Dark Stasis texts are in their own package (darkstasis.str)
+static int CG_ForceDescText(const char* reference, char* text, const int text_size)
+{
+	if (!Q_stricmpn(reference, "DARKSTASIS_", 11))
+	{
+		return cgi_SP_GetStringTextString(reference, text, text_size);
+	}
+	if (!cgi_SP_GetStringTextString(va("SP_INGAME_%s", reference), text, text_size))
+	{
+		return cgi_SP_GetStringTextString(va("SPMOD_INGAME_%s", reference), text, text_size);
+	}
+	return 1;
+}
+
 const char* forcepowerDesc[NUM_FORCE_POWERS] =
 {
 	"FORCE_ABSORB_DESC",
@@ -4832,6 +4854,7 @@ const char* forcepowerDesc[NUM_FORCE_POWERS] =
 	"FORCE_FEAR_DESC",
 	"FORCE_DEADLYSIGHT_DESC",
 	"FORCE_INSANITY_DESC",
+	"DARKSTASIS_DESC",
 };
 
 const char* forcepowerLvl1Desc[NUM_FORCE_POWERS] =
@@ -4864,6 +4887,7 @@ const char* forcepowerLvl1Desc[NUM_FORCE_POWERS] =
 	"FORCE_FEAR_LVL1_DESC",
 	"FORCE_DEADLYSIGHT_LVL1_DESC",
 	"FORCE_INSANITY_LVL1_DESC",
+	"DARKSTASIS_LVL1_DESC",
 };
 
 const char* forcepowerLvl2Desc[NUM_FORCE_POWERS] =
@@ -4896,6 +4920,7 @@ const char* forcepowerLvl2Desc[NUM_FORCE_POWERS] =
 	"FORCE_FEAR_LVL2_DESC",
 	"FORCE_DEADLYSIGHT_LVL2_DESC",
 	"FORCE_INSANITY_LVL2_DESC",
+	"DARKSTASIS_LVL2_DESC",
 };
 
 const char* forcepowerLvl3Desc[NUM_FORCE_POWERS] =
@@ -4928,6 +4953,7 @@ const char* forcepowerLvl3Desc[NUM_FORCE_POWERS] =
 	"FORCE_FEAR_LVL3_DESC",
 	"FORCE_DEADLYSIGHT_LVL3_DESC",
 	"FORCE_INSANITY_LVL3_DESC",
+	"DARKSTASIS_LVL3_DESC",
 };
 
 /*
@@ -5094,39 +5120,19 @@ void CG_DrawDataPadForceSelect()
 		}
 	}
 
-	if (!cgi_SP_GetStringTextString(va("SP_INGAME_%s", forcepowerDesc[cg.DataPadforcepowerSelect]), text,
-		sizeof text))
-	{
-		cgi_SP_GetStringTextString(va("SPMOD_INGAME_%s", forcepowerDesc[cg.DataPadforcepowerSelect]), text,
-			sizeof text);
-	}
+	CG_ForceDescText(forcepowerDesc[cg.DataPadforcepowerSelect], text, sizeof text);
 
 	if (player->client->ps.forcePowerLevel[showDataPadPowers[cg.DataPadforcepowerSelect]] == 1)
 	{
-		if (!cgi_SP_GetStringTextString(va("SP_INGAME_%s", forcepowerLvl1Desc[cg.DataPadforcepowerSelect]), text2,
-			sizeof text2))
-		{
-			cgi_SP_GetStringTextString(va("SPMOD_INGAME_%s", forcepowerLvl1Desc[cg.DataPadforcepowerSelect]), text2,
-				sizeof text2);
-		}
+		CG_ForceDescText(forcepowerLvl1Desc[cg.DataPadforcepowerSelect], text2, sizeof text2);
 	}
 	else if (player->client->ps.forcePowerLevel[showDataPadPowers[cg.DataPadforcepowerSelect]] == 2)
 	{
-		if (!cgi_SP_GetStringTextString(va("SP_INGAME_%s", forcepowerLvl2Desc[cg.DataPadforcepowerSelect]), text2,
-			sizeof text2))
-		{
-			cgi_SP_GetStringTextString(va("SPMOD_INGAME_%s", forcepowerLvl2Desc[cg.DataPadforcepowerSelect]), text2,
-				sizeof text2);
-		}
+		CG_ForceDescText(forcepowerLvl2Desc[cg.DataPadforcepowerSelect], text2, sizeof text2);
 	}
 	else
 	{
-		if (!cgi_SP_GetStringTextString(va("SP_INGAME_%s", forcepowerLvl3Desc[cg.DataPadforcepowerSelect]), text2,
-			sizeof text2))
-		{
-			cgi_SP_GetStringTextString(va("SPMOD_INGAME_%s", forcepowerLvl3Desc[cg.DataPadforcepowerSelect]), text2,
-				sizeof text2);
-		}
+		CG_ForceDescText(forcepowerLvl3Desc[cg.DataPadforcepowerSelect], text2, sizeof text2);
 	}
 
 	if (text[0])

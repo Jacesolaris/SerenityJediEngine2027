@@ -150,6 +150,7 @@ extern cvar_t* g_DebugSaberCombat;
 extern cvar_t* g_allowslipping;
 extern cvar_t* g_allowClimbing;
 extern cvar_t* g_AllowLedgeGrab;
+extern cvar_t* g_ledgeGrabMinAir;
 extern cvar_t* g_saberAutoBlocking;
 extern int parry_debounce[];
 extern qboolean cg_usingInFrontOf;
@@ -2856,7 +2857,7 @@ static void PM_WaterMove()
 
 	// a dead body in water floats up to the surface and drifts about slowly once the death anim is done; it
 	// ragdolls there (DH 2026-10-25)
-	extern float PM_WaterDeathFrame(const gentity_t* gent);
+	extern float PM_WaterDeathFrame(const gentity_t * gent);
 	if (pm->ps->pm_type == PM_DEAD
 		&& (pm->ps->legsAnim == BOTH_DEATH19 ? PM_WaterDeathFrame(pm->gent) >= 20.0f : pm->ps->legsAnimTimer <= 0))	// BOTH_DEATH19: from its frame 20
 	{
@@ -21893,6 +21894,7 @@ extern void ForceProtect(gentity_t* self);
 extern void ForceAbsorb(gentity_t* self);
 extern void ForceSeeing(gentity_t* self);
 extern void ForceStasis(gentity_t* self);
+extern void ForceDarkStasis(gentity_t* self);
 extern void ForceFear(gentity_t* self);
 extern void ForceRepulse(gentity_t* self);
 extern void ForceLightningStrike(gentity_t* self);
@@ -21971,6 +21973,9 @@ void PM_CheckForceUseButton(gentity_t* ent, usercmd_t* ucmd)
 				break;
 			case FP_DEADLYSIGHT:
 				ForceDeadlySight(ent);
+				break;
+			case FP_DARK_STASIS:
+				ForceDarkStasis(ent);
 				break;
 			case FP_BLAST:
 				ForceBlast(ent);
@@ -23871,6 +23876,30 @@ static qboolean LedgeTrace(trace_t* trace, vec3_t dir, float* lerpup, float* ler
 }
 
 //check for ledge grab
+// DH 2026-10-26: no ledge grab from the ground or a small hop (running past a ledge at head height, off a step or over a
+// bump grabbed it): the feet must be g_ledgeGrabMinAir units or more above the floor, so a ledge has to be jumped up to.
+// 0 = the old behaviour.
+static qboolean PM_LedgeGrabHighEnough()
+{
+	const float min_air = g_ledgeGrabMinAir ? g_ledgeGrabMinAir->value : 0.0f;
+	trace_t tr;
+	vec3_t down;
+
+	if (min_air <= 0.0f)
+	{
+		return qtrue;
+	}
+	if (pm->ps->groundEntityNum != ENTITYNUM_NONE)
+	{
+		return qfalse;
+	}
+	VectorCopy(pm->ps->origin, down);
+	down[2] -= min_air;
+	pm->trace(&tr, pm->ps->origin, pm->mins, pm->maxs, down, pm->ps->clientNum, pm->tracemask,
+		static_cast<EG2_Collision>(0), 0);
+	return tr.fraction < 1.0f || tr.startsolid ? qfalse : qtrue;
+}
+
 void PM_CheckGrab()
 {
 	vec3_t check_dir, trace_to, fwdAngles;
@@ -23946,6 +23975,12 @@ void PM_CheckGrab()
 	if (g_AllowLedgeGrab->integer == 0)
 	{
 		//Not allowed
+		return;
+	}
+
+	if (!PM_LedgeGrabHighEnough())
+	{
+		//the ledge must be jumped up to (g_ledgeGrabMinAir)
 		return;
 	}
 

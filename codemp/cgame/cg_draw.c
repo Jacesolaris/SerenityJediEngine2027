@@ -196,6 +196,7 @@ char* showPowersName[] =
 	"BLAST2", //FP_BLAST
 	"INSANITY2", //FP_INSANITY
 	"BLINDING2", //FP_BLINDING
+	"DARKSTASIS_NAME", //FP_DARK_STASIS (its own strings/English/darkstasis.str: CG_GetStringEdString)
 	NULL
 };
 
@@ -8620,7 +8621,8 @@ static qboolean CG_IsDurationPower(const int power)
 		power == FP_RAGE ||
 		power == FP_PROTECT ||
 		power == FP_ABSORB ||
-		power == FP_SEE)
+		power == FP_SEE ||
+		power == FP_DARK_STASIS)
 	{
 		return qtrue;
 	}
@@ -11153,6 +11155,24 @@ static void CG_Draw2DScreenTints(void)
 			{
 				cgRageRecTime = 0;
 			}
+		}
+
+		if (cg.snap->ps.fd.forcePowersActive & 1 << FP_DARK_STASIS)
+		{
+			// Dark Stasis: the screen tinted red, pulsing, with the damage-sense ring round it
+			static qhandle_t dmgSenseShader = 0;
+			const float pulse = 0.5f + 0.5f * sin(cg.time * 0.006f);
+			const vec4_t darkStasisTint = { 0.55f, 0.0f, 0.0f, 0.16f + 0.12f * pulse };
+			const vec4_t darkStasisRing = { 1.0f, 0.75f + 0.25f * pulse, 0.75f + 0.25f * pulse, 1.0f };
+
+			if (!dmgSenseShader)
+			{
+				dmgSenseShader = trap->R_RegisterShaderNoMip("gfx/2d/dmgsense");
+			}
+			CG_FillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, darkStasisTint);
+			trap->R_SetColor(darkStasisRing);
+			CG_DrawPic(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, dmgSenseShader);
+			trap->R_SetColor(NULL);
 		}
 
 		if (cg.snap->ps.fd.forcePowersActive & 1 << FP_ABSORB)

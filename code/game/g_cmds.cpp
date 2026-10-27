@@ -46,6 +46,7 @@ extern void G_StartMatrixEffect(const gentity_t* ent, int me_flags = 0, int leng
 extern void ItemUse_Bacta(gentity_t* ent);
 extern gentity_t* G_GetSelfForPlayerCmd();
 extern void ForceStasis(gentity_t* self);
+extern void ForceDarkStasis(gentity_t* self);
 extern void ForceDestruction(gentity_t* self);
 extern void ItemUse_UseCloak(gentity_t* ent);
 extern void ItemUse_Barrier(gentity_t* ent);
@@ -2785,6 +2786,11 @@ void ClientCommand(const int clientNum)
 	{
 		ent = G_GetSelfForPlayerCmd();
 		ForceStasis(ent);
+	}
+	else if (Q_stricmp(cmd, "force_darkstasis") == 0)
+	{
+		ent = G_GetSelfForPlayerCmd();
+		ForceDarkStasis(ent);
 	}
 	else if (Q_stricmp(cmd, "force_deadlysight") == 0)
 	{

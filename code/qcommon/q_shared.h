@@ -798,6 +798,8 @@ using forcePowers_t = enum
 	//instant
 	FP_BLINDING,
 	//instant
+	FP_DARK_STASIS,
+	//duration
 #endif // !JK2_MODE
 
 	NUM_FORCE_POWERS
@@ -2198,6 +2200,7 @@ public:
 
 	int stasisTime;
 	int stasisJediTime;
+	int darkStasisTime;
 	int genericenemyindex;
 
 	int respectingtime;
@@ -2440,6 +2443,7 @@ public:
 
 		saved_game.write<int32_t>(stasisTime);
 		saved_game.write<int32_t>(stasisJediTime);
+		saved_game.write<int32_t>(darkStasisTime);
 		saved_game.write<int32_t>(cloakFuel);
 		saved_game.write<int32_t>(BarrierFuel);
 		saved_game.write<int32_t>(blockPoints);
@@ -2711,6 +2715,7 @@ public:
 
 		saved_game.read<int32_t>(stasisTime);
 		saved_game.read<int32_t>(stasisJediTime);
+		saved_game.read<int32_t>(darkStasisTime);
 		saved_game.read<int32_t>(cloakFuel);
 		saved_game.read<int32_t>(BarrierFuel);
 		saved_game.read<int32_t>(blockPoints);
@@ -2877,6 +2882,7 @@ using genCmds_t = enum
 	GENCMD_FORCE_DEADLYSIGHT,
 	GENCMD_FORCE_INSANITY,
 	GENCMD_FORCE_BLINDING,
+	GENCMD_FORCE_DARK_STASIS,
 };
 
 // usercmd_t is sent to the server each client frame
@@ -3097,6 +3103,7 @@ using entityState_t = struct entityState_s
 	int cloakFuel;
 	int stasisTime;
 	int stasisJediTime;
+	int darkStasisTime;
 	int forceSpeedRecoveryTime;
 
 	int respectingtime;
@@ -3195,6 +3202,7 @@ using entityState_t = struct entityState_s
 
 		saved_game.write<int32_t>(stasisTime);
 		saved_game.write<int32_t>(stasisJediTime);
+		saved_game.write<int32_t>(darkStasisTime);
 		saved_game.write<int32_t>(cloakFuel);
 
 		saved_game.write<int32_t>(hyperSpaceTime);
@@ -3320,6 +3328,7 @@ using entityState_t = struct entityState_s
 
 		saved_game.read<int32_t>(stasisTime);
 		saved_game.read<int32_t>(stasisJediTime);
+		saved_game.read<int32_t>(darkStasisTime);
 		saved_game.read<int32_t>(cloakFuel);
 
 		saved_game.read<int32_t>(hyperSpaceTime);

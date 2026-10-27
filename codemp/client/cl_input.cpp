@@ -143,6 +143,9 @@ static void IN_UseGivenForce(void)
 	case FP_TEAM_FORCE:
 		genCmdNum = GENCMD_FORCE_FORCEPOWEROTHER;
 		break;
+	case FP_DARK_STASIS:
+		genCmdNum = GENCMD_FORCE_DARK_STASIS;
+		break;
 	default:
 		assert(0);
 		break;
@@ -389,6 +392,12 @@ static void IN_GenCMD36(void)
 {
 	cl.gcmdSendValue = qtrue;
 	cl.gcmdValue = GENCMD_SURRENDER;
+}
+
+static void IN_GenCMD37(void)
+{
+	cl.gcmdSendValue = qtrue;
+	cl.gcmdValue = GENCMD_FORCE_DARK_STASIS;
 }
 
 //toggle automap view mode
@@ -2211,6 +2220,7 @@ static constexpr cmdList_t inputCmds[] =
 	{ "flourish", "Flourish", IN_GenCMD34, nullptr },                                          //GENCMD_FLOURISH
 	{ "gloat", "Gloat", IN_GenCMD35, nullptr },                                                 //GENCMD_GLOAT
 	{ "surrender", "Surrender", IN_GenCMD36, nullptr },                                         //GENCMD_SURRENDER
+	{ "force_darkstasis", "Use dark stasis force power", IN_GenCMD37, nullptr },         //GENCMD_FORCE_DARK_STASIS
 
 	{ "useGivenForce", "Use specified force power", IN_UseGivenForce, nullptr },
 	{ "automap_button", "Show/hide automap", IN_AutoMapButton, nullptr },

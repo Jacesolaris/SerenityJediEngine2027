@@ -265,6 +265,7 @@ cvar_t* g_WeaponRemovalTime;
 cvar_t* g_IconBackgroundSlow;
 
 cvar_t* g_AllowLedgeGrab;
+cvar_t* g_ledgeGrabMinAir;
 cvar_t* g_attackskill;
 cvar_t* g_saberLockCinematicCamera;
 cvar_t* g_npcSpecialAttackFreq; // Modifier for special/kata attack frequency
@@ -877,6 +878,7 @@ static void G_InitCvars()
 	g_IconBackgroundSlow = gi.cvar("g_iconbackgroundslow", "0", CVAR_ARCHIVE | CVAR_SAVEGAME | CVAR_NORESTART);
 
 	g_AllowLedgeGrab = gi.cvar("g_allowledgegrab", "1", CVAR_ARCHIVE | CVAR_SAVEGAME | CVAR_NORESTART);
+	g_ledgeGrabMinAir = gi.cvar("g_ledgeGrabMinAir", "16", CVAR_ARCHIVE); // a ledge is grabbed only with the feet this high off the floor (DH 2026-10-26; 0 = old)
 
 	g_attackskill = gi.cvar("g_attackskill", "3", CVAR_ARCHIVE);
 
@@ -1797,7 +1799,7 @@ qboolean G_RagDoll(gentity_t* ent, vec3_t forcedAngles)
 	VectorCopy(ent->client->ps.origin, usedOrg);
 
 	// dying in water (BOTH_DEATH19): the ragdoll starts at its frame 45, not before (DH 2026-10-25)
-	extern float PM_WaterDeathFrame(const gentity_t* gent);
+	extern float PM_WaterDeathFrame(const gentity_t * gent);
 	if (!ent->client->isRagging && ent->waterlevel >= 2 && ent->client->ps.legsAnim == BOTH_DEATH19)
 	{
 		if (PM_WaterDeathFrame(ent) < 45.0f)
@@ -2247,6 +2249,8 @@ void G_RunFrame(const int levelTime)
 	NAV::DecayDangerSenses();
 	Rail_Update();
 	Troop_Update();
+	extern void G_RancorPitThink();
+	G_RancorPitThink(); // the rancor that lives on mp/duel7 (NPC_spawn.cpp)
 	Pilot_Update();
 	extern void G_FighterRoute_Frame();
 	G_FighterRoute_Frame(); // ship_wp_show

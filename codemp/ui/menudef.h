@@ -362,6 +362,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define UI_FORCE_RANK_BLAST				347
 #define UI_FORCE_RANK_INSANITY			348
 #define UI_FORCE_RANK_BLINDING			349
+#define UI_FORCE_RANK_DARK_STASIS		350
 #define UI_VERSION					277
 #define UI_TOTALFORCESTARS			278
 #define UI_AUTOSWITCHLIST			279

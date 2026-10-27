@@ -174,7 +174,8 @@ int forcePowerNeeded[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		999, //FP_DEADLYSIGHT
 		999, //FP_BLAST
 		999, //FP_INSANITY
-		999 //FP_BLINDING
+		999, //FP_BLINDING
+		999 //FP_DARK_STASIS
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -205,7 +206,8 @@ int forcePowerNeeded[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		90, //FP_DEADLYSIGHT
 		30, //FP_BLAST
 		50, //FP_INSANITY
-		20 //FP_BLINDING
+		20, //FP_BLINDING
+		50 //FP_DARK_STASIS
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -236,7 +238,8 @@ int forcePowerNeeded[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		90, //FP_DEADLYSIGHT
 		30, //FP_BLAST
 		50, //FP_INSANITY
-		20 //FP_BLINDING
+		20, //FP_BLINDING
+		50 //FP_DARK_STASIS
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -267,7 +270,8 @@ int forcePowerNeeded[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		90, //FP_DEADLYSIGHT
 		30, //FP_BLAST
 		50, //FP_INSANITY
-		20 //FP_BLINDING
+		20, //FP_BLINDING
+		50 //FP_DARK_STASIS
 		//NUM_FORCE_POWERS
 	}
 };
@@ -303,7 +307,8 @@ int forcePowerNeededlevel1[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		999, //FP_DEADLYSIGHT
 		999, //FP_BLAST
 		999, //FP_INSANITY
-		999 //FP_BLINDING
+		999, //FP_BLINDING
+		999 //FP_DARK_STASIS
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -334,7 +339,8 @@ int forcePowerNeededlevel1[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		90, //FP_DEADLYSIGHT
 		30, //FP_BLAST
 		50, //FP_INSANITY
-		20 //FP_BLINDING
+		20, //FP_BLINDING
+		50 //FP_DARK_STASIS
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -365,7 +371,8 @@ int forcePowerNeededlevel1[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		90, //FP_DEADLYSIGHT
 		30, //FP_BLAST
 		50, //FP_INSANITY
-		20 //FP_BLINDING
+		20, //FP_BLINDING
+		50 //FP_DARK_STASIS
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -396,7 +403,8 @@ int forcePowerNeededlevel1[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		90, //FP_DEADLYSIGHT
 		30, //FP_BLAST
 		50, //FP_INSANITY
-		20 //FP_BLINDING
+		20, //FP_BLINDING
+		50 //FP_DARK_STASIS
 		//NUM_FORCE_POWERS
 	}
 };
@@ -432,7 +440,8 @@ int forcePowerNeededlevel2[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		999, //FP_DEADLYSIGHT
 		999, //FP_BLAST
 		999, //FP_INSANITY
-		999 //FP_BLINDING
+		999, //FP_BLINDING
+		999 //FP_DARK_STASIS
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -463,7 +472,8 @@ int forcePowerNeededlevel2[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		90, //FP_DEADLYSIGHT
 		30, //FP_BLAST
 		50, //FP_INSANITY
-		20 //FP_BLINDING
+		20, //FP_BLINDING
+		50 //FP_DARK_STASIS
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -494,7 +504,8 @@ int forcePowerNeededlevel2[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		90, //FP_DEADLYSIGHT
 		30, //FP_BLAST
 		50, //FP_INSANITY
-		20 //FP_BLINDING
+		20, //FP_BLINDING
+		50 //FP_DARK_STASIS
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -525,7 +536,8 @@ int forcePowerNeededlevel2[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		90, //FP_DEADLYSIGHT
 		30, //FP_BLAST
 		50, //FP_INSANITY
-		20 //FP_BLINDING
+		20, //FP_BLINDING
+		50 //FP_DARK_STASIS
 		//NUM_FORCE_POWERS
 	}
 };
@@ -6407,6 +6419,29 @@ static qboolean PM_IsGunner(void)
 	return qfalse;
 }
 
+// DH 2026-10-26: no ledge grab from the ground or a small hop (running past a ledge at head height, off a step or over a
+// bump grabbed it): the feet must be g_ledgeGrabMinAir units or more above the floor, so a ledge has to be jumped up to.
+// 0 = the old behaviour.
+static qboolean PM_LedgeGrabHighEnough(void)
+{
+	const float min_air = g_ledgeGrabMinAir.value;
+	trace_t tr;
+	vec3_t down;
+
+	if (min_air <= 0.0f)
+	{
+		return qtrue;
+	}
+	if (pm->ps->groundEntityNum != ENTITYNUM_NONE)
+	{
+		return qfalse;
+	}
+	VectorCopy(pm->ps->origin, down);
+	down[2] -= min_air;
+	pm->trace(&tr, pm->ps->origin, pm->mins, pm->maxs, down, pm->ps->clientNum, pm->tracemask);
+	return tr.fraction < 1.0f || tr.startsolid ? qfalse : qtrue;
+}
+
 void PM_CheckGrab(void)
 {
 	vec3_t checkDir, traceTo, fwdAngles;
@@ -6473,6 +6508,12 @@ void PM_CheckGrab(void)
 	if (g_AllowLedgeGrab.integer == 0)
 	{
 		//Not allowed
+		return;
+	}
+
+	if (!PM_LedgeGrabHighEnough())
+	{
+		//the ledge must be jumped up to (g_ledgeGrabMinAir)
 		return;
 	}
 
@@ -6711,7 +6752,7 @@ static void PM_WaterMove(void)
 
 	// a dead body in water floats up to the surface and drifts about slowly once the death anim is done; it
 	// ragdolls there (DH 2026-10-25)
-	extern float BG_WaterDeathFrame(const playerState_t* ps, const animation_t* anims);
+	extern float BG_WaterDeathFrame(const playerState_t * ps, const animation_t * anims);
 	if (pm->ps->pm_type == PM_DEAD
 		&& (pm->ps->legsAnim == BOTH_DEATH19 ? BG_WaterDeathFrame(pm->ps, pm->animations) >= 20.0f : pm->ps->legsTimer <= 0))	// BOTH_DEATH19: from its frame 20
 	{
@@ -20195,6 +20236,11 @@ static void PmoveSingle(pmove_t* pmove)
 
 	//set up these "global" bg ents
 	pm_entSelf = PM_BGEntForNum(pm->ps->clientNum);
+	if (!pm_entSelf)
+	{
+		// every client and NPC has one; the code below reads it without checking
+		return;
+	}
 	if (pm->ps->m_iVehicleNum)
 	{
 		if (pm->ps->clientNum < MAX_CLIENTS)
@@ -20860,7 +20906,7 @@ static void PmoveSingle(pmove_t* pmove)
 			veh->m_pVehicle->m_fTimeModifier = pml.frametime * 60.0f;
 		}
 	}
-	else if (pm_entSelf->s.NPC_class != CLASS_VEHICLE
+	else if ((!pm_entSelf || pm_entSelf->s.NPC_class != CLASS_VEHICLE)
 		&& pm->ps->m_iVehicleNum)
 	{
 		bgEntity_t* veh = pm_entVeh;
@@ -21479,6 +21525,16 @@ static void PmoveSingle(pmove_t* pmove)
 
 	// entering / leaving water splashes
 	PM_WaterEvents();
+
+	// DH 2026-10-26: a whole-body creature / droid player on its own skeleton (wampa, rancor...): the torso always plays
+	// the legs anim. The cgame drives its whole body (model_root) with the torso anim too, so a different torso anim
+	// (weapon ready / idle) bent it double, alive and dead.
+	if (pm->ps->clientNum < MAX_CLIENTS && pm_entSelf && pm->gametype != GT_SIEGE
+		&& BG_ClassIsWholeBody(pm->ps->botclass) && !BG_AnimSetIsHumanoidLike(pm_entSelf->localAnimIndex))
+	{
+		pm->ps->torsoAnim = pm->ps->legsAnim;
+		pm->ps->torsoTimer = pm->ps->legsTimer;
+	}
 
 	// snap velocity to integer coordinates to save network bandwidth
 	if (!pm->pmove_float)

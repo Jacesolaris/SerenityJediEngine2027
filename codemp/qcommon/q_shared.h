@@ -431,6 +431,7 @@ typedef enum
 	FP_BLAST,
 	FP_INSANITY,
 	FP_BLINDING,
+	FP_DARK_STASIS, // dark side: holds everyone in an arc around the caster (2026-10-27)
 	NUM_FORCE_POWERS
 } forcePowers_t;
 
@@ -1547,6 +1548,7 @@ typedef struct siegePers_s
 #define FLAG_PERFECTBLOCK   21
 #define FLAG_SLIGHTFATIGUE  22
 #define FLAG_DOUBLEJUMPFLIP 23	// the double jump's flip is playing (twice as fast: PM_SaberStartTransAnim)
+#define FLAG_DARKSTASIS		24	// frozen by Dark Stasis (with FLAG_FROZEN): drawn red
 
 #define DODGE_BOLTBLOCK			1	//standard DP cost to block a missile bolt
 #define DODGE_BOWCASTERBLOCK	2
@@ -1709,7 +1711,8 @@ typedef enum
 	GENCMD_MEDITATE,
 	GENCMD_FLOURISH,
 	GENCMD_GLOAT,
-	GENCMD_SURRENDER
+	GENCMD_SURRENDER,
+	GENCMD_FORCE_DARK_STASIS // the force_darkstasis key (2026-10-27)
 } genCmds_t;
 
 // usercmd_t is sent to the server each client frame

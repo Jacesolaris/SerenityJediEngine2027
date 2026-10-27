@@ -27,6 +27,9 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #include "rd-vanilla/tr_quicksprite.h"
 #include "tr_WorldEffects.h"
+#if !defined(G2_H_INC)
+#include "../ghoul2/G2.h"
+#endif
 
 /////===== Part of the VERTIGON system =====/////
 // The surfacesprites are a simple system.  When a polygon with this shader stage on it is drawn,
@@ -332,6 +335,439 @@ vec2_t ss_vert_wind_dir[SHADER_MAX_VERTEXES];
 qboolean ss_additive_transparency = qfalse;
 qboolean ss_using_fog = qfalse;
 
+// Grass wind and bending (2026-10-26).
+// r_grassWind: sway + gusts rolling across all grass (0 = old look; ssWindIdle sway alone was too small to see).
+// r_grassPush: grass bends away from players, NPCs, bots and creatures (the ghoul2 models in the scene; 0 = off).
+// r_grassPushRadius scales the bend radius (32 units at model scale 1).
+extern cvar_t* r_grassWind;
+extern cvar_t* r_grassPush;
+extern cvar_t* r_grassPushRadius;
+
+// Grass force waves (2026-10-27): the cgame sends grass_wave (renderer command, tr_init.cpp) when someone uses force
+// push, pull or repulse, and a wave runs out from them through the grass, flattens it and lets it spring back.
+// r_grassForceWave scales it (up to 2, 0 = off). Same numbers as surface_sprites.glsl in rend2.
+extern cvar_t* r_grassForceWave;
+
+constexpr int GRASS_MAX_WAVES = 4;
+constexpr float GRASS_WAVE_SPEED = 1400.0f;	// units a second
+constexpr float GRASS_WAVE_SETTLE = 1.6f;	// seconds until the grass stands still again
+constexpr float GRASS_WAVE_BELOW = 160.0f;	// grass this far below / above the user's origin is reached
+constexpr float GRASS_WAVE_ABOVE = 96.0f;
+
+struct grassWave_t
+{
+	int time;		// cg.time when it started
+	float org[3];
+	float dir[2];	// flat direction of a push or pull
+	int type;		// 0 push (cone, away), 1 pull (cone, toward), 2 repulse (all round, away)
+	float range;
+	float age;		// seconds since it started, this frame
+};
+
+static grassWave_t grass_waves[GRASS_MAX_WAVES];
+static int grass_num_waves = 0;
+static int grass_wave_time = -1;
+static int grass_num_active_waves = 0;
+static int grass_local_waves[GRASS_MAX_WAVES];	// waves that can reach the surface being drawn
+static int grass_num_local_waves = 0;
+
+void R_GrassAddWave(const int time, const float* org, const float* dir, const int type, const float range)
+{
+	int slot = grass_num_waves;
+	if (slot == GRASS_MAX_WAVES)
+	{	// replace the oldest
+		slot = 0;
+		for (int i = 1; i < GRASS_MAX_WAVES; i++)
+		{
+			if (grass_waves[i].time < grass_waves[slot].time)
+			{
+				slot = i;
+			}
+		}
+	}
+	else
+	{
+		grass_num_waves++;
+	}
+
+	grassWave_t* w = &grass_waves[slot];
+	w->time = time;
+	VectorCopy(org, w->org);
+	w->type = type >= 0 && type <= 2 ? type : 0;
+	const float len = sqrtf(dir[0] * dir[0] + dir[1] * dir[1]);
+	if (len > 0.001f)
+	{
+		w->dir[0] = dir[0] / len;
+		w->dir[1] = dir[1] / len;
+	}
+	else
+	{	// no flat direction (looking straight up or down): all round
+		w->dir[0] = 1.0f;
+		w->dir[1] = 0.0f;
+		w->type = w->type == 1 ? 1 : 2;
+	}
+	w->range = range < 64.0f ? 64.0f : range > 2048.0f ? 2048.0f : range;
+	w->age = 0.0f;
+	grass_wave_time = -1;
+}
+
+// Once a frame: drops finished waves (and ones from before a map change or restart, when cg.time starts again).
+static void RB_GrassGatherWaves()
+{
+	const int now = backEnd.refdef.time;
+	if (grass_wave_time == now)
+	{
+		return;
+	}
+	grass_wave_time = now;
+
+	for (int i = 0; i < grass_num_waves;)
+	{
+		grassWave_t* w = &grass_waves[i];
+		const float age = static_cast<float>(now - w->time) * 0.001f;
+		if (now < w->time - 250 || age > w->range / GRASS_WAVE_SPEED + GRASS_WAVE_SETTLE)
+		{
+			grass_waves[i] = grass_waves[--grass_num_waves];
+			continue;
+		}
+		w->age = age;
+		i++;
+	}
+
+	grass_num_active_waves = grass_num_waves;
+	if (!r_grassForceWave || r_grassForceWave->value <= 0.0f || backEnd.refdef.rdflags & RDF_NOWORLDMODEL)
+	{
+		grass_num_active_waves = 0;
+	}
+}
+
+// Bends the top of one blade (loc2) in the waves passing it.
+static void RB_GrassWaveBend(const vec3_t loc, vec3_t loc2, const float h)
+{
+	float bx = 0.0f, by = 0.0f, bz = 0.0f;
+	for (int i = 0; i < grass_num_local_waves; i++)
+	{
+		const grassWave_t* w = &grass_waves[grass_local_waves[i]];
+		const float dz = loc[2] - w->org[2];
+		if (dz < -GRASS_WAVE_BELOW || dz > GRASS_WAVE_ABOVE)
+		{
+			continue;
+		}
+		const float dx = loc[0] - w->org[0];
+		const float dy = loc[1] - w->org[1];
+		const float d2 = dx * dx + dy * dy;
+		const float r2 = w->range * w->range;
+		if (d2 >= r2)
+		{
+			continue;
+		}
+		const float d = sqrtf(d2);
+		float ux, uy;
+		if (d > 0.5f)
+		{
+			ux = dx / d;
+			uy = dy / d;
+		}
+		else
+		{
+			const float a = loc[0] * 12.9898f + loc[1] * 78.233f;
+			ux = cosf(a);
+			uy = sinf(a);
+		}
+
+		float cone = 1.0f;
+		if (w->type != 2 && d > 32.0f)
+		{	// push and pull: a cone in front of the user
+			cone = (ux * w->dir[0] + uy * w->dir[1] - 0.35f) / 0.4f;
+			if (cone <= 0.0f)
+			{
+				continue;
+			}
+			if (cone > 1.0f)
+			{
+				cone = 1.0f;
+			}
+			cone = cone * cone * (3.0f - 2.0f * cone);
+		}
+
+		const float tp = w->age - d / GRASS_WAVE_SPEED;	// seconds since the wave front passed this blade
+		if (tp <= 0.0f)
+		{
+			continue;
+		}
+		// flattened at once, then it springs back with a little overshoot
+		const float ramp = tp < 0.06f ? tp / 0.06f : 1.0f;
+		const float s = ramp * expf(-2.2f * tp) * cosf(tp * 3.5f) * cone * (1.0f - d2 / r2);
+		const float sd = w->type == 1 ? -s : s;
+		bx += ux * sd;
+		by += uy * sd;
+		bz += fabsf(s);
+	}
+	if (bz <= 0.0f)
+	{
+		return;
+	}
+
+	const float len = sqrtf(bx * bx + by * by);
+	if (len > 1.0f)
+	{
+		bx /= len;
+		by /= len;
+	}
+	if (bz > 1.0f)
+	{
+		bz = 1.0f;
+	}
+	float strength = r_grassForceWave->value;
+	if (strength > 2.0f)
+	{
+		strength = 2.0f;
+	}
+	loc2[0] += bx * h * 1.2f * strength;
+	loc2[1] += by * h * 1.2f * strength;
+	loc2[2] -= bz * h * 0.7f * strength;
+	if (loc2[2] < loc[2] + h * 0.1f)
+	{
+		loc2[2] = loc[2] + h * 0.1f;
+	}
+}
+
+constexpr int GRASS_MAX_PUSHERS = 32;
+constexpr float GRASS_PUSH_RADIUS = 32.0f;
+constexpr float GRASS_PUSH_RANGE = 2048.0f;
+
+static vec4_t grass_pushers[GRASS_MAX_PUSHERS];	// x, y, z (model origin), radius
+static int grass_num_pushers = 0;
+static int grass_pusher_time = -1;
+static const trRefEntity_t* grass_pusher_ents = nullptr;
+static int grass_pusher_num_ents = -1;
+static int grass_local[GRASS_MAX_PUSHERS];		// pushers near the surface being drawn
+static int grass_num_local = 0;
+
+static void RB_GrassGatherPushers()
+{
+	if (grass_pusher_time == backEnd.refdef.time && grass_pusher_ents == backEnd.refdef.entities
+		&& grass_pusher_num_ents == backEnd.refdef.num_entities)
+	{
+		return;
+	}
+	grass_pusher_time = backEnd.refdef.time;
+	grass_pusher_ents = backEnd.refdef.entities;
+	grass_pusher_num_ents = backEnd.refdef.num_entities;
+	grass_num_pushers = 0;
+
+	if (!r_grassPush || r_grassPush->value <= 0.0f || !r_grassPushRadius || backEnd.refdef.rdflags & RDF_NOWORLDMODEL)
+	{
+		return;
+	}
+
+	float dists[GRASS_MAX_PUSHERS];
+	for (int i = 0; i < backEnd.refdef.num_entities; i++)
+	{
+		const trRefEntity_t* ent = &backEnd.refdef.entities[i];
+		if (ent->e.reType != RT_MODEL || ent->e.renderfx & RF_FIRST_PERSON || !ent->e.ghoul2
+			|| !G2API_HaveWeGhoul2Models(*((CGhoul2Info_v*)ent->e.ghoul2)))
+		{
+			continue;
+		}
+
+		vec3_t delta;
+		VectorSubtract(ent->e.origin, backEnd.viewParms.ori.origin, delta);
+		const float dist = VectorLengthSquared(delta);
+		if (dist > GRASS_PUSH_RANGE * GRASS_PUSH_RANGE)
+		{
+			continue;
+		}
+
+		float scale = ent->e.modelScale[0] > 0.0f ? ent->e.modelScale[0] : 1.0f;
+		if (scale > 4.0f)
+		{
+			scale = 4.0f;
+		}
+		const float radius = GRASS_PUSH_RADIUS * scale * r_grassPushRadius->value;
+		if (radius < 1.0f)
+		{
+			continue;
+		}
+
+		// keep the ones nearest the camera
+		int slot = grass_num_pushers;
+		if (slot == GRASS_MAX_PUSHERS)
+		{
+			slot = 0;
+			for (int j = 1; j < GRASS_MAX_PUSHERS; j++)
+			{
+				if (dists[j] > dists[slot])
+				{
+					slot = j;
+				}
+			}
+			if (dist >= dists[slot])
+			{
+				continue;
+			}
+		}
+		else
+		{
+			grass_num_pushers++;
+		}
+		VectorCopy(ent->e.origin, grass_pushers[slot]);
+		grass_pushers[slot][3] = radius;
+		dists[slot] = dist;
+	}
+}
+
+// Picks the pushers that can reach this surface, so grass far from everyone costs nothing.
+static void RB_GrassLocalPushers(const shaderCommands_t* input)
+{
+	grass_num_local = 0;
+	grass_num_local_waves = 0;
+	RB_GrassGatherPushers();
+	RB_GrassGatherWaves();
+	if ((!grass_num_pushers && !grass_num_active_waves) || backEnd.currentEntity != &tr.worldEntity || input->numVertexes <= 0)
+	{
+		return;
+	}
+
+	vec3_t mins, maxs;
+	VectorCopy(input->xyz[0], mins);
+	VectorCopy(input->xyz[0], maxs);
+	for (int i = 1; i < input->numVertexes; i++)
+	{
+		for (int k = 0; k < 3; k++)
+		{
+			if (input->xyz[i][k] < mins[k])
+				mins[k] = input->xyz[i][k];
+			if (input->xyz[i][k] > maxs[k])
+				maxs[k] = input->xyz[i][k];
+		}
+	}
+
+	for (int i = 0; i < grass_num_pushers; i++)
+	{
+		const float* p = grass_pushers[i];
+		const float r = p[3];
+		if (p[0] + r < mins[0] || p[0] - r > maxs[0] || p[1] + r < mins[1] || p[1] - r > maxs[1]
+			|| p[2] - 2.25f * r > maxs[2] || p[2] + 1.25f * r < mins[2])
+		{
+			continue;
+		}
+		grass_local[grass_num_local++] = i;
+	}
+
+	for (int i = 0; i < grass_num_active_waves; i++)
+	{
+		const grassWave_t* w = &grass_waves[i];
+		const float cx = w->org[0] < mins[0] ? mins[0] : w->org[0] > maxs[0] ? maxs[0] : w->org[0];
+		const float cy = w->org[1] < mins[1] ? mins[1] : w->org[1] > maxs[1] ? maxs[1] : w->org[1];
+		const float ex = w->org[0] - cx;
+		const float ey = w->org[1] - cy;
+		if (ex * ex + ey * ey > w->range * w->range || w->org[2] - GRASS_WAVE_BELOW > maxs[2]
+			|| w->org[2] + GRASS_WAVE_ABOVE < mins[2])
+		{
+			continue;
+		}
+		grass_local_waves[grass_num_local_waves++] = i;
+	}
+}
+
+// Moves the top of one blade (loc2): default sway, then away from anyone standing in it.
+static void RB_GrassBend(const vec3_t loc, vec3_t loc2, const float height, const int hangdown)
+{
+	if (hangdown)
+	{
+		return;
+	}
+	const float h = fabsf(height);
+
+	if (r_grassWind && r_grassWind->value > 0.0f)
+	{	// on all grass, also grass with its own ssWind / ssWindIdle (that sway was too small to see)
+		const float t = static_cast<float>(backEnd.refdef.time);
+		const float w = r_grassWind->value;
+		const float angle = (loc[0] + loc[1]) * 0.02f + t * 0.0015f;
+		const float sway = h * 0.12f * w;
+		loc2[0] += cosf(angle) * sway;
+		loc2[1] += sinf(angle) * sway;
+		// gusts rolling across the field, the blades flutter while a gust passes
+		const float gust = 0.5f + 0.5f * sinf(t * 0.0009f - (loc[0] * 0.8f + loc[1] * 0.6f) * 0.006f);
+		const float lean = h * w * gust * gust * (0.45f + 0.06f * sinf(t * 0.006f + (loc[0] + loc[1]) * 0.05f));
+		loc2[0] += 0.8f * lean;
+		loc2[1] += 0.6f * lean;
+		loc2[2] -= 0.3f * lean;
+	}
+
+	if (grass_num_local_waves)
+	{
+		RB_GrassWaveBend(loc, loc2, h);
+	}
+
+	if (!grass_num_local)
+	{
+		return;
+	}
+
+	float bx = 0.0f, by = 0.0f, bz = 0.0f;
+	for (int i = 0; i < grass_num_local; i++)
+	{
+		const float* p = grass_pushers[grass_local[i]];
+		const float r = p[3];
+		const float dz = loc[2] - p[2];
+		if (dz < -2.25f * r || dz > 1.25f * r)
+		{
+			continue;
+		}
+		const float dx = loc[0] - p[0];
+		const float dy = loc[1] - p[1];
+		const float d2 = dx * dx + dy * dy;
+		if (d2 >= r * r)
+		{
+			continue;
+		}
+		const float d = sqrtf(d2);
+		float s = 1.0f - d / r;
+		s = s * s * (3.0f - 2.0f * s);
+		if (d > 0.5f)
+		{
+			bx += dx / d * s;
+			by += dy / d * s;
+		}
+		else
+		{	// right underfoot: fall over in a direction picked by the blade's spot
+			const float a = loc[0] * 12.9898f + loc[1] * 78.233f;
+			bx += cosf(a) * s;
+			by += sinf(a) * s;
+		}
+		bz += s;
+	}
+	if (bz <= 0.0f)
+	{
+		return;
+	}
+
+	const float len = sqrtf(bx * bx + by * by);
+	if (len > 1.0f)
+	{
+		bx /= len;
+		by /= len;
+	}
+	if (bz > 1.0f)
+	{
+		bz = 1.0f;
+	}
+	float strength = r_grassPush->value;
+	if (strength > 2.0f)
+	{
+		strength = 2.0f;
+	}
+	loc2[0] += bx * h * 0.9f * strength;
+	loc2[1] += by * h * 0.9f * strength;
+	loc2[2] -= bz * h * 0.6f * strength;
+	if (loc2[2] < loc[2] + h * 0.1f)
+	{
+		loc2[2] = loc[2] + h * 0.1f;
+	}
+}
+
 /////////////////////////////////////////////
 // Vertical surface sprites
 
@@ -390,6 +826,8 @@ static void RB_VerticalSurfaceSprite(vec3_t loc, const float width, const float 
 		}
 		loc2[2] += sin(angle * 2.5) * windsway;
 	}
+
+	RB_GrassBend(loc, loc2, height, hangdown);
 
 	if (flattened)
 	{
@@ -484,6 +922,8 @@ static void RB_VerticalSurfaceSpriteWindPoint(vec3_t loc, const float width, con
 	loc2[1] += height * winddiff[1] * windforce;
 	loc2[2] -= height * windforce * (0.75 + 0.15 * sin((RB_SMP(refdef, tr.refdef).time + 500 * windforce) * 0.01));
 
+	RB_GrassBend(loc, loc2, height, hangdown);
+
 	if (flattened)
 	{
 		right[0] = sin(DEG2RAD(loc[0])) * width;
@@ -573,6 +1013,8 @@ static void RB_DrawVerticalSurfaceSprites(shaderStage_t* stage, shaderCommands_t
 	{	// Don't want to force a new fade_rand
 		faderange = 1.0;
 	}
+
+	RB_GrassLocalPushers(input);
 
 	// Quickly calc all the alphas and windstuff for each vertex
 	for (curvert = 0; curvert < input->numVertexes; curvert++)

@@ -23,6 +23,7 @@ uniform vec3 u_LightUp;
 uniform vec3 u_LightRight;
 uniform vec4 u_LightOrigin;
 uniform float u_LightRadius;
+uniform vec4 u_Color; // x = edge blur scale, y = darkest shadow (cg_shadows 2 soft, 3 sharp) (DH 2026-10-26)
 
 in vec3 var_Position;
 in vec3 var_Normal;
@@ -81,7 +82,7 @@ void main()
 	float part = 0.0;
 #if defined(USE_PCF)
 	float offsetScale = pow(lightDist, 4.0) * TEXTURE_SCALE * 0.00000001;
-	offsetScale = max(TEXTURE_SCALE, offsetScale);
+	offsetScale = max(TEXTURE_SCALE, offsetScale) * u_Color.x;
 	for (int i = 0; i < PCF_SAMPLES; ++i)
 	{
 		part += 1.0 - float(texture(u_ShadowMap, vec4(st + offsetScale * poissonDisc[i], u_LightOrigin.w, 1.0)));
@@ -102,5 +103,5 @@ void main()
 #endif
 
 	out_Color.rgb = vec3(.0,.0,.0);
-	out_Color.a = clamp(intensity, 0.0, 0.75);
+	out_Color.a = clamp(intensity, 0.0, u_Color.y);
 }

@@ -40,7 +40,7 @@ extern int uiForcePowersRank[NUM_FORCE_POWERS];
 extern int uiForcePowerDarkLight[NUM_FORCE_POWERS];
 
 // ownerdraw -> force power index: UI_FORCE_RANK_HEAL .. _SABERTHROW follow UI_FORCE_RANK, the ported SP powers have their own range
-#define UI_FORCE_RANK_INDEX(od) ((od) >= UI_FORCE_RANK_STASIS && (od) <= UI_FORCE_RANK_BLINDING \
+#define UI_FORCE_RANK_INDEX(od) ((od) >= UI_FORCE_RANK_STASIS && (od) <= UI_FORCE_RANK_DARK_STASIS \
 	? FP_STASIS + (od) - UI_FORCE_RANK_STASIS : (od) - UI_FORCE_RANK - 1)
 
 extern int uiSaberColorShaders[NUM_SABER_COLORS];

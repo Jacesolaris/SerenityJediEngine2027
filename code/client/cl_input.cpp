@@ -153,6 +153,9 @@ static void IN_UseGivenForce()
 	case FP_LIGHTNING_STRIKE:
 		genCmdNum = GENCMD_FORCE_LIGHTNING_STRIKE;
 		break;
+	case FP_DARK_STASIS:
+		genCmdNum = GENCMD_FORCE_DARK_STASIS;
+		break;
 	case FP_BLAST:
 		genCmdNum = GENCMD_FORCE_BLAST;
 		break;

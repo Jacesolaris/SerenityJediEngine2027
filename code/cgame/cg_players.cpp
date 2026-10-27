@@ -39,6 +39,16 @@ constexpr auto CG_SWINGSPEED = 0.3f;
 #include "cgame/animtable.h"
 #include <cmath>
 
+// saber-only light (DH 2026-10-27): cg_saberLightRadius / cg_saberLightIntensity scale only lightsaber light, on top of r_dlightRadius / r_dlightIntensity.
+// In rend2 with r_hdr 1 a light colour above 1 is cut back to 1, so cg_saberLightIntensity stops getting
+// brighter at about 1.5 there (the blade colour is already scaled to 0.66)
+static void CG_AddSaberLight(const vec3_t org, const float radius, const vec3_t rgb)
+{
+	const float radiusScale = cg_saberLightRadius.value > 0.0f ? cg_saberLightRadius.value : 1.0f;
+	const float intensity = cg_saberLightIntensity.value > 0.0f ? cg_saberLightIntensity.value : 1.0f;
+	cgi_R_AddLightToScene(org, radius * radiusScale, rgb[0] * intensity, rgb[1] * intensity, rgb[2] * intensity);
+}
+
 extern qboolean WP_SaberBladeUseSecondBladeStyle(const saberInfo_t* saber, int bladeNum);
 extern void WP_SaberSwingSound(const gentity_t* ent, int saberNum, swingType_t swing_type);
 extern qboolean PM_InKataAnim(const int anim);
@@ -5215,6 +5225,50 @@ static void CG_ClothForcePush(const centity_t* cent)
 		org[0], org[1], org[2], fwd[0], fwd[1], fwd[2], strength));
 }
 
+// Grass force waves (2026-10-27): when someone's force push or pull starts (its refraction powerup came on) or their
+// repulse blast goes off (PW_FORCE_REPULSE turns from "charging" to the blast time), tell the renderer (renderer
+// command grass_wave), which sends a wave through the grass in front of them (all round for repulse).
+// r_grassForceWave in the renderer scales it, 0 = off.
+static void CG_GrassForceWave(const centity_t* cent)
+{
+	static qboolean pushWasOn[MAX_GENTITIES];
+	static qboolean repulseWasOn[MAX_GENTITIES];
+	const int num = cent->currentState.number;
+	if (num < 0 || num >= MAX_GENTITIES || !cent->gent || !cent->gent->client)
+	{
+		return;
+	}
+	const playerState_t* ps = &cent->gent->client->ps;
+	const qboolean push = (ps->powerups[PW_FORCE_PUSH] > cg.time || ps->powerups[PW_FORCE_PUSH_RHAND] > cg.time) ? qtrue : qfalse;
+	// while charging it holds a never-ending time, the blast sets a real one
+	const int repulseTime = ps->powerups[PW_FORCE_REPULSE];
+	const qboolean repulse = repulseTime > cg.time && repulseTime < cg.time + 60000 ? qtrue : qfalse;
+	const qboolean pushStarted = push && !pushWasOn[num] ? qtrue : qfalse;
+	const qboolean repulseStarted = repulse && !repulseWasOn[num] ? qtrue : qfalse;
+	pushWasOn[num] = push;
+	repulseWasOn[num] = repulse;
+	if (!pushStarted && !repulseStarted)
+	{
+		return;
+	}
+	vec3_t fwd;
+	AngleVectors(ps->viewangles, fwd, nullptr, nullptr);
+	int type = 0;		// push
+	float range = 640.0f;
+	if (repulseStarted)
+	{
+		type = 2;
+		range = 448.0f;
+	}
+	else if (ps->forcePowersActive & 1 << FP_PULL)
+	{
+		type = 1;
+		range = 512.0f;
+	}
+	cgi_SendConsoleCommand(va("grass_wave %d %.0f %.0f %.0f %.3f %.3f %d %.0f\n", cg.time,
+		cent->lerpOrigin[0], cent->lerpOrigin[1], cent->lerpOrigin[2], fwd[0], fwd[1], type, range));
+}
+
 static void CG_ForcePushBodyBlur(const centity_t* cent, const vec3_t origin, vec3_t temp_angles)
 {
 	vec3_t fx_org;
@@ -6856,7 +6910,20 @@ void CG_AddRefEntityWithPowerups(refEntity_t* ent, int powerups, centity_t* cent
 		cgi_R_AddRefEntityToScene(ent);
 	}
 
-	if (cent->gent->client->ps.stasisTime > (cg.time ? cg.time : level.time))
+	if (cent->gent->client->ps.darkStasisTime > (cg.time ? cg.time : level.time))
+	{
+		//dark stasis is represented by red..
+		ent->shaderRGBA[0] = 255;
+		ent->shaderRGBA[1] = 20;
+		ent->shaderRGBA[2] = 10;
+		ent->shaderRGBA[3] = 254;
+
+		ent->renderfx &= ~RF_RGB_TINT;
+		ent->customShader = cgs.media.playerShieldDamage;
+
+		cgi_R_AddRefEntityToScene(ent);
+	}
+	else 	if (cent->gent->client->ps.stasisTime > (cg.time ? cg.time : level.time))
 	{
 		//stasis is represented by grey..
 		ent->shaderRGBA[0] = 10;
@@ -7853,7 +7920,7 @@ static void CG_DoSaberLight(const saberInfo_t* saber)
 			}
 		}
 
-		cgi_R_AddLightToScene(mid, diameter + Q_flrand(0.0f, 1.0f) * 8.0f, rgb[0], rgb[1], rgb[2]);
+		CG_AddSaberLight(mid, diameter + Q_flrand(0.0f, 1.0f) * 8.0f, rgb);
 	}
 }
 
@@ -7963,7 +8030,7 @@ static void CG_DoTFASaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 	{
 		CG_RGBForSaberColor(color, rgb);
 		VectorScale(rgb, 0.66f, rgb);
-		cgi_R_AddLightToScene(mid, blade_len * 2.0f + randoms() * 10.0f, rgb[0], rgb[1], rgb[2]);
+		CG_AddSaberLight(mid, blade_len * 2.0f + randoms() * 10.0f, rgb);
 	}
 
 	//Distance Scale
@@ -8447,7 +8514,7 @@ static void CG_DoBattlefrontSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t tra
 	{
 		CG_RGBForSaberColor(color, rgb);
 		VectorScale(rgb, 0.66f, rgb);
-		cgi_R_AddLightToScene(mid, blade_len * 2.0f + randoms() * 10.0f, rgb[0], rgb[1], rgb[2]);
+		CG_AddSaberLight(mid, blade_len * 2.0f + randoms() * 10.0f, rgb);
 	}
 
 	//Distance Scale
@@ -8931,7 +8998,7 @@ static void CG_DoEp1Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 	{
 		CG_RGBForSaberColor(color, rgb);
 		VectorScale(rgb, 0.66f, rgb);
-		cgi_R_AddLightToScene(mid, blade_len * 2.0f + randoms() * 10.0f, rgb[0], rgb[1], rgb[2]);
+		CG_AddSaberLight(mid, blade_len * 2.0f + randoms() * 10.0f, rgb);
 	}
 
 	//Distance Scale
@@ -9415,7 +9482,7 @@ static void CG_DoEp2Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 	{
 		CG_RGBForSaberColor(color, rgb);
 		VectorScale(rgb, 0.66f, rgb);
-		cgi_R_AddLightToScene(mid, blade_len * 2.0f + randoms() * 10.0f, rgb[0], rgb[1], rgb[2]);
+		CG_AddSaberLight(mid, blade_len * 2.0f + randoms() * 10.0f, rgb);
 	}
 
 	//Distance Scale
@@ -9899,7 +9966,7 @@ static void CG_DoEp3Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 	{
 		CG_RGBForSaberColor(color, rgb);
 		VectorScale(rgb, 0.66f, rgb);
-		cgi_R_AddLightToScene(mid, blade_len * 2.0f + randoms() * 10.0f, rgb[0], rgb[1], rgb[2]);
+		CG_AddSaberLight(mid, blade_len * 2.0f + randoms() * 10.0f, rgb);
 	}
 
 	//Distance Scale
@@ -10383,7 +10450,7 @@ static void CG_DoSFXSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 	{
 		CG_RGBForSaberColor(color, rgb);
 		VectorScale(rgb, 0.66f, rgb);
-		cgi_R_AddLightToScene(mid, blade_len * 2.0f + randoms() * 10.0f, rgb[0], rgb[1], rgb[2]);
+		CG_AddSaberLight(mid, blade_len * 2.0f + randoms() * 10.0f, rgb);
 	}
 
 	//Distance Scale
@@ -10872,7 +10939,7 @@ static void CG_DoOTSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, v
 	{
 		CG_RGBForSaberColor(color, rgb);
 		VectorScale(rgb, 0.66f, rgb);
-		cgi_R_AddLightToScene(mid, blade_len * 2.0f + randoms() * 10.0f, rgb[0], rgb[1], rgb[2]);
+		CG_AddSaberLight(mid, blade_len * 2.0f + randoms() * 10.0f, rgb);
 	}
 
 	//Distance Scale
@@ -11381,7 +11448,7 @@ static void CG_DoCustomSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_ti
 	{
 		CG_RGBForSaberColor(color, rgb);
 		VectorScale(rgb, 0.66f, rgb);
-		cgi_R_AddLightToScene(mid, blade_len * 2.0f + randoms() * 10.0f, rgb[0], rgb[1], rgb[2]);
+		CG_AddSaberLight(mid, blade_len * 2.0f + randoms() * 10.0f, rgb);
 	}
 
 	//Distance Scale
@@ -11869,7 +11936,7 @@ static void CG_DoCloakedSaber(vec3_t origin, vec3_t dir, float length, float len
 	if (do_light)
 	{
 		CG_RGBForSaberColor(color, rgb);
-		cgi_R_AddLightToScene(mid, length * 1.4f + randoms() * 3.0f, rgb[0], rgb[1], rgb[2]);
+		CG_AddSaberLight(mid, length * 1.4f + randoms() * 3.0f, rgb);
 	}
 
 	//Distance Scale
@@ -12149,7 +12216,7 @@ static void CG_DoSaber(vec3_t origin, vec3_t dir, float length, float length_max
 	if (do_light)
 	{
 		CG_RGBForSaberColor(color, rgb);
-		cgi_R_AddLightToScene(mid, length * 1.4f + Q_flrand(0.0f, 1.0f) * 3.0f, rgb[0], rgb[1], rgb[2]);
+		CG_AddSaberLight(mid, length * 1.4f + Q_flrand(0.0f, 1.0f) * 3.0f, rgb);
 	}
 
 	memset(&saber, 0, sizeof(refEntity_t));
@@ -12390,7 +12457,7 @@ static void CG_DoSaberUnstable(vec3_t origin, vec3_t dir, float length, float le
 	if (do_light)
 	{
 		CG_RGBForSaberColor(color, rgb);
-		cgi_R_AddLightToScene(mid, length * 1.4f + Q_flrand(0.0f, 1.0f) * 3.0f, rgb[0], rgb[1], rgb[2]);
+		CG_AddSaberLight(mid, length * 1.4f + Q_flrand(0.0f, 1.0f) * 3.0f, rgb);
 	}
 
 	memset(&saber, 0, sizeof(refEntity_t));
@@ -16686,6 +16753,7 @@ void CG_Player(centity_t* cent)
 			}
 		}
 		CG_ClothForcePush(cent);
+		CG_GrassForceWave(cent);
 		//"refraction" effect -rww
 		if (cent->gent->client->ps.powerups[PW_FORCE_PUSH] > cg.time)
 		{

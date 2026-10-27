@@ -532,113 +532,111 @@ char* FS_BuildOSPath(const char* base, const char* game, const char* qpath) {
 =================================================================================
 */
 namespace {
+	constexpr int FS_LOOKUP_MAX_MS = 120000;	// a load longer than this just stops using the listings
 
-constexpr int FS_LOOKUP_MAX_MS = 120000;	// a load longer than this just stops using the listings
+	struct fsFolderListing_t
+	{
+		bool							complete = false;	// false: could not be listed - open as before
+		std::unordered_set<std::string>	names;				// lower case, files and folders
+	};
 
-struct fsFolderListing_t
-{
-	bool							complete = false;	// false: could not be listed - open as before
-	std::unordered_set<std::string>	names;				// lower case, files and folders
-};
+	bool												fs_lookupActive = false;
+	int													fs_lookupStartMs = 0;
+	std::unordered_map<std::string, fsFolderListing_t>	fs_lookupFolders;	// lower-case OS folder path -> its listing
+	int													fs_lookupSkipped = 0;
 
-bool												fs_lookupActive = false;
-int													fs_lookupStartMs = 0;
-std::unordered_map<std::string, fsFolderListing_t>	fs_lookupFolders;	// lower-case OS folder path -> its listing
-int													fs_lookupSkipped = 0;
-
-std::string FS_LookupLower(const char* s, const size_t len)
-{
-	std::string out(s, len);
-	for (char& c : out)
+	std::string FS_LookupLower(const char* s, const size_t len)
 	{
-		c = (c == '\\') ? '/' : static_cast<char>(tolower(static_cast<unsigned char>(c)));
-	}
-	return out;
-}
-
-fsFolderListing_t FS_LookupListFolder(const std::string& folder)
-{
-	PROFILE_ZONE("Load: file system folder listing");
-	PROFILE_TEXT(folder.c_str());
-	fsFolderListing_t listing;
-#if defined(_WIN32)
-	_finddata_t info;
-	const std::string pattern = folder + "\\*";
-	errno = 0;
-	const intptr_t handle = _findfirst(pattern.c_str(), &info);
-	if (handle == -1)
-	{
-		listing.complete = (errno == ENOENT);	// the folder is not there: nothing can be opened in it
-		return listing;
-	}
-	do
-	{
-		listing.names.insert(FS_LookupLower(info.name, strlen(info.name)));
-		errno = 0;
-	} while (_findnext(handle, &info) == 0);
-	listing.complete = (errno == ENOENT);	// ENOENT = the end of the folder; anything else = not sure, open as before
-	_findclose(handle);
-#else
-	errno = 0;
-	DIR* dir = opendir(folder.c_str());
-	if (!dir)
-	{
-		listing.complete = (errno == ENOENT || errno == ENOTDIR);
-		return listing;
-	}
-	for (;;)
-	{
-		errno = 0;
-		const dirent* entry = readdir(dir);
-		if (!entry)
+		std::string out(s, len);
+		for (char& c : out)
 		{
-			listing.complete = (errno == 0);
-			break;
+			c = (c == '\\') ? '/' : static_cast<char>(tolower(static_cast<unsigned char>(c)));
 		}
-		listing.names.insert(FS_LookupLower(entry->d_name, strlen(entry->d_name)));
+		return out;
 	}
-	closedir(dir);
+
+	fsFolderListing_t FS_LookupListFolder(const std::string& folder)
+	{
+		PROFILE_ZONE("Load: file system folder listing");
+		PROFILE_TEXT(folder.c_str());
+		fsFolderListing_t listing;
+#if defined(_WIN32)
+		_finddata_t info;
+		const std::string pattern = folder + "\\*";
+		errno = 0;
+		const intptr_t handle = _findfirst(pattern.c_str(), &info);
+		if (handle == -1)
+		{
+			listing.complete = (errno == ENOENT);	// the folder is not there: nothing can be opened in it
+			return listing;
+		}
+		do
+		{
+			listing.names.insert(FS_LookupLower(info.name, strlen(info.name)));
+			errno = 0;
+		} while (_findnext(handle, &info) == 0);
+		listing.complete = (errno == ENOENT);	// ENOENT = the end of the folder; anything else = not sure, open as before
+		_findclose(handle);
+#else
+		errno = 0;
+		DIR* dir = opendir(folder.c_str());
+		if (!dir)
+		{
+			listing.complete = (errno == ENOENT || errno == ENOTDIR);
+			return listing;
+		}
+		for (;;)
+		{
+			errno = 0;
+			const dirent* entry = readdir(dir);
+			if (!entry)
+			{
+				listing.complete = (errno == 0);
+				break;
+			}
+			listing.names.insert(FS_LookupLower(entry->d_name, strlen(entry->d_name)));
+		}
+		closedir(dir);
 #endif
-	return listing;
-}
+		return listing;
+	}
 
-// FS_FOpenFileRead, before opening 'ospath' in a game folder: false = it is certainly not there
-bool FS_LookupMayExist(const char* ospath)
-{
-	if (!fs_lookupActive)
+	// FS_FOpenFileRead, before opening 'ospath' in a game folder: false = it is certainly not there
+	bool FS_LookupMayExist(const char* ospath)
 	{
-		return true;
+		if (!fs_lookupActive)
+		{
+			return true;
+		}
+		if (Sys_Milliseconds() - fs_lookupStartMs > FS_LOOKUP_MAX_MS)
+		{
+			FS_LookupCacheEnd();
+			return true;
+		}
+		const char* slash = strrchr(ospath, '/');
+		const char* backslash = strrchr(ospath, '\\');
+		if (!slash || (backslash && backslash > slash))
+		{
+			slash = backslash;
+		}
+		if (!slash || !slash[1])
+		{
+			return true;
+		}
+		const std::string folder(ospath, static_cast<size_t>(slash - ospath));
+		const std::string key = FS_LookupLower(folder.c_str(), folder.size());
+		auto it = fs_lookupFolders.find(key);
+		if (it == fs_lookupFolders.end())
+		{
+			it = fs_lookupFolders.emplace(key, FS_LookupListFolder(folder)).first;
+		}
+		if (!it->second.complete || it->second.names.count(FS_LookupLower(slash + 1, strlen(slash + 1))))
+		{
+			return true;
+		}
+		fs_lookupSkipped++;
+		return false;
 	}
-	if (Sys_Milliseconds() - fs_lookupStartMs > FS_LOOKUP_MAX_MS)
-	{
-		FS_LookupCacheEnd();
-		return true;
-	}
-	const char* slash = strrchr(ospath, '/');
-	const char* backslash = strrchr(ospath, '\\');
-	if (!slash || (backslash && backslash > slash))
-	{
-		slash = backslash;
-	}
-	if (!slash || !slash[1])
-	{
-		return true;
-	}
-	const std::string folder(ospath, static_cast<size_t>(slash - ospath));
-	const std::string key = FS_LookupLower(folder.c_str(), folder.size());
-	auto it = fs_lookupFolders.find(key);
-	if (it == fs_lookupFolders.end())
-	{
-		it = fs_lookupFolders.emplace(key, FS_LookupListFolder(folder)).first;
-	}
-	if (!it->second.complete || it->second.names.count(FS_LookupLower(slash + 1, strlen(slash + 1))))
-	{
-		return true;
-	}
-	fs_lookupSkipped++;
-	return false;
-}
-
 } // namespace
 
 // the start of a map load (SV_SpawnServer; MP clients also CL_InitCGame): fresh listings

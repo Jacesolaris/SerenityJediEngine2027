@@ -2989,6 +2989,12 @@ static int Pickup_Ammo(const gentity_t* ent, const gentity_t* other)
 static int Pickup_Weapon(const gentity_t* ent, gentity_t* other)
 {
 	int quantity = 0;
+	// the ammo slot of the weapon (the respawn rule below used the weapon number as the ammo slot)
+	int ammoIndex = (unsigned)ent->item->giTag < WP_NUM_WEAPONS ? weaponData[ent->item->giTag].ammoIndex : AMMO_NONE;
+	if ((unsigned)ammoIndex >= AMMO_MAX)
+	{
+		ammoIndex = AMMO_NONE;
+	}
 
 	if (ent->count < 0)
 	{
@@ -3013,9 +3019,9 @@ static int Pickup_Weapon(const gentity_t* ent, gentity_t* other)
 			// New method:  If the player has less than half the minimum, give them the minimum, else add 1/2 the min.
 
 			// drop the quantity if the already have over the minimum
-			if (other->client->ps.ammo[ent->item->giTag] < quantity * 0.5)
+			if (other->client->ps.ammo[ammoIndex] < quantity * 0.5)
 			{
-				quantity = quantity - other->client->ps.ammo[ent->item->giTag];
+				quantity = quantity - other->client->ps.ammo[ammoIndex];
 			}
 			else
 			{
@@ -3030,7 +3036,7 @@ static int Pickup_Weapon(const gentity_t* ent, gentity_t* other)
 	G_AddEvent(other, EV_WEAPINVCHANGE, other->client->ps.stats[STAT_WEAPONS]);
 
 	//Add_Ammo( other, ent->item->giTag, quantity );
-	Add_Ammo(other, weaponData[ent->item->giTag].ammoIndex, quantity);
+	Add_Ammo(other, ammoIndex, quantity);
 
 	G_LogWeaponPickup(other->s.number, ent->item->giTag);
 

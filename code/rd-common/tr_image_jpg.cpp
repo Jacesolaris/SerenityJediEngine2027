@@ -343,7 +343,6 @@ bool R_DecodeJPGThreadSafe(const byte* data, const size_t len, byte** pic, int* 
 	return true;
 }
 
-
 // save game screenshots (JK2 / JKO: com_outcast 1)
 void LoadJPGFromBuffer(byte* inputBuffer, size_t len, unsigned char** pic, int* width, int* height) {
 	/* This struct contains the JPEG decompression parameters and pointers to

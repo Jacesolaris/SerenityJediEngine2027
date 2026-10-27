@@ -2437,7 +2437,8 @@ static void UI_CalcForceStatus()
 		p_state->forcePowerLevel[FP_LIGHTNING_STRIKE] +
 		p_state->forcePowerLevel[FP_FEAR] +
 		p_state->forcePowerLevel[FP_DEADLYSIGHT] +
-		p_state->forcePowerLevel[FP_INSANITY];
+		p_state->forcePowerLevel[FP_INSANITY] +
+		p_state->forcePowerLevel[FP_DARK_STASIS];
 
 	const float total = lightSide + darkSide;
 
@@ -3968,8 +3969,8 @@ void UI_LoadMenus(const char* menuFile, const qboolean reset)
 	Com_Printf("--------------------- Client Initialization ---------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("---------- Genuine SerenityJediEngine-(Solaris Edition)SP--------\n");
-	Com_Printf("---------------------Build date 25/10/2026-----------------------\n"); // build date
-	Com_Printf("---------------------------Build 16------------------------------\n");
+	Com_Printf("---------------------Build date 27/10/2026-----------------------\n"); // build date
+	Com_Printf("---------------------------Build 18------------------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("------------------------LightSaber-------------------------------\n");
 	Com_Printf("-----------An elegant weapon for a more civilized age------------\n");
@@ -5756,7 +5757,7 @@ static void UI_UpdateFightingStyleChoices()
 	}
 }
 
-constexpr auto MAX_POWER_ENUMS = 26;
+constexpr auto MAX_POWER_ENUMS = 27;
 
 using powerEnum_t = struct
 {
@@ -5812,6 +5813,7 @@ static powerEnum_t powerEnums[MAX_POWER_ENUMS] =
 	{ "blast", FP_BLAST },
 	{ "insanity", FP_INSANITY },
 	{ "blinding", FP_BLINDING },
+	{ "darkstasis", FP_DARK_STASIS },
 #endif // !JK2_MODE
 };
 
@@ -6114,6 +6116,7 @@ static void UI_DemoSetForceLevels()
 
 		uiInfo.forcePowerLevel[FP_INSANITY] = 0;
 		uiInfo.forcePowerLevel[FP_BLINDING] = 0;
+		uiInfo.forcePowerLevel[FP_DARK_STASIS] = 0;
 	}
 	else
 	{
@@ -6151,6 +6154,7 @@ static void UI_DemoSetForceLevels()
 
 		uiInfo.forcePowerLevel[FP_INSANITY] = 0;
 		uiInfo.forcePowerLevel[FP_BLINDING] = 0;
+		uiInfo.forcePowerLevel[FP_DARK_STASIS] = 0;
 	}
 
 	if (p_state)
@@ -6187,6 +6191,8 @@ static void UI_DemoSetForceLevels()
 		uiInfo.forcePowerLevel[FP_BLAST] = Q_max(p_state->forcePowerLevel[FP_BLAST], uiInfo.forcePowerLevel[FP_BLAST]);
 		uiInfo.forcePowerLevel[FP_BLINDING] = Q_max(p_state->forcePowerLevel[FP_BLINDING],
 			uiInfo.forcePowerLevel[FP_BLINDING]);
+		uiInfo.forcePowerLevel[FP_DARK_STASIS] = Q_max(p_state->forcePowerLevel[FP_DARK_STASIS],
+			uiInfo.forcePowerLevel[FP_DARK_STASIS]);
 	}
 }
 #endif // !JK2_MODE

@@ -2452,6 +2452,10 @@ static void RB_UpdateSceneConstants(gpuFrame_t* frame, const trRefdef_t* refdef)
 		frame, &sceneBlock, sizeof(sceneBlock));
 }
 
+// rend2 look (DH 2026-10-26): r_dlightIntensity / r_dlightRadius scale every dynamic light (sabers, shots, explosions),
+// r_baseRoughness = surface roughness for textures without a material map (1 = matte as before)
+extern cvar_t* r_dlightIntensity;
+
 static void RB_UpdateLightsConstants(gpuFrame_t* frame, const trRefdef_t* refdef)
 {
 	LightsBlock lightsBlock = {};
@@ -2461,6 +2465,9 @@ static void RB_UpdateLightsConstants(gpuFrame_t* frame, const trRefdef_t* refdef
 	memcpy(lightsBlock.shadowVP3, refdef->sunShadowMvp[2], sizeof(matrix_t));
 
 	lightsBlock.numLights = MIN(refdef->num_dlights, MAX_DLIGHTS);
+	// menu model views (RDF_NOWORLDMODEL) keep the menu's own light strength (DH 2026-10-27)
+	const float dlightIntensity = (refdef->rdflags & RDF_NOWORLDMODEL) || r_dlightIntensity->value <= 0.0f
+		? 1.0f : r_dlightIntensity->value;
 	for (int i = 0; i < lightsBlock.numLights; ++i)
 	{
 		const dlight_t* dlight = refdef->dlights + i;
@@ -2472,7 +2479,7 @@ static void RB_UpdateLightsConstants(gpuFrame_t* frame, const trRefdef_t* refdef
 			dlight->origin[1],
 			dlight->origin[2],
 			dlight->noShadow ? 0.0f : 1.0f);	// w: has a shadow map this frame (r_dlightShadowMax)
-		VectorCopy(dlight->color, lightData->color);
+		VectorScale(dlight->color, dlightIntensity, lightData->color);
 		lightData->radius = dlight->radius;
 	}
 	// TODO: Add pshadow data
@@ -3102,6 +3109,23 @@ static const void* RB_SwapBuffers(const void* data) {
 		{
 			FBO_FastBlit(tr.renderFbo, NULL, NULL, NULL, GL_COLOR_BUFFER_BIT, GL_NEAREST);
 		}
+	}
+
+	if (tr.renderFbo)
+	{
+		// MovieDuels (DH 2026-10-27): start every frame with a black render FBO. Frames without a 3D scene (menus,
+		// videos) draw straight into it and nothing ever cleared it. With r_hdr its float buffer kept the values above 1
+		// that overbright 2D and additive menu layers leave; they grew frame after frame up to Inf/NaN, which no blended
+		// draw can paint over, so the MP menus and videos posterised (logo black/white).
+		FBO_t* oldFbo = glState.currentFBO;
+		FBO_Bind(tr.renderFbo);
+		qglColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+		qglScissor(0, 0, tr.renderFbo->width, tr.renderFbo->height);
+		qglClearBufferfv(GL_COLOR, 0, colorBlack);
+		qglClearBufferfv(GL_COLOR, 1, colorBlack);
+		qglScissor(glState.viewportOrigin[0], glState.viewportOrigin[1], glState.viewportSize[0], glState.viewportSize[1]);
+		qglColorMask(!backEnd.colorMask[0], !backEnd.colorMask[1], !backEnd.colorMask[2], !backEnd.colorMask[3]);
+		FBO_Bind(oldFbo);
 	}
 
 	if (tr.numFramesToCapture > 0)

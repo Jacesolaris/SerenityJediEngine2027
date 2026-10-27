@@ -915,8 +915,9 @@ void R_AddWorldSurfaces(viewParms_t* viewParms, trRefdef_t* refdef) {
 	else
 	{
 		dlightBits = (1 << refdef->num_dlights) - 1;
-		if (r_shadows->integer == 4)
-			pshadowBits = (1 << refdef->num_pshadows) - 1;
+		// cg_shadows 2 and 3 use the character shadow maps too; 32 shadows need all 32 bits (1 << 32 is undefined) (DH 2026-10-26)
+		if (r_shadows->integer >= 2)
+			pshadowBits = refdef->num_pshadows >= 32 ? -1 : (1 << refdef->num_pshadows) - 1;
 		else
 			pshadowBits = 0;
 	}

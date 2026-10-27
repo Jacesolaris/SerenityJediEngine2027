@@ -782,9 +782,11 @@ static void CG_TouchItem(centity_t* cent)
 	if (item->giType == IT_WEAPON)
 	{
 		BG_GiveWeapon(cg.predictedPlayerState.stats, item->giTag);
-		if (!cg.predictedPlayerState.ammo[item->giTag])
+		// the ammo slot of the weapon (this used the weapon number as the ammo slot)
+		const int ammoIndex = (unsigned)item->giTag < WP_NUM_WEAPONS ? weaponData[item->giTag].ammoIndex : AMMO_NONE;
+		if (ammoIndex > AMMO_NONE && ammoIndex < AMMO_MAX && !cg.predictedPlayerState.ammo[ammoIndex])
 		{
-			cg.predictedPlayerState.ammo[item->giTag] = 1;
+			cg.predictedPlayerState.ammo[ammoIndex] = 1;
 		}
 	}
 }

@@ -83,6 +83,10 @@ cvar_t* r_nocurves;
 
 cvar_t* r_dlightStyle;
 cvar_t* r_surfaceSprites;
+cvar_t* r_grassWind;
+cvar_t* r_grassPush;
+cvar_t* r_grassPushRadius;
+cvar_t* r_grassForceWave;
 cvar_t* r_surfaceWeather;
 cvar_t* r_AdvancedsurfaceSprites;
 
@@ -1664,6 +1668,18 @@ static void R_MeshClothPush_f(void) {
 	MC_Push(c, d, (float)atof(ri.Cmd_Argv(7)), (float)atof(ri.Cmd_Argv(8)), coneDot);
 }
 
+// grass_wave time x y z dirx diry type range - sent by the cgame when someone uses force push (type 0), pull (1) or
+// repulse (2): a wave runs out from them through the grass (R_GrassAddWave, surface sprites; r_grassForceWave)
+void R_GrassAddWave(int time, const float* org, const float* dir, int type, float range);
+static void R_GrassWave_f(void) {
+	if (ri.Cmd_Argc() < 9) return;
+	float org[3], dir[2];
+	for (int k = 0; k < 3; k++) org[k] = (float)atof(ri.Cmd_Argv(2 + k));
+	dir[0] = (float)atof(ri.Cmd_Argv(5));
+	dir[1] = (float)atof(ri.Cmd_Argv(6));
+	R_GrassAddWave(atoi(ri.Cmd_Argv(1)), org, dir, atoi(ri.Cmd_Argv(7)), (float)atof(ri.Cmd_Argv(8)));
+}
+
 static consoleCommand_t	commands[] = {
 	{ "imagelist",			R_ImageList_f },
 	{ "shaderlist",			R_ShaderList_f },
@@ -1679,6 +1695,7 @@ static consoleCommand_t	commands[] = {
 	{ "modellist",			R_Modellist_f },
 	{ "meshcloth_blast",	R_MeshClothBlast_f },
 	{ "meshcloth_push",	R_MeshClothPush_f },
+	{ "grass_wave",		R_GrassWave_f },
 	{ "modelcacheinfo",		RE_RegisterModels_Info_f },
 	{ "r_fogDistance",		R_FogDistance_f },
 	{ "r_fogColor",			R_FogColor_f },
@@ -1740,8 +1757,8 @@ static void R_Register()
 	r_detailTextures = ri.Cvar_Get("r_detailtextures", "1", CVAR_ARCHIVE_ND | CVAR_LATCH);
 	r_texturebits = ri.Cvar_Get("r_texturebits", "0", CVAR_ARCHIVE_ND | CVAR_LATCH);
 	r_texturebitslm = ri.Cvar_Get("r_texturebitslm", "0", CVAR_ARCHIVE_ND | CVAR_LATCH);
-	r_overBrightBits = ri.Cvar_Get("r_overBrightBits", "0.2", CVAR_ARCHIVE_ND | CVAR_LATCH);
-	r_mapOverBrightBits = ri.Cvar_Get("r_mapOverBrightBits", "0.2", CVAR_ARCHIVE_ND | CVAR_LATCH);
+	r_overBrightBits = ri.Cvar_Get("r_overBrightBits", "0", CVAR_ARCHIVE_ND | CVAR_LATCH);
+	r_mapOverBrightBits = ri.Cvar_Get("r_mapOverBrightBits", "0", CVAR_ARCHIVE_ND | CVAR_LATCH);
 	r_simpleMipMaps = ri.Cvar_Get("r_simpleMipMaps", "1", CVAR_ARCHIVE_ND | CVAR_LATCH);
 	r_vertexLight = ri.Cvar_Get("r_vertexLight", "0", CVAR_ARCHIVE | CVAR_LATCH);
 	r_subdivisions = ri.Cvar_Get("r_subdivisions", "4", CVAR_ARCHIVE_ND | CVAR_LATCH);
@@ -1751,7 +1768,7 @@ static void R_Register()
 	//
 	// temporary latched variables that can only change over a restart
 	//
-	r_fullbright = ri.Cvar_Get("r_fullbright", "0.2", CVAR_LATCH);
+	r_fullbright = ri.Cvar_Get("r_fullbright", "0", CVAR_LATCH);
 	r_singleShader = ri.Cvar_Get("r_singleShader", "0", CVAR_CHEAT | CVAR_LATCH);
 
 	//
@@ -1777,6 +1794,10 @@ static void R_Register()
 
 	r_dlightStyle = ri.Cvar_Get("r_dlightStyle", "1", CVAR_ARCHIVE_ND);
 	r_surfaceSprites = ri.Cvar_Get("r_surfaceSprites", "1", CVAR_ARCHIVE_ND);
+	r_grassWind = ri.Cvar_Get("r_grassWind", "1", CVAR_ARCHIVE_ND);
+	r_grassPush = ri.Cvar_Get("r_grassPush", "1", CVAR_ARCHIVE_ND);
+	r_grassPushRadius = ri.Cvar_Get("r_grassPushRadius", "1", CVAR_ARCHIVE_ND);
+	r_grassForceWave = ri.Cvar_Get("r_grassForceWave", "1", CVAR_ARCHIVE_ND);
 	r_surfaceWeather = ri.Cvar_Get("r_surfaceWeather", "0", CVAR_TEMP);
 	r_AdvancedsurfaceSprites = ri.Cvar_Get("r_advancedlod", "1", CVAR_ARCHIVE_ND);
 

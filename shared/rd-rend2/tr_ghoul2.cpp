@@ -2706,19 +2706,8 @@ static void RenderSurfaces(CRenderSurface& RS, const trRefEntity_t* ent, int ent
 #endif
 		}
 
-		// projection shadows work fine with personal models
-		if (r_shadows->integer == 3
-			&& RS.fogNum == 0
-			&& (RS.renderfx & (RF_NOSHADOW | RF_DEPTHHACK))
-			&& shader->sort == SS_OPAQUE)
-		{
-			CRenderableSurface* newSurf = AllocGhoul2RenderableSurface();
-			newSurf->vboMesh = &RS.currentModel->data.glm->vboModels[RS.lod].vboMeshes[RS.surfaceNum];
-			assert(newSurf->vboMesh != NULL && RS.surfaceNum == surface->thisSurfaceIndex);
-			newSurf->surfaceData = surface;
-			newSurf->boneCache = RS.boneCache;
-			R_AddDrawSurf((surfaceType_t*)newSurf, entityNum, tr.projectionShadowShader, 0, qfalse, qfalse, 0);
-		}
+		// No projection shadow surfaces in rend2: cg_shadows 3 uses the character shadow maps like 2 (the old path
+		// only tagged menu models, and is why cg_shadows 3 used to be forced back to 2 at start up) (DH 2026-10-26)
 	}
 
 	// if we are turning off all descendants, then stop this recursion now
@@ -3739,7 +3728,7 @@ static const char* const mcColliderBones[][2] = {
 	{ "pelvis", "thoracic" },{ "thoracic", "cervical" },{ "cervical", "cranium" },
 	{ "lfemurYZ", "ltibia" },{ "ltibia", "ltalus" },{ "rfemurYZ", "rtibia" },{ "rtibia", "rtalus" },
 	{ "lhumerus", "lradius" },{ "lradius", "lhand" },{ "rhumerus", "rradius" },{ "rradius", "rhand" },
-	{ "lclavical", "lhumerus" }, { "rclavical", "rhumerus" }	// shoulders (hard 2: grid-simulated cloth only)
+	{ "lclavical", "lhumerus" },{ "rclavical", "rhumerus" }	// shoulders (hard 2: grid-simulated cloth only)
 };
 static const float mcColliderRadius[] = { 6.0f, 4.5f, 3.8f, 5.0f, 3.8f, 5.0f, 3.8f, 2.5f, 2.2f, 2.5f, 2.2f, 4.2f, 4.2f };
 static const int MC_NUM_COLLIDERS = sizeof(mcColliderRadius) / sizeof(mcColliderRadius[0]);
@@ -3790,6 +3779,12 @@ static const float (*MC_BoneFn(void* ctx, const int boneIndex))[4]
 	return reinterpret_cast<const float(*)[4]>(static_cast<CBoneCache*>(ctx)->boneMatrices[boneIndex]);
 }
 
+// saber hilt colliders (r_meshClothHilt, r_meshClothHiltLen / HiltBack / HiltRadius), set up by MC_SolverParams
+static cvar_t* mc_hilt = nullptr;
+static cvar_t* mc_hiltLen = nullptr;
+static cvar_t* mc_hiltBack = nullptr;
+static cvar_t* mc_hiltRadius = nullptr;
+
 // saber hilt collider: the hand bolt tag (*r_hand, *l_hand) is skinned like the engine skins it
 // for bolts; the hilt lies along the blade direction (the bolt's minus Y = the tag triangle's
 // longest side) and reaches a little behind the fist and well in front of it
@@ -3838,14 +3833,14 @@ static bool MC_HiltCapsule(const mdxmSurface_t* clothSurf, CBoneCache* bones, co
 	if (VectorNormalize(dir) < 1e-4f) return false;
 	VectorScale(dir, -1.0f, dir);	// blade direction
 	vec3_t la, lb;
-	VectorMA(p[MDX_TAG_ORIGIN], -4.0f, dir, la);
-	VectorMA(p[MDX_TAG_ORIGIN], 9.0f, dir, lb);
+	VectorMA(p[MDX_TAG_ORIGIN], -(mc_hiltBack ? mc_hiltBack->value : 4.0f), dir, la);
+	VectorMA(p[MDX_TAG_ORIGIN], mc_hiltLen ? mc_hiltLen->value : 9.0f, dir, lb);
 	for (int r = 0; r < 3; r++)
 	{
 		cap.a[r] = ent->e.origin[r] + axis[0][r] * la[0] + axis[1][r] * la[1] + axis[2][r] * la[2];
 		cap.b[r] = ent->e.origin[r] + axis[0][r] * lb[0] + axis[1][r] * lb[1] + axis[2][r] * lb[2];
 	}
-	cap.r = 1.6f;
+	cap.r = mc_hiltRadius && mc_hiltRadius->value > 0.1f ? mc_hiltRadius->value : 1.6f;
 	cap.hard = 1;
 	return true;
 }
@@ -3899,6 +3894,39 @@ static cvar_t* MC_ClothCvar(const char* name, const char* value, const char* des
 #else
 	return ri.Cvar_Get(name, value, CVAR_ARCHIVE_ND, desc);
 #endif
+}
+
+// Mesh cloth solver settings, main thread (2026-10-27, from the meshcloth author's newer branch):
+//  r_meshClothXPBD      1 = XPBD solver (stiffness no longer changes with r_meshClothIter; 'stretch' works), 0 = old
+//  r_meshClothXPBDIter  XPBD passes per substep (1 = same cost as the old solver)
+//  r_meshClothFriction  scales every surface's friction / sfriction (1 = the config's, 0 = frictionless)
+//  r_meshClothLift      -2 = each surface's 'lift', -1 = no limit, N = units a cape may rise above its attached edge
+//  r_meshClothEdgeCol   1 = cloth edges are pushed off arms, fists and hilts too (no forearm through a cape)
+//  r_meshClothHilt      1 = saber hilt colliders; r_meshClothHiltLen / HiltBack / HiltRadius set their size
+static void MC_SolverParams(mcParams_t& prm)
+{
+	static cvar_t* xp = nullptr;
+	static cvar_t* xi = nullptr;
+	static cvar_t* fr = nullptr;
+	static cvar_t* li = nullptr;
+	static cvar_t* ec = nullptr;
+	if (!xp)
+	{
+		xp = MC_ClothCvar("r_meshClothXPBD", "1", "Mesh cloth solver: 1 XPBD (stiffness independent of substeps), 0 old projection");
+		xi = MC_ClothCvar("r_meshClothXPBDIter", "1", "Mesh cloth XPBD solver passes per substep (1-8)");
+		fr = MC_ClothCvar("r_meshClothFriction", "1", "Scales mesh cloth friction on the body and floor (0 frictionless)");
+		li = MC_ClothCvar("r_meshClothLift", "-2", "How high mesh cloth may rise above its attached edge: -2 per surface, -1 no limit, N units");
+		ec = MC_ClothCvar("r_meshClothEdgeCol", "1", "Mesh cloth edges collide with arms, fists and saber hilts (1 on, 0 off)");
+		mc_hilt = MC_ClothCvar("r_meshClothHilt", "1", "Saber hilts push mesh cloth (1 on, 0 off)");
+		mc_hiltLen = MC_ClothCvar("r_meshClothHiltLen", "9", "Mesh cloth hilt collider length in front of the fist");
+		mc_hiltBack = MC_ClothCvar("r_meshClothHiltBack", "4", "Mesh cloth hilt collider length behind the fist");
+		mc_hiltRadius = MC_ClothCvar("r_meshClothHiltRadius", "1.6", "Mesh cloth hilt collider thickness");
+	}
+	prm.xpbd = xp ? xp->integer : 0;
+	prm.xpbdIters = xi ? xi->integer : 1;
+	prm.frictionScale = fr && fr->value > 0.0f ? fr->value : 0.0f;
+	prm.liftLimit = li ? li->value : -2.0f;
+	prm.edgeCol = ec ? ec->integer : 0;
 }
 
 // The weather on one character's cloth (key: its bone cache, the cloth's own key), main thread:
@@ -4320,6 +4348,7 @@ static void RB_MeshClothPrepare(CBoneCache* bones, const mdxmSurface_t* surface,
 	}
 	prm.gust = r_meshClothGust->value;
 	MC_WeatherWind(ent, bones, timeMs, prm);
+	MC_SolverParams(prm);
 	prm.timeSec = 0.0f;
 	MC_LodParams(ent, prm);
 	MC_FloorUnder(ent, timeMs, prm);
@@ -4416,9 +4445,12 @@ static bool RB_MeshClothBuild(CBoneCache* bones, const mdxmSurface_t* surface, c
 		}
 	}
 
-	// saber hilts in both hands
-	if (MC_HiltCapsule(surface, bones, "*r_hand", ent, axis, caps[ncaps])) ncaps++;
-	if (MC_HiltCapsule(surface, bones, "*l_hand", ent, axis, caps[ncaps])) ncaps++;
+	// saber hilts in both hands (r_meshClothHilt)
+	if (!mc_hilt || mc_hilt->integer)
+	{
+		if (MC_HiltCapsule(surface, bones, "*r_hand", ent, axis, caps[ncaps])) ncaps++;
+		if (MC_HiltCapsule(surface, bones, "*l_hand", ent, axis, caps[ncaps])) ncaps++;
+	}
 	// nearby characters (r_meshClothOthers)
 	for (int i = 0; i < cp.numOthers; i++)
 	{
@@ -4571,9 +4603,17 @@ static const char* MC_ModelPath(const CBoneCache* bones, const mdxmHeader_t* mdx
 // character menu drew hooded/caped models (Jedi Warrior, Sith Eradicator, Arcann, Sidious) with exploded cloth triangles
 // in rend2 only, with r_threads 0 as well, while the same characters in the level and the main menu (no level) were fine.
 // Cause not found yet; the main menu (no level loaded) keeps its cloth.
+// r_meshClothMenus (DH 2026-10-27): 1 = in-game menus simulate cloth again, 0 = skip as above. Likely fixed by the
+// batch fix in RB_MeshClothDraw (2026-10-25): surfaces batched before a cape were drawn from the cloth buffer,
+// which gives exactly this kind of exploded triangle. If the menus show broken cloth again, set it to 0.
 static bool MC_SkipScene()
 {
-	return tr.world && (backEnd.refdef.rdflags & RDF_NOWORLDMODEL);
+	static cvar_t* menus = nullptr;
+	if (!menus)
+	{
+		menus = MC_ClothCvar("r_meshClothMenus", "1", "Mesh cloth in in-game menu model views (character / saber menus): 1 on, 0 off");
+	}
+	return !menus->integer && tr.world && (backEnd.refdef.rdflags & RDF_NOWORLDMODEL);
 }
 
 static bool RB_MeshClothDraw(CRenderableSurface* surf)
@@ -4823,8 +4863,7 @@ void RB_G2PrepareDrawSurfs(drawSurf_t* drawSurfs, const int numDrawSurfs)
 
 // called by RB_DrawSurfs when the list has been drawn (rend2: results are kept per frame)
 void RB_G2FinishDrawSurfs()
-{
-}
+{}
 
 // called by RE_Shutdown: the workers must be gone before the renderer is unloaded
 void R_ShutdownRenderJobs()

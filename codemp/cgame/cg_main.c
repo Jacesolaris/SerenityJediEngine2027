@@ -1924,7 +1924,11 @@ const char* CG_GetStringEdString(char* refSection, char* refName)
 	static int		index = 0;
 
 	index ^= 1;
-	trap->SE_GetStringTextString(va("%s_%s", refSection, refName), text[index], sizeof(text[0]));
+	if (!trap->SE_GetStringTextString(va("%s_%s", refSection, refName), text[index], sizeof(text[0])))
+	{
+		// a reference from a package of its own (DARKSTASIS_NAME: strings/English/darkstasis.str), as it is
+		trap->SE_GetStringTextString(refName, text[index], sizeof(text[0]));
+	}
 	return text[index];
 }
 

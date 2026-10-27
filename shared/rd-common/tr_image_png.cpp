@@ -369,35 +369,35 @@ libpng warning or anything read() would refuse returns false, and LoadPNG then l
 =================
 */
 namespace {
-struct pngMemSource_t
-{
-	const byte* data;
-	size_t size;
-	size_t offset;
-	bool warned;
-};
-
-void PNG_TS_Read(const png_structp png_ptr, const png_bytep out, const png_size_t length)
-{
-	auto* src = static_cast<pngMemSource_t*>(png_get_io_ptr(png_ptr));
-	if (length > src->size - src->offset)
+	struct pngMemSource_t
 	{
-		png_error(png_ptr, "PNG data ends unexpectedly");	// longjmps to the decode's error handler
+		const byte* data;
+		size_t size;
+		size_t offset;
+		bool warned;
+	};
+
+	void PNG_TS_Read(const png_structp png_ptr, const png_bytep out, const png_size_t length)
+	{
+		auto* src = static_cast<pngMemSource_t*>(png_get_io_ptr(png_ptr));
+		if (length > src->size - src->offset)
+		{
+			png_error(png_ptr, "PNG data ends unexpectedly");	// longjmps to the decode's error handler
+		}
+		memcpy(out, src->data + src->offset, length);
+		src->offset += length;
 	}
-	memcpy(out, src->data + src->offset, length);
-	src->offset += length;
-}
 
-void PNG_TS_Error(const png_structp png_ptr, png_const_charp)
-{
-	// silent: straight back to the setjmp in R_DecodePNGThreadSafe (if this returned, libpng would print to stderr)
-	png_longjmp(png_ptr, 1);
-}
+	void PNG_TS_Error(const png_structp png_ptr, png_const_charp)
+	{
+		// silent: straight back to the setjmp in R_DecodePNGThreadSafe (if this returned, libpng would print to stderr)
+		png_longjmp(png_ptr, 1);
+	}
 
-void PNG_TS_Warning(const png_structp png_ptr, png_const_charp)
-{
-	static_cast<pngMemSource_t*>(png_get_error_ptr(png_ptr))->warned = true;	// LoadPNG would print it: let it
-}
+	void PNG_TS_Warning(const png_structp png_ptr, png_const_charp)
+	{
+		static_cast<pngMemSource_t*>(png_get_error_ptr(png_ptr))->warned = true;	// LoadPNG would print it: let it
+	}
 }
 
 bool R_DecodePNGThreadSafe(const byte* data, const size_t len, byte** pic, int* width, int* height)

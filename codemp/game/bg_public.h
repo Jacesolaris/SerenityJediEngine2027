@@ -81,7 +81,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define DEFAULT_REDTEAM_NAME	"Empire"
 #define DEFAULT_BLUETEAM_NAME	"Rebellion"
 
-#define CURRENT_SJE_CLIENTVERSION		"Day-25,Month-10,Year-26,BuildNum-16" // build date
+#define CURRENT_SJE_CLIENTVERSION		"Day-27,Month-10,Year-26,BuildNum-18" // build date
 
 #define	STEPSIZE		18
 
@@ -89,7 +89,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define DEFAULT_FORCEPOWERS_LEN (22) // numPowers + rank + side + separators
 // the longest forcepowers string: one digit per power, the ported SP powers (FP_STASIS ..) after the 18 JKA ones.
 // Strings from DEFAULT_FORCEPOWERS_LEN (JKA configs, bots, .fcf files: the new powers are 0) up to this are valid.
-#define FORCEPOWERS_MAX_LEN (4 + NUM_FORCE_POWERS)
+#define FORCEPOWERS_MAX_LEN (5 + NUM_FORCE_POWERS) // + 1: a two-digit rank (the kyo / shinya bots: "15-2-...")
 //"rank-side-heal.lev.speed.push.pull.tele.grip.lightning.rage.protect.absorb.teamheal.teamforce.drain.see"
 
 #define	DEFAULT_GRAVITY		800

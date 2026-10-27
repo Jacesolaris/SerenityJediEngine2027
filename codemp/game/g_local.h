@@ -894,6 +894,23 @@ struct gclient_s
 	int brokenLimbs;
 
 	qboolean noCorpse; //don't leave a corpse on respawn this time.
+	int droidVanishTime; // a dead small droid is hidden at this time (G_DroidVanishThink), 0 = not
+	// wampa / rancor player or bot holding someone (G_MonsterPlayerThink, NPC_AI_Wampa.c)
+	int monsterHold; // 0 = nobody, 1 = in its hand, 2 = in the rancor's mouth
+	int monsterVictim;
+	int monsterTarget;
+	int monsterDmgTime;
+	int monsterDmg2Time;
+	int monsterGrabTime;
+	int monsterDropTime;
+	int monsterClearTime;
+	int monsterSniffDone;
+	int monsterLastHealth;
+	int monsterBotTime;
+	qboolean monsterSniffed;
+	int heldAttackTime; // held by a wampa / rancor player: his saber slash at it lands at this time
+	int heldAttackDebounce; // and his next slash may start at this time
+	int monsterBites; // a rancor bot's bites on the one in its hand (it eats him after a bite or two)
 
 	int jetPackTime;
 
@@ -1709,6 +1726,12 @@ void BeginIntermission(void);
 void InitBodyQue(void);
 void ClientSpawn(gentity_t* ent);
 void player_die(gentity_t* self, const gentity_t* inflictor, gentity_t* attacker, const int damage, const int means_of_death);
+void G_DroidVanishThink(gentity_t* ent);
+// wampa / rancor players and bots grab, hold and eat like the SP AI (NPC_AI_Wampa.c)
+int G_MonsterPlayerClass(const gentity_t* ent);
+void G_MonsterPlayerThink(gentity_t* ent, usercmd_t* ucmd);
+void G_MonsterReleaseVictim(gentity_t* self, qboolean dropAnim);
+qboolean G_HeldByMonsterPlayer(gentity_t* ent, gentity_t* monster, usercmd_t* ucmd);
 qboolean G_CorpsePushable(const gentity_t* ent);
 qboolean G_SaberBlasterKyleModel(const gentity_t* ent);	// g_cmds.c: SS_BLASTER is Kyle Katarn's style only
 void G_PushCorpse(gentity_t* ent, const vec3_t push);

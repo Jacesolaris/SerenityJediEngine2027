@@ -373,6 +373,7 @@ SetForceCmd SetForceTable[NUM_FORCE_POWERS] = {
 	{ "forceblast", "setForceBlast", FORCE_LEVEL_3 },
 	{ "forceInsanity", "setForceInsanity", FORCE_LEVEL_3 },
 	{ "forceBlinding", "setForceBlinding", FORCE_LEVEL_3 },
+	{ "forceDarkStasis", "setForceDarkStasis", FORCE_LEVEL_3 },
 };
 
 static void Svcmd_ForceSetLevel_f(const int forcePower)
@@ -1325,6 +1326,39 @@ static void Svcmd_ForceRepulse_f()
 	}
 }
 
+static void Svcmd_ForceDarkStasis_f()
+{
+	if (!g_entities[0].client)
+	{
+		return;
+	}
+	const char* newVal = gi.argv(1);
+	if (!VALIDSTRING(newVal))
+	{
+		gi.Printf("Current Dark Stasis level is %d\n", g_entities[0].client->ps.forcePowerLevel[FP_DARK_STASIS]);
+		gi.Printf("Usage:  ForceDarkStasis <level> (1 - 3)\n");
+		return;
+	}
+	const int val = atoi(newVal);
+	if (val > FORCE_LEVEL_0)
+	{
+		g_entities[0].client->ps.forcePowersKnown |= 1 << FP_DARK_STASIS;
+	}
+	else
+	{
+		g_entities[0].client->ps.forcePowersKnown &= ~(1 << FP_DARK_STASIS);
+	}
+	g_entities[0].client->ps.forcePowerLevel[FP_DARK_STASIS] = val;
+	if (g_entities[0].client->ps.forcePowerLevel[FP_DARK_STASIS] < FORCE_LEVEL_0)
+	{
+		g_entities[0].client->ps.forcePowerLevel[FP_DARK_STASIS] = FORCE_LEVEL_0;
+	}
+	else if (g_entities[0].client->ps.forcePowerLevel[FP_DARK_STASIS] > FORCE_LEVEL_3)
+	{
+		g_entities[0].client->ps.forcePowerLevel[FP_DARK_STASIS] = FORCE_LEVEL_3;
+	}
+}
+
 static void Svcmd_GiveForceAll_f()
 {
 	Svcmd_ForceJump_f();
@@ -1339,6 +1373,7 @@ static void Svcmd_GiveForceAll_f()
 	Svcmd_ForceBlast_f();
 	Svcmd_ForceBlinding_f();
 	Svcmd_ForceRepulse_f();
+	Svcmd_ForceDarkStasis_f();
 	Svcmd_SaberDefense_f();
 	Svcmd_SaberOffense_f();
 	Svcmd_ForceSetLevel_f(FP_ABSORB);
@@ -1810,6 +1845,7 @@ static svcmd_t svcmds[] = {
 	{ "setForceBlast", Svcmd_ForceSetLevel_f<FP_BLAST>, CMD_CHEAT },
 	{ "setForceInsanity", Svcmd_ForceSetLevel_f<FP_INSANITY>, CMD_CHEAT },
 	{ "setForceBlinding", Svcmd_ForceSetLevel_f<FP_BLINDING>, CMD_CHEAT },
+	{ "setForceDarkStasis", Svcmd_ForceSetLevel_f<FP_DARK_STASIS>, CMD_CHEAT },
 	{ "setForceAll", Svcmd_SetForceAll_f, CMD_CHEAT },
 	{ "setSaberAll", Svcmd_SetSaberAll_f, CMD_CHEAT },
 

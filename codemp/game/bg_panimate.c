@@ -6773,6 +6773,13 @@ static void BG_SetAnimFinal(playerState_t* ps, const animation_t* animations, co
 			goto setAnimLegs;
 		}
 
+		// or while the Dark Stasis cast throw plays: it owns the torso until it is over (2026-10-27, DH)
+		if (ps->torsoAnim == BOTH_SUPERPUSH && anim != BOTH_SUPERPUSH && ps->torsoTimer > 0
+			&& ps->fd.forcePowersActive & 1 << FP_DARK_STASIS && ps->stats[STAT_HEALTH] > 0)
+		{
+			goto setAnimLegs;
+		}
+
 		BG_StartTorsoAnim(ps, anim);
 
 		if (setAnimFlags & SETANIM_FLAG_HOLD)
@@ -6869,7 +6876,6 @@ setAnimLegs:
 setAnimDone:
 	return;
 }
-
 
 // Dying in water (DH 2026-10-25): BOTH_DEATH19, played 25% slower (cg_players.c, g_combat.c); the body floats from
 // its frame 20 (bg_pmove PM_WaterMove) and ragdolls from its frame 45 (g_active.c, g_client.c BodyFloat). Returns how

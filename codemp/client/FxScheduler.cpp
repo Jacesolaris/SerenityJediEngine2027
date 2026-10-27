@@ -1469,7 +1469,7 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate* fx, const vec3_t origin, mat
 		break;
 	}
 
-		//---------
+	//---------
 	case Tail:
 		//---------
 

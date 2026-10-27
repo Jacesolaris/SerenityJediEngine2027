@@ -709,3 +709,924 @@ void NPC_BSWampa_Default(void)
 
 	NPC_UpdateAngles(qtrue, qtrue);
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// DH 2026-10-26: wampa and rancor players and bots grab, hold and eat like the SP AI (AI_Wampa.cpp,
+// AI_Rancor.cpp). The victim is held with EF2_HELD_BY_MONSTER + lookTarget, as by the MP rancor NPC, and
+// G_HeldByMonster (g_active.c) puts him in the wampa's hand or the rancor's hand / mouth every frame.
+//   Wampa: alt attack next to someone = grab (else the backhand). Holding: attack = maul him, alt = drop him.
+//          Any hit on a wampa that holds someone makes it drop him (SP); a held saber user can slash at it.
+//   Rancor: alt attack next to someone = grab swing (else the bite). Holding: attack = quick bite, alt = eat him
+//          whole (he is cut in half, swallowed and gone). A dead victim in its hand is eaten.
+// Bots do the same on their own. g_monsterGrab 0 = the old attacks only.
+// ---------------------------------------------------------------------------------------------------------------
+#define MONSTER_HOLD_HAND	1
+#define MONSTER_HOLD_MOUTH	2
+
+extern void G_GetBoltPosition(gentity_t* self, int boltIndex, vec3_t pos, int modelIndex);
+
+int G_MonsterPlayerClass(const gentity_t* ent)
+{
+	if (!ent || !ent->inuse || !ent->client || ent->s.number >= MAX_CLIENTS || level.gametype == GT_SIEGE
+		|| ent->client->sess.sessionTeam == TEAM_SPECTATOR || ent->client->tempSpectate >= level.time)
+	{
+		return BCLASS_NONE;
+	}
+	if (ent->client->pers.botclass != BCLASS_WAMPA && ent->client->pers.botclass != BCLASS_RANCOR)
+	{
+		return BCLASS_NONE;
+	}
+	if (BG_AnimSetIsHumanoidLike(ent->localAnimIndex))
+	{
+		return BCLASS_NONE;	// on the default model, not the creature's own skeleton
+	}
+	return ent->client->pers.botclass;
+}
+
+// the SP rule (Wampa_TryGrab / Rancor_Swing): no droids, machines, vehicles or other rancors
+static qboolean G_MonsterCanGrab(const gentity_t* self, const gentity_t* targ)
+{
+	if (!targ || !targ->inuse || !targ->client || targ == self || targ->health <= 0 || !targ->takedamage)
+	{
+		return qfalse;
+	}
+	if (targ->client->ps.eFlags2 & EF2_HELD_BY_MONSTER || targ->client->ps.m_iVehicleNum
+		|| targ->client->sess.sessionTeam == TEAM_SPECTATOR || targ->client->tempSpectate >= level.time
+		|| targ->client->ps.eFlags & EF_NODRAW)
+	{
+		return qfalse;
+	}
+	if (OnSameTeam(self, targ))
+	{
+		return qfalse;
+	}
+	if (self->client->ps.duelInProgress && self->client->ps.duelIndex != targ->s.number
+		|| targ->client->ps.duelInProgress && targ->client->ps.duelIndex != self->s.number)
+	{
+		return qfalse;
+	}
+	switch (targ->client->NPC_class)
+	{
+	case CLASS_RANCOR:
+	case CLASS_GALAKMECH:
+	case CLASS_ATST:
+	case CLASS_GONK:
+	case CLASS_R2D2:
+	case CLASS_R5D2:
+	case CLASS_MARK1:
+	case CLASS_MARK2:
+	case CLASS_MOUSE:
+	case CLASS_PROBE:
+	case CLASS_SEEKER:
+	case CLASS_REMOTE:
+	case CLASS_SENTRY:
+	case CLASS_INTERROGATOR:
+	case CLASS_DROIDEKA:
+	case CLASS_SAND_CREATURE:
+	case CLASS_VEHICLE:
+		return qfalse;
+	case CLASS_WAMPA:
+		if (G_MonsterPlayerClass(self) == BCLASS_WAMPA)
+		{
+			return qfalse;	// a wampa can't hang from a wampa's hand
+		}
+		break;
+	default:
+		break;
+	}
+	if (targ->s.number < MAX_CLIENTS)
+	{
+		switch (targ->client->pers.botclass)
+		{
+		case BCLASS_RANCOR:
+		case BCLASS_R2D2:
+		case BCLASS_R5D2:
+		case BCLASS_GONK:
+		case BCLASS_MOUSE:
+		case BCLASS_PROBE:
+		case BCLASS_SEEKER:
+		case BCLASS_SENTRY:
+		case BCLASS_INTERROGATOR:
+		case BCLASS_MARK1:
+		case BCLASS_MARK2:
+		case BCLASS_DROIDEKA:
+		case BCLASS_GALAKMECH:
+			return qfalse;
+		case BCLASS_WAMPA:
+			if (G_MonsterPlayerClass(self) == BCLASS_WAMPA)
+			{
+				return qfalse;
+			}
+			break;
+		default:
+			break;
+		}
+	}
+	return qtrue;
+}
+
+static void G_MonsterBoltOrg(gentity_t* self, const char* boltName, vec3_t out)
+{
+	VectorCopy(self->r.currentOrigin, out);
+	if (self->ghoul2)
+	{
+		const int bolt = trap->G2API_AddBolt(self->ghoul2, 0, boltName);
+		if (bolt != -1)
+		{
+			G_GetBoltPosition(self, bolt, out, 0);
+		}
+	}
+}
+
+// the nearest one we may grab within radius of org (in front of us when frontOnly)
+static gentity_t* G_MonsterFindVictim(gentity_t* self, const vec3_t org, const float radius, const qboolean frontOnly)
+{
+	int touch[128];
+	vec3_t mins, maxs, fwd, yaw;
+	gentity_t* best = NULL;
+	float bestDist = radius;
+
+	VectorSet(yaw, 0, self->client->ps.viewangles[YAW], 0);
+	AngleVectors(yaw, fwd, NULL, NULL);
+	for (int i = 0; i < 3; i++)
+	{
+		mins[i] = org[i] - radius;
+		maxs[i] = org[i] + radius;
+	}
+	const int num = trap->EntitiesInBox(mins, maxs, touch, 128);
+	for (int i = 0; i < num; i++)
+	{
+		gentity_t* ent = &g_entities[touch[i]];
+		vec3_t dir;
+
+		if (!G_MonsterCanGrab(self, ent))
+		{
+			continue;
+		}
+		const float dist = Distance(ent->r.currentOrigin, org);
+		if (dist > bestDist)
+		{
+			continue;
+		}
+		if (frontOnly)
+		{
+			VectorSubtract(ent->r.currentOrigin, self->r.currentOrigin, dir);
+			dir[2] = 0;
+			VectorNormalize(dir);
+			if (DotProduct(dir, fwd) < 0.3f)
+			{
+				continue;
+			}
+		}
+		best = ent;
+		bestDist = dist;
+	}
+	return best;
+}
+
+static gentity_t* G_MonsterVictim(const gentity_t* self)
+{
+	if (!self->client->monsterHold)
+	{
+		return NULL;
+	}
+	gentity_t* victim = &g_entities[self->client->monsterVictim];
+	if (!victim->inuse || !victim->client || !(victim->client->ps.eFlags2 & EF2_HELD_BY_MONSTER)
+		|| !victim->client->ps.hasLookTarget || victim->client->ps.lookTarget != self->s.number)
+	{
+		return NULL;
+	}
+	return victim;
+}
+
+// is targ in front of it, within reach (flat distance) and not far above / below it
+static qboolean G_MonsterInReach(const gentity_t* self, const gentity_t* targ, const float reach)
+{
+	vec3_t dir, fwd, yaw;
+
+	VectorSubtract(targ->r.currentOrigin, self->r.currentOrigin, dir);
+	if (targ->r.currentOrigin[2] < self->r.absmin[2] - 16.0f || targ->r.currentOrigin[2] > self->r.absmax[2] + 32.0f)
+	{
+		return qfalse;
+	}
+	dir[2] = 0;
+	if (VectorNormalize(dir) > reach)
+	{
+		return qfalse;
+	}
+	VectorSet(yaw, 0, self->client->ps.viewangles[YAW], 0);
+	AngleVectors(yaw, fwd, NULL, NULL);
+	return DotProduct(dir, fwd) >= 0.3f ? qtrue : qfalse;
+}
+
+static void G_MonsterTakeVictim(gentity_t* self, gentity_t* victim)
+{
+	victim->client->ps.eFlags2 |= EF2_HELD_BY_MONSTER;
+	victim->client->ps.hasLookTarget = qtrue;
+	victim->client->ps.lookTarget = self->s.number;
+	victim->client->ps.forceHandExtend = HANDEXTEND_NONE;
+	victim->client->ps.forceHandExtendTime = 0;
+	victim->client->heldAttackTime = 0;
+	victim->client->heldAttackDebounce = 0;
+	self->client->monsterHold = MONSTER_HOLD_HAND;
+	self->client->monsterVictim = victim->s.number;
+	self->client->monsterSniffed = qfalse;
+	self->client->monsterSniffDone = 0;
+	self->client->monsterLastHealth = self->health;
+	self->client->monsterBotTime = level.time + Q_irand(500, 1500);
+	self->client->monsterBites = 0;
+}
+
+void G_MonsterReleaseVictim(gentity_t* self, const qboolean dropAnim)
+{
+	gclient_t* cl = self->client;
+
+	if (!cl || !cl->monsterHold)
+	{
+		return;
+	}
+	gentity_t* victim = G_MonsterVictim(self);
+	if (victim)
+	{
+		victim->client->ps.eFlags2 &= ~EF2_HELD_BY_MONSTER;
+		victim->client->ps.hasLookTarget = qfalse;
+		victim->client->ps.lookTarget = ENTITYNUM_NONE;
+		victim->client->heldAttackTime = 0;
+		victim->client->ps.viewangles[PITCH] = 0;
+		victim->client->ps.viewangles[ROLL] = 0;
+		victim->r.currentAngles[PITCH] = 0;
+		victim->r.currentAngles[ROLL] = 0;
+		G_SetAngles(victim, victim->r.currentAngles);
+
+		if (cl->monsterHold == MONSTER_HOLD_MOUTH)
+		{
+			// eaten: nothing is left of him
+			victim->client->ps.eFlags |= EF_NODRAW;
+			victim->r.contents = 0;
+			victim->client->noCorpse = qtrue;
+		}
+		else if (victim->health > 0)
+		{
+			if (victim->s.number < MAX_CLIENTS)
+			{
+				vec3_t vicAngles;
+				VectorSet(vicAngles, 0, AngleNormalize180(cl->ps.viewangles[YAW] + 180.0f), 0);
+				SetClientViewAngle(victim, vicAngles);
+			}
+			if (G_MonsterPlayerClass(self) == BCLASS_WAMPA)
+			{
+				NPC_SetAnim(victim, SETANIM_BOTH, BOTH_RELEASED, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+				victim->client->ps.legsTimer += 500;
+				victim->client->ps.weaponTime = victim->client->ps.torsoTimer = victim->client->ps.legsTimer;
+			}
+			else
+			{
+				victim->client->ps.legsTimer = 0;
+				victim->client->ps.torsoTimer = 0;
+			}
+			if (victim->NPC)
+			{
+				victim->NPC->nextBStateThink = level.time;
+			}
+		}
+		else
+		{
+			victim->client->ps.legsTimer = 0;
+			victim->client->ps.torsoTimer = 0;
+		}
+	}
+	if (dropAnim && self->health > 0 && G_MonsterPlayerClass(self) == BCLASS_WAMPA)
+	{
+		NPC_SetAnim(self, SETANIM_BOTH, BOTH_STAND2TO1, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+		cl->ps.weaponTime = cl->ps.legsTimer;
+	}
+	cl->monsterHold = 0;
+	cl->monsterVictim = 0;
+	cl->monsterDmgTime = 0;
+	cl->monsterDmg2Time = 0;
+	cl->monsterDropTime = 0;
+	cl->monsterClearTime = 0;
+	cl->ps.eFlags2 &= ~(EF2_USE_ALT_ANIM | EF2_GENERIC_NPC_FLAG);
+}
+
+static void G_MonsterStartAnim(gentity_t* self, const int anim, const int dmgDelay)
+{
+	NPC_SetAnim(self, SETANIM_BOTH, anim, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART);
+	self->client->ps.weaponTime = self->client->ps.legsTimer;
+	self->client->monsterDmgTime = dmgDelay > 0 ? level.time + dmgDelay : 0;
+	self->client->monsterDmg2Time = 0;
+}
+
+static qboolean G_MonsterAnimDone(const gentity_t* self)
+{
+	return (self->client->ps.legsTimer <= 0 || self->client->ps.legsAnim == BOTH_HOLD_IDLE)
+		&& self->client->ps.weaponTime <= 0 ? qtrue : qfalse;
+}
+
+// the wampa's grab / hold anims and the rancor's grab / eat anims: it stands still while they play (the SP AI does)
+static qboolean G_MonsterStandStillAnim(const gentity_t* self, const int monster)
+{
+	const int anim = self->client->ps.legsAnim;
+
+	if (self->client->ps.legsTimer <= 0)
+	{
+		return qfalse;
+	}
+	switch (anim)
+	{
+	case BOTH_HOLD_START:
+	case BOTH_HOLD_END:
+	case BOTH_HOLD_MISS:
+	case BOTH_HOLD_SNIFF:
+	case BOTH_HOLD_ATTACK:
+	case BOTH_HOLD_DROP:
+		return monster == BCLASS_WAMPA ? qtrue : qfalse;
+	case BOTH_ATTACK2:
+	case BOTH_ATTACK3:
+	case BOTH_ATTACK10:
+	case BOTH_ATTACK11:
+		return monster == BCLASS_RANCOR ? qtrue : qfalse;
+	case BOTH_ATTACK1:
+		return monster == BCLASS_RANCOR && self->client->monsterHold ? qtrue : qfalse;
+	default:
+		return qfalse;
+	}
+}
+
+// ------------------------------------ wampa ------------------------------------
+
+// SP Wampa_TryGrab, at the end of BOTH_HOLD_START
+static void G_WampaTryGrab(gentity_t* self)
+{
+	vec3_t hand;
+	gentity_t* target = self->client->monsterTarget >= 0 && self->client->monsterTarget < ENTITYNUM_WORLD
+		? &g_entities[self->client->monsterTarget] : NULL;
+
+	G_MonsterBoltOrg(self, "*r_hand", hand);
+	gentity_t* victim = G_MonsterFindVictim(self, hand, 64.0f, qfalse);
+	if (victim)
+	{
+		G_MonsterTakeVictim(self, victim);
+		NPC_SetAnim(victim, SETANIM_BOTH, BOTH_GRABBED, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+		G_MonsterStartAnim(self, BOTH_HOLD_END, 0);
+		self->client->ps.weaponTime = self->client->ps.legsTimer + Q_irand(500, 1500);
+		return;
+	}
+	G_MonsterStartAnim(self, BOTH_HOLD_MISS, 0);
+	if (target && G_MonsterCanGrab(self, target) && Distance(target->r.currentOrigin, hand) < 128.0f)
+	{
+		// smack
+		vec3_t push_dir, angs;
+
+		G_Sound(target, CHAN_AUTO, G_SoundIndex("sound/chars/rancor/swipehit.wav"));
+		VectorCopy(self->client->ps.viewangles, angs);
+		angs[YAW] += flrand(25, 50);
+		angs[PITCH] = flrand(-25, -15);
+		AngleVectors(angs, push_dir, NULL, NULL);
+		if (!(target->flags & FL_NO_KNOCKBACK))
+		{
+			G_Throw(target, push_dir, Q_irand(30, 70));
+			G_Knockdown(target, self, push_dir, 300, qtrue);
+		}
+	}
+}
+
+static void G_WampaThink(gentity_t* self, usercmd_t* ucmd, const qboolean isBot)
+{
+	gclient_t* cl = self->client;
+	gentity_t* victim = G_MonsterVictim(self);
+	qboolean wantAttack = ucmd->buttons & BUTTON_ATTACK ? qtrue : qfalse;
+	qboolean wantAlt = ucmd->buttons & BUTTON_ALT_ATTACK ? qtrue : qfalse;
+
+	if (cl->monsterHold && !victim)
+	{
+		G_MonsterReleaseVictim(self, qfalse);
+	}
+
+	if (cl->ps.legsAnim == BOTH_HOLD_START)
+	{
+		ucmd->buttons &= ~(BUTTON_ATTACK | BUTTON_ALT_ATTACK);
+		if (cl->monsterGrabTime && level.time >= cl->monsterGrabTime)
+		{
+			cl->monsterGrabTime = 0;
+			G_WampaTryGrab(self);
+		}
+		return;
+	}
+	cl->monsterGrabTime = 0;
+
+	if (!cl->monsterHold)
+	{
+		vec3_t front, fwd, yaw;
+
+		if (cl->ps.weaponTime > 0 || cl->ps.groundEntityNum == ENTITYNUM_NONE)
+		{
+			return;
+		}
+		VectorSet(yaw, 0, cl->ps.viewangles[YAW], 0);
+		AngleVectors(yaw, fwd, NULL, NULL);
+		VectorMA(self->r.currentOrigin, self->r.maxs[0] + 40.0f, fwd, front);
+		gentity_t* target = G_MonsterFindVictim(self, front, 70.0f, qtrue);
+		if (isBot && target && level.time >= cl->monsterBotTime)
+		{
+			// the SP AI grabs when close (Wampa_Attack), now and then
+			cl->monsterBotTime = level.time + Q_irand(1000, 2500);
+			wantAlt = Q_irand(0, 1) ? qtrue : qfalse;
+		}
+		if (wantAlt && target)
+		{
+			// grab
+			ucmd->buttons &= ~(BUTTON_ATTACK | BUTTON_ALT_ATTACK);
+			G_MonsterStartAnim(self, BOTH_HOLD_START, 0);
+			cl->ps.legsTimer += 200;
+			cl->ps.torsoTimer = cl->ps.weaponTime = cl->ps.legsTimer;
+			cl->monsterGrabTime = level.time + cl->ps.legsTimer - 200;
+			cl->monsterTarget = target->s.number;
+		}
+		return;
+	}
+
+	// holding someone
+	ucmd->buttons &= ~(BUTTON_ATTACK | BUTTON_ALT_ATTACK);
+	if (!victim)
+	{
+		return;
+	}
+
+	if (self->health < cl->monsterLastHealth)
+	{
+		// hit while holding: drop him (SP NPC_Wampa_Pain)
+		G_MonsterReleaseVictim(self, qtrue);
+		return;
+	}
+	cl->monsterLastHealth = self->health;
+
+	if (cl->monsterDmgTime && level.time >= cl->monsterDmgTime && cl->ps.legsAnim == BOTH_HOLD_ATTACK)
+	{
+		cl->monsterDmgTime = 0;
+		G_Sound(victim, CHAN_AUTO, G_SoundIndex("sound/chars/rancor/swipehit.wav"));
+		G_Damage(victim, self, self, vec3_origin, victim->r.currentOrigin, Q_irand(25, 40),
+			DAMAGE_NO_KNOCKBACK | DAMAGE_NO_ARMOR, MOD_MELEE);
+		if (victim->health <= 0)
+		{
+			// killed him, rip something off
+			G_Dismember(victim, self, victim->r.currentOrigin, Q_irand(G2_MODELPART_LARM, G2_MODELPART_RLEG));
+			cl->monsterSniffDone = level.time + Q_irand(2000, 5000);
+		}
+		else
+		{
+			NPC_SetAnim(victim, SETANIM_BOTH, BOTH_HANG_PAIN, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+		}
+	}
+	if (cl->monsterDropTime && level.time >= cl->monsterDropTime)
+	{
+		cl->monsterDropTime = 0;
+		G_MonsterReleaseVictim(self, qfalse);
+		return;
+	}
+	if (victim->health <= 0)
+	{
+		// sniff the corpse for a moment, then drop it
+		if (!cl->monsterSniffDone)
+		{
+			cl->monsterSniffDone = level.time + Q_irand(2000, 5000);
+		}
+		if (level.time >= cl->monsterSniffDone && G_MonsterAnimDone(self))
+		{
+			G_MonsterStartAnim(self, BOTH_HOLD_DROP, 0);
+			cl->monsterDropTime = level.time + 500;
+		}
+		return;
+	}
+	if (!G_MonsterAnimDone(self))
+	{
+		return;
+	}
+	if (isBot)
+	{
+		wantAttack = wantAlt = qfalse;
+		if (level.time >= cl->monsterBotTime)
+		{
+			if (!cl->monsterSniffed)
+			{
+				// SP: the first thing it does is sniff him
+				cl->monsterSniffed = qtrue;
+				G_MonsterStartAnim(self, BOTH_HOLD_SNIFF, 0);
+				cl->monsterBotTime = level.time + cl->ps.legsTimer + Q_irand(300, 1000);
+				return;
+			}
+			wantAttack = qtrue;
+			cl->monsterBotTime = level.time + Q_irand(1500, 4000);
+		}
+	}
+	if (wantAlt)
+	{
+		G_MonsterStartAnim(self, BOTH_HOLD_DROP, 0);
+		cl->monsterDropTime = level.time + 500;
+	}
+	else if (wantAttack)
+	{
+		G_MonsterStartAnim(self, BOTH_HOLD_ATTACK, 1400);
+	}
+	else if (!ucmd->forwardmove && !ucmd->rightmove)
+	{
+		// standing: holds him up (SP BOTH_HOLD_IDLE); walking plays the usual walk / run
+		if (cl->ps.legsAnim != BOTH_HOLD_IDLE)
+		{
+			NPC_SetAnim(self, SETANIM_BOTH, BOTH_HOLD_IDLE, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+		}
+		if (cl->ps.legsTimer < 200)
+		{
+			cl->ps.legsTimer = cl->ps.torsoTimer = 200;
+		}
+	}
+	else if (cl->ps.legsAnim == BOTH_HOLD_IDLE)
+	{
+		cl->ps.legsTimer = cl->ps.torsoTimer = 0;
+	}
+}
+
+// ------------------------------------ rancor ------------------------------------
+
+// SP Rancor_Swing with try_grab: grab one, smack the rest
+static void G_RancorSwing(gentity_t* self)
+{
+	int touch[128];
+	vec3_t hand, mins, maxs;
+	const float scale = self->modelScale[0] > 0.0f ? self->modelScale[0] : 1.0f;
+	// the SP reach (88) also for the smaller MP rancor (70%), more for a bigger one
+	const float radius = 88.0f * (scale > 1.0f ? scale : 1.0f);
+	gentity_t* target = self->client->monsterTarget >= 0 && self->client->monsterTarget < ENTITYNUM_WORLD
+		? &g_entities[self->client->monsterTarget] : NULL;
+
+	G_MonsterBoltOrg(self, "*r_hand", hand);
+	G_Sound(self, CHAN_AUTO, G_SoundIndex(va("sound/chars/rancor/swipe%d.wav", Q_irand(1, 3))));
+
+	gentity_t* victim = G_MonsterFindVictim(self, hand, radius, qfalse);
+	if (!victim && G_MonsterCanGrab(self, target) && G_MonsterInReach(self, target, self->r.maxs[0] + 64.0f))
+	{
+		// the one it swung at is still right in front of it: it gets him (the hand bolt alone missed him too often)
+		victim = target;
+	}
+	if (victim)
+	{
+		G_MonsterTakeVictim(self, victim);
+		NPC_SetAnim(victim, SETANIM_BOTH, BOTH_SWIM_IDLE1, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+		self->client->ps.weaponTime = self->client->ps.legsTimer + Q_irand(500, 2500);
+		// a bot holds him up a moment before it bites (he can still fight free)
+		self->client->monsterBotTime = level.time + self->client->ps.legsTimer + Q_irand(1500, 3000);
+	}
+	for (int i = 0; i < 3; i++)
+	{
+		mins[i] = hand[i] - radius;
+		maxs[i] = hand[i] + radius;
+	}
+	const int num = trap->EntitiesInBox(mins, maxs, touch, 128);
+	for (int i = 0; i < num; i++)
+	{
+		gentity_t* ent = &g_entities[touch[i]];
+		vec3_t push_dir, angs;
+
+		if (ent == victim || !G_MonsterCanGrab(self, ent) || Distance(ent->r.currentOrigin, hand) > radius)
+		{
+			continue;
+		}
+		// smack
+		G_Sound(ent, CHAN_AUTO, G_SoundIndex("sound/chars/rancor/swipehit.wav"));
+		VectorCopy(self->client->ps.viewangles, angs);
+		angs[YAW] += flrand(25, 50);
+		angs[PITCH] = flrand(-25, -15);
+		AngleVectors(angs, push_dir, NULL, NULL);
+		G_Damage(ent, self, self, vec3_origin, ent->r.currentOrigin, Q_irand(25, 40), DAMAGE_NO_ARMOR | DAMAGE_NO_KNOCKBACK,
+			MOD_MELEE);
+		G_Throw(ent, push_dir, 250);
+		if (ent->health > 0)
+		{
+			G_Knockdown(ent, self, push_dir, 100, qtrue);
+		}
+	}
+}
+
+static void G_RancorKillVictim(gentity_t* self, gentity_t* victim)
+{
+	if (victim->health > 0)
+	{
+		G_Dismember(victim, self, victim->r.currentOrigin, G2_MODELPART_WAIST);
+		G_Damage(victim, self, self, vec3_origin, victim->r.currentOrigin, victim->health + 9999,
+			DAMAGE_NO_PROTECTION | DAMAGE_NO_ARMOR | DAMAGE_NO_KNOCKBACK | DAMAGE_NO_HIT_LOC, MOD_MELEE);
+		G_AddEvent(victim, EV_JUMP, victim->health);
+	}
+	victim->client->ps.forceHandExtend = HANDEXTEND_NONE;
+	victim->client->ps.forceHandExtendTime = 0;
+	NPC_SetAnim(victim, SETANIM_BOTH, BOTH_SWIM_IDLE1, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+}
+
+static void G_RancorThink(gentity_t* self, usercmd_t* ucmd, const qboolean isBot)
+{
+	gclient_t* cl = self->client;
+	gentity_t* victim = G_MonsterVictim(self);
+	qboolean wantAttack = ucmd->buttons & BUTTON_ATTACK ? qtrue : qfalse;
+	qboolean wantAlt = ucmd->buttons & BUTTON_ALT_ATTACK ? qtrue : qfalse;
+
+	if (cl->monsterHold && !victim)
+	{
+		G_MonsterReleaseVictim(self, qfalse);
+	}
+
+	// delayed damage of the anim playing (SP Rancor_Attack)
+	if (cl->monsterDmgTime && level.time >= cl->monsterDmgTime)
+	{
+		cl->monsterDmgTime = 0;
+		switch (cl->ps.legsAnim)
+		{
+		case BOTH_ATTACK2:
+		case BOTH_ATTACK10:
+		case BOTH_ATTACK11:
+			if (!cl->monsterHold)
+			{
+				G_RancorSwing(self);
+			}
+			break;
+		case BOTH_ATTACK1:
+			if (victim && cl->monsterHold == MONSTER_HOLD_HAND)
+			{
+				// quick bite
+				G_Damage(victim, self, self, vec3_origin, victim->r.currentOrigin, Q_irand(50, 80),
+					DAMAGE_NO_ARMOR | DAMAGE_NO_KNOCKBACK, MOD_MELEE);
+				if (victim->health <= 0)
+				{
+					// bit his head off
+					G_Dismember(victim, self, victim->r.currentOrigin, G2_MODELPART_HEAD);
+					victim->client->ps.forceHandExtend = HANDEXTEND_NONE;
+					victim->client->ps.forceHandExtendTime = 0;
+					NPC_SetAnim(victim, SETANIM_BOTH, BOTH_SWIM_IDLE1, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+				}
+				G_Sound(victim, CHAN_AUTO, G_SoundIndex("sound/chars/rancor/chomp.wav"));
+			}
+			break;
+		case BOTH_ATTACK3:
+			if (victim && cl->monsterHold == MONSTER_HOLD_HAND)
+			{
+				// cut in half
+				G_RancorKillVictim(self, victim);
+				G_Sound(victim, CHAN_AUTO, G_SoundIndex("sound/chars/rancor/swipehit.wav"));
+				cl->monsterDmg2Time = level.time + 1350;
+			}
+			break;
+		default:
+			break;
+		}
+	}
+	else if (cl->monsterDmg2Time && level.time >= cl->monsterDmg2Time)
+	{
+		cl->monsterDmg2Time = 0;
+		if (cl->ps.legsAnim == BOTH_ATTACK3 && victim && cl->monsterHold == MONSTER_HOLD_HAND)
+		{
+			// swallow him
+			G_Sound(victim, CHAN_AUTO, G_SoundIndex("sound/chars/rancor/chomp.wav"));
+			G_RancorKillVictim(self, victim);
+			victim->client->ps.eFlags |= EF_NODRAW;
+			victim->client->noCorpse = qtrue;
+			cl->monsterHold = MONSTER_HOLD_MOUTH;
+			cl->monsterClearTime = level.time + 2600;
+		}
+	}
+
+	if (cl->monsterHold == MONSTER_HOLD_MOUTH)
+	{
+		ucmd->buttons &= ~(BUTTON_ATTACK | BUTTON_ALT_ATTACK);
+		cl->ps.eFlags2 |= EF2_USE_ALT_ANIM | EF2_GENERIC_NPC_FLAG;
+		if (level.time >= cl->monsterClearTime)
+		{
+			G_MonsterReleaseVictim(self, qfalse);
+		}
+		return;
+	}
+
+	if (!cl->monsterHold)
+	{
+		vec3_t front, fwd, center, yaw;
+
+		cl->ps.eFlags2 &= ~(EF2_USE_ALT_ANIM | EF2_GENERIC_NPC_FLAG);
+		if (cl->ps.weaponTime > 0 || cl->ps.groundEntityNum == ENTITYNUM_NONE)
+		{
+			return;
+		}
+		VectorSet(yaw, 0, cl->ps.viewangles[YAW], 0);
+		AngleVectors(yaw, fwd, NULL, NULL);
+		VectorMA(self->r.currentOrigin, self->r.maxs[0] + 50.0f, fwd, front);
+		gentity_t* target = G_MonsterFindVictim(self, front, 90.0f, qtrue);
+		if (isBot && target && level.time >= cl->monsterBotTime)
+		{
+			cl->monsterBotTime = level.time + Q_irand(1000, 2500);
+			wantAlt = Q_irand(0, 1) ? qtrue : qfalse;
+		}
+		if (wantAlt && target)
+		{
+			// grab swing, high or low for where he is (SP)
+			int grabAnim = BOTH_ATTACK2;
+
+			VectorCopy(target->r.currentOrigin, center);
+			if (center[2] - self->r.currentOrigin[2] >= 128.0f * self->modelScale[0])
+			{
+				grabAnim = BOTH_ATTACK11;
+			}
+			else if (center[2] - self->r.currentOrigin[2] >= 64.0f * self->modelScale[0])
+			{
+				grabAnim = BOTH_ATTACK10;
+			}
+			ucmd->buttons &= ~(BUTTON_ATTACK | BUTTON_ALT_ATTACK);
+			G_MonsterStartAnim(self, grabAnim, 800);
+			cl->monsterTarget = target->s.number;
+		}
+		return;
+	}
+
+	// holding someone in the hand
+	ucmd->buttons &= ~(BUTTON_ATTACK | BUTTON_ALT_ATTACK);
+	cl->ps.eFlags2 |= EF2_USE_ALT_ANIM;
+	cl->ps.eFlags2 &= ~EF2_GENERIC_NPC_FLAG;
+
+	if (victim->health > 0 && cl->monsterLastHealth - self->health >= 40 && cl->ps.legsAnim != BOTH_ATTACK3)
+	{
+		// hurt enough while holding him (his saber, his friends): it lets go and he is free
+		G_MonsterReleaseVictim(self, qfalse);
+		return;
+	}
+
+	if (!G_MonsterAnimDone(self))
+	{
+		return;
+	}
+	if (victim->health <= 0)
+	{
+		// a dead one in the hand gets eaten
+		wantAttack = qfalse;
+		wantAlt = qtrue;
+	}
+	else if (isBot)
+	{
+		// SP bites or eats at once; a bot holds him a moment and bites before it eats, so he has a chance to fight free
+		wantAttack = wantAlt = qfalse;
+		if (level.time >= cl->monsterBotTime)
+		{
+			if (victim->health <= 50 || cl->monsterBites >= 2 || cl->monsterBites && !Q_irand(0, 2))
+			{
+				wantAlt = qtrue;
+			}
+			else
+			{
+				wantAttack = qtrue;
+			}
+		}
+	}
+	if (wantAlt)
+	{
+		// full eat
+		G_MonsterStartAnim(self, BOTH_ATTACK3, 900);
+		if (victim->health > 0)
+		{
+			// he screams
+			G_AddEvent(victim, Q_irand(EV_DEATH1, EV_DEATH3), 0);
+			NPC_SetAnim(victim, SETANIM_TORSO, BOTH_FALLDEATH1, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+		}
+	}
+	else if (wantAttack)
+	{
+		G_MonsterStartAnim(self, BOTH_ATTACK1, 450);
+		cl->ps.weaponTime = cl->ps.legsTimer + Q_irand(500, 1500);
+		cl->monsterBotTime = level.time + cl->ps.weaponTime + Q_irand(1500, 3000);
+		cl->monsterBites++;
+	}
+}
+
+// ClientThink, before the move: the wampa / rancor player's grab, hold and eat
+void G_MonsterPlayerThink(gentity_t* ent, usercmd_t* ucmd)
+{
+	const int monster = G_MonsterPlayerClass(ent);
+
+	if (!ent->client)
+	{
+		return;
+	}
+	if (monster == BCLASS_NONE || ent->health <= 0 || !g_monsterGrab.integer
+		|| ent->client->ps.eFlags2 & EF2_HELD_BY_MONSTER)
+	{
+		if (ent->client->monsterHold)
+		{
+			G_MonsterReleaseVictim(ent, qfalse);
+		}
+		ent->client->monsterGrabTime = 0;
+		return;
+	}
+	const qboolean isBot = ent->r.svFlags & SVF_BOT ? qtrue : qfalse;
+	if (monster == BCLASS_WAMPA)
+	{
+		G_WampaThink(ent, ucmd, isBot);
+	}
+	else
+	{
+		G_RancorThink(ent, ucmd, isBot);
+	}
+	if (G_MonsterStandStillAnim(ent, monster) || isBot && ent->client->monsterHold)
+	{
+		// SP: it stands still to grab, eat or maul (a bot also while it holds someone)
+		ucmd->forwardmove = 0;
+		ucmd->rightmove = 0;
+		ucmd->upmove = 0;
+	}
+}
+
+// G_HeldByMonster (g_active.c): someone held by a wampa / rancor player or bot (holders below MAX_CLIENTS; the rancor
+// NPC is handled there). qtrue = handled here: he hangs in its hand (or is in its mouth), or he was let go because that
+// monster no longer holds him (EF2_HELD_BY_MONSTER cleared). Held by a wampa he may slash at it with his saber (SP).
+qboolean G_HeldByMonsterPlayer(gentity_t* ent, gentity_t* monster, usercmd_t* ucmd)
+{
+	if (!monster || monster->s.number >= MAX_CLIENTS)
+	{
+		return qfalse;
+	}
+	const int monsterClass = G_MonsterPlayerClass(monster);
+	if (monsterClass == BCLASS_NONE || monster->health <= 0 || G_MonsterVictim(monster) != ent)
+	{
+		ent->client->ps.eFlags2 &= ~EF2_HELD_BY_MONSTER;
+		ent->client->ps.hasLookTarget = qfalse;
+		ent->client->ps.lookTarget = ENTITYNUM_NONE;
+		ent->client->ps.viewangles[PITCH] = 0;
+		ent->client->ps.viewangles[ROLL] = 0;
+		ent->client->heldAttackTime = 0;
+		return qtrue;
+	}
+
+	BG_AttachToRancor(monster->ghoul2, monster->client->ps.viewangles[YAW], monster->r.currentOrigin, level.time, NULL,
+		monster->modelScale, monster->client->monsterHold == MONSTER_HOLD_MOUTH ? qtrue : qfalse,
+		ent->client->ps.origin, ent->client->ps.viewangles, NULL);
+
+	if (ent->health > 0)
+	{
+		gclient_t* cl = ent->client;
+		int idleAnim = BOTH_SWIM_IDLE1;
+
+		if (monsterClass == BCLASS_WAMPA)
+		{
+			idleAnim = BOTH_HANG_IDLE;
+		}
+		if (cl->heldAttackTime && level.time >= cl->heldAttackTime)
+		{
+			// the slash lands: any hit makes a wampa drop him, 40 damage a rancor (G_RancorThink)
+			vec3_t dir;
+			cl->heldAttackTime = 0;
+			VectorSubtract(monster->r.currentOrigin, cl->ps.origin, dir);
+			VectorNormalize(dir);
+			G_Sound(monster, CHAN_AUTO, G_SoundIndex(va("sound/weapons/saber/saberhit%d.wav", Q_irand(1, 3))));
+			G_Damage(monster, ent, ent, dir, cl->ps.origin, Q_irand(15, 25), DAMAGE_NO_KNOCKBACK, MOD_SABER);
+			cl->heldAttackDebounce = level.time + (monsterClass == BCLASS_WAMPA ? 0 : 300);
+		}
+		else if (cl->ps.weapon == WP_SABER && ucmd->buttons & BUTTON_ATTACK && !cl->heldAttackTime
+			&& level.time >= cl->heldAttackDebounce && cl->ps.legsAnim == idleAnim
+			&& cl->ps.torsoAnim != BOTH_FALLDEATH1 && monster->client->ps.legsAnim != BOTH_ATTACK3)
+		{
+			cl->ps.saberHolstered = 0;
+			if (monsterClass == BCLASS_WAMPA)
+			{
+				// SP PM_WeaponWampa: swing the saber up at it
+				NPC_SetAnim(ent, SETANIM_BOTH, BOTH_HANG_ATTACK, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+			}
+			else
+			{
+				// in the rancor's fist: slash at its arm
+				NPC_SetAnim(ent, SETANIM_TORSO, BOTH_A2_TR_BL, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+			}
+			cl->heldAttackTime = level.time + 400;
+		}
+		if (monsterClass != BCLASS_WAMPA && cl->ps.torsoAnim != idleAnim && cl->ps.torsoAnim != BOTH_FALLDEATH1
+			&& cl->ps.torsoTimer <= 50)
+		{
+			NPC_SetAnim(ent, SETANIM_TORSO, idleAnim, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+		}
+		if (cl->ps.legsAnim != idleAnim)
+		{
+			// grabbed / slash / pain anims play out, then back to hanging there
+			const qboolean oneShot = cl->ps.legsAnim == BOTH_GRABBED || cl->ps.legsAnim == BOTH_HANG_ATTACK
+				|| cl->ps.legsAnim == BOTH_HANG_PAIN || cl->ps.torsoAnim == BOTH_FALLDEATH1;
+			if (!oneShot || cl->ps.legsTimer <= 50)
+			{
+				NPC_SetAnim(ent, SETANIM_BOTH, idleAnim, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+			}
+		}
+		if (cl->ps.legsAnim == idleAnim)
+		{
+			// keep the looping hang anim on (nothing else may play while held)
+			if (cl->ps.legsTimer < 100)
+			{
+				cl->ps.legsTimer = 100;
+			}
+			if (cl->ps.torsoAnim == idleAnim && cl->ps.torsoTimer < 100)
+			{
+				cl->ps.torsoTimer = 100;
+			}
+		}
+	}
+	ucmd->buttons = 0;	// nothing else while held
+	return qtrue;
+}

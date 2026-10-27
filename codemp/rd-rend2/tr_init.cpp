@@ -157,6 +157,9 @@ cvar_t* r_baseNormalY;
 cvar_t* r_baseParallax;
 cvar_t* r_baseSpecular;
 cvar_t* r_dlightMode;
+cvar_t* r_dlightIntensity;
+cvar_t* r_dlightRadius;
+cvar_t* r_baseRoughness;
 cvar_t* r_pshadowDist;
 cvar_t* r_imageUpsample;
 cvar_t* r_imageUpsampleMaxSize;
@@ -273,6 +276,10 @@ cvar_t* r_marksOnTriangleMeshes;
 cvar_t* r_aviMotionJpegQuality;
 cvar_t* r_screenshotJpegQuality;
 cvar_t* r_surfaceSprites;
+cvar_t* r_grassWind;
+cvar_t* r_grassPush;
+cvar_t* r_grassPushRadius;
+cvar_t* r_grassForceWave;
 cvar_t* r_AdvancedsurfaceSprites;
 
 cvar_t* r_patchStitching;
@@ -355,23 +362,7 @@ static void R_Splash()
 		ri.Cvar_Set("com_rend2", "1");
 	}
 
-	if (r_shadows->integer == 1)
-	{
-		ri.Cvar_Set("cg_shadows", "1");
-	}
-	else if (r_shadows->integer == 2)
-	{
-		ri.Cvar_Set("cg_shadows", "2");
-	}
-	else
-	{// stop rend2 from using cg_shadows 3 as it doesn't work with the new shadow system, and will cause a crash if used
-		qboolean forceCgShadows = (r_shadows->integer == 3) ? qtrue : qfalse;
-
-		if (forceCgShadows == qtrue)
-		{
-			ri.Cvar_Set("cg_shadows", "2"); //maximum allowd
-		}
-	}
+	// cg_shadows is no longer forced from 3 to 2: in rend2, 2 and 3 both draw the character shadow maps (DH 2026-10-26)
 
 	ri.WIN_Present(&window);
 }
@@ -1516,9 +1507,22 @@ static void R_MeshClothPush_f(void) {
 	MC_Push(c, d, (float)atof(ri.Cmd_Argv(7)), (float)atof(ri.Cmd_Argv(8)), coneDot);
 }
 
+// grass_wave time x y z dirx diry type range - sent by the cgame when someone uses force push (type 0), pull (1) or
+// repulse (2): a wave runs out from them through the grass (R_GrassAddWave, surface sprites; r_grassForceWave)
+void R_GrassAddWave(int time, const float* org, const float* dir, int type, float range);
+static void R_GrassWave_f(void) {
+	if (ri.Cmd_Argc() < 9) return;
+	float org[3], dir[2];
+	for (int k = 0; k < 3; k++) org[k] = (float)atof(ri.Cmd_Argv(2 + k));
+	dir[0] = (float)atof(ri.Cmd_Argv(5));
+	dir[1] = (float)atof(ri.Cmd_Argv(6));
+	R_GrassAddWave(atoi(ri.Cmd_Argv(1)), org, dir, atoi(ri.Cmd_Argv(7)), (float)atof(ri.Cmd_Argv(8)));
+}
+
 static consoleCommand_t	commands[] = {
 	{ "meshcloth_blast",	R_MeshClothBlast_f },
 	{ "meshcloth_push",	R_MeshClothPush_f },
+	{ "grass_wave",		R_GrassWave_f },
 	{ "imagelist",			R_ImageList_f },
 	{ "shaderlist",			R_ShaderList_f },
 	{ "skinlist",			R_SkinList_f },
@@ -1588,7 +1592,7 @@ static void R_Register(void)
 	r_colorMipLevels = ri.Cvar_Get("r_colorMipLevels", "0", CVAR_LATCH, "");
 	r_detailTextures = ri.Cvar_Get("r_detailtextures", "1", CVAR_ARCHIVE | CVAR_LATCH, "");
 	r_texturebits = ri.Cvar_Get("r_texturebits", "0", CVAR_ARCHIVE | CVAR_LATCH, "");
-	r_overBrightBits = ri.Cvar_Get("r_overBrightBits", "0.2", CVAR_ARCHIVE | CVAR_LATCH, "");
+	r_overBrightBits = ri.Cvar_Get("r_overBrightBits", "0", CVAR_ARCHIVE | CVAR_LATCH, "");
 	r_simpleMipMaps = ri.Cvar_Get("r_simpleMipMaps", "1", CVAR_ARCHIVE | CVAR_LATCH, "");
 	r_vertexLight = ri.Cvar_Get("r_vertexLight", "0", CVAR_ARCHIVE | CVAR_LATCH, "");
 	r_uiFullScreen = ri.Cvar_Get("r_uifullscreen", "0", 0, "");
@@ -1632,6 +1636,10 @@ static void R_Register(void)
 	r_baseParallax = ri.Cvar_Get("r_baseParallax", "0.05", CVAR_ARCHIVE | CVAR_LATCH, "");
 	r_baseSpecular = ri.Cvar_Get("r_baseSpecular", "0.04", CVAR_ARCHIVE | CVAR_LATCH, "");
 	r_dlightMode = ri.Cvar_Get("r_dlightMode", "1", CVAR_ARCHIVE | CVAR_LATCH, "");
+	// rend2 look (DH 2026-10-26): brighter, further-reaching dynamic lights and optional shinier surfaces
+	r_dlightIntensity = ri.Cvar_Get("r_dlightIntensity", "2.5", CVAR_ARCHIVE, "Brightness of dynamic lights (sabers, shots, explosions); 1 = as before");
+	r_dlightRadius = ri.Cvar_Get("r_dlightRadius", "2", CVAR_ARCHIVE, "Reach of dynamic lights; 1 = as before");
+	r_baseRoughness = ri.Cvar_Get("r_baseRoughness", "0.8", CVAR_ARCHIVE | CVAR_LATCH, "Roughness of surfaces without a material map: lower = shinier, more reflection; 1 = matte as before");
 	r_pshadowDist = ri.Cvar_Get("r_pshadowDist", "128", CVAR_ARCHIVE, "");
 	r_imageUpsample = ri.Cvar_Get("r_imageUpsample", "0", CVAR_ARCHIVE | CVAR_LATCH, "");
 	r_imageUpsampleMaxSize = ri.Cvar_Get("r_imageUpsampleMaxSize", "1024", CVAR_ARCHIVE | CVAR_LATCH, "");
@@ -1642,7 +1650,7 @@ static void R_Register(void)
 	r_forceSunMapLightScale = ri.Cvar_Get("r_forceSunMapLightScale", "1.0", CVAR_CHEAT, "");
 	r_forceSunLightScale = ri.Cvar_Get("r_forceSunLightScale", "1.0", CVAR_CHEAT, "");
 	r_forceSunAmbientScale = ri.Cvar_Get("r_forceSunAmbientScale", "0.5", CVAR_CHEAT, "");
-	r_drawSunRays = ri.Cvar_Get("r_drawSunRays", "0", CVAR_ARCHIVE | CVAR_LATCH, "");
+	r_drawSunRays = ri.Cvar_Get("r_drawSunRays", "1", CVAR_ARCHIVE | CVAR_LATCH, "");
 	r_sunlightMode = ri.Cvar_Get("r_sunlightMode", "1", CVAR_ARCHIVE | CVAR_LATCH, "");
 
 	r_volumetricFog = ri.Cvar_Get("r_volumetricFog", "1", CVAR_ARCHIVE | CVAR_LATCH, "Disable/enable lightgrid lighting on fog volumes");
@@ -1664,8 +1672,8 @@ static void R_Register(void)
 	//
 	// temporary latched variables that can only change over a restart
 	//
-	r_fullbright = ri.Cvar_Get("r_fullbright", "0.2", CVAR_LATCH | CVAR_CHEAT, "");
-	r_mapOverBrightBits = ri.Cvar_Get("r_mapOverBrightBits", "0.2", CVAR_LATCH, "");
+	r_fullbright = ri.Cvar_Get("r_fullbright", "0", CVAR_LATCH | CVAR_CHEAT, "");
+	r_mapOverBrightBits = ri.Cvar_Get("r_mapOverBrightBits", "0", CVAR_LATCH, "");
 	r_intensity = ri.Cvar_Get("r_intensity", "1", CVAR_LATCH, "");
 	r_singleShader = ri.Cvar_Get("r_singleShader", "0", CVAR_CHEAT | CVAR_LATCH, "");
 
@@ -1755,6 +1763,10 @@ static void R_Register(void)
 	r_aviMotionJpegQuality = ri.Cvar_Get("r_aviMotionJpegQuality", "90", CVAR_ARCHIVE, "");
 	r_screenshotJpegQuality = ri.Cvar_Get("r_screenshotJpegQuality", "90", CVAR_ARCHIVE, "");
 	r_surfaceSprites = ri.Cvar_Get("r_surfaceSprites", "1", CVAR_ARCHIVE, "");
+	r_grassWind = ri.Cvar_Get("r_grassWind", "1", CVAR_ARCHIVE, "");
+	r_grassPush = ri.Cvar_Get("r_grassPush", "1", CVAR_ARCHIVE, "");
+	r_grassPushRadius = ri.Cvar_Get("r_grassPushRadius", "1", CVAR_ARCHIVE, "");
+	r_grassForceWave = ri.Cvar_Get("r_grassForceWave", "1", CVAR_ARCHIVE, "");
 	r_AdvancedsurfaceSprites = ri.Cvar_Get("r_advancedlod", "1", CVAR_ARCHIVE, "");
 
 	r_aspectCorrectFonts = ri.Cvar_Get("r_aspectCorrectFonts", "0", CVAR_ARCHIVE, "");

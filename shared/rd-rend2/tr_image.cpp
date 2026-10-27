@@ -453,25 +453,25 @@ static void RGBAtoNormal(const byte* in, byte* out, int width, int height, qbool
 	// (rows run on the job workers: each row keeps its own max, combined below)
 	std::vector<byte> rowMax(height, 0);
 	R_ImageRows(width, height, [&](const int y0, const int y1)
-	{
-		for (int y = y0; y < y1; y++)
 		{
-			const byte* inbyte = in + y * width * 4;
-			byte* outbyte = out + y * width * 4 + 3;
-			byte m = 0;
-
-			for (int x = 0; x < width; x++)
+			for (int y = y0; y < y1; y++)
 			{
-				byte result = (inbyte[0] >> 2) + (inbyte[1] >> 1) + (inbyte[2] >> 2);
-				result = result * result / 255; // Make linear
-				*outbyte = result;
-				m = MAX(m, result);
-				outbyte += 4;
-				inbyte += 4;
+				const byte* inbyte = in + y * width * 4;
+				byte* outbyte = out + y * width * 4 + 3;
+				byte m = 0;
+
+				for (int x = 0; x < width; x++)
+				{
+					byte result = (inbyte[0] >> 2) + (inbyte[1] >> 1) + (inbyte[2] >> 2);
+					result = result * result / 255; // Make linear
+					*outbyte = result;
+					m = MAX(m, result);
+					outbyte += 4;
+					inbyte += 4;
+				}
+				rowMax[y] = m;
 			}
-			rowMax[y] = m;
-		}
-	});
+		});
 
 	int max = 1;
 	for (int y = 0; y < height; y++)
@@ -484,18 +484,18 @@ static void RGBAtoNormal(const byte* in, byte* out, int width, int height, qbool
 	{
 		const byte add = (byte)(255 - max);
 		R_ImageRows(width, height, [&](const int y0, const int y1)
-		{
-			for (int y = y0; y < y1; y++)
 			{
-				byte* outbyte = out + y * width * 4 + 3;
-
-				for (int x = 0; x < width; x++)
+				for (int y = y0; y < y1; y++)
 				{
-					*outbyte = *outbyte + add;
-					outbyte += 4;
+					byte* outbyte = out + y * width * 4 + 3;
+
+					for (int x = 0; x < width; x++)
+					{
+						*outbyte = *outbyte + add;
+						outbyte += 4;
+					}
 				}
-			}
-		});
+			});
 	}
 
 	// now run sobel filter over height values to generate X and Y
@@ -504,55 +504,55 @@ static void RGBAtoNormal(const byte* in, byte* out, int width, int height, qbool
 	// independent. Neighbour rows/columns wrap or clamp exactly as before, but
 	// are worked out once per row/column instead of per sample.
 	R_ImageRows(width, height, [&](const int y0, const int y1)
-	{
-		for (int y = y0; y < y1; y++)
 		{
-			const int ym = clampToEdge ? MAX(y - 1, 0) : (y - 1 + height) % height;
-			const int yp = clampToEdge ? MIN(y + 1, height - 1) : (y + 1) % height;
-			const byte* r0 = out + ym * width * 4 + 3;	// heights of the row above
-			const byte* r1 = out + y * width * 4 + 3;
-			const byte* r2 = out + yp * width * 4 + 3;	// and below
-			byte* outbyte = out + y * width * 4;
-
-			for (int x = 0; x < width; x++)
+			for (int y = y0; y < y1; y++)
 			{
-				// 0 1 2
-				// 3 4 5
-				// 6 7 8
-				int xm = (x - 1) * 4, xp = (x + 1) * 4;
-				const int xc = x * 4;
-				if (x == 0 || x == width - 1)	// edges only: wrap or clamp the neighbours
+				const int ym = clampToEdge ? MAX(y - 1, 0) : (y - 1 + height) % height;
+				const int yp = clampToEdge ? MIN(y + 1, height - 1) : (y + 1) % height;
+				const byte* r0 = out + ym * width * 4 + 3;	// heights of the row above
+				const byte* r1 = out + y * width * 4 + 3;
+				const byte* r2 = out + yp * width * 4 + 3;	// and below
+				byte* outbyte = out + y * width * 4;
+
+				for (int x = 0; x < width; x++)
 				{
-					xm = (clampToEdge ? MAX(x - 1, 0) : (x - 1 + width) % width) * 4;
-					xp = (clampToEdge ? MIN(x + 1, width - 1) : (x + 1) % width) * 4;
+					// 0 1 2
+					// 3 4 5
+					// 6 7 8
+					int xm = (x - 1) * 4, xp = (x + 1) * 4;
+					const int xc = x * 4;
+					if (x == 0 || x == width - 1)	// edges only: wrap or clamp the neighbours
+					{
+						xm = (clampToEdge ? MAX(x - 1, 0) : (x - 1 + width) % width) * 4;
+						xp = (clampToEdge ? MIN(x + 1, width - 1) : (x + 1) % width) * 4;
+					}
+					const int s0 = r0[xm], s1 = r0[xc], s2 = r0[xp];
+					const int s3 = r1[xm], s4 = r1[xc], s5 = r1[xp];
+					const int s6 = r2[xm], s7 = r2[xc], s8 = r2[xp];
+					vec3_t normal;
+
+					normal[0] = s0 - s2
+						+ 2 * s3 - 2 * s5
+						+ s6 - s8;
+
+					normal[1] = s0 + 2 * s1 + s2
+
+						- s6 - 2 * s7 - s8;
+
+					normal[2] = s4 * 4;
+
+					if (!VectorNormalize2(normal, normal))
+					{
+						VectorSet(normal, 0, 0, 1);
+					}
+
+					*outbyte++ = FloatToOffsetByte(normal[0]);
+					*outbyte++ = FloatToOffsetByte(normal[1]);
+					*outbyte++ = FloatToOffsetByte(normal[2]);
+					outbyte++;
 				}
-				const int s0 = r0[xm], s1 = r0[xc], s2 = r0[xp];
-				const int s3 = r1[xm], s4 = r1[xc], s5 = r1[xp];
-				const int s6 = r2[xm], s7 = r2[xc], s8 = r2[xp];
-				vec3_t normal;
-
-				normal[0] = s0 - s2
-					+ 2 * s3 - 2 * s5
-					+ s6 - s8;
-
-				normal[1] = s0 + 2 * s1 + s2
-
-					- s6 - 2 * s7 - s8;
-
-				normal[2] = s4 * 4;
-
-				if (!VectorNormalize2(normal, normal))
-				{
-					VectorSet(normal, 0, 0, 1);
-				}
-
-				*outbyte++ = FloatToOffsetByte(normal[0]);
-				*outbyte++ = FloatToOffsetByte(normal[1]);
-				*outbyte++ = FloatToOffsetByte(normal[2]);
-				outbyte++;
 			}
-		}
-	});
+		});
 }
 
 #define COPYSAMPLE(a,b) *(unsigned int *)(a) = *(unsigned int *)(b)
@@ -2918,20 +2918,20 @@ static void R_CreateNormalMap(const char* name, byte* pic, int width, int height
 		// Brighten up the original image to work with the normal map
 		// (per pixel, so a row at a time on the render job workers - same result as one pass)
 		R_ImageRows(width, height, [&](const int y0, const int y1)
-		{
-			for (int row = y0; row < y1; row++)
 			{
-				byte* picbyte = pic + row * width * 4;
-				const byte* normbyte = normalPic + row * width * 4;
-				RGBAtoYCoCgA(picbyte, picbyte, width, 1);
-				for (int col = 0; col < width; col++)
+				for (int row = y0; row < y1; row++)
 				{
-					int div = MAX(normbyte[col * 4 + 2] - 127, 16);
-					picbyte[col * 4] = CLAMP(picbyte[col * 4] * 128 / div, 0, 255);
+					byte* picbyte = pic + row * width * 4;
+					const byte* normbyte = normalPic + row * width * 4;
+					RGBAtoYCoCgA(picbyte, picbyte, width, 1);
+					for (int col = 0; col < width; col++)
+					{
+						int div = MAX(normbyte[col * 4 + 2] - 127, 16);
+						picbyte[col * 4] = CLAMP(picbyte[col * 4] * 128 / div, 0, 255);
+					}
+					YCoCgAtoRGBA(picbyte, picbyte, width, 1);
 				}
-				YCoCgAtoRGBA(picbyte, picbyte, width, 1);
-			}
-		});
+			});
 #else
 		// Blur original image's luma to work with the normal map
 		{
@@ -3589,7 +3589,7 @@ static void R_CreateBuiltinImages(void)
 			IMGFLAG_NO_COMPRESSION | IMGFLAG_CLAMPTOEDGE, GL_R32F);
 	}
 
-	if (r_shadows->integer == 4)
+	// always made, so cg_shadows 2/3 character shadows work after switching shadows on in game (DH 2026-10-26)
 	{
 		tr.pshadowArrayImage = R_Create2DImageArray(
 			va("*pshadowmapArray"),

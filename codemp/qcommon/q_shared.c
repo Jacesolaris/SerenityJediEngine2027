@@ -657,7 +657,11 @@ int QDECL Com_sprintf(char* dest, int size, const char* fmt, ...)
 	va_end(argptr);
 
 	if (len >= size)
-		Com_Printf("Com_sprintf: Output length %d too short, require %d bytes.\n", size, len + 1);
+	{
+		// with the cut text, so the warning says which caller it was. (On Windows Q_vsnprintf returns size
+		// for any overflow, so the old "require size + 1 bytes" was no real length.)
+		Com_Printf("Com_sprintf: text too long for a %d-byte buffer, cut to \"%s\"\n", size, dest);
+	}
 
 	return len;
 }

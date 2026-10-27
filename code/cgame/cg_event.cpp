@@ -402,7 +402,6 @@ static void CG_ClothBlast(const int weapon, const qboolean altFire, const vec3_t
 		strength * cg_clothExplosion.value, radius));
 }
 
-
 void CG_EntityEvent(centity_t* cent, vec3_t position)
 {
 	const char* s = nullptr;

@@ -212,7 +212,8 @@ int bgForcePowerCost[NUM_FORCE_POWERS][NUM_FORCE_POWER_LEVELS] = //0 == neutral
 	{ 0, 2, 5, 8 }, // Deadly Sight //FP_DEADLYSIGHT
 	{ 0, 1, 3, 6 }, // Blast		//FP_BLAST
 	{ 0, 2, 5, 8 }, // Insanity	//FP_INSANITY
-	{ 0, 2, 4, 6 }  // Blinding	//FP_BLINDING
+	{ 0, 2, 4, 6 }, // Blinding	//FP_BLINDING
+	{ 0, 2, 5, 8 }  // Dark Stasis	//FP_DARK_STASIS
 	//NUM_FORCE_POWERS
 };
 
@@ -246,7 +247,8 @@ int forcePowerSorted[NUM_FORCE_POWERS] =
 	FP_DEADLYSIGHT,
 	FP_BLAST,
 	FP_INSANITY,
-	FP_BLINDING
+	FP_BLINDING,
+	FP_DARK_STASIS
 };
 
 int force_power_dark_light[NUM_FORCE_POWERS] = //0 == neutral
@@ -279,7 +281,8 @@ int force_power_dark_light[NUM_FORCE_POWERS] = //0 == neutral
 	FORCE_DARKSIDE, //FP_DEADLYSIGHT
 	FORCE_LIGHTSIDE, //FP_BLAST
 	FORCE_DARKSIDE, //FP_INSANITY
-	FORCE_LIGHTSIDE //FP_BLINDING
+	FORCE_LIGHTSIDE, //FP_BLINDING
+	FORCE_DARKSIDE //FP_DARK_STASIS
 	//NUM_FORCE_POWERS
 };
 
