@@ -29346,8 +29346,8 @@ void WP_ForcePowerStart(gentity_t* self, const forcePowers_t force_power, int ov
 		//held as long as its victims are
 		duration = darkStasisTime[DarkStasisLevel(self->client->ps.forcePowerLevel[force_power])];
 		self->client->ps.forcePowersActive |= 1 << force_power;
-		G_SoundOnEnt(self, CHAN_ITEM, "sound/weapons/force/rage.mp3");
-		self->s.loopSound = G_SoundIndex("sound/weapons/force/rageloop.wav");
+		G_SoundOnEnt(self, CHAN_ITEM, "sound/weapons/force/DarkStasis.mp3");
+		self->s.loopSound = G_SoundIndex("sound/weapons/force/Darkstasisloop.wav");
 		if (self->chestBolt != -1)
 		{
 			G_PlayEffect(G_EffectIndex("force/rage2"), self->playerModel, self->chestBolt, self->s.number,

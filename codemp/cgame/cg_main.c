@@ -997,6 +997,8 @@ static void CG_RegisterSounds(void)
 	trap->S_RegisterSound("sound/weapons/force/lightning.mp3");
 	trap->S_RegisterSound("sound/weapons/force/lightning2.wav");
 	trap->S_RegisterSound("sound/weapons/force/lightning3.mp3");
+	trap->S_RegisterSound("sound/weapons/force/DarkStasis.mp3");
+	trap->S_RegisterSound("sound/weapons/force/Darkstasisloop.wav");
 
 	trap->S_RegisterSound("sound/weapons/force/lightninghit1.mp3");
 	trap->S_RegisterSound("sound/weapons/force/lightninghit2.mp3");

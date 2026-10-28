@@ -598,6 +598,8 @@ void CG_RegisterWeapon(const int weapon_num)
 		cgi_S_RegisterSound("sound/weapons/force/ForceStasis.mp3");
 		cgi_S_RegisterSound("sound/weapons/force/repulsecharge.mp3");
 		cgi_S_RegisterSound("sound/weapons/force/repulseloop.wav");
+		cgi_S_RegisterSound("sound/weapons/force/DarkStasis.mp3");
+		cgi_S_RegisterSound("sound/weapons/force/Darkstasisloop.wav");
 
 		cgi_S_RegisterSound("sound/weapons/force/fear.mp3");
 		cgi_S_RegisterSound("sound/weapons/force/fearfail.mp3");
