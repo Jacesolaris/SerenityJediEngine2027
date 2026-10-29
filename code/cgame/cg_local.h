@@ -922,6 +922,17 @@ void CG_DPNextInventory_f();
 void CG_DPPrevInventory_f();
 void CG_DPNextForcePower_f();
 void CG_DPPrevForcePower_f();
+// the weapon / force wheel (cg_main.cpp)
+void CG_MDWheel_Down_f();
+void CG_MDWheel_ForceDown_f();
+void CG_MDWheel_Up_f();
+void CG_MDWheel_Menu_f();
+void CG_MDWheel_Reset();
+void CG_MDWheel_Frame();
+void CG_DrawMDWheel();
+qboolean CG_MDWheel_SwitchRing();
+qboolean CG_MDWheel_BlocksButtons();
+float CG_MDWheel_SensitivityScale();
 
 void CG_RegisterWeapon(int weapon_num);
 void CG_RegisterItemVisuals(int itemNum);

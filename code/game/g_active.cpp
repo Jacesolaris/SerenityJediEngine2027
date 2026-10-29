@@ -2824,7 +2824,19 @@ static gentity_t* G_KickTrace(gentity_t* ent, vec3_t kick_dir, const float kick_
 								hitEnt->client->otherKillerWeaponType = WP_NONE;
 								hitEnt->client->ps.saberMove = LS_READY;
 							}
-							G_Kick_Throw(hitEnt, kick_dir, 70);
+							// a hilt bash only shoves him a little (MD team 2026-10-29). Each kick counts once: this path never set
+							// kickedDebounce, so while the kick anim lasted it hit again each time the knockback timer ran out and each
+							// hit added to the throw - a hilt bash could send him flying across the map
+							if (ent->client->ps.torsoAnim == BOTH_A7_HILT)
+							{
+								G_Kick_Throw(hitEnt, kick_dir, 20);
+								TIMER_Set(hitEnt, "kickedDebounce", ent->client->ps.torsoAnimTimer > 500 ? ent->client->ps.torsoAnimTimer : 500);
+							}
+							else
+							{
+								G_Kick_Throw(hitEnt, kick_dir, 70);
+								TIMER_Set(hitEnt, "kickedDebounce", 500);
+							}
 							return hitEnt;
 						}
 						G_Damage(hitEnt, ent, ent, kick_dir, trace.endpos, kick_damage * 0.2f, DAMAGE_NO_KNOCKBACK,
@@ -9311,12 +9323,21 @@ A new command has arrived from the client
 extern void PM_CheckForceUseButton(gentity_t* ent, usercmd_t* ucmd);
 extern qboolean PM_GentCantJump(const gentity_t* gent);
 
+extern qboolean CG_MDWheel_BlocksButtons();
+
 void ClientThink(const int clientNum, usercmd_t* ucmd)
 {
 	gentity_t* ent = g_entities + clientNum;
 	if (!ent->client)
 	{
 		return;
+	}
+
+	// the weapon / force wheel (cgame, cg_main.cpp) has the player's attack buttons while it is open (attack picks there),
+	// and the press that closed it doesn't fire
+	if (clientNum == 0 && CG_MDWheel_BlocksButtons())
+	{
+		ucmd->buttons &= ~(BUTTON_ATTACK | BUTTON_ALT_ATTACK);
 	}
 
 	qboolean restore_ucmd = qfalse;

@@ -1126,16 +1126,17 @@ the game holds the view angles there (PM_LockAngles, the body keeps facing), so 
 the meditation began, read from the user commands. Afterwards the camera swings back behind the player. (As MP.)
 ===============
 */
+extern qboolean CG_PlayerMeditating();
+
 static void CG_MeditateCameraOrbit(float* yaw, float* pitch)
 {
 	static qboolean active = qfalse;
 	static short startYaw, startPitch;
 	static float orbitYaw = 0.0f, orbitPitch = 0.0f;
 	static int lastTime = 0;
-	const int anim = cg.predictedPlayerState.legsAnim;
-	const qboolean meditating = static_cast<qboolean>(cg.renderingThirdPerson
-		&& cg.predictedPlayerState.stats[STAT_HEALTH] > 0
-		&& (anim == BOTH_MEDITATE || anim == BOTH_MEDITATE1 || anim == BOTH_MEDITATE_SABER));
+	// the game's meditate state (as CG_CheckModifyUCmd, cg_predict.cpp, which stops resetting the mouse input to the
+	// held view at the same frame), not the snapshot's: else the camera snapped back when meditating ended
+	const qboolean meditating = static_cast<qboolean>(cg.renderingThirdPerson && CG_PlayerMeditating());
 	usercmd_t cmd;
 
 	cgi_GetUserCmd(cgi_GetCurrentCmdNumber(), &cmd);
@@ -2930,6 +2931,10 @@ void CG_DrawActiveFrame(const int serverTime, const stereoFrame_t stereoView)
 			lastFighterPilot = fighterPilot;
 		}
 	}
+
+	// the weapon / force wheel: the mouse turn moves its pointer (a slower turn while it is open)
+	CG_MDWheel_Frame();
+	speed *= CG_MDWheel_SensitivityScale();
 
 	cgi_SetUserCmdValue(cg.weaponSelect, speed, mPitchOverride, mYawOverride, keyPitchScale, keyYawScale);
 

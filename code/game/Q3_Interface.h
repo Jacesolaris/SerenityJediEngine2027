@@ -567,6 +567,7 @@ using setType_t = enum //# setType_e
 	SET_FORCE_BLAST_LEVEL,
 	SET_FORCE_INSANITY_LEVEL,
 	SET_FORCE_BLINDING_LEVEL,
+	SET_FORCE_DARK_STASIS_LEVEL,
 
 	SET_SABER1_COLOR1,
 	//## %t="SABER_COLORS" # Set color of first blade of first saber

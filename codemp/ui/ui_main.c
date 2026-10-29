@@ -1598,8 +1598,8 @@ void UI_LoadMenus(const char* menuFile, const qboolean reset)
 	Com_Printf("--------------------- Client Initialization ---------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("---------- genuine SerenityJediEngine-(Solaris Edition)MP--------\n");
-	Com_Printf("---------------------Build date 28/10/2026-----------------------\n"); // build date
-	Com_Printf("---------------------------Build 18------------------------------\n");
+	Com_Printf("---------------------Build date 29/10/2026-----------------------\n"); // build date
+	Com_Printf("---------------------------Build 19------------------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("------------------------LightSaber-------------------------------\n");
 	Com_Printf("-----------An elegant weapon for a more civilized age------------\n");

@@ -7768,7 +7768,20 @@ void ForceDarkStasis(gentity_t* self)
 	vec3_t mins = { 0 }, maxs = { 0 }, eye, viewFwd, fwd;
 
 	WP_ForcePowerStart(self, FP_DARK_STASIS, 0);
-	SJE_CastAnim(self, BOTH_SUPERPUSH, "sound/weapons/force/DarkStasis.mp3", "force/drain_hand");
+
+	if (self->client->ps.fd.forcePowerLevel[FP_DARK_STASIS] == FORCE_LEVEL_1) // level 1 devide by 3
+	{
+		SJE_CastAnim(self, BOTH_SUPERPUSH, "sound/weapons/force/DarkStasis1.mp3", "force/drain_hand");
+	}
+	else if (self->client->ps.fd.forcePowerLevel[FP_DARK_STASIS] == FORCE_LEVEL_2) // level 2 devide by 3
+	{
+		SJE_CastAnim(self, BOTH_SUPERPUSH, "sound/weapons/force/DarkStasis2.mp3", "force/drain_hand");
+	}
+	else
+	{
+		SJE_CastAnim(self, BOTH_SUPERPUSH, "sound/weapons/force/DarkStasis3.mp3", "force/drain_hand");
+	}
+
 	G_PlayBoltedEffect(G_EffectIndex("force/drain_hand"), self, "*r_hand");
 	if (!(self->client->ps.fd.forcePowersActive & (1 << FP_RAGE | 1 << FP_ABSORB)))
 	{

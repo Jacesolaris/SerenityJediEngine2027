@@ -12186,6 +12186,9 @@ static void CG_Draw2D(void)
 		CG_DrawSiegeDeathTimer(timeRemaining);
 	}
 
+	// the radial weapon / force wheel (cg_weapons.c)
+	CG_DrawMDWheel();
+
 	// don't draw center string if scoreboard is up
 	cg.scoreBoardShowing = CG_DrawScoreboard();
 	if (!cg.scoreBoardShowing)

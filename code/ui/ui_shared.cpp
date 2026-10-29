@@ -5355,6 +5355,8 @@ void Menus_Activate(menuDef_t* menu)
 static const char* g_bindCommands[] =
 {
 	"pazaak",
+	"+md_wheel", // the weapon / force wheel (cgame), held
+	"+md_forcewheel", // the same wheel on the force ring
 	"+altattack",
 	"+attack",
 	"+back",

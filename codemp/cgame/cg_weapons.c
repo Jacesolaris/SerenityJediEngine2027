@@ -34,6 +34,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 // cg_weapons.c -- events and effects dealing with weapons
 #include "cg_local.h"
+#include "ui/ui_shared.h"	// key numbers, text styles (the weapon wheel)
 #include "fx_local.h"
 #include "ghoul2/G2.h"
 #include <assert.h>
@@ -3997,4 +3998,769 @@ void CG_CheckPlayerG2Weapons(const playerState_t* ps, centity_t* cent)
 
 		cent->weapon = ps->weapon;
 	}
+}
+
+
+/*
+===============================================================================
+Weapon / force wheel (ported from MovieDuels 9 MP, Jace 2026-10-29)
+
+Press the "Weapon Wheel" key (+md_wheel) or the "Force Wheel" key (+md_forcewheel): a radial overlay of the weapons the
+player can carry, or (mouse wheel / middle click) the force powers. Point with the mouse (the view stays put); the key
+again or a click takes it, escape cancels. No slowdown in MP. SJE MP weapons and force powers, same layout as MD.
+===============================================================================
+*/
+#define MDW_MAX_ITEMS	40
+#define MDW_PANEL		240.0f	// half size of the slice scene (virtual 480-high units, kept round on wide screens)
+// the panel: a round, square crop of the MD team's art (WeaponWheelPanel.tga, 2048x1024, made for a stretched 16:9
+// screen), glow and all: gfx/menus/weaponwheel/WeaponWheelPanelRound.tga (1024x1024, Claude_Edits pk3). Its gold rim's
+// inner edge is 0.789 of its half size (284 / 360); that edge goes at MDW_ART_RIM, as the old art's rim
+#define MDW_ART_RIM		181.0f
+#define MDW_ART_HALF	(MDW_ART_RIM * 360.0f / 284.0f)
+#define MDW_RIM			180.0f	// the slices reach the gold rim
+#define MDW_INNER		106.0f	// the slices start here (inside it: the names)
+#define MDW_RADIUS		146.0f	// the icon ring
+#define MDW_ICON		28.0f
+#define MDW_ICON_HOVER	38.0f
+#define MDW_DEADZONE	30.0f	// pointer this close to the centre = nothing picked
+#define MDW_POINTER_MAX	175.0f
+#define MDW_SCENE_DIST	100.0f	// the slice polygons: a small 3D scene in front of a 90 degree camera
+
+extern char* showPowersName[];
+
+static struct
+{
+	qboolean open;
+	int ring;		// 0 weapons, 1 force powers
+	int holdKey;	// the key that opened the wheel (-1 none): pressed again it takes the pick, as MD SP
+	qboolean keyLetGo;	// that key was let go since the wheel opened (its auto-repeat must not count as the second press)
+	float px, py;	// the pointer, relative to the centre
+	int hover;		// index in items[], -1 none
+	int items[MDW_MAX_ITEMS];
+	qboolean avail[MDW_MAX_ITEMS];	// carried / known (the others are shown faded and can't be picked)
+	int numItems;
+	qhandle_t panelShader, sliceShader;
+	sfxHandle_t clickSound;
+} mdWheel;
+
+// a force power with a slot on the wheel: the passive ones are never selected (as ForcePower_Valid, cg_draw.c)
+static qboolean CG_MDWheel_ForceSlot(const int fp)
+{
+	return fp >= 0 && fp < NUM_FORCE_POWERS && fp != FP_LEVITATION && fp != FP_SABER_OFFENSE && fp != FP_SABER_DEFENSE
+		&& fp != FP_SABERTHROW ? qtrue : qfalse;
+}
+
+// SJE MP: the weapons on the wheel run from the stun baton to LAST_USEABLE_WEAPON (the emplaced gun / turret never)
+#define MDW_FIRST_WEAPON	WP_STUN_BATON
+#define MDW_LAST_WEAPON		LAST_USEABLE_WEAPON
+
+// the weapons any player can carry: always on the wheel, faded when he doesn't carry them. The droideka's (NPC class
+// weapon) and the old bryar are there only while he has them
+static qboolean CG_MDWheel_PlayerWeapon(const int weapon)
+{
+	return weapon >= MDW_FIRST_WEAPON && weapon <= MDW_LAST_WEAPON && weapon != WP_DROIDEKA
+		&& weapon != WP_BRYAR_OLD ? qtrue : qfalse;
+}
+
+// the weapon ring by type (as MD, SJE MP weapons), clockwise from the top: 0 saber and melee, 1 pistols, 2 rifles,
+// 3 heavy weapons, 4 explosives
+static int CG_MDWheel_WeaponGroup(const int weapon)
+{
+	switch (weapon)
+	{
+	case WP_SABER:
+	case WP_MELEE:
+	case WP_STUN_BATON:
+	case WP_TUSKEN_STAFF:
+	case WP_NOGHRI_STICK:
+		return 0;
+	case WP_BRYAR_PISTOL:
+	case WP_BRYAR_OLD:
+		return 1;
+	case WP_BLASTER:
+	case WP_DISRUPTOR:
+	case WP_BOWCASTER:
+	case WP_TUSKEN_RIFLE:
+		return 2;
+	case WP_THERMAL:
+	case WP_TRIP_MINE:
+	case WP_DET_PACK:
+		return 4;
+	default:
+		return 3; // repeater, DEMP2, flechette, rocket launcher, concussion, Z-6, droideka
+	}
+}
+
+// the force ring (as MD): neutral powers across the top, light side down the right, dark side down the left; SJE MP
+// force powers
+static const int mdWheelForceOrder[] =
+{
+	FP_ABSORB, FP_HEAL, FP_TEAM_HEAL, FP_PROTECT, FP_TELEPATHY, FP_LIGHTNING_STRIKE, FP_BLAST, FP_BLINDING,
+	FP_STASIS, FP_SPEED, FP_PUSH, FP_PULL, FP_SEE, FP_GRASP, FP_REPULSE,
+	FP_DRAIN, FP_LIGHTNING, FP_RAGE, FP_TEAM_FORCE, FP_GRIP, FP_DESTRUCTION, FP_FEAR, FP_DEADLYSIGHT, FP_INSANITY,
+	FP_DARK_STASIS
+};
+
+// 0 neutral, 1 light, 2 dark (as the icon colours)
+static int CG_MDWheel_ForceSide(const int fp)
+{
+	switch (fp)
+	{
+	case FP_ABSORB:
+	case FP_HEAL:
+	case FP_TEAM_HEAL:
+	case FP_PROTECT:
+	case FP_TELEPATHY:
+	case FP_LIGHTNING_STRIKE:
+	case FP_BLAST:
+	case FP_BLINDING:
+		return 1;
+	case FP_DRAIN:
+	case FP_LIGHTNING:
+	case FP_RAGE:
+	case FP_TEAM_FORCE:
+	case FP_GRIP:
+	case FP_DESTRUCTION:
+	case FP_FEAR:
+	case FP_DEADLYSIGHT:
+	case FP_INSANITY:
+	case FP_DARK_STASIS:
+		return 2;
+	default:
+		return 0;
+	}
+}
+
+static void CG_MDWheel_AddItem(const int item, const qboolean avail)
+{
+	if (mdWheel.numItems < MDW_MAX_ITEMS)
+	{
+		mdWheel.avail[mdWheel.numItems] = avail;
+		mdWheel.items[mdWheel.numItems++] = item;
+	}
+}
+
+static void CG_MDWheel_AddWeapon(const int weapon)
+{
+	const qboolean owned = BG_HasWeapon(cg.predictedPlayerState.stats, weapon) ? qtrue : qfalse;
+	if (owned || CG_MDWheel_PlayerWeapon(weapon))
+	{
+		CG_MDWheel_AddItem(weapon, owned);
+	}
+}
+
+static void CG_MDWheel_AddForce(const int fp)
+{
+	CG_MDWheel_AddItem(fp, cg.snap->ps.fd.forcePowersKnown & 1 << fp ? qtrue : qfalse);
+}
+
+// every slot in a fixed place: all player weapons / all selectable force powers, carried / known or not.
+// Slot 0 is straight up, the others follow clockwise
+static void CG_MDWheel_BuildItems(void)
+{
+	mdWheel.numItems = 0;
+	if (mdWheel.ring == 0)
+	{
+		// by type; in a type in weapon order, the saber first (straight up)
+		CG_MDWheel_AddWeapon(WP_SABER);
+		for (int group = 0; group <= 4; group++)
+		{
+			for (int i = MDW_FIRST_WEAPON; i <= MDW_LAST_WEAPON; i++)
+			{
+				if (i != WP_SABER && CG_MDWheel_WeaponGroup(i) == group)
+				{
+					CG_MDWheel_AddWeapon(i);
+				}
+			}
+		}
+	}
+	else
+	{
+		int side[3][NUM_FORCE_POWERS];
+		int count[3] = { 0, 0, 0 };
+		for (int i = 0; i < (int)ARRAY_LEN(mdWheelForceOrder); i++)
+		{
+			const int fp = mdWheelForceOrder[i];
+			if (CG_MDWheel_ForceSlot(fp))
+			{
+				const int s = CG_MDWheel_ForceSide(fp);
+				side[s][count[s]++] = fp;
+			}
+		}
+		// the middle neutral power straight up, the rest of them on to the right; the light side down the right; the
+		// dark side up the left (its first power at the top); the first neutral powers back to the top
+		const int mid = count[0] / 2;
+		for (int k = mid; k < count[0]; k++)
+		{
+			CG_MDWheel_AddForce(side[0][k]);
+		}
+		for (int k = 0; k < count[1]; k++)
+		{
+			CG_MDWheel_AddForce(side[1][k]);
+		}
+		for (int k = count[2] - 1; k >= 0; k--)
+		{
+			CG_MDWheel_AddForce(side[2][k]);
+		}
+		for (int k = 0; k < mid; k++)
+		{
+			CG_MDWheel_AddForce(side[0][k]);
+		}
+	}
+}
+
+static void CG_MDWheel_UpdateHover(void)
+{
+	mdWheel.hover = -1;
+	if (mdWheel.numItems <= 0 || mdWheel.px * mdWheel.px + mdWheel.py * mdWheel.py < MDW_DEADZONE * MDW_DEADZONE)
+	{
+		return;
+	}
+	// clockwise from straight up, item 0 at the top
+	float a = atan2f(mdWheel.px, -mdWheel.py);
+	if (a < 0.0f)
+	{
+		a += 2.0f * (float)M_PI;
+	}
+	const float step = 2.0f * (float)M_PI / (float)mdWheel.numItems;
+	mdWheel.hover = (int)((a + step * 0.5f) / step) % mdWheel.numItems;
+}
+
+static qboolean CG_MDWheel_CanOpen(void)
+{
+	if (!cg.snap || cg.demoPlayback || cg.snap->ps.pm_flags & PMF_FOLLOW || cg.snap->ps.emplacedIndex
+		|| cg.predictedPlayerState.pm_type == PM_SPECTATOR || cg.predictedPlayerState.pm_type == PM_INTERMISSION
+		|| cg.predictedPlayerState.stats[STAT_HEALTH] <= 0)
+	{
+		return qfalse;
+	}
+	// not over the console, a menu or the chat line
+	return trap->Key_GetCatcher() & ~KEYCATCH_CGAME ? qfalse : qtrue;
+}
+
+static void CG_MDWheel_PickWeapon(const int num)
+{
+	// the checks of the weapon commands (CG_WeaponClean_f)
+	if (cg.snap->ps.pm_flags & PMF_STUCK_TO_WALL || cg.snap->ps.emplacedIndex)
+	{
+		return;
+	}
+	if (!BG_HasWeapon(cg.snap->ps.stats, num) || !CG_WeaponSelectable(num))
+	{
+		return;
+	}
+	cg.weaponSelectTime = cg.time;
+	if (cg.weaponSelect != num)
+	{
+		trap->S_MuteSound(cg.snap->ps.clientNum, CHAN_WEAPON);
+	}
+	cg.weaponSelect = num;
+}
+
+static void CG_MDWheel_Close(const qboolean pick)
+{
+	if (!mdWheel.open)
+	{
+		return;
+	}
+	mdWheel.open = qfalse;
+	if (pick && cg.snap && mdWheel.hover >= 0 && mdWheel.hover < mdWheel.numItems && mdWheel.avail[mdWheel.hover])
+	{
+		const int item = mdWheel.items[mdWheel.hover];
+		if (mdWheel.ring == 0)
+		{
+			CG_MDWheel_PickWeapon(item);
+		}
+		else if (cg.snap->ps.fd.forcePowersKnown & 1 << item)
+		{
+			cg.forceSelect = item;
+			cg.forceSelectTime = cg.time;
+		}
+	}
+	trap->Key_SetCatcher(trap->Key_GetCatcher() & ~KEYCATCH_CGAME);
+}
+
+static void CG_MDWheel_Open(const int holdKey, const int ring)
+{
+	if (mdWheel.open || !CG_MDWheel_CanOpen())
+	{
+		return;
+	}
+	if (!mdWheel.panelShader)
+	{
+		// the MD team's panel art and the slice shader (shaders/sje_weaponwheel.shader, SJE Claude_Edits pk3)
+		mdWheel.panelShader = trap->R_RegisterShaderNoMip("gfx/menus/weaponwheel/WeaponWheelPanelRound");
+		mdWheel.sliceShader = trap->R_RegisterShaderNoMip("gfx/menus/weaponwheel/slice");
+		mdWheel.clickSound = trap->S_RegisterSound("sound/interface/button1.wav");
+	}
+	mdWheel.open = qtrue;
+	mdWheel.ring = ring;
+	mdWheel.holdKey = holdKey;
+	mdWheel.keyLetGo = qfalse;
+	mdWheel.px = mdWheel.py = 0.0f;
+	mdWheel.hover = -1;
+	trap->Key_SetCatcher(trap->Key_GetCatcher() | KEYCATCH_CGAME);
+}
+
+// "+md_wheel" / "+md_forcewheel" (the Controls rows "Weapon Wheel" / "Force Wheel"; a key's +command passes its key
+// number) and their "-" commands. As MD: a press opens it, the key again, attack or escape closes it (attack / key take
+// the pick)
+void CG_MDWheel_Down_f(void)
+{
+	if (mdWheel.open)
+	{
+		CG_MDWheel_Close(qtrue);
+		return;
+	}
+	CG_MDWheel_Open(trap->Cmd_Argc() > 1 ? atoi(CG_Argv(1)) : -1, 0);
+}
+
+// the same wheel opening on the force powers
+void CG_MDWheel_ForceDown_f(void)
+{
+	if (mdWheel.open)
+	{
+		CG_MDWheel_Close(qtrue);
+		return;
+	}
+	CG_MDWheel_Open(trap->Cmd_Argc() > 1 ? atoi(CG_Argv(1)) : -1, 1);
+}
+
+void CG_MDWheel_Up_f(void)
+{
+	// the wheel stays open when the key is let go (as MD); the second
+	// press (CG_MDWheel_KeyEvent: the open wheel takes the keys, so the bind doesn't run), attack or escape close it
+	// (the engine's made-up release when the wheel takes the keys - Key_SetCatcher / Key_ClearStates - is ignored too)
+}
+
+// escape (CG_EventHandling) closes it without a pick
+void CG_MDWheel_Cancel(void)
+{
+	CG_MDWheel_Close(qfalse);
+}
+
+// the same key (letters in either case: a bind names the capital, the key sends the small letter)
+static qboolean CG_MDWheel_SameKey(const int a, const int b)
+{
+	if (a <= 0 || b <= 0)
+	{
+		return qfalse;
+	}
+	return a == b || (a < 128 && b < 128 && tolower(a) == tolower(b)) ? qtrue : qfalse;
+}
+
+qboolean CG_MDWheel_KeyEvent(const int key, const qboolean down)
+{
+	if (!mdWheel.open)
+	{
+		return qfalse;
+	}
+	if (key & K_CHAR_FLAG)
+	{
+		return qtrue;
+	}
+	// a key that opens a wheel (the one that opened it, or the other wheel's) pressed again takes the pick;
+	// the opening press's auto-repeat doesn't count until that key has been let go once
+	const qboolean wheelKey = CG_MDWheel_SameKey(key, mdWheel.holdKey) || CG_MDWheel_SameKey(key, trap->Key_GetKey("+md_wheel"))
+		|| CG_MDWheel_SameKey(key, trap->Key_GetKey("+md_forcewheel")) ? qtrue : qfalse;
+	if (!down)
+	{
+		if (wheelKey)
+		{
+			mdWheel.keyLetGo = qtrue;
+		}
+		return qtrue;
+	}
+	if (wheelKey)
+	{
+		if (mdWheel.keyLetGo || !CG_MDWheel_SameKey(key, mdWheel.holdKey))
+		{
+			CG_MDWheel_Close(qtrue);
+		}
+		return qtrue;
+	}
+	switch (key)
+	{
+	case A_MOUSE1:
+		CG_MDWheel_Close(qtrue);
+		break;
+	case A_MOUSE3:
+	case A_MWHEELUP:
+	case A_MWHEELDOWN:
+		mdWheel.ring ^= 1;
+		mdWheel.hover = -1;
+		trap->S_StartLocalSound(mdWheel.clickSound, CHAN_LOCAL_SOUND);
+		break;
+	default:
+		break;
+	}
+	return qtrue;
+}
+
+qboolean CG_MDWheel_MouseEvent(const int x, const int y)
+{
+	if (!mdWheel.open)
+	{
+		return qfalse;
+	}
+	mdWheel.px += (float)x * 0.5f;
+	mdWheel.py += (float)y * 0.5f;
+	const float d = sqrtf(mdWheel.px * mdWheel.px + mdWheel.py * mdWheel.py);
+	if (d > MDW_POINTER_MAX)
+	{
+		mdWheel.px *= MDW_POINTER_MAX / d;
+		mdWheel.py *= MDW_POINTER_MAX / d;
+	}
+	return qtrue;
+}
+
+static const char* CG_MDWheel_WeaponName(const int weapon)
+{
+	static char text[256];
+	char key[256];
+
+	if (!cg_weapons[weapon].item)
+	{
+		return "";
+	}
+	Q_strncpyz(key, cg_weapons[weapon].item->classname, sizeof key);
+	if (trap->SE_GetStringTextString(va("SP_INGAME_%s", Q_strupr(key)), text, sizeof text))
+	{
+		return text;
+	}
+	return cg_weapons[weapon].item->classname;
+}
+
+static const char* CG_MDWheel_ForceName(const int fp)
+{
+	static char text[256];
+
+	if (!showPowersName[fp])
+	{
+		return "";
+	}
+	if (trap->SE_GetStringTextString(va("SP_INGAME_%s", showPowersName[fp]), text, sizeof text)
+		|| trap->SE_GetStringTextString(showPowersName[fp], text, sizeof text)) // DARKSTASIS_NAME
+	{
+		return text;
+	}
+	return showPowersName[fp];
+}
+
+static void CG_MDWheel_CenterText(const float y, float scale, vec4_t color, const char* text, const float ax)
+{
+	if (text && text[0])
+	{
+		// long names are scaled down to stay inside the inner ring
+		const float maxWidth = 230.0f * ax;
+		float width = (float)CG_Text_Width(text, scale, FONT_SMALL);
+		if (width > maxWidth)
+		{
+			scale *= maxWidth / width;
+			width = (float)CG_Text_Width(text, scale, FONT_SMALL);
+		}
+		CG_Text_Paint(320.0f - width * 0.5f, y, scale, color, text, 0, 0, ITEM_TEXTSTYLE_SHADOWED, FONT_SMALL);
+	}
+}
+
+// a point of the wheel (x right, y up, virtual 480-high units from the centre) in the slice scene
+static void CG_MDWheel_VertXY(polyVert_t* v, const float x, const float y, const vec4_t c)
+{
+	const float k = MDW_SCENE_DIST / MDW_PANEL;
+	v->xyz[0] = MDW_SCENE_DIST;
+	v->xyz[1] = -x * k;
+	v->xyz[2] = y * k;
+	v->st[0] = v->st[1] = 0.0f;
+	for (int i = 0; i < 4; i++)
+	{
+		v->modulate[i] = (byte)(Com_Clamp(0.0f, 1.0f, c[i]) * 255.0f);
+	}
+}
+
+// radius r at angle a (radians, clockwise from straight up)
+static void CG_MDWheel_Vert(polyVert_t* v, const float r, const float a, const vec4_t c)
+{
+	CG_MDWheel_VertXY(v, sinf(a) * r, cosf(a) * r, c);
+}
+
+// a ring sector from angle a0 to a1, radius r0 (colour c0) to r1 (c1): the colours blend across it
+static void CG_MDWheel_Sector(const float r0, const float r1, const float a0, const float a1, const vec4_t c0,
+	const vec4_t c1)
+{
+	const float maxStep = 1.0f * (float)M_PI / 180.0f; // 1 degree: smooth arcs
+	int steps = (int)ceilf(fabsf(a1 - a0) / maxStep);
+	if (steps < 1)
+	{
+		steps = 1;
+	}
+	for (int s = 0; s < steps; s++)
+	{
+		polyVert_t v[4];
+		const float s0 = a0 + (a1 - a0) * (float)s / (float)steps;
+		const float s1 = a0 + (a1 - a0) * (float)(s + 1) / (float)steps;
+		CG_MDWheel_Vert(&v[0], r0, s0, c0);
+		CG_MDWheel_Vert(&v[1], r1, s0, c1);
+		CG_MDWheel_Vert(&v[2], r1, s1, c1);
+		CG_MDWheel_Vert(&v[3], r0, s1, c0);
+		trap->R_AddPolysToScene(mdWheel.sliceShader, 4, v, 1);
+	}
+}
+
+// a straight line out from the centre at angle a, from r0 to r1, w wide
+static void CG_MDWheel_Spoke(const float a, const float r0, const float r1, const float w, const vec4_t c)
+{
+	polyVert_t v[4];
+	const float sx = sinf(a), sy = cosf(a);
+	const float tx = sy * w * 0.5f, ty = -sx * w * 0.5f; // across the line
+	CG_MDWheel_VertXY(&v[0], sx * r0 - tx, sy * r0 - ty, c);
+	CG_MDWheel_VertXY(&v[1], sx * r1 - tx, sy * r1 - ty, c);
+	CG_MDWheel_VertXY(&v[2], sx * r1 + tx, sy * r1 + ty, c);
+	CG_MDWheel_VertXY(&v[3], sx * r0 + tx, sy * r0 + ty, c);
+	trap->R_AddPolysToScene(mdWheel.sliceShader, 4, v, 1);
+}
+
+// the colour c with no alpha
+static void CG_MDWheel_Clear(vec4_t out, const vec4_t c)
+{
+	out[0] = c[0];
+	out[1] = c[1];
+	out[2] = c[2];
+	out[3] = 0.0f;
+}
+
+// a line out from the centre with soft sides: a solid core w wide and f either side fading to nothing (no jagged edges)
+static void CG_MDWheel_SoftSpoke(const float a, const float r0, const float r1, const float w, const float f,
+	const vec4_t c)
+{
+	const float sx = sinf(a), sy = cosf(a);
+	const float nx = sy, ny = -sx; // across the line
+	vec4_t clear;
+	CG_MDWheel_Clear(clear, c);
+	CG_MDWheel_Spoke(a, r0, r1, w, c);
+	for (int side = -1; side <= 1; side += 2)
+	{
+		polyVert_t v[4];
+		const float o0 = (float)side * w * 0.5f, o1 = (float)side * (w * 0.5f + f);
+		CG_MDWheel_VertXY(&v[0], sx * r0 + nx * o0, sy * r0 + ny * o0, c);
+		CG_MDWheel_VertXY(&v[1], sx * r1 + nx * o0, sy * r1 + ny * o0, c);
+		CG_MDWheel_VertXY(&v[2], sx * r1 + nx * o1, sy * r1 + ny * o1, clear);
+		CG_MDWheel_VertXY(&v[3], sx * r0 + nx * o1, sy * r0 + ny * o1, clear);
+		trap->R_AddPolysToScene(mdWheel.sliceShader, 4, v, 1);
+	}
+}
+
+// a ring band from r0 to r1 with soft edges: f inside and outside fading to nothing
+static void CG_MDWheel_SoftArc(const float r0, const float r1, const float f, const float a0, const float a1,
+	const vec4_t c)
+{
+	vec4_t clear;
+	CG_MDWheel_Clear(clear, c);
+	CG_MDWheel_Sector(r0, r1, a0, a1, c, c);
+	CG_MDWheel_Sector(r0 - f, r0, a0, a1, clear, c);
+	CG_MDWheel_Sector(r1, r1 + f, a0, a1, c, clear);
+}
+
+// slot n's slice (Outer Worlds style): a soft gradient getting stronger towards the rim, a brighter band along the rim,
+// and soft edges
+static void CG_MDWheel_Slice(const int n, const vec3_t rgb, const float alphaIn, const float alphaOut,
+	const float edgeAlpha)
+{
+	const float band = 14.0f; // the brighter band inside the rim
+	const float step = 2.0f * (float)M_PI / (float)mdWheel.numItems;
+	const float a0 = ((float)n - 0.5f) * step, a1 = ((float)n + 0.5f) * step;
+	vec4_t cIn, cOut, cBand, cEdge;
+
+	VectorCopy(rgb, cIn);
+	VectorCopy(rgb, cOut);
+	VectorCopy(rgb, cBand);
+	VectorCopy(rgb, cEdge);
+	cIn[3] = alphaIn;
+	cOut[3] = alphaOut;
+	cBand[3] = alphaOut + (edgeAlpha - alphaOut) * 0.4f;
+	cEdge[3] = edgeAlpha;
+	CG_MDWheel_Sector(MDW_INNER, MDW_RIM - band, a0, a1, cIn, cOut);
+	CG_MDWheel_Sector(MDW_RIM - band, MDW_RIM, a0, a1, cOut, cBand);
+	if (edgeAlpha > 0.0f)
+	{
+		CG_MDWheel_SoftArc(MDW_RIM - 2.4f, MDW_RIM, 0.9f, a0, a1, cEdge); // along the rim
+		CG_MDWheel_SoftArc(MDW_INNER, MDW_INNER + 1.2f, 0.9f, a0, a1, cEdge); // the inner end
+		if (mdWheel.numItems > 1)
+		{
+			CG_MDWheel_SoftSpoke(a0, MDW_INNER, MDW_RIM, 1.2f, 0.9f, cEdge);
+			CG_MDWheel_SoftSpoke(a1, MDW_INNER, MDW_RIM, 1.2f, 0.9f, cEdge);
+		}
+	}
+}
+
+// the dividers and the slices, drawn as polygons in a small scene over the panel (square in pixels: round anywhere)
+static void CG_MDWheel_DrawSlices(const int current)
+{
+	// the panel's gold rim, #ab7e2e
+	static const vec3_t rim = { 171.0f / 255.0f, 126.0f / 255.0f, 46.0f / 255.0f };
+	static const vec3_t greyRgb = { 0.62f, 0.62f, 0.62f };
+	static const vec4_t divider = { 171.0f / 255.0f, 126.0f / 255.0f, 46.0f / 255.0f, 0.5f };
+	refdef_t rd;
+
+	if (!mdWheel.sliceShader || mdWheel.numItems <= 0 || cgs.glconfig.vidHeight <= 0)
+	{
+		return;
+	}
+	trap->R_ClearScene();
+	if (mdWheel.numItems > 1)
+	{
+		const float step = 2.0f * (float)M_PI / (float)mdWheel.numItems;
+		for (int n = 0; n < mdWheel.numItems; n++)
+		{
+			CG_MDWheel_SoftSpoke(((float)n + 0.5f) * step, MDW_INNER, MDW_RIM, 0.7f, 0.8f, divider);
+		}
+	}
+	for (int n = 0; n < mdWheel.numItems; n++)
+	{
+		if (mdWheel.items[n] == current && mdWheel.avail[n] && n != mdWheel.hover)
+		{
+			CG_MDWheel_Slice(n, rim, 0.03f, 0.2f, 0.55f); // the one in hand: a fainter slice
+		}
+	}
+	if (mdWheel.hover >= 0 && mdWheel.hover < mdWheel.numItems)
+	{
+		if (mdWheel.avail[mdWheel.hover])
+		{
+			CG_MDWheel_Slice(mdWheel.hover, rim, 0.08f, 0.55f, 1.0f);
+		}
+		else
+		{
+			CG_MDWheel_Slice(mdWheel.hover, greyRgb, 0.03f, 0.2f, 0.45f); // can't be picked
+		}
+	}
+
+	memset(&rd, 0, sizeof rd);
+	rd.rdflags = RDF_NOWORLDMODEL;
+	AxisClear(rd.viewaxis);
+	rd.fov_x = rd.fov_y = 90.0f;
+	rd.width = rd.height = (int)(2.0f * MDW_PANEL * (float)cgs.glconfig.vidHeight / 480.0f);
+	rd.x = (cgs.glconfig.vidWidth - rd.width) / 2;
+	rd.y = (cgs.glconfig.vidHeight - rd.height) / 2;
+	rd.time = cg.time;
+	trap->R_RenderScene(&rd);
+}
+
+void CG_DrawMDWheel(void)
+{
+	static vec4_t dim = { 0.0f, 0.0f, 0.0f, 0.35f };
+	static vec4_t gold = { 0.875f, 0.718f, 0.121f, 1.0f };
+	static vec4_t white = { 1.0f, 1.0f, 1.0f, 1.0f };
+	static vec4_t grey = { 0.7f, 0.7f, 0.7f, 0.9f };
+	static vec4_t greyed = { 0.5f, 0.5f, 0.5f, 0.85f };
+
+	if (!mdWheel.open)
+	{
+		return;
+	}
+	// escape / a menu took the keys, or he died (letting go of the wheel key: CG_MDWheel_Up_f / CG_MDWheel_KeyEvent -
+	// not Key_IsDown, the engine cleared the key states when the wheel took the keys)
+	if (!(trap->Key_GetCatcher() & KEYCATCH_CGAME) || !CG_MDWheel_CanOpen())
+	{
+		CG_MDWheel_Close(qfalse);
+		return;
+	}
+
+	CG_MDWheel_BuildItems();
+	CG_MDWheel_UpdateHover();
+
+	// the 640x480 screen is stretched to the window: squeeze x to keep the wheel round
+	const float ax = cgs.glconfig.vidWidth > 0 && cgs.glconfig.vidHeight > 0
+		? (float)cgs.glconfig.vidHeight * 640.0f / ((float)cgs.glconfig.vidWidth * 480.0f) : 1.0f;
+	const float mx = 320.0f, my = 240.0f;
+	const int current = mdWheel.ring == 0 ? cg.weaponSelect : cg.forceSelect;
+	// the icons get smaller when many share the ring
+	const float slotArc = mdWheel.numItems > 0 ? 2.0f * (float)M_PI * MDW_RADIUS / (float)mdWheel.numItems : MDW_ICON;
+	const float iconSize = slotArc * 0.82f < MDW_ICON ? slotArc * 0.82f : MDW_ICON;
+
+	CG_FillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, dim);
+	trap->R_SetColor(NULL);
+	CG_DrawPic(mx - MDW_ART_HALF * ax, my - MDW_ART_HALF, 2.0f * MDW_ART_HALF * ax, 2.0f * MDW_ART_HALF, mdWheel.panelShader);
+	CG_MDWheel_DrawSlices(current);
+
+	for (int n = 0; n < mdWheel.numItems; n++)
+	{
+		const int item = mdWheel.items[n];
+		const float a = 2.0f * (float)M_PI * (float)n / (float)mdWheel.numItems;
+		const float size = n == mdWheel.hover ? iconSize * MDW_ICON_HOVER / MDW_ICON : iconSize;
+		const float x = mx + sinf(a) * MDW_RADIUS * ax, y = my - cosf(a) * MDW_RADIUS;
+		qhandle_t icon = 0;
+		vec4_t color = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+		if (mdWheel.ring == 0)
+		{
+			CG_RegisterWeapon(item);
+			const qboolean usable = mdWheel.avail[n] && CG_WeaponSelectable(item) && CG_WeaponCheck(item);
+			icon = usable || !mdWheel.avail[n] ? cgs.media.weaponIcons[item] : cgs.media.weaponIcons_NA[item];
+			if (!mdWheel.avail[n])
+			{
+				color[3] = 0.25f; // not carried
+			}
+			else if (!usable)
+			{
+				color[3] = 0.5f;
+			}
+		}
+		else
+		{
+			icon = cgs.media.forcePowerIcons[item];
+			if (!mdWheel.avail[n])
+			{
+				// not known: faded as a weapon not carried. The colour is dimmed too, so an icon whose shader ignores
+				// the alpha (an additive glow) fades as well
+				color[0] = color[1] = color[2] = 0.45f;
+				color[3] = 0.4f;
+			}
+		}
+
+		if (icon)
+		{
+			trap->R_SetColor(color);
+			CG_DrawPic(x - size * 0.5f * ax, y - size * 0.5f, size * ax, size, icon);
+		}
+	}
+	trap->R_SetColor(NULL);
+
+	// the centre: ring name, the pointed item, its ammo (or why it can't be picked), the controls
+	CG_MDWheel_CenterText(my - 78.0f, 0.6f, gold, mdWheel.ring == 0 ? "WEAPONS" : "FORCE POWERS", ax);
+	if (mdWheel.numItems == 0)
+	{
+		CG_MDWheel_CenterText(my - 12.0f, 0.7f, grey, mdWheel.ring == 0 ? "No weapons" : "No force powers", ax);
+	}
+	else if (mdWheel.hover >= 0)
+	{
+		const int item = mdWheel.items[mdWheel.hover];
+		const qboolean avail = mdWheel.avail[mdWheel.hover];
+		if (mdWheel.ring == 0)
+		{
+			CG_MDWheel_CenterText(my - 30.0f, 0.75f, avail ? white : greyed, CG_MDWheel_WeaponName(item), ax);
+			if (!avail)
+			{
+				CG_MDWheel_CenterText(my - 4.0f, 0.6f, greyed, "Not carried", ax);
+			}
+			else
+			{
+				if (weaponData[item].ammoIndex != AMMO_NONE)
+				{
+					CG_MDWheel_CenterText(my - 4.0f, 0.6f, grey,
+						va("Ammo: %d", cg.predictedPlayerState.ammo[weaponData[item].ammoIndex]), ax);
+				}
+			}
+		}
+		else
+		{
+			CG_MDWheel_CenterText(my - 18.0f, 0.75f, avail ? white : greyed, CG_MDWheel_ForceName(item), ax);
+			if (!avail)
+			{
+				CG_MDWheel_CenterText(my + 6.0f, 0.6f, greyed, "Not known", ax);
+			}
+		}
+	}
+	CG_MDWheel_CenterText(my + 52.0f, 0.45f, grey, mdWheel.ring == 0 ? "Mouse wheel: force powers" : "Mouse wheel: weapons", ax);
+
+	// the pointer
+	CG_FillRect(mx + mdWheel.px * ax - 2.0f * ax, my + mdWheel.py - 2.0f, 4.0f * ax, 4.0f, white);
 }

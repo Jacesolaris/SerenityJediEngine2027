@@ -223,6 +223,11 @@ static int cmdcmp(const void* a, const void* b)
 
 /* This array MUST be sorted correctly by alphabetical name field */
 static consoleCommand_t commands[] = {
+	{ "+md_forcewheel", CG_MDWheel_ForceDown_f }, // the weapon / force wheel (cg_main.cpp) on the force ring, held
+	{ "+md_wheel", CG_MDWheel_Down_f }, // the weapon / force wheel (cg_main.cpp), held
+	{ "-md_forcewheel", CG_MDWheel_Up_f },
+	{ "-md_wheel", CG_MDWheel_Up_f },
+	{ "md_wheel_menu", CG_MDWheel_Menu_f }, // "md_wheel_menu [force]": opens / closes the wheel (for menus and binds)
 	{ "cam_disable", CMD_CGCam_Disable }, //gets out of camera mode for debuggin
 	{ "cam_enable", CGCam_Enable }, //gets into camera mode for precise camera placement
 	{ "dpforcenext", CG_DPNextForcePower_f },

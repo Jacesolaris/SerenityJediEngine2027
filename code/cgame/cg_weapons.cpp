@@ -599,6 +599,9 @@ void CG_RegisterWeapon(const int weapon_num)
 		cgi_S_RegisterSound("sound/weapons/force/repulsecharge.mp3");
 		cgi_S_RegisterSound("sound/weapons/force/repulseloop.wav");
 		cgi_S_RegisterSound("sound/weapons/force/DarkStasis.mp3");
+		cgi_S_RegisterSound("sound/weapons/force/DarkStasis1.mp3");
+		cgi_S_RegisterSound("sound/weapons/force/DarkStasis2.mp3");
+		cgi_S_RegisterSound("sound/weapons/force/DarkStasis3.mp3");
 		cgi_S_RegisterSound("sound/weapons/force/Darkstasisloop.wav");
 
 		cgi_S_RegisterSound("sound/weapons/force/fear.mp3");
@@ -3555,6 +3558,11 @@ CG_NextWeapon_f
 */
 void CG_NextWeapon_f()
 {
+	if (CG_MDWheel_SwitchRing())
+	{
+		return; // the mouse wheel switches the weapon / force wheel's rings
+	}
+
 	if (!cg.snap)
 	{
 		return;
@@ -3732,6 +3740,11 @@ CG_PrevWeapon_f
 */
 void CG_PrevWeapon_f()
 {
+	if (CG_MDWheel_SwitchRing())
+	{
+		return; // the mouse wheel switches the weapon / force wheel's rings
+	}
+
 	if (!cg.snap)
 	{
 		return;

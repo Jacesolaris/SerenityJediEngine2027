@@ -820,6 +820,12 @@ void CG_OwnerDraw(float x, float y, float w, float h, float text_x, float text_y
 
 void CG_MouseEvent(const int x, const int y)
 {
+	// the radial weapon wheel (cg_weapons.c) moves its own pointer while it is open
+	if (CG_MDWheel_MouseEvent(x, y))
+	{
+		return;
+	}
+
 	cgs.cursorX += x;
 	if (cgs.cursorX < 0)
 		cgs.cursorX = 0;
@@ -890,6 +896,7 @@ void CG_EventHandling(const int type)
 	cgs.eventHandling = type;
 	if (type == CGAME_EVENT_NONE)
 	{
+		CG_MDWheel_Cancel();
 		CG_HideTeamMenu();
 	}
 	else if (type == CGAME_EVENT_TEAMMENU)
@@ -903,6 +910,12 @@ void CG_EventHandling(const int type)
 
 void CG_KeyEvent(const int key, const qboolean down)
 {
+	// the radial weapon wheel (cg_weapons.c) takes the keys while it is open
+	if (CG_MDWheel_KeyEvent(key, down))
+	{
+		return;
+	}
+
 	if (!down)
 	{
 		return;

@@ -5494,7 +5494,9 @@ static const char* g_bindCommands[] = {
 	"r_weather",
 	"use_barrier",
 	"use_decca",
-	"pazaak"
+	"pazaak",
+	"+md_wheel", // the radial weapon wheel (cgame)
+	"+md_forcewheel" // the same wheel on the force ring
 };
 
 #define g_bindCount ARRAY_LEN(g_bindCommands)

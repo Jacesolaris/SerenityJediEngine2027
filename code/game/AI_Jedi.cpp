@@ -732,6 +732,12 @@ void Jedi_PlayBlockedPushSound(const gentity_t* self)
 
 void Jedi_PlayDeflectSound(const gentity_t* self)
 {
+	// a thrown or dropped saber that is knocked away by a blade may have no owner to hit (saberHitEntity
+	// ENTITYNUM_NONE / the world: hit_owner NULL): that crashed here (MD team 2026-10-29)
+	if (!self || !self->client)
+	{
+		return;
+	}
 	if (!self->s.number)
 	{
 		if (!npc_is_dark_jedi(self))

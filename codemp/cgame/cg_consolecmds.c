@@ -349,7 +349,11 @@ static int cmdcmp(const void* a, const void* b)
 }
 
 static consoleCommand_t commands[] = {
+	{ "+md_forcewheel", CG_MDWheel_ForceDown_f }, // the weapon wheel on the force ring (the "Force Wheel" bind)
+	{ "+md_wheel", CG_MDWheel_Down_f }, // the radial weapon / force wheel (cg_weapons.c)
 	{ "+scores", CG_ScoresDown_f },
+	{ "-md_forcewheel", CG_MDWheel_Up_f },
+	{ "-md_wheel", CG_MDWheel_Up_f },
 	{ "-scores", CG_ScoresUp_f },
 	{ "briefing", CG_SiegeBriefing_f },
 	{ "clientlist", CG_ClientList_f },

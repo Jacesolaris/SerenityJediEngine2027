@@ -8063,7 +8063,7 @@ static void WP_SaberDamageTrace(gentity_t* ent, int saberNum, int bladeNum)
 		{
 			auto active_defenseentagain = static_cast<qboolean>((ent->client->ps.ManualBlockingFlags & 1 << MBF_NPCBLOCKING) != 0 || (ent->client->ps.ManualBlockingFlags & 1 << MBF_HOLDINGBLOCK) != 0);
 
-			if (!collision_resolved && base_damage)
+			if (!collision_resolved && base_damage && hit_owner && hit_owner->client) // the hit saber may have no owner (MD team 2026-10-29)
 			{
 				//some other kind of in-hand saber collision
 				//handle my reaction
@@ -29346,7 +29346,20 @@ void WP_ForcePowerStart(gentity_t* self, const forcePowers_t force_power, int ov
 		//held as long as its victims are
 		duration = darkStasisTime[DarkStasisLevel(self->client->ps.forcePowerLevel[force_power])];
 		self->client->ps.forcePowersActive |= 1 << force_power;
-		G_SoundOnEnt(self, CHAN_ITEM, "sound/weapons/force/DarkStasis.mp3");
+
+		if (self->client->ps.forcePowerLevel[FP_DARK_STASIS] == FORCE_LEVEL_1) // level 1 devide by 3
+		{
+			G_SoundOnEnt(self, CHAN_ITEM, "sound/weapons/force/DarkStasis1.mp3");
+		}
+		else if (self->client->ps.forcePowerLevel[FP_DARK_STASIS] == FORCE_LEVEL_2) // level 2 devide by 3
+		{
+			G_SoundOnEnt(self, CHAN_ITEM, "sound/weapons/force/DarkStasis2.mp3");
+		}
+		else
+		{
+			G_SoundOnEnt(self, CHAN_ITEM, "sound/weapons/force/DarkStasis3.mp3");
+		}
+
 		self->s.loopSound = G_SoundIndex("sound/weapons/force/Darkstasisloop.wav");
 		if (self->chestBolt != -1)
 		{

@@ -8827,6 +8827,9 @@ static void CG_Draw2D()
 
 		cgi_R_Font_DrawString(x_pos, y_pos, text, colorTable[CT_WHITE], cgs.media.qhFontMedium, -1, scale);
 	}
+
+	// the weapon / force wheel, while its key is held (cg_main.cpp)
+	CG_DrawMDWheel();
 }
 
 /*
