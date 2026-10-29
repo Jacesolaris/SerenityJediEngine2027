@@ -2845,6 +2845,111 @@ static void CG_SaberBodyStickPlace(centity_t* cent)
 	cent->lerpAngles[ROLL] = 0;
 }
 
+/*
+===============
+CG_MissileFromMuzzle
+
+The server starts a gun's shot at a point worked out from the eye (calcmuzzlePoint, g_weapon.c): in third person
+that is below / beside the gun the player holds, so the bolt came out under the muzzle (SP starts it at the gun's
+muzzle bolt). Here the shot is drawn from the shooter's gun muzzle (the *flash bolt of his weapon model, as the
+muzzle flash) and blends into its real path over its first MUZZLE_BLEND_MSEC. Visual only: where the shot goes and
+what it hits are the server's (Jace 2026-10-29).
+===============
+*/
+#define MUZZLE_BLEND_MSEC	150
+#define MUZZLE_MAX_OFS		48.0f
+
+static qboolean CG_MissileGunFlash(centity_t* owner, const int model, vec3_t out)
+{
+	mdxaBone_t mat;
+
+	if (!trap->G2API_HasGhoul2ModelOnIndex(&owner->ghoul2, model))
+	{
+		return qfalse;
+	}
+	trap->G2API_GetBoltMatrix(owner->ghoul2, model, 0, &mat, owner->turAngles, owner->lerpOrigin, cg.time,
+		cgs.game_models, owner->modelScale);
+	BG_GiveMeVectorFromMatrix(&mat, ORIGIN, out);
+	return qtrue;
+}
+
+static void CG_MissileFromMuzzle(centity_t* cent)
+{
+	const entityState_t* s1 = &cent->currentState;
+	const int age = cg.time - s1->pos.trTime;
+
+	if (cent->muzzleOfsTrTime != s1->pos.trTime)
+	{
+		// a new shot: the offset from its start to the shooter's gun muzzle, taken once
+		cent->muzzleOfsTrTime = s1->pos.trTime;
+		VectorClear(cent->muzzleOfs);
+
+		if (age >= MUZZLE_BLEND_MSEC || s1->otherentityNum < 0 || s1->otherentityNum >= ENTITYNUM_WORLD)
+		{
+			return;
+		}
+		switch (s1->weapon)
+		{
+		case WP_NONE:
+		case WP_STUN_BATON:
+		case WP_MELEE:
+		case WP_SABER:
+		case WP_THERMAL:
+		case WP_TRIP_MINE:
+		case WP_DET_PACK:
+		case WP_EMPLACED_GUN:
+		case WP_TURRET:
+			return;
+		default:
+			break;
+		}
+		if (s1->weapon <= WP_NONE || s1->weapon >= WP_NUM_WEAPONS || s1->pos.trType == TR_STATIONARY
+			|| s1->powerups & 1 << PW_FORCE_PROJECTILE)
+		{
+			return;
+		}
+		centity_t* owner = &cg_entities[s1->otherentityNum];
+		if (!owner->currentValid || !owner->ghoul2
+			|| owner->currentState.eType != ET_PLAYER && owner->currentState.eType != ET_NPC
+			|| owner->currentState.weapon != s1->weapon || owner->currentState.m_iVehicleNum)
+		{
+			return;
+		}
+		// the local player in first person: the shot already starts by the view weapon
+		if (s1->otherentityNum == cg.snap->ps.clientNum && !cg.renderingThirdPerson)
+		{
+			return;
+		}
+		// the gun nearest the shot's start (dual pistols / the droideka fire from both hands)
+		vec3_t flash, best;
+		float bestDist = MUZZLE_MAX_OFS * MUZZLE_MAX_OFS;
+		qboolean found = qfalse;
+		for (int model = 1; model <= 2; model++)
+		{
+			if (CG_MissileGunFlash(owner, model, flash))
+			{
+				const float d = DistanceSquared(flash, s1->pos.trBase);
+				if (d < bestDist)
+				{
+					bestDist = d;
+					VectorCopy(flash, best);
+					found = qtrue;
+				}
+			}
+		}
+		if (found)
+		{
+			VectorSubtract(best, s1->pos.trBase, cent->muzzleOfs);
+		}
+	}
+
+	if (age < MUZZLE_BLEND_MSEC && !VectorCompare(cent->muzzleOfs, vec3_origin))
+	{
+		const float f = age <= 0 ? 1.0f : 1.0f - (float)age / (float)MUZZLE_BLEND_MSEC;
+		VectorMA(cent->lerpOrigin, f, cent->muzzleOfs, cent->lerpOrigin);
+	}
+}
+
 static void CG_Missile(centity_t* cent)
 {
 	refEntity_t ent = { 0 };
@@ -2860,6 +2965,9 @@ static void CG_Missile(centity_t* cent)
 	}
 
 	s1 = &cent->currentState;
+
+	// a gun's shot leaves the shooter's gun muzzle (as SP), then follows its real path
+	CG_MissileFromMuzzle(cent);
 
 	if (s1->weapon > WP_NUM_WEAPONS && s1->weapon != G2_MODEL_PART)
 	{

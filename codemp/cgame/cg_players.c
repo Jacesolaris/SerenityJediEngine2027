@@ -16749,6 +16749,16 @@ static void CG_HolsteredWeaponRender(centity_t* cent, const clientInfo_t* ci, co
 #define		G2MODEL_GOLAN_HOLSTERED			10
 #define		SABERBLASTER_HIP_HOLSTERED		(WP_NUM_WEAPONS + 1) // SS_BLASTER (2026-10-14): blaster2_holstered marker
 
+// SS_BLASTER is Kyle Katarn's style only (game: G_SaberBlasterKyleModel, g_active.c): his model folders contain "kyle".
+// Only he carries the style's bryar pistol on the left hip (as MD9 MP; Jace 2026-10-29)
+static qboolean CG_SaberBlasterKyleModel(const clientInfo_t* ci)
+{
+	char model[MAX_QPATH];
+	Q_strncpyz(model, ci->modelName, sizeof model);
+	Q_strlwr(model);
+	return strstr(model, "kyle") ? qtrue : qfalse;
+}
+
 // SS_BLASTER (2026-10-14): the blaster saber style holds a bryar pistol in the left hand (visual only): the left hand
 // pistol instance (bolted to *l_hand) goes into ghoul2 slot 2, which single saber users do not use
 static void CG_SaberBlasterPistolUpdate(centity_t* cent, const clientInfo_t* ci)
@@ -16775,6 +16785,7 @@ static void CG_SaberBlasterPistolUpdate(centity_t* cent, const clientInfo_t* ci)
 		return;
 	}
 	if (cent->currentState.fireflag == SS_BLASTER
+		&& cent->currentState.saberHolstered != 2 // SS_BLASTER (Jace 2026-10-29): saber off = pistol holstered
 		&& !ci->saber[1].model[0]
 		&& !(cent->currentState.eFlags & EF_DEAD))
 	{
@@ -17434,12 +17445,14 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 		// forbid it) but does not use it right now carries its bryar pistol on the left hip; it takes the left hip
 		// before any other gun. With the style active the pistol is in his left hand (CG_SaberBlasterPistolUpdate).
 		if (CG_HOLSTER_HAS(WP_SABER)
+			&& CG_SaberBlasterKyleModel(ci) // Kyle Katarn only
 			&& ci->saber[0].model[0] && !ci->saber[1].model[0]
 			&& ci->saber[0].numBlades == 1
 			&& !(ci->saber[0].saberFlags & SFL_TWO_HANDED)
 			&& !(ci->saber[0].stylesForbidden & 1 << SS_BLASTER))
 		{
-			if (!(cent->currentState.weapon == WP_SABER && cent->currentState.fireflag == SS_BLASTER))
+			if (!(cent->currentState.weapon == WP_SABER && cent->currentState.fireflag == SS_BLASTER
+				&& cent->currentState.saberHolstered != 2)) // SS_BLASTER (Jace 2026-10-29): saber off = on the hip
 			{
 				if (ci->holster_blaster2 != -1)
 				{

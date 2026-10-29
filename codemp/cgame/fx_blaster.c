@@ -26,6 +26,29 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 /*
 -------------------------
+FX_ShotTailScale
+
+As SP (FX_BlasterProjectileThink): for a shot's first 75 msec (just fired, or bounced) the direction given to its
+effect is scaled down, which shortens the effect's tail, so it doesn't reach back through the shooter from the
+muzzle (Jace 2026-10-29)
+-------------------------
+*/
+void FX_ShotTailScale(const centity_t* cent, vec3_t forward)
+{
+	int dif = cg.time - cent->currentState.pos.trTime;
+
+	if (dif < 75)
+	{
+		if (dif < 0)
+		{
+			dif = 0;
+		}
+		VectorScale(forward, (float)dif / 75.0f * 0.95f + 0.05f, forward);
+	}
+}
+
+/*
+-------------------------
 FX_BlasterProjectileThink
 -------------------------
 */
@@ -38,6 +61,7 @@ void FX_BlasterProjectileThink(centity_t* cent, const struct weaponInfo_s* weapo
 	{
 		forward[2] = 1.0f;
 	}
+	FX_ShotTailScale(cent, forward);
 
 	trap->FX_PlayEffectID(cgs.effects.blasterShotEffect, cent->lerpOrigin, forward, -1, -1, qfalse);
 }
@@ -55,6 +79,7 @@ void FX_BlasterAltFireThink(centity_t* cent, const struct weaponInfo_s* weapon)
 	{
 		forward[2] = 1.0f;
 	}
+	FX_ShotTailScale(cent, forward);
 
 	trap->FX_PlayEffectID(cgs.effects.blasterShotEffect, cent->lerpOrigin, forward, -1, -1, qfalse);
 }
@@ -74,6 +99,7 @@ void FX_DroidekaProjectileThink(centity_t* cent, const struct weaponInfo_s* weap
 	{
 		forward[2] = 1.0f;
 	}
+	FX_ShotTailScale(cent, forward);
 
 	trap->FX_PlayEffectID(cgs.effects.droidekaShotEffect, cent->lerpOrigin, forward, -1, -1, qfalse);
 }
@@ -93,6 +119,7 @@ void FX_CloneProjectileThink(centity_t* cent, const struct weaponInfo_s* weapon)
 	{
 		forward[2] = 1.0f;
 	}
+	FX_ShotTailScale(cent, forward);
 
 	trap->FX_PlayEffectID(cgs.effects.cloneShotEffect, cent->lerpOrigin, forward, -1, -1, qfalse);
 }
@@ -117,6 +144,7 @@ void FX_NoghriShotProjectileThink(centity_t* cent, const struct weaponInfo_s* we
 	{
 		forward[2] = 1.0f;
 	}
+	FX_ShotTailScale(cent, forward);
 
 	// as SP: shorten the tail for a moment after it was fired so it does not clip so harshly
 	int dif = cg.time - cent->currentState.pos.trTime;
@@ -159,6 +187,7 @@ void FX_TuskenShotProjectileThink(centity_t* cent, const struct weaponInfo_s* we
 	{
 		forward[2] = 1.0f;
 	}
+	FX_ShotTailScale(cent, forward);
 
 	// as SP: shorten the tail for a moment after it was fired so it does not clip so harshly
 	int dif = cg.time - cent->currentState.pos.trTime;
@@ -235,6 +264,7 @@ void FX_EwebProjectileThink(centity_t* cent, const struct weaponInfo_s* weapon)
 	{
 		forward[2] = 1.0f;
 	}
+	FX_ShotTailScale(cent, forward);
 
 	trap->FX_PlayEffectID(cgs.effects.ewebShotEffect, cent->lerpOrigin, forward, -1, -1, qfalse);
 }
@@ -252,6 +282,7 @@ void FX_EwebAltFireThink(centity_t* cent, const struct weaponInfo_s* weapon)
 	{
 		forward[2] = 1.0f;
 	}
+	FX_ShotTailScale(cent, forward);
 
 	trap->FX_PlayEffectID(cgs.effects.ewebShotEffect, cent->lerpOrigin, forward, -1, -1, qfalse);
 }

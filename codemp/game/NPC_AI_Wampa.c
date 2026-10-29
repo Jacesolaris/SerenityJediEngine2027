@@ -1345,6 +1345,9 @@ static void G_RancorThink(gentity_t* self, usercmd_t* ucmd, const qboolean isBot
 			if (!cl->monsterHold)
 			{
 				G_RancorSwing(self);
+				// the swing may have grabbed someone: he is the victim from now on (it was still NULL here, and the
+				// "holding someone" code below crashed on it - Jace 2026-10-29)
+				victim = G_MonsterVictim(self);
 			}
 			break;
 		case BOTH_ATTACK1:
@@ -1446,6 +1449,10 @@ static void G_RancorThink(gentity_t* self, usercmd_t* ucmd, const qboolean isBot
 	ucmd->buttons &= ~(BUTTON_ATTACK | BUTTON_ALT_ATTACK);
 	cl->ps.eFlags2 |= EF2_USE_ALT_ANIM;
 	cl->ps.eFlags2 &= ~EF2_GENERIC_NPC_FLAG;
+	if (!victim)
+	{
+		return; // (as the wampa) no valid victim this frame
+	}
 
 	if (victim->health > 0 && cl->monsterLastHealth - self->health >= 40 && cl->ps.legsAnim != BOTH_ATTACK3)
 	{

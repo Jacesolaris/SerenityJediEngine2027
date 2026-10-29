@@ -3409,6 +3409,86 @@ static void CG_DrawHUDJK2RightFrame2(const int x, const int y)
 CG_DrawHUD
 ================
 */
+/*
+===============
+CG_DrawSaberBlasterClip
+
+SS_BLASTER (Jace 2026-10-29): the blaster style's pistol clip as Jedi Survivor's blaster stance meter - a capsule on the
+left of the screen, above the left HUD, ten cells (two shots each: lit, half lit for the last shot of a cell, dark when
+spent; the shots left count down from the top) and the bryar icon below them. The frame pulses red with the clip empty
+(reload). Only while the style is in use. Art: gfx/hud/saberblaster_frame / _cell (Claude_Edits pk3); without it,
+plain boxes.
+===============
+*/
+#define SABERBLASTER_HUD_CELLS	(SABERBLASTER_CLIP_SIZE / 2)
+static void CG_DrawSaberBlasterClip(const centity_t* cent)
+{
+	if (!cent || cent->currentState.weapon != WP_SABER || cg.predictedPlayerState.fd.saberDrawAnimLevel != SS_BLASTER
+		|| cg.predictedPlayerState.saberHolstered == 2) // saber off = pistol holstered, no meter (Jace 2026-10-29)
+	{
+		return;
+	}
+	int left = SABERBLASTER_CLIP_SIZE - cg.predictedPlayerState.ammo[SABERBLASTER_CLIP_SLOT];
+	if (left < 0)
+	{
+		left = 0;
+	}
+	else if (left > SABERBLASTER_CLIP_SIZE)
+	{
+		left = SABERBLASTER_CLIP_SIZE;
+	}
+	const qhandle_t frame = trap->R_RegisterShaderNoMip("gfx/hud/saberblaster_frame");
+	const qhandle_t cell = trap->R_RegisterShaderNoMip("gfx/hud/saberblaster_cell");
+	const qhandle_t icon = cgs.media.weaponIcons[WP_BRYAR_PISTOL];
+	const float hr = cgs.glconfig.vidWidth > 0 && cgs.glconfig.vidHeight > 0 ? (float)cgs.glconfig.vidHeight * 640.0f / ((float)cgs.glconfig.vidWidth * 480.0f) : 1.0f;
+	const float x = 8.0f * hr, w = 20.0f * hr, y = 254.0f, h = 136.0f;
+	const float cellsTop = y + 8.0f, cellsBottom = y + h - 30.0f;
+	const float cellH = (cellsBottom - cellsTop) / (float)(SABERBLASTER_HUD_CELLS);
+	vec4_t frameColor = { 1.0f, 1.0f, 1.0f, 0.9f };
+	static vec4_t frameBack = { 0.05f, 0.07f, 0.1f, 0.65f };
+	static vec4_t lit = { 0.25f, 0.65f, 1.0f, 1.0f };
+	static vec4_t half = { 0.25f, 0.65f, 1.0f, 0.45f };
+	static vec4_t spent = { 0.35f, 0.35f, 0.38f, 0.55f };
+
+	if (left <= 0)
+	{
+		// empty: reload (the frame pulses red)
+		const float pulse = 0.5f + 0.5f * sinf((float)(cg.time) * 0.008f);
+		frameColor[1] = frameColor[2] = 0.3f + 0.3f * pulse;
+		frameColor[3] = 0.95f;
+	}
+	if (frame)
+	{
+		trap->R_SetColor(frameColor);
+		CG_DrawPic(x, y, w, h, frame);
+	}
+	else
+	{
+		CG_FillRect(x, y, w, h, frameBack);
+	}
+	for (int i = 0; i < SABERBLASTER_HUD_CELLS; i++)
+	{
+		// cell 0 at the bottom: the shots left are the lit cells from the bottom up
+		const int shots = left - 2 * i;
+		const float* color = shots >= 2 ? lit : shots == 1 ? half : spent;
+		const float cy = cellsBottom - (float)(i + 1) * cellH + 1.0f;
+		if (cell)
+		{
+			trap->R_SetColor(color);
+			CG_DrawPic(x + 4.0f * hr, cy, w - 8.0f * hr, cellH - 2.0f, cell);
+		}
+		else
+		{
+			CG_FillRect(x + 4.0f * hr, cy, w - 8.0f * hr, cellH - 2.0f, color);
+		}
+	}
+	trap->R_SetColor(NULL);
+	if (icon)
+	{
+		CG_DrawPic(x + (w - 14.0f * hr) * 0.5f, y + h - 24.0f, 14.0f * hr, 14.0f, icon);
+	}
+}
+
 static void CG_DrawHUD(const centity_t* cent)
 {
 	// don't display if dead
@@ -3464,6 +3544,8 @@ static void CG_DrawHUD(const centity_t* cent)
 			}
 		}
 
+		// SS_BLASTER: the pistol clip meter, last so the HUD art never covers it
+		CG_DrawSaberBlasterClip(cent);
 		return;
 	}
 
@@ -3813,6 +3895,9 @@ static void CG_DrawHUD(const centity_t* cent)
 			}
 		}
 	}
+
+	// SS_BLASTER: the pistol clip meter, drawn after every HUD style's art so none of them covers it
+	CG_DrawSaberBlasterClip(cent);
 }
 
 #define MAX_SHOWPOWERS NUM_FORCE_POWERS

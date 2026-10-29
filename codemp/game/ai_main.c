@@ -9359,6 +9359,36 @@ static qboolean Bot_SameGroundLevel(bot_state_t* bs, const vec3_t enemyPos)
 // CLOSE‑RANGE MELEE COMBAT HANDLING
 // ---------------------------------------------------------
 static void JediDirectionalDashDodge(bot_state_t* bs, const vec3_t enemyPos);
+
+// ---------------------------------------------------------
+// Bots' 2 dash rule (as the players' Dash_Count): 2 dashes (evade dashes and dash attacks alike), then no dash until
+// the cooldown (5-10 s) is over. The counter was reset before every dash (the cooldown time was 0, so "expired"),
+// so bots dashed without limit (Jace 2026-10-29)
+// ---------------------------------------------------------
+static qboolean Bot_CanDash(bot_state_t* bs)
+{
+	if (bs->DashOutTime > level.time)
+	{
+		return qfalse; // cooling down
+	}
+	if (bs->DashOutTime)
+	{
+		// the cooldown is over: 2 more dashes
+		bs->DashOutTime = 0;
+		bs->Dash_BOT_Count = 0;
+	}
+	return bs->Dash_BOT_Count < 2 ? qtrue : qfalse;
+}
+
+static void Bot_CountDash(bot_state_t* bs)
+{
+	bs->Dash_BOT_Count++;
+	if (bs->Dash_BOT_Count >= 2)
+	{
+		// the second dash: the cooldown starts
+		bs->DashOutTime = level.time + Q_irand(5000, 10000);
+	}
+}
 static void BotStartBackOff(bot_state_t* bs);
 static qboolean BotEnemyInKata(const playerState_t* ps);
 static void melee_combat_handling(bot_state_t* bs)
@@ -9410,38 +9440,14 @@ static void melee_combat_handling(bot_state_t* bs)
 			PM_InKnockDown(&bs->cur_ps) == qfalse)
 		{
 			// -----------------------------------------
-			// Cooldown check: if still cooling down → NO DASH
+			// The 2 dash rule (Bot_CanDash): 2 dashes, then the cooldown → NO DASH, back off
 			// -----------------------------------------
-			if (bs->DashOutTime > level.time)
-			{
-				BotStartBackOff(bs);
-				return;
-			}
-
-			// -----------------------------------------
-			// Cooldown expired → reset dash counter
-			// -----------------------------------------
-			if (bs->DashOutTime <= level.time)
-			{
-				bs->Dash_BOT_Count = 0;
-			}
-
-			// -----------------------------------------
-			// Allow up to 2 dashes
-			// -----------------------------------------
-			if (bs->Dash_BOT_Count < 2 &&
+			if (Bot_CanDash(bs) &&
 				bs->cur_ps.fd.forcePower >= 50)
 			{
 				bs->cur_ps.fd.forcePower -= 35;
 				JediDirectionalDashDodge(bs, enemyPos);
-
-				bs->Dash_BOT_Count++;
-
-				// Start cooldown after second dash
-				if (bs->Dash_BOT_Count >= 2)
-				{
-					bs->DashOutTime = level.time + Q_irand(5000, 10000);
-				}
+				Bot_CountDash(bs);
 				return;
 			}
 			else
@@ -10423,38 +10429,14 @@ static void saber_combat_handling(bot_state_t* bs)
 			PM_InKnockDown(&bs->cur_ps) == qfalse)
 		{
 			// -----------------------------------------
-			// Cooldown check: if still cooling down → NO DASH
+			// The 2 dash rule (Bot_CanDash): 2 dashes, then the cooldown → NO DASH, back off
 			// -----------------------------------------
-			if (bs->DashOutTime > level.time)
-			{
-				BotStartBackOff(bs);
-				return;
-			}
-
-			// -----------------------------------------
-			// Cooldown expired → reset dash counter
-			// -----------------------------------------
-			if (bs->DashOutTime <= level.time)
-			{
-				bs->Dash_BOT_Count = 0;
-			}
-
-			// -----------------------------------------
-			// Allow up to 2 dashes
-			// -----------------------------------------
-			if (bs->Dash_BOT_Count < 2 &&
+			if (Bot_CanDash(bs) &&
 				bs->cur_ps.fd.forcePower >= 50)
 			{
 				bs->cur_ps.fd.forcePower -= 35;
 				JediDirectionalDashDodge(bs, enemyPos);
-
-				bs->Dash_BOT_Count++;
-
-				// Start cooldown after second dash
-				if (bs->Dash_BOT_Count >= 2)
-				{
-					bs->DashOutTime = level.time + Q_irand(5000, 10000);
-				}
+				Bot_CountDash(bs);
 				return;
 			}
 			else
@@ -10535,11 +10517,13 @@ static void saber_combat_handling(bot_state_t* bs)
 
 		if (lowSkill == qfalse &&
 			bs->DashInTime <= level.time &&
+			Bot_CanDash(bs) && // the 2 dash rule
 			bs->frame_Enemy_Len < MaxDashDist &&
 			bs->cur_ps.groundEntityNum != ENTITYNUM_NONE &&
 			(enemy_ps_for_dash == NULL ? qfalse : (PM_InKnockDown(enemy_ps_for_dash) ? qtrue : qfalse)) == qfalse)
 		{
 			JediDirectionalDashAttack(bs, enemyPos);
+			Bot_CountDash(bs);
 			bs->DashInTime = level.time + Q_irand(3000, 6000);
 		}
 		else
@@ -10652,38 +10636,14 @@ static void Enhanced_saber_combat_handling(bot_state_t* bs)
 			PM_InKnockDown(&bs->cur_ps) == qfalse)
 		{
 			// -----------------------------------------
-			// Cooldown check: if still cooling down → NO DASH
+			// The 2 dash rule (Bot_CanDash): 2 dashes, then the cooldown → NO DASH, back off
 			// -----------------------------------------
-			if (bs->DashOutTime > level.time)
-			{
-				BotStartBackOff(bs);
-				return;
-			}
-
-			// -----------------------------------------
-			// Cooldown expired → reset dash counter
-			// -----------------------------------------
-			if (bs->DashOutTime <= level.time)
-			{
-				bs->Dash_BOT_Count = 0;
-			}
-
-			// -----------------------------------------
-			// Allow up to 2 dashes
-			// -----------------------------------------
-			if (bs->Dash_BOT_Count < 2 &&
+			if (Bot_CanDash(bs) &&
 				bs->cur_ps.fd.forcePower >= 50)
 			{
 				bs->cur_ps.fd.forcePower -= 35;
 				JediDirectionalDashDodge(bs, enemyPos);
-
-				bs->Dash_BOT_Count++;
-
-				// Start cooldown after second dash
-				if (bs->Dash_BOT_Count >= 2)
-				{
-					bs->DashOutTime = level.time + Q_irand(5000, 10000);
-				}
+				Bot_CountDash(bs);
 				return;
 			}
 			else
@@ -10722,11 +10682,13 @@ static void Enhanced_saber_combat_handling(bot_state_t* bs)
 		playerState_t* ps = &bs->currentEnemy->client->ps;
 		// Dash cooldown using bot-local timer
 		if (bs->DashInTime <= level.time &&
+			Bot_CanDash(bs) && // the 2 dash rule
 			bs->frame_Enemy_Len < MaxDashDist &&
 			bs->cur_ps.groundEntityNum != ENTITYNUM_NONE &&
 			PM_InKnockDown(ps) == qfalse)
 		{
 			JediDirectionalDashAttack(bs, enemyPos);
+			Bot_CountDash(bs);
 			bs->DashInTime = level.time + Q_irand(3000, 6000);
 #ifdef _DEBUG
 			//Com_Printf("Enhanced_dash_to_attack\n");

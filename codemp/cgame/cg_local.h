@@ -556,6 +556,10 @@ typedef struct centity_s {
 	qboolean		saberBodyStickSet;
 	vec3_t			saberBodyStickOfs;
 	vec3_t			saberBodyStickDir;
+
+	// a gun's shot (CG_MissileFromMuzzle): drawn leaving the shooter's gun muzzle, blending into its real path
+	int				muzzleOfsTrTime;	// the shot (its trajectory start) the offset was taken for
+	vec3_t			muzzleOfs;			// gun muzzle - the server's shot start
 } centity_t;
 
 //======================================================================

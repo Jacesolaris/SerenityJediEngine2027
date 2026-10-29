@@ -410,8 +410,8 @@ static CGhoul2Info_v* Hls_WeaponG2(const int weapon)
 // Applies a rotation (degrees) about one axis (PITCH, YAW or ROLL) to the axis (multiplayer's ApplyAxisRotation)
 static void Hls_RotateAxis(vec3_t axis[3], const int rotType, const float value)
 {
-	vec3_t result[3];
-	vec3_t rotation[3];
+	vec3_t result[3]= {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
+	vec3_t rotation[3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
 
 	if (value == 0)
 	{
@@ -492,7 +492,7 @@ static void Hls_Render(centity_t* cent, const holsterModel_t* model, const int h
 	}
 
 	mdxaBone_t boltMatrix;
-	vec3_t angles, org, axis[3];
+	vec3_t angles, org, axis[3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
 	VectorCopy(g2Angles, angles);
 	VectorCopy(origin, org);
 	gi.G2API_GetBoltMatrix(gent->ghoul2, gent->playerModel, bolt, &boltMatrix, angles, org, cg.time,
@@ -724,7 +724,8 @@ void CG_HolsteredWeapons(centity_t* cent, const vec3_t g2Angles, const vec3_t or
 	}
 	// not drawn while the pistol is in his hand: the bryar pistol selected as a weapon, or the saber in the blaster
 	// style (the pistol in his left hand)
-	if (blasterHip && inHand != WP_BRYAR_PISTOL && !(inHand == WP_SABER && client->ps.saberAnimLevel == SS_BLASTER))
+	if (blasterHip && inHand != WP_BRYAR_PISTOL && !(inHand == WP_SABER && client->ps.saberAnimLevel == SS_BLASTER
+		&& client->ps.saber[0].Active())) // SS_BLASTER (Jace 2026-10-29): saber off = pistol on the hip
 	{
 		Hls_Render(cent, model, HLR_BRYARPISTOL_L, WP_BRYAR_PISTOL, g2Angles, origin, playerRenderfx, shadowPlane,
 			cg_blasterHipPullIn.value); // SS_BLASTER (2026-10-15): closer to the body

@@ -2328,6 +2328,287 @@ static qboolean WP_CounterForce(const gentity_t* attacker, const gentity_t* defe
 	return qtrue;
 }
 
+// ----------------------------------------------------------------------------------------------------------------
+// Force Grip / Force Grasp level 3 arc (Jace 2026-10-29, as SP): a player's level 3 grip / grasp also catches up to
+// FORCE_ARC_EXTRA more enemies in a 90 degree arc in front of him. The one he aimed at is carried as before (the grip
+// / grasp entity); the others are lifted and held where they stand, choking (grip: the same damage as the one
+// carried). They are let go with him, or when they get out of reach or sight. Same Force drain as one. Players only:
+// bots and NPCs grip / grasp one.
+// ----------------------------------------------------------------------------------------------------------------
+#define FORCE_ARC_EXTRA	3
+#define FORCE_ARC_DOT	0.7071f	// cos 45: 45 degrees either side of the aim
+#define FORCE_ARC_LIFT	48.0f	// lifted this far
+static int forceArcVictim[MAX_GENTITIES][FORCE_ARC_EXTRA]; // entity number + 1, 0 = none
+static vec3_t forceArcHold[MAX_GENTITIES][FORCE_ARC_EXTRA]; // where each one was lifted to
+// carried as the main one (Jace 2026-10-29): each one's place around the aim when caught - yaw / pitch from the view
+// and distance from the eye - kept as the player turns, advances or retreats
+static float forceArcYaw[MAX_GENTITIES][FORCE_ARC_EXTRA], forceArcPitch[MAX_GENTITIES][FORCE_ARC_EXTRA];
+static float forceArcDist[MAX_GENTITIES][FORCE_ARC_EXTRA];
+
+static qboolean SJE_ValidEnemy(const gentity_t* self, const gentity_t* ent, const forcePowers_t fp);
+
+static qboolean WP_ForceArcUser(const gentity_t* self, const forcePowers_t power)
+{
+	return self && self->client && self->s.number < MAX_CLIENTS && !(self->r.svFlags & SVF_BOT)
+		&& self->client->ps.fd.forcePowerLevel[power] >= FORCE_LEVEL_3 ? qtrue : qfalse;
+}
+
+static void WP_ForceArcLetGo(const gentity_t* self, const int slot)
+{
+	const int num = forceArcVictim[self->s.number][slot] - 1;
+	forceArcVictim[self->s.number][slot] = 0;
+	if (num < 0 || num >= ENTITYNUM_WORLD)
+	{
+		return;
+	}
+	gentity_t* ent = &g_entities[num];
+	if (!ent->inuse || !ent->client)
+	{
+		return;
+	}
+	ent->client->ps.forceGripChangeMovetype = PM_NORMAL;
+	ent->client->ps.fd.forceGripBeingGripped = 0;
+	if (VectorLength(ent->client->ps.velocity) > 500)
+	{
+		VectorNormalize(ent->client->ps.velocity);
+		VectorScale(ent->client->ps.velocity, 500, ent->client->ps.velocity);
+	}
+	if (ent->client->ps.forceHandExtend == HANDEXTEND_CHOKE)
+	{
+		ent->client->ps.forceHandExtendTime = 0;
+	}
+}
+
+// all of self's arc victims go (the grip / grasp stopped)
+static void WP_ForceArcRelease(const gentity_t* self)
+{
+	if (!self || self->s.number < 0 || self->s.number >= MAX_GENTITIES)
+	{
+		return;
+	}
+	for (int k = 0; k < FORCE_ARC_EXTRA; k++)
+	{
+		WP_ForceArcLetGo(self, k);
+	}
+}
+
+// the grip / grasp took main: catch the others in the arc
+static void WP_ForceArcGrab(const gentity_t* self, const gentity_t* main, const forcePowers_t power)
+{
+	int list[MAX_GENTITIES];
+	vec3_t mins = { 0 }, maxs = { 0 }, eye, fwd;
+	int used = 0;
+
+	WP_ForceArcRelease(self);
+	if (!WP_ForceArcUser(self, power))
+	{
+		return;
+	}
+	VectorCopy(self->client->ps.origin, eye);
+	eye[2] += self->client->ps.viewheight;
+	AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
+	for (int i = 0; i < 3; i++)
+	{
+		mins[i] = eye[i] - MAX_GRIP_DISTANCE;
+		maxs[i] = eye[i] + MAX_GRIP_DISTANCE;
+	}
+	const int num = trap->EntitiesInBox(mins, maxs, list, MAX_GENTITIES);
+	// the ones nearest the aim first
+	for (int pick = 0; pick < FORCE_ARC_EXTRA; pick++)
+	{
+		gentity_t* best = NULL;
+		float bestDot = FORCE_ARC_DOT;
+		for (int e = 0; e < num; e++)
+		{
+			gentity_t* ent = &g_entities[list[e]];
+			qboolean taken = qfalse;
+			vec3_t spot, dir;
+			trace_t tr;
+
+			if (ent == main || !ent->client || !SJE_ValidEnemy(self, ent, power)
+				|| ent->client->ps.fd.forceGripCripple || ent->client->ps.fd.forceGripBeingGripped > level.time
+				|| ent->client->ps.m_iVehicleNum)
+			{
+				continue;
+			}
+			for (int k = 0; k < used; k++)
+			{
+				if (forceArcVictim[self->s.number][k] - 1 == ent->s.number)
+				{
+					taken = qtrue;
+				}
+			}
+			if (taken)
+			{
+				continue;
+			}
+			VectorCopy(ent->client->ps.origin, spot);
+			spot[2] += ent->client->ps.viewheight * 0.5f;
+			VectorSubtract(spot, eye, dir);
+			if (VectorNormalize(dir) > MAX_GRIP_DISTANCE)
+			{
+				continue;
+			}
+			const float dot = DotProduct(dir, fwd);
+			if (dot < bestDot)
+			{
+				continue;
+			}
+			trap->Trace(&tr, eye, NULL, NULL, spot, self->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
+			if (tr.fraction < 1.0f && tr.entityNum != ent->s.number)
+			{
+				continue;
+			}
+			best = ent;
+			bestDot = dot;
+		}
+		if (!best)
+		{
+			break;
+		}
+		forceArcVictim[self->s.number][used] = best->s.number + 1;
+		VectorCopy(best->client->ps.origin, forceArcHold[self->s.number][used]);
+		forceArcHold[self->s.number][used][2] += FORCE_ARC_LIFT;
+		{
+			// his place around the aim, from the eye
+			vec3_t to, ang;
+			VectorSubtract(forceArcHold[self->s.number][used], eye, to);
+			forceArcDist[self->s.number][used] = Com_Clamp(96.0f, MAX_GRIP_DISTANCE, VectorLength(to));
+			vectoangles(to, ang);
+			forceArcYaw[self->s.number][used] = AngleSubtract(ang[YAW], self->client->ps.viewangles[YAW]);
+			forceArcPitch[self->s.number][used] = AngleSubtract(ang[PITCH], self->client->ps.viewangles[PITCH]);
+		}
+		used++;
+		best->client->ps.fd.forceGripStarted = level.time;
+		if (best->client->ps.weapon == WP_SABER && !best->client->ps.saberHolstered)
+		{
+			best->client->ps.saberHolstered = 2;
+			G_Sound(best, CHAN_WEAPON, G_SoundIndex("sound/weapons/saber/saberoffquick.mp3"));
+		}
+		if (best->s.eType == ET_NPC)
+		{
+			G_AddVoiceEvent(best, Q_irand(EV_PUSHED1, EV_PUSHED3), 2000);
+		}
+	}
+}
+
+// Force Grasp: the held one chokes, BOTH_CHOKE4 over and over as long as he is held (Jace 2026-10-29)
+static void WP_GraspChokeAnim(gentity_t* ent, const int parts)
+{
+	const qboolean torso = parts == SETANIM_TORSO ? qtrue : qfalse;
+	const int anim = torso ? ent->client->ps.torsoAnim : ent->client->ps.legsAnim;
+	const int timer = torso ? ent->client->ps.torsoTimer : ent->client->ps.legsTimer;
+	if (anim != BOTH_CHOKE4 || timer <= 0)
+	{
+		G_SetAnim(ent, NULL, parts, BOTH_CHOKE4, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART, 0);
+	}
+}
+
+// every frame of the grip / grasp: hold the arc victims up (grasp: choking)
+static void WP_ForceArcHold(const gentity_t* self, const forcePowers_t power)
+{
+	if (!self || self->s.number < 0 || self->s.number >= MAX_GENTITIES)
+	{
+		return;
+	}
+	for (int k = 0; k < FORCE_ARC_EXTRA; k++)
+	{
+		const int num = forceArcVictim[self->s.number][k] - 1;
+		vec3_t to;
+		trace_t tr;
+
+		if (num < 0)
+		{
+			continue;
+		}
+		gentity_t* ent = &g_entities[num];
+		if (!ent->inuse || !ent->client || ent->health < 1 || ent->client->ps.eFlags & EF_DEAD)
+		{
+			WP_ForceArcLetGo(self, k);
+			continue;
+		}
+		VectorSubtract(ent->client->ps.origin, self->client->ps.origin, to);
+		trap->Trace(&tr, self->client->ps.origin, NULL, NULL, ent->client->ps.origin, self->s.number, MASK_PLAYERSOLID,
+			qfalse, 0, 0);
+		if (VectorLength(to) > MAX_GRIP_DISTANCE * 1.25f || tr.fraction != 1.0f && tr.entityNum != ent->s.number)
+		{
+			WP_ForceArcLetGo(self, k);
+			continue;
+		}
+		Jetpack_Off(ent);
+		ent->client->ps.fd.forceGripBeingGripped = level.time + 1000;
+		ent->client->ps.forceGripChangeMovetype = PM_FLOAT;
+		ent->client->ps.otherKiller = self->s.number;
+		ent->client->ps.otherKillerTime = level.time + 5000;
+		ent->client->ps.otherKillerDebounceTime = level.time + 100;
+		if (ent->client->ps.weaponTime < 300)
+		{
+			ent->client->ps.weaponTime = 300;
+		}
+		if (ent->client->ps.weapon == WP_SABER && !ent->client->ps.saberHolstered)
+		{
+			ent->client->ps.saberHolstered = 2;
+		}
+		if (power == FP_GRASP)
+		{
+			WP_GraspChokeAnim(ent, SETANIM_BOTH);
+		}
+		if (ent->client->ps.forceGripMoveInterval < level.time)
+		{
+			// to his carried spot (only every 300 ms: bandwidth, as the grip's own move)
+			vec3_t vel;
+			// carried as the main one: his place around the aim follows the player's turn and steps
+			vec3_t ang, dir, eye, goal;
+			VectorCopy(self->client->ps.origin, eye);
+			eye[2] += self->client->ps.viewheight;
+			VectorCopy(self->client->ps.viewangles, ang);
+			ang[PITCH] += forceArcPitch[self->s.number][k];
+			ang[YAW] += forceArcYaw[self->s.number][k];
+			ang[ROLL] = 0;
+			AngleVectors(ang, dir, NULL, NULL);
+			VectorMA(eye, forceArcDist[self->s.number][k], dir, goal);
+			VectorSubtract(goal, ent->client->ps.origin, vel);
+			const float len = VectorNormalize(vel);
+			VectorScale(vel, len < 16 ? 8 : len < 64 ? 128 : len < 128 ? 256 : 512, ent->client->ps.velocity);
+			ent->client->ps.forceGripMoveInterval = level.time + 300;
+		}
+	}
+}
+
+// the grip's damage: the arc victims take the same (crack: the level 3 squeeze, with the choke)
+static void WP_ForceArcDamage(gentity_t* self, const int dmg, const qboolean crack)
+{
+	if (!self || self->s.number < 0 || self->s.number >= MAX_GENTITIES)
+	{
+		return;
+	}
+	for (int k = 0; k < FORCE_ARC_EXTRA; k++)
+	{
+		const int num = forceArcVictim[self->s.number][k] - 1;
+		if (num < 0)
+		{
+			continue;
+		}
+		gentity_t* ent = &g_entities[num];
+		if (!ent->inuse || !ent->client || ent->health < 1)
+		{
+			WP_ForceArcLetGo(self, k);
+			continue;
+		}
+		G_Damage(ent, self, self, NULL, NULL, dmg, DAMAGE_NO_ARMOR, MOD_FORCE_DARK);
+		if (crack && ent->inuse && ent->client && ent->health > 0)
+		{
+			G_EntitySound(ent, CHAN_VOICE, G_SoundIndex(va("*choke%d.wav", Q_irand(1, 3))));
+			ent->client->ps.forceHandExtend = HANDEXTEND_CHOKE;
+			ent->client->ps.forceHandExtendTime = level.time + 2000;
+			if (ent->client->ps.fd.forcePowersActive & 1 << FP_GRIP)
+			{
+				WP_ForcePowerStop(ent, FP_GRIP);
+			}
+		}
+	}
+}
+
 void ForceGrip(const gentity_t* self)
 {
 	trace_t tr;
@@ -2412,6 +2693,7 @@ void ForceGrip(const gentity_t* self)
 			}
 		}
 		self->client->ps.fd.forceGripentity_num = tr.entityNum;
+		WP_ForceArcGrab(self, &g_entities[tr.entityNum], FP_GRIP); // level 3: the others in the arc too
 		g_entities[tr.entityNum].client->ps.fd.forceGripStarted = level.time;
 		self->client->ps.fd.forceGripDamageDebounceTime = 0;
 
@@ -7363,7 +7645,6 @@ void ForceThrow(gentity_t* self, qboolean pull)
 // Deadly Sight runs for a time.
 // ==================================================================================================================
 
-extern void G_AddVoiceEvent(const gentity_t* self, int event, int speak_debounce_time);
 extern void G_ClearEnemy(gentity_t* self);
 extern void G_GetBoltPosition(gentity_t* self, int boltIndex, vec3_t pos, int modelIndex);
 extern void G_StasisMissile(gentity_t* ent, gentity_t* missile, vec3_t forward);
@@ -8184,6 +8465,7 @@ static void ForceGrasp(gentity_t* self)
 	}
 	WP_ForcePowerStart(self, FP_GRASP, 0);
 	self->client->graspEntityNum = target->s.number + 1;
+	WP_ForceArcGrab(self, target, FP_GRASP); // level 3: the others in the arc too
 	self->client->graspStartTime = level.time;
 	self->client->ps.fd.forcePowerDebounce[FP_GRASP] = level.time + 1000;
 	G_SetAnim(self, NULL, SETANIM_TORSO, BOTH_FORCEGRIP_HOLD, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
@@ -8205,6 +8487,7 @@ static void ForceGrasp(gentity_t* self)
 
 static void SJE_GraspRelease(gentity_t* self)
 {
+	WP_ForceArcRelease(self); // the level 3 arc's others go too
 	if (self->client->graspEntityNum)
 	{
 		gentity_t* target = &g_entities[self->client->graspEntityNum - 1];
@@ -8264,6 +8547,7 @@ static void SJE_GraspRun(gentity_t* self, const usercmd_t* cmd)
 	}
 
 	Jetpack_Off(target);
+	WP_ForceArcHold(self, FP_GRASP); // the level 3 arc's others
 	target->client->ps.fd.forceGripBeingGripped = level.time + 1000;
 	target->client->ps.otherKiller = self->s.number;
 	target->client->ps.otherKillerTime = level.time + 5000;
@@ -8272,10 +8556,8 @@ static void SJE_GraspRun(gentity_t* self, const usercmd_t* cmd)
 	{
 		target->client->ps.weaponTime = 300;
 	}
-	if (target->client->ps.legsAnim != BOTH_PULLED_INAIR_F && lvl > FORCE_LEVEL_1)
-	{
-		G_SetAnim(target, NULL, SETANIM_BOTH, BOTH_PULLED_INAIR_F, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
-	}
+	// BOTH_CHOKE4 over and over while held (Jace 2026-10-29; was BOTH_PULLED_INAIR_F at levels 2 / 3)
+	WP_GraspChokeAnim(target, lvl > FORCE_LEVEL_1 ? SETANIM_BOTH : SETANIM_TORSO);
 	if (lvl == FORCE_LEVEL_1)
 	{
 		return; // held where he is (grip 1's movement)
@@ -8653,6 +8935,7 @@ void WP_ForcePowerStop(gentity_t* self, const forcePowers_t forcePower)
 		break;
 	case FP_GRIP:
 		self->client->ps.fd.forceGripUseTime = level.time + 3000;
+		WP_ForceArcRelease(self); // the level 3 arc's others go too
 		if (self->client->ps.fd.forcePowerLevel[forcePower] > FORCE_LEVEL_1 &&
 			g_entities[self->client->ps.fd.forceGripentity_num].client &&
 			g_entities[self->client->ps.fd.forceGripentity_num].health > 0 &&
@@ -8836,6 +9119,7 @@ static void DoGripAction(gentity_t* self, const forcePowers_t forcePower)
 		//2 damage per second while choking, resulting in 10 damage total (not including The Squeeze<tm>)
 		self->client->ps.fd.forcePowerDebounce[FP_GRIP] = level.time + 1000;
 		G_Damage(gripEnt, self, self, NULL, NULL, 2, DAMAGE_NO_ARMOR, MOD_FORCE_DARK);
+		WP_ForceArcDamage(self, 2, qfalse); // the level 3 arc's others: the same
 	}
 
 	Jetpack_Off(gripEnt); //make sure the guy being gripped has his jetpack off.
@@ -8906,6 +9190,7 @@ static void DoGripAction(gentity_t* self, const forcePowers_t forcePower)
 	if (grip_level == FORCE_LEVEL_3)
 	{
 		gripEnt->client->ps.fd.forceGripBeingGripped = level.time + 1000;
+		WP_ForceArcHold(self, FP_GRIP); // the level 3 arc's others
 
 		gripEnt->client->ps.otherKiller = self->s.number;
 		gripEnt->client->ps.otherKillerTime = level.time + 5000;
@@ -8980,6 +9265,7 @@ static void DoGripAction(gentity_t* self, const forcePowers_t forcePower)
 			//if we managed to lift him into the air for 2 seconds, give him a crack
 			self->client->ps.fd.forceGripDamageDebounceTime = 1;
 			G_Damage(gripEnt, self, self, NULL, NULL, 40, DAMAGE_NO_ARMOR, MOD_FORCE_DARK);
+			WP_ForceArcDamage(self, 40, qtrue); // the level 3 arc's others: the same squeeze
 
 			//Must play custom sounds on the actual entity. Don't use G_Sound (it creates a temp entity for the sound)
 			G_EntitySound(gripEnt, CHAN_VOICE, G_SoundIndex(va("*choke%d.wav", Q_irand(1, 3))));

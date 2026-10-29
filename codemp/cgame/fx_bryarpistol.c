@@ -25,6 +25,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "cg_local.h"
 #include "fx_local.h"
 
+void FX_ShotTailScale(const centity_t* cent, vec3_t forward); // fx_blaster.c: a fresh shot's short tail (as SP)
+
 /*
 -------------------------
 
@@ -42,6 +44,7 @@ void FX_BryarProjectileThink(centity_t* cent, const struct weaponInfo_s* weapon)
 	{
 		forward[2] = 1.0f;
 	}
+	FX_ShotTailScale(cent, forward);
 
 	trap->FX_PlayEffectID(cgs.effects.bryarShotEffect, cent->lerpOrigin, forward, -1, -1, qfalse);
 }
@@ -54,6 +57,7 @@ void FX_SbdProjectileThink(centity_t* cent, const struct weaponInfo_s* weapon)
 	{
 		forward[2] = 1.0f;
 	}
+	FX_ShotTailScale(cent, forward);
 
 	trap->FX_PlayEffectID(cgs.effects.sbdShotEffect, cent->lerpOrigin, forward, -1, -1, qfalse);
 }
@@ -107,6 +111,7 @@ void FX_BryarAltProjectileThink(centity_t* cent, const struct weaponInfo_s* weap
 	{
 		forward[2] = 1.0f;
 	}
+	FX_ShotTailScale(cent, forward);
 
 	// see if we have some sort of extra charge going on
 	for (int t = 1; t < cent->currentState.generic1; t++)
@@ -196,6 +201,7 @@ void FX_TurretProjectileThink(centity_t* cent, const struct weaponInfo_s* weapon
 	{
 		forward[2] = 1.0f;
 	}
+	FX_ShotTailScale(cent, forward);
 
 	trap->FX_PlayEffectID(cgs.effects.turretShotEffect, cent->lerpOrigin, forward, -1, -1, qfalse);
 }
@@ -296,6 +302,7 @@ void FX_ConcussionProjectileThink(centity_t* cent, const struct weaponInfo_s* we
 	{
 		forward[2] = 1.0f;
 	}
+	FX_ShotTailScale(cent, forward);
 
 	trap->FX_PlayEffectID(cgs.effects.concussionShotEffect, cent->lerpOrigin, forward, -1, -1, qfalse);
 }

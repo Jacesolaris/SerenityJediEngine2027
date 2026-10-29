@@ -24,6 +24,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #include "cg_local.h"
 
+void FX_ShotTailScale(const centity_t* cent, vec3_t forward); // fx_blaster.c: a fresh shot's short tail (as SP)
+
 /*
 ---------------------------
 FX_BowcasterProjectileThink
@@ -38,6 +40,7 @@ void FX_BowcasterProjectileThink(centity_t* cent, const struct weaponInfo_s* wea
 	{
 		forward[2] = 1.0f;
 	}
+	FX_ShotTailScale(cent, forward);
 
 	trap->FX_PlayEffectID(cgs.effects.bowcasterShotEffect, cent->lerpOrigin, forward, -1, -1, qfalse);
 }
@@ -85,6 +88,7 @@ void FX_BowcasterAltProjectileThink(centity_t* cent, const struct weaponInfo_s* 
 	{
 		forward[2] = 1.0f;
 	}
+	FX_ShotTailScale(cent, forward);
 
 	trap->FX_PlayEffectID(cgs.effects.bowcasterShotEffect, cent->lerpOrigin, forward, -1, -1, qfalse);
 }

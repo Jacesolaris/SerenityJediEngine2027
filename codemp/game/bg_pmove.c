@@ -743,6 +743,28 @@ static qboolean PM_CanAimGun(void)
 	return qfalse;
 }
 
+// bots: after a shot the gun stays up (the weapon's aim pose) for BOT_GUN_AIM_HOLD msec, instead of the ready / idle
+// pose between shots (their torso went up / down / up all through a fight). Jace 2026-10-29
+#define BOT_GUN_AIM_HOLD	2500
+
+static qboolean PM_BotHoldsGunAim(void)
+{
+#ifdef _GAME
+	const int since = pm->cmd.serverTime - pm->ps->lastShotTime;
+
+	if (pm->ps->clientNum < MAX_CLIENTS && g_entities[pm->ps->clientNum].r.svFlags & SVF_BOT
+		&& pm->ps->stats[STAT_HEALTH] > 0 && pm->ps->pm_type == PM_NORMAL
+		&& PM_CanAimGun() && pm->ps->weapon != WP_NOGHRI_STICK && pm->ps->weapon != WP_TUSKEN_RIFLE
+		&& pm->ps->weapon != WP_BRYAR_OLD && !(pm_entSelf && pm_entSelf->s.botclass == BCLASS_SBD)
+		&& !(pm->ps->weapon == WP_DISRUPTOR && pm->ps->zoomMode == 1)
+		&& pm->ps->lastShotTime > 0 && since >= 0 && since < BOT_GUN_AIM_HOLD)
+	{
+		return qtrue;
+	}
+#endif
+	return qfalse;
+}
+
 static void PM_HandleGunnerAim(qboolean is_walking_and_blocking)
 {
 	// Only apply to gunner-type weapons
@@ -15467,7 +15489,16 @@ static void PM_Weapon(void)
 		return;
 	}
 
-	if (PM_CanSetWeaponAnims() &&
+	if (PM_BotHoldsGunAim())
+	{
+		// a bot keeps his gun up after a shot: the attack anim, then the aim pose (not the ready / idle pose)
+		if (PM_CanSetWeaponAnims() && pm->ps->weaponTime <= 0 && pm->ps->torsoTimer <= 0
+			&& pm->ps->torsoAnim != PM_GetWeaponAimAnim() && PM_CanSetWeaponReadyAnim() == qtrue)
+		{
+			PM_StartTorsoAnim(PM_GetWeaponAimAnim());
+		}
+	}
+	else if (PM_CanSetWeaponAnims() &&
 		!PM_IsRocketTrooper() &&
 		pm->ps->weaponstate == WEAPON_READY && pm->ps->weaponTime <= 0 &&
 		(pm->ps->weapon >= WP_BRYAR_PISTOL || pm->ps->weapon == WP_STUN_BATON) &&
@@ -15518,7 +15549,8 @@ static void PM_Weapon(void)
 	}
 
 	if ((pm->ps->torsoAnim == TORSO_WEAPONREADY4 || pm->ps->torsoAnim == BOTH_ATTACK4) &&
-		(pm->ps->weapon != WP_DISRUPTOR || pm->ps->zoomMode != 1))
+		(pm->ps->weapon != WP_DISRUPTOR || pm->ps->zoomMode != 1) &&
+		!PM_BotHoldsGunAim()) // a bot holds the aim after a shot
 	{
 		if (pm->ps->weapon == WP_EMPLACED_GUN)
 		{
@@ -16117,7 +16149,7 @@ static void PM_Weapon(void)
 		}
 	}
 	pm->ps->weaponTime += addTime;
-	pm->ps->lastShotTime = 3000; //so we know when the last time we fired our gun is
+	pm->ps->lastShotTime = pm->cmd.serverTime; // when we last fired our gun (bots hold the aim after it: PM_BotHoldsGunAim)
 
 	if ((pm->ps->weapon == WP_NOGHRI_STICK && pm->cmd.buttons & BUTTON_ALT_ATTACK
 		|| pm->ps->weapon == WP_TUSKEN_RIFLE && pm->cmd.buttons & BUTTON_ALT_ATTACK
@@ -20031,7 +20063,8 @@ static int PM_SaberBlasterFireDelay(void)
 
 static qboolean PM_SaberBlasterActive(void)
 {
-	return pm->ps->weapon == WP_SABER && pm->ps->fd.saberAnimLevel == SS_BLASTER ? qtrue : qfalse;
+	// SS_BLASTER (Jace 2026-10-29): only with the saber on; saber off = the pistol is holstered
+	return pm->ps->weapon == WP_SABER && pm->ps->fd.saberAnimLevel == SS_BLASTER && pm->ps->saberHolstered != 2 ? qtrue : qfalse;
 }
 
 static void PM_SaberBlasterFilterCmd(void)
