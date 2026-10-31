@@ -339,6 +339,8 @@ vmCvar_t cg_autoswitch;
 vmCvar_t cg_simpleItems;
 vmCvar_t cg_fov;
 vmCvar_t cg_fovAspectAdjust;
+vmCvar_t cg_sprintFov; // sprint camera (2026-10-31): degrees the view widens while sprinting (0 = off)
+vmCvar_t cg_sprintFovTime; // sprint camera: ms to ease in / out
 vmCvar_t cg_endcredits;
 vmCvar_t cg_updatedDataPadForcePower1;
 vmCvar_t cg_updatedDataPadForcePower2;
@@ -346,6 +348,9 @@ vmCvar_t cg_updatedDataPadForcePower3;
 vmCvar_t cg_updatedDataPadObjective;
 vmCvar_t cg_drawBreath;
 vmCvar_t cg_drawAirBar;
+vmCvar_t cg_saberSliceCaps;
+vmCvar_t cg_saberSliceCoolTime;
+vmCvar_t cg_saberSliceRenderer;
 vmCvar_t cg_roffdebug;
 #ifndef FINAL_BUILD
 vmCvar_t	cg_roffval1;
@@ -517,6 +522,8 @@ static cvarTable_t cvarTable[] = {
 	{ &cg_drawGun, "cg_drawGun", "1", CVAR_ARCHIVE },
 	{ &cg_fov, "cg_fov", "80", CVAR_ARCHIVE },
 	{ &cg_fovAspectAdjust, "cg_fovAspectAdjust", "1", CVAR_ARCHIVE },
+	{ &cg_sprintFov, "cg_sprintFov", "15", CVAR_ARCHIVE },
+	{ &cg_sprintFovTime, "cg_sprintFovTime", "300", CVAR_ARCHIVE },
 	{ &cg_stereoSeparation, "cg_stereoSeparation", "0.4", CVAR_ARCHIVE },
 	{ &cg_shadows, "cg_shadows", "2", CVAR_ARCHIVE },
 	{ &cg_renderToTextureFX, "cg_renderToTextureFX", "1", CVAR_ARCHIVE },
@@ -577,6 +584,9 @@ static cvarTable_t cvarTable[] = {
 	{ &cg_errorDecay, "cg_errordecay", "100", 0 },
 
 	{ &cg_drawBreath, "cg_drawBreath", "0", CVAR_ARCHIVE }, // Added 11/07/02
+	{ &cg_saberSliceCaps, "cg_saberSliceCaps", "0", CVAR_ARCHIVE }, // old saber slice cut face discs: 0 off (the renderers draw the inside of the model), 1 vanilla renderer only, 2 always
+	{ &cg_saberSliceCoolTime, "cg_saberSliceCoolTime", "6000", CVAR_ARCHIVE }, // ms for a saber cut face to cool from orange to dark red
+	{ &cg_saberSliceRenderer, "cl_renderer", "rd-vanilla", 0 }, // read only: which renderer draws the cut faces
 	{ &cg_drawAirBar, "cg_drawAirBar", "1", CVAR_ARCHIVE }, // blue breath bar above the HUD while air runs out under water (DH 2026-10-25)
 	{ &cg_roffdebug, "cg_roffdebug", "0" },
 #ifndef FINAL_BUILD
@@ -662,8 +672,8 @@ static cvarTable_t cvarTable[] = {
 
 	{ &cg_smoothCamera, "cg_smoothCamera", "1", CVAR_ARCHIVE },
 	{ &cg_speedTrail, "cg_speedTrail", "0", CVAR_ARCHIVE },
-	{ &cg_saberLightRadius, "cg_saberLightRadius", "1.5", CVAR_ARCHIVE }, // saber light reach (1 = as before)
-	{ &cg_saberLightIntensity, "cg_saberLightIntensity", "1.2", CVAR_ARCHIVE }, // saber light strength (1 = as before)
+	{ &cg_saberLightRadius, "cg_saberLightRadius", "0.703125", CVAR_ARCHIVE }, // saber light reach (1 = as before)
+	{ &cg_saberLightIntensity, "cg_saberLightIntensity", "1.070312", CVAR_ARCHIVE }, // saber light strength (1 = as before)
 	{ &cg_wheelSlowmo, "cg_wheelSlowmo", "1", CVAR_ARCHIVE }, // weapon / force wheel: slow the game while it is open
 	{ &cg_fovViewmodel, "cg_fovViewmodel", "0", CVAR_ARCHIVE },
 	{ &cg_fovViewmodelAdjust, "cg_fovViewmodelAdjust", "1", CVAR_ARCHIVE },
@@ -1929,6 +1939,7 @@ static void CG_RegisterGraphics()
 	cgs.media.bdecal_burnmark1 = cgi_R_RegisterShader("gfx/damage/burnmark1");
 	cgs.media.bdecal_saberglowmark = cgi_R_RegisterShader("gfx/damage/saberglowmark");
 	cgs.media.bdecal_saberglow = cgi_R_RegisterShader("gfx/effects/saberDamageGlow");
+	cgs.media.saberSliceCapShader = cgi_R_RegisterShader("gfx/effects/saberslice_cap");
 
 	cg.loadLCARSStage = 5;
 	CG_LoadingString("game media models");

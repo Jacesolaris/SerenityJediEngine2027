@@ -408,6 +408,120 @@ static void Cmd_Give_f(gentity_t* ent)
 	G_Give(ent, gi.argv(1), ConcatArgs(2), gi.argc());
 }
 
+// weaponvariant [name|number|0] (cheat, 2026-10-31): hold an SJE gun (a weapon variant) on your current weapon, to see
+// and hear it; no name lists the variants of the weapon in hand. NPCs get theirs by themselves.
+extern void G_CreateG2AttachedWeaponModel(gentity_t* ent, const char* ps_weapon_model, int bolt_num, int weapon_num);
+extern void G_Shop_GiveVariant(gentity_t* ent, int v);
+extern void G_Shop_EquipStock(gentity_t* ent, int weapon);
+extern qboolean G_Shop_Owns(const gentity_t* ent, int variant);
+
+static void Cmd_WeaponVariant_f(gentity_t* ent)
+{
+	if (!CheatsOk(ent))
+	{
+		return;
+	}
+	const int weapon = ent->client->ps.weapon;
+	const char* arg = gi.argv(1);
+
+	if (!arg[0])
+	{
+		int n = 0;
+		for (int i = 1; i < bgNumWeaponVariants; i++)
+		{
+			if (bgWeaponVariants[i].baseWeapon == BG_WeaponVariantFamily(weapon))
+			{
+				gi.Printf("%3i %s (%s)\n", i, bgWeaponVariants[i].name, bgWeaponVariants[i].displayName);
+				n++;
+			}
+		}
+		gi.Printf("%i variants for this weapon (%i loaded), now: %i\n", n, bgNumWeaponVariants - 1, ent->client->ps.weaponVariant);
+		return;
+	}
+
+	int v = atoi(arg);
+	if (v == 0 && Q_stricmp(arg, "0"))
+	{
+		v = BG_WeaponVariantByName(arg);
+	}
+	if (v != 0 && !BG_GetWeaponVariant(v, weapon))
+	{
+		gi.Printf("No such variant for the weapon in hand.\n");
+		return;
+	}
+	ent->client->ps.weaponVariant = v;
+	// the shop (2026-10-31): the player now owns it and uses it on this weapon (G_Shop_PlayerThink keeps it on)
+	if (v)
+	{
+		G_Shop_GiveVariant(ent, v);
+	}
+	else
+	{
+		G_Shop_EquipStock(ent, weapon);
+	}
+	if (ent->weaponModel[0] > 0 && ent->ghoul2.size() && weapon > WP_NONE && weapon != WP_SABER)
+	{
+		gi.G2API_RemoveGhoul2Model(ent->ghoul2, ent->weaponModel[0]);
+		ent->weaponModel[0] = -1;
+		G_CreateG2AttachedWeaponModel(ent, weaponData[weapon].weaponMdl, ent->handRBolt, 0);
+	}
+}
+
+// grenade [name|number|next|0] (2026-10-31, not a cheat): the grenade type you throw (a WP_THERMAL weapon variant);
+// no name lists them. 0 = the stock thermal.
+static void Cmd_Grenade_f(gentity_t* ent)
+{
+	const char* arg = gi.argv(1);
+	int v;
+
+	if (!arg[0])
+	{
+		gi.Printf("  0 Thermal Detonator (stock)\n");
+		for (int i = 1; i < bgNumWeaponVariants; i++)
+		{
+			if (bgWeaponVariants[i].baseWeapon == WP_THERMAL)
+			{
+				gi.Printf("%3i %s (%s)%s\n", i, bgWeaponVariants[i].displayName, bgWeaponVariants[i].name,
+					G_Shop_Owns(ent, i) ? "" : " - not owned, buy it in the shop");
+			}
+		}
+		gi.Printf("now: %i. grenade <number|name|next>\n", ent->grenadeKind);
+		return;
+	}
+	if (!Q_stricmp(arg, "next"))
+	{
+		v = 0;
+		for (int i = ent->grenadeKind + 1; i < bgNumWeaponVariants; i++)
+		{
+			if (bgWeaponVariants[i].baseWeapon == WP_THERMAL && G_Shop_Owns(ent, i))
+			{
+				v = i;
+				break;
+			}
+		}
+	}
+	else
+	{
+		v = atoi(arg);
+		if (v == 0 && Q_stricmp(arg, "0"))
+		{
+			v = BG_WeaponVariantByName(arg);
+		}
+	}
+	if (v != 0 && !BG_GetWeaponVariant(v, WP_THERMAL))
+	{
+		gi.Printf("No such grenade.\n");
+		return;
+	}
+	if (v != 0 && !G_Shop_Owns(ent, v) && !g_cheats->integer)
+	{
+		gi.Printf("You don't have that grenade: buy it in the shop.\n");
+		return;
+	}
+	ent->grenadeKind = v;
+	gi.Printf("Grenade: %s\n", v ? bgWeaponVariants[v].displayName : "Thermal Detonator");
+}
+
 extern void SP_fx_runner(gentity_t* ent);
 //------------------
 static void Cmd_Fx(const gentity_t* ent)
@@ -2695,6 +2809,10 @@ void ClientCommand(const int clientNum)
 
 	if (Q_stricmp(cmd, "give") == 0)
 		Cmd_Give_f(ent);
+	else if (Q_stricmp(cmd, "weaponvariant") == 0)
+		Cmd_WeaponVariant_f(ent);
+	else if (Q_stricmp(cmd, "grenade") == 0)
+		Cmd_Grenade_f(ent);
 	else if (Q_stricmp(cmd, "god") == 0)
 		Cmd_God_f(ent);
 	else if (Q_stricmp(cmd, "undying") == 0)

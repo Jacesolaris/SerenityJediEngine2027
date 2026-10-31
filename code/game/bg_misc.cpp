@@ -426,10 +426,6 @@ void PlayerStateToEntityState(playerState_t* ps, entityState_t* s)
 	{
 		s->eType = ET_INVISIBLE;
 	}
-	else if (ps->stats[STAT_HEALTH] <= GIB_HEALTH)
-	{
-		s->eType = ET_INVISIBLE;
-	}
 	else
 	{
 		s->eType = ET_PLAYER;
@@ -470,6 +466,7 @@ void PlayerStateToEntityState(playerState_t* ps, entityState_t* s)
 	s->vehicleModel = ps->vehicleModel;
 
 	s->weapon = ps->weapon;
+	s->weaponVariant = ps->weaponVariant; // weapon variant (2026-10-31)
 	s->groundEntityNum = ps->groundEntityNum;
 	s->ManualBlockingFlags = ps->ManualBlockingFlags; //Blockingflag on OK
 	s->ManualBlockingTime = ps->ManualBlockingTime; //Blocking time 1 on

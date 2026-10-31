@@ -302,6 +302,7 @@ void G_InitGame(int levelTime, int randomSeed, int restart)
 
 	//Load external vehicle data
 	BG_VehicleLoadParms();
+	BG_LoadWeaponVariants(); // weapon variants (2026-10-31): the SJE guns for gunner bots and NPCs
 
 	trap->Print("------- Game Initialization -------\n");
 	trap->Print("gamename: %s\n", GAMEVERSION);
@@ -3769,7 +3770,7 @@ static void CheckTournament(void)
 				gentity_t* te = G_TempEntity(vec3_origin, EV_GLOBAL_DUEL);
 				te->r.svFlags |= SVF_BROADCAST;
 				//this is really pretty nasty, but..
-				te->s.otherentityNum = level.sortedClients[0];
+				te->s.otherEntityNum = level.sortedClients[0];
 				te->s.otherentityNum2 = level.sortedClients[1];
 				te->s.groundEntityNum = level.sortedClients[2];
 
@@ -3810,7 +3811,7 @@ static void CheckTournament(void)
 					gentity_t* te = G_TempEntity(vec3_origin, EV_GLOBAL_DUEL);
 					te->r.svFlags |= SVF_BROADCAST;
 					//this is really pretty nasty, but..
-					te->s.otherentityNum = level.sortedClients[0];
+					te->s.otherEntityNum = level.sortedClients[0];
 					te->s.otherentityNum2 = level.sortedClients[1];
 					te->s.groundEntityNum = level.sortedClients[2];
 

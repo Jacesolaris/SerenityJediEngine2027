@@ -1133,6 +1133,84 @@ static void RB_BindTransformFeedbackBuffer(const bufferBinding_t& binding)
 	}
 }
 
+/*
+=====================
+Saber slice (tr_saberslice.h)
+
+Sliced ghoul2 entities get their cut planes in the Entity block and their
+per bone cut modes in the Bones block. The skeletal programs write one
+gl_ClipDistance per cut, so the GPU clips the mesh exactly along the plane.
+Back faces are drawn too, as molten metal: through the cut you see the
+inside of the model, which looks like the glowing cut face.
+=====================
+*/
+struct sliceEntityUbo_t
+{
+	GLuint ubo;
+	size_t offset;
+	int count;
+};
+static sliceEntityUbo_t s_sliceEntityUbos[64];
+static int s_numSliceEntityUbos = 0;
+
+static void RB_SliceRegisterEntityUbo(GLuint ubo, size_t offset, int count)
+{
+	if (s_numSliceEntityUbos < (int)ARRAY_LEN(s_sliceEntityUbos))
+	{
+		s_sliceEntityUbos[s_numSliceEntityUbos].ubo = ubo;
+		s_sliceEntityUbos[s_numSliceEntityUbos].offset = offset;
+		s_sliceEntityUbos[s_numSliceEntityUbos].count = count;
+		s_numSliceEntityUbos++;
+	}
+}
+
+static void RB_SliceForgetEntityUbos(GLuint ubo)
+{
+	int n = 0;
+	for (int i = 0; i < s_numSliceEntityUbos; i++)
+	{
+		if (s_sliceEntityUbos[i].ubo != ubo)
+			s_sliceEntityUbos[n++] = s_sliceEntityUbos[i];
+	}
+	s_numSliceEntityUbos = n;
+}
+
+static int RB_SliceCountForDrawItem(const DrawItem& drawItem)
+{
+	if (!s_numSliceEntityUbos)
+		return 0;
+	for (uint32_t i = 0; i < drawItem.numUniformBlockBindings; i++)
+	{
+		const UniformBlockBinding& b = drawItem.uniformBlockBindings[i];
+		if (b.block != UNIFORM_BLOCK_ENTITY)
+			continue;
+		const size_t offset = b.offset;
+		for (int j = 0; j < s_numSliceEntityUbos; j++)
+		{
+			if (s_sliceEntityUbos[j].ubo == b.ubo && s_sliceEntityUbos[j].offset == offset)
+				return s_sliceEntityUbos[j].count;
+		}
+		return 0;
+	}
+	return 0;
+}
+
+static void GL_SliceClip(int count)
+{
+	if (glState.sliceClipCount == count)
+		return;
+	for (int i = 0; i < MAX_SABER_SLICES; i++)
+	{
+		const bool want = i < count;
+		const bool have = i < glState.sliceClipCount;
+		if (want && !have)
+			qglEnable(GL_CLIP_DISTANCE0 + i);
+		else if (!want && have)
+			qglDisable(GL_CLIP_DISTANCE0 + i);
+	}
+	glState.sliceClipCount = count;
+}
+
 static void RB_DrawItems(
 	int numDrawItems,
 	const DrawItem* drawItems,
@@ -1157,6 +1235,36 @@ static void RB_DrawItems(
 		GLSL_SetUniforms(drawItem.program, drawItem.uniformData);
 
 		RB_SetRenderState(drawItem.renderState);
+
+		// saber slice: clip sliced models along their cut planes, show their inside as molten metal
+		if (drawItem.program->sliceClip)
+		{
+			const int sliceCount = RB_SliceCountForDrawItem(drawItem);
+			GL_SliceClip(sliceCount);
+			int molten = 0;
+			if (sliceCount > 0 && (drawItem.renderState.cullType == CT_FRONT_SIDED ||
+				drawItem.renderState.cullType == CT_BACK_SIDED))
+			{
+				// a closed, one sided surface: the faces that would be culled are only seen through the cut.
+				// CT_FRONT_SIDED culls GL_FRONT (Quake winding), so those are the GL front faces;
+				// CT_BACK_SIDED (mirrored views / entities) culls GL_BACK.
+				GL_Cull(CT_TWO_SIDED);
+				molten = (drawItem.renderState.cullType == CT_FRONT_SIDED) ? 1 : 2;
+				if (tr.saberSliceImages[0] && tr.saberSliceImages[1] && tr.saberSliceImages[2])
+				{
+					// the cut face shows DH's cap images (4 = textured)
+					GL_BindToTMU(tr.saberSliceImages[0], TB_SLICECAPSMAP);
+					GL_BindToTMU(tr.saberSliceImages[1], TB_SLICEBLOODMAP);
+					GL_BindToTMU(tr.saberSliceImages[2], TB_SLICEGLOWMAP);
+					molten |= 4;
+				}
+			}
+			GLSL_SetUniformInt(drawItem.program, UNIFORM_SLICEMOLTEN, molten);
+		}
+		else
+		{
+			GL_SliceClip(0);
+		}
 
 		switch (drawItem.draw.type)
 		{
@@ -1203,6 +1311,9 @@ static void RB_DrawItems(
 			qglDisable(GL_RASTERIZER_DISCARD);
 		}
 	}
+
+	// saber slice: never leave clip distances on for draws outside this list
+	GL_SliceClip(0);
 }
 
 /*
@@ -2603,6 +2714,41 @@ static void RB_UpdateEntityModelConstants(
 		entityBlock.entityTime = -refEntity->e.shaderTime;
 }
 
+// saber slice: the cut planes of a sliced ghoul2 model (world space, the positive side is cut away)
+static void RB_UpdateEntitySliceConstants(
+	EntityBlock& entityBlock,
+	const trRefEntity_t* refEntity)
+{
+	const refEntity_t& e = refEntity->e;
+	entityBlock.sliceCount = 0;
+	if (e.reType != RT_MODEL || !e.ghoul2 || !(e.renderfx & RF_SABERSLICE) ||
+		e.sliceCount <= 0 || e.sliceCount > MAX_SABER_SLICES)
+		return;
+
+	entityBlock.sliceCount = e.sliceCount;
+	for (int i = 0; i < MAX_SABER_SLICES; i++)
+	{
+		if (i < e.sliceCount)
+		{
+			VectorCopy4(e.slicePlane[i], entityBlock.slicePlanes[i]);
+			entityBlock.sliceSign[i] = (e.sliceInvert & (1 << i)) ? -1.0f : 1.0f;
+		}
+		else
+		{
+			VectorSet4(entityBlock.slicePlanes[i], 0.0f, 0.0f, 0.0f, -1.0f);
+			entityBlock.sliceSign[i] = 1.0f;
+		}
+	}
+	// a metal body (super battle droid) sends heat + 2: the shaders draw hot metal instead of flesh
+	bool metal = false;
+	for (int i = 0; i < e.sliceCount; i++)
+	{
+		if (e.sliceBone[i] & SABERSLICE_METAL)
+			metal = true;
+	}
+	entityBlock.sliceHeat = Com_Clamp(0.0f, 1.0f, e.sliceHeat) + (metal ? 2.0f : 0.0f);
+}
+
 static void RB_UpdateSkyEntityConstants(gpuFrame_t* frame, const trRefdef_t* refdef)
 {
 	EntityBlock skyEntityBlock = {};
@@ -2749,6 +2895,10 @@ static void RB_UpdateEntityConstants(
 	memset(tr.entityUboOffsets, 0, sizeof(tr.entityUboOffsets));
 	memset(tr.previousEntityUboOffsets, 0, sizeof(tr.previousEntityUboOffsets));
 
+	// saber slice: forget this scene buffer's sliced entities from the last time it was filled
+	const GLuint sceneUbo = frame->ubo[frame->currentScene];
+	RB_SliceForgetEntityUbos(sceneUbo);
+
 	trRefEntity_t* ent = &tr.worldEntity;
 	R_SetupEntityLighting(refdef, ent);
 
@@ -2779,12 +2929,15 @@ static void RB_UpdateEntityConstants(
 		RB_UpdateEntityLightConstants(entityBlock, ent);
 		RB_UpdateEntityMatrixConstants(entityBlock, ent);
 		RB_UpdateEntityModelConstants(entityBlock, ent);
+		RB_UpdateEntitySliceConstants(entityBlock, ent);
 
 		if (entityBlock == worldEntityBlock)
 			tr.entityUboOffsets[i] = tr.entityUboOffsets[REFENTITYNUM_WORLD];
 		else
 			tr.entityUboOffsets[i] = RB_AppendConstantsData(
 				frame, &entityBlock, sizeof(entityBlock));
+		if (entityBlock.sliceCount > 0)
+			RB_SliceRegisterEntityUbo(sceneUbo, (size_t)tr.entityUboOffsets[i], entityBlock.sliceCount);
 		tr.previousEntityUboOffsets[i] = -1;
 
 		if (!backEndData->cachePreviousFrameUbos)

@@ -90,6 +90,8 @@ XCVAR_DEF(g_debugServerSkel, "0", NULL, CVAR_CHEAT, qfalse)
 XCVAR_DEF(g_disableServerG2, "0", NULL, CVAR_NONE, qtrue)
 #endif
 XCVAR_DEF(g_dismember, "80", NULL, CVAR_ARCHIVE, qtrue)
+XCVAR_DEF(g_gundismemberment, "1", NULL, CVAR_ARCHIVE, qtrue) // every gun dismemberment (head and body shots, gun cuts); 0 = off
+XCVAR_DEF(g_saberSlice, "1", NULL, CVAR_ARCHIVE, qtrue) // saber kills cut at the blade's contact point (Jedi Survivor style); 0 = old limb dismemberment
 XCVAR_DEF(g_doWarmup, "0", NULL, CVAR_NONE, qtrue)
 XCVAR_DEF(g_corpseRemovalTime, "10", NULL, CVAR_NONE, qtrue)
 XCVAR_DEF(g_ff_objectives, "0", NULL, CVAR_CHEAT | CVAR_NORESTART, qtrue)
@@ -283,5 +285,10 @@ XCVAR_DEF(g_tuskenWeapons, "1", NULL, CVAR_ARCHIVE, qfalse) // tusken raiders ge
 XCVAR_DEF(g_awardStreaks, "1", NULL, CVAR_ARCHIVE, qfalse) // award sounds for kill / death / saber-3 kill streaks of 4 (0: the old awards) (DH 2026-10-25)
 XCVAR_DEF(g_duelWinSound, "1", NULL, CVAR_ARCHIVE, qfalse) // play sound/player/Quin.mp3 to the winner of a private duel (DH 2026-10-25)
 XCVAR_DEF(g_Advancedaitalk, "1", NULL, CVAR_ARCHIVE, qfalse) // NPCs taunt/talk in combat (SP g_Advancedaitalk) (DH 2026-10-24 SP NPC port)
+
+XCVAR_DEF(g_weaponVariants, "1", NULL, CVAR_ARCHIVE, qtrue) // gunner bots and NPCs each get their own gun: a weapon variant (SJE guns, ext_data/sje_weaponvariants.dat) of their weapon, the least used one; saber users never (0: the stock guns) (DH 2026-10-31)
+XCVAR_DEF(g_aiReload, "1", NULL, CVAR_ARCHIVE, qtrue) // gunner bots and NPCs count their shots and stop to reload when the clip is empty: reload anim + sound, NPCs duck or run to cover and call out (clip sizes from the weapon variants / the gun data) (DH 2026-10-31); 0 = the old endless fire
+XCVAR_DEF(g_aiClipScale, "1", NULL, CVAR_ARCHIVE, qtrue) // x every bot / NPC clip size (g_aiReload)
+XCVAR_DEF(g_grenadeCook, "1", NULL, CVAR_ARCHIVE, qtrue) // grenades (2026-10-31): players can cook a grenade (hold past a full throw), 0 = old
 
 #undef XCVAR_DEF

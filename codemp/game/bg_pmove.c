@@ -828,6 +828,21 @@ static void PM_RemoveGunnerAimFlag(qboolean removeFlag)
 	}
 }
 
+// (Jace 2026-10-31) the aim flag - and with it the aiming camera (cg_view.c) - goes as soon as walk + block are let
+// go or the weapon can't aim. Only the walking branch of PM_GetWeaponReadyAnim cleared it, so letting go of walk
+// first (or that function not running this pmove) left the camera zoomed in over the shoulder
+static void PM_CheckGunnerAimRelease(void)
+{
+	if (!(pm->ps->communicatingflags & (1u << CF_AIMINGGUN)))
+	{
+		return;
+	}
+	if (!(pm->cmd.buttons & BUTTON_WALKING) || !(pm->cmd.buttons & BUTTON_BLOCK) || !PM_CanAimGun())
+	{
+		PM_RemoveGunnerAimFlag(qtrue);
+	}
+}
+
 // ============================================================================
 // PM_GetWeaponReadyAnim
 //
@@ -7521,7 +7536,7 @@ static void PM_CheckAirDash(void)
 		te->s.time = pm->cmd.serverTime;
 		te->s.time2 = 2500;
 		te->owner = &g_entities[pm->ps->clientNum];
-		te->s.otherentityNum = pm->ps->clientNum;
+		te->s.otherEntityNum = pm->ps->clientNum;
 		trap->LinkEntity((sharedEntity_t*)te);
 	}
 #endif
@@ -16148,6 +16163,9 @@ static void PM_Weapon(void)
 			addTime *= 2;
 		}
 	}
+	// weapon variants (2026-10-31): each gun its own rate of fire (x the base weapon's time between shots)
+	addTime = BG_WeaponVariantFireTime(pm->ps->weaponVariant, pm->ps->weapon, addTime,
+		(pm->cmd.buttons & BUTTON_ALT_ATTACK) ? qtrue : qfalse);
 	pm->ps->weaponTime += addTime;
 	pm->ps->lastShotTime = pm->cmd.serverTime; // when we last fired our gun (bots hold the aim after it: PM_BotHoldsGunAim)
 
@@ -20037,13 +20055,41 @@ static void PM_RepulseHover(void)
 // Saber in the right hand, a bryar pistol in the left hand (visual only, not an inventory weapon). Predicted here:
 // alt attack fires (torso BOTH_FORCELIGHTNING, clip in ps->ammo[SABERBLASTER_CLIP_SLOT] = shots used), alt attack +
 // attack reloads, no saber throw / kata. The server spawns the bolt on EV_SABERBLASTER (g_active.c ClientEvents).
-qboolean pm_saberBlasterAlt = qfalse; // alt attack held this pmove (taken out of pm->cmd), read by PM_SaberLocked
+qboolean pm_saberBlasterAlt = qfalse; // walk + dash held this pmove (not a reload), read by PM_SaberLocked (bg_saber.c)
 static qboolean pm_saberBlasterReload = qfalse;
 // the shot leaves the pistol at the arm's full reach: SABERBLASTER_FIRE_FRAME of BOTH_FORCELIGHTNING (the 6th frame),
 // not as the anim starts (2026-10-15). Predicted: SBE_FIRE goes out on the pmove where weaponTime (set to the bryar's
 // fireTime as the shot starts) passes fireTime - the delay; pm_saberBlasterPrevWeaponTime = weaponTime as this pmove began
 #define SABERBLASTER_FIRE_FRAME	5
 static int pm_saberBlasterPrevWeaponTime = 0;
+// the charged shot (Jace 2026-10-31, replaces the 2026-10-30 arm delay): walk + dash fire on release - a tap a normal
+// shot; held past SABERBLASTER_CHARGE_START the left arm holds out (BOTH_FORCEGRIP_HOLD) and the shot charges
+// (bryar glow + charge sound), full at SABERBLASTER_CHARGE_FULL; attack while they are held reloads and drops the shot.
+// Outside a saberlock ps->weaponChargeTime is the hold start (0 = not held, -1 = dropped until walk + dash go up); it
+// goes out as entityState constantLight, so other clients see the charge too
+static int pm_saberBlasterRelease = -1; // walk + dash went up this pmove: the shot's charge level (0 = normal), -1 = none
+static int pm_saberBlasterHeld = 0; // ms walk + dash have been held this pmove (0 = not held / dropped)
+
+// the level of a shot held this long (0 = a normal shot), no more than the clip has left to pay for it
+int BG_SaberBlasterChargeLevel(const int held, const int clip_used)
+{
+	if (held < SABERBLASTER_CHARGE_START)
+	{
+		return 0;
+	}
+	int level = 1 + (held - SABERBLASTER_CHARGE_START) * (SABERBLASTER_CHARGE_LEVELS - 1)
+		/ (SABERBLASTER_CHARGE_FULL - SABERBLASTER_CHARGE_START);
+	if (level > SABERBLASTER_CHARGE_LEVELS)
+	{
+		level = SABERBLASTER_CHARGE_LEVELS;
+	}
+	const int left = SABERBLASTER_CLIP_SIZE - clip_used;
+	if (level > left - 1)
+	{
+		level = left - 1; // the shot itself + 1 a level
+	}
+	return level > 0 ? level : 0;
+}
 
 static int PM_SaberBlasterFireDelay(void)
 {
@@ -20073,10 +20119,16 @@ static void PM_SaberBlasterFilterCmd(void)
 
 	pm_saberBlasterAlt = qfalse;
 	pm_saberBlasterReload = qfalse;
+	pm_saberBlasterRelease = -1;
+	pm_saberBlasterHeld = 0;
 	pm_saberBlasterPrevWeaponTime = pm->ps->weaponTime;
 
-	if (!PM_SaberBlasterActive())
+	if (!PM_SaberBlasterActive() || pm->ps->weaponstate == WEAPON_RAISING || pm->ps->weaponstate == WEAPON_DROPPING)
 	{
+		if (pm->ps->weapon == WP_SABER && pm->ps->saberLockTime < pm->cmd.serverTime)
+		{
+			pm->ps->weaponChargeTime = 0; // no stale hold (a gun's charge start) fires a shot later
+		}
 		return;
 	}
 
@@ -20085,31 +20137,58 @@ static void PM_SaberBlasterFilterCmd(void)
 
 	if (reload)
 	{
+		// alt attack + attack reloads the pistol instead of a kata
+		// SS_BLASTER (2026-10-24): test the reload flag, not the button (it is cleared here)
+		pm_saberBlasterReload = qtrue;
 		pm->cmd.buttons &= ~BUTTON_ATTACK;
-	}
-	if (alt)
-	{
-		// SS_BLASTER (2026-10-24): test the reload flag, not the button: the attack button was already cleared just
-		// above, so the combo always took the fire branch and never reloaded (MP only; SP was fine)
-		if (reload)
-		{
-			// alt attack + attack reloads the pistol instead of a kata
-			pm_saberBlasterReload = qtrue;
-			pm->cmd.buttons &= ~BUTTON_ATTACK;
-		}
-		else
-		{
-			pm_saberBlasterAlt = qtrue;
-		}
-		//pm->cmd.buttons &= ~BUTTON_ALT_ATTACK;
 	}
 	// alt attack belongs to the pistol: no saber throw in this style
 	pm->cmd.buttons &= ~BUTTON_BOTSABERTHROW;
 
-	if (pm->ps->saberLockTime < pm->cmd.serverTime)
+	if (pm->ps->saberLockTime >= pm->cmd.serverTime)
 	{
-		pm->ps->weaponChargeTime = 0; // saberlock charge (see PM_SaberLocked)
+		// in a saberlock weaponChargeTime is PM_SaberLocked's charge start (bg_saber.c): walk + dash held charge the
+		// lock shot. A hold dropped by a reload doesn't block it (-1 would read as a finished charge there); a charge
+		// already going as the lock starts carries on into it
+		if (pm->ps->weaponChargeTime < 0)
+		{
+			pm->ps->weaponChargeTime = 0;
+		}
+		pm_saberBlasterAlt = alt && !reload ? qtrue : qfalse;
+		return;
 	}
+
+	if (!alt)
+	{
+		if (pm->ps->weaponChargeTime > 0 && pm->ps->weaponChargeTime <= pm->cmd.serverTime)
+		{
+			// walk + dash went up: the shot goes, charged if they were held long enough
+			pm_saberBlasterRelease = BG_SaberBlasterChargeLevel(pm->cmd.serverTime - pm->ps->weaponChargeTime,
+				pm->ps->ammo[SABERBLASTER_CLIP_SLOT]);
+		}
+		pm->ps->weaponChargeTime = 0;
+		return;
+	}
+
+	if (reload)
+	{
+		pm->ps->weaponChargeTime = -1; // the shot is dropped until walk + dash go up
+		return;
+	}
+	if (pm->ps->weaponChargeTime < 0)
+	{
+		return;
+	}
+	if (!pm->ps->weaponChargeTime)
+	{
+		if (pm->ps->weaponTime > 0)
+		{
+			return; // still busy (the last shot, a swing): the hold starts once he is free
+		}
+		pm->ps->weaponChargeTime = pm->cmd.serverTime; // walk + dash just went down
+	}
+	pm_saberBlasterAlt = qtrue;
+	pm_saberBlasterHeld = pm->cmd.serverTime - pm->ps->weaponChargeTime;
 }
 
 static void WP_SaberBlasterThink(void)
@@ -20157,7 +20236,23 @@ static void WP_SaberBlasterThink(void)
 		return;
 	}
 
-	if (!pm_saberBlasterAlt)
+	if (pm_saberBlasterAlt)
+	{
+		// held: once it is a charged shot the arm holds out, aiming the pistol, while it charges
+		if (BG_SaberBlasterChargeLevel(pm_saberBlasterHeld, pm->ps->ammo[SABERBLASTER_CLIP_SLOT]) > 0
+			&& pm->ps->saberBlocked == BLOCKED_NONE)
+		{
+			if (pm_saberBlasterHeld - pml.msec < SABERBLASTER_CHARGE_START)
+			{
+				PM_AddEventWithParm(EV_SABERBLASTER, SBE_CHARGE); // the charge starts: its sound
+			}
+			PM_SetAnim(SETANIM_TORSO, BOTH_FORCEGRIP_HOLD, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+			pm->ps->torsoTimer = 150;
+		}
+		return;
+	}
+
+	if (pm_saberBlasterRelease < 0)
 	{
 		return;
 	}
@@ -20170,8 +20265,23 @@ static void WP_SaberBlasterThink(void)
 		return;
 	}
 
-	pm->ps->ammo[SABERBLASTER_CLIP_SLOT]++;
 	pm->ps->saberBlocked = BLOCKED_NONE;
+	if (pm_saberBlasterRelease > 0)
+	{
+		// a charged shot: the arm is already out, it goes at once and costs 1 + its level
+		pm->ps->ammo[SABERBLASTER_CLIP_SLOT] += 1 + pm_saberBlasterRelease;
+		if (pm->ps->ammo[SABERBLASTER_CLIP_SLOT] > SABERBLASTER_CLIP_SIZE)
+		{
+			pm->ps->ammo[SABERBLASTER_CLIP_SLOT] = SABERBLASTER_CLIP_SIZE;
+		}
+		PM_SetAnim(SETANIM_TORSO, BOTH_FORCELIGHTNING_RELEASE, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART);
+		pm->ps->weaponTime = weaponData[WP_BRYAR_PISTOL].fireTime;
+		pm->ps->torsoTimer = pm->ps->weaponTime;
+		PM_AddEventWithParm(EV_SABERBLASTER, SBE_CHARGED1 + pm_saberBlasterRelease - 1);
+		return;
+	}
+
+	pm->ps->ammo[SABERBLASTER_CLIP_SLOT]++;
 	PM_SetAnim(SETANIM_TORSO, BOTH_FORCELIGHTNING, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART);
 	pm->ps->weaponTime = weaponData[WP_BRYAR_PISTOL].fireTime;
 	pm->ps->torsoTimer = pm->ps->weaponTime;
@@ -20296,6 +20406,7 @@ static void PmoveSingle(pmove_t* pmove)
 	gPMDoSlowFall = PM_DoSlowFall();
 
 	PM_SaberBlasterFilterCmd(); // SS_BLASTER (2026-10-14)
+	PM_CheckGunnerAimRelease(); // the aiming camera goes when walk + block are let go (2026-10-31)
 
 	// this counter lets us debug movement problems with a journal
 	// by setting a conditional breakpoint fot the previous frame
@@ -20335,7 +20446,9 @@ static void PmoveSingle(pmove_t* pmove)
 	else if (pm->ps->saberMove == LS_A_BACK || pm->ps->saberMove == LS_A_BACK_CR ||
 		pm->ps->saberMove == LS_A_BACKSTAB || pm->ps->saberMove == LS_A_BACKSTAB_B ||
 		pm->ps->saberMove == LS_A_FLIP_STAB || pm->ps->saberMove == LS_A_FLIP_SLASH ||
-		pm->ps->saberMove == LS_DUAL_LR || pm->ps->saberMove == LS_DUAL_FB)
+		pm->ps->saberMove == LS_DUAL_LR || pm->ps->saberMove == LS_DUAL_FB
+		// SS_BLASTER (2026-10-31): its jump attack is the flip-over stab: the same turn in the air
+		|| pm->ps->saberMove == LS_A_JUMP_T__B_ && pm->ps->legsAnim == BOTH_JUMPFLIPSTABDOWN)
 	{
 		if (pm->ps->fd.saberAnimLevel == SS_FAST || pm->ps->fd.saberAnimLevel == SS_TAVION)
 		{

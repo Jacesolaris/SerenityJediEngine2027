@@ -66,10 +66,10 @@ void CG_GrappleTrail(centity_t* ent, const weaponInfo_t* wi)
 	memset(&beam, 0, sizeof beam);
 
 	//FIXME adjust for muzzle position
-	VectorCopy(cg_entities[ent->currentState.otherentityNum].lerpOrigin, beam.origin);
+	VectorCopy(cg_entities[ent->currentState.otherEntityNum].lerpOrigin, beam.origin);
 	beam.origin[2] += 26;
 
-	AngleVectors(cg_entities[ent->currentState.otherentityNum].lerpAngles, forward, nullptr, up);
+	AngleVectors(cg_entities[ent->currentState.otherEntityNum].lerpAngles, forward, nullptr, up);
 	VectorMA(beam.origin, -6, up, beam.origin);
 	VectorCopy(origin, beam.oldorigin);
 
@@ -101,10 +101,10 @@ static void CG_StunTrail(centity_t* ent, const weaponInfo_t* wi)
 	memset(&beam, 0, sizeof beam);
 
 	//FIXME adjust for muzzle position
-	VectorCopy(cg_entities[ent->currentState.otherentityNum].lerpOrigin, beam.origin);
+	VectorCopy(cg_entities[ent->currentState.otherEntityNum].lerpOrigin, beam.origin);
 	beam.origin[2] += 26;
 
-	AngleVectors(cg_entities[ent->currentState.otherentityNum].lerpAngles, forward, nullptr, up);
+	AngleVectors(cg_entities[ent->currentState.otherEntityNum].lerpAngles, forward, nullptr, up);
 	VectorMA(beam.origin, -6, up, beam.origin);
 	VectorCopy(origin, beam.oldorigin);
 
@@ -1460,6 +1460,13 @@ static void CG_DoMuzzleFlash(centity_t* cent, vec3_t org, vec3_t dir, const weap
 			if (wData->mAltMuzzleEffect[0])
 			{
 				effect = &wData->mAltMuzzleEffect[0];
+			}
+		}
+		{
+			const char* variant_fx = CG_WeaponVariantMuzzleFx(&cent->currentState, cent->alt_fire); // an SJE gun's own (2026-10-31)
+			if (variant_fx)
+			{
+				effect = variant_fx;
 			}
 		}
 
@@ -3027,6 +3034,24 @@ void SetWeaponSelectTime()
 	}
 }
 
+// the look (weapon variant) the player has on this weapon: the gun in hand, else the one he owns and uses on it (the
+// shop, g_pazaak.cpp); 0 = the stock gun. The weapon bar shows its icon and name (2026-10-31)
+extern int G_Shop_HolsterLook(const gentity_t* ent, int weapon);
+
+static int CG_PlayerWeaponLook(const int weapon)
+{
+	const gentity_t* player = &g_entities[0];
+	if (!player->client)
+	{
+		return 0;
+	}
+	if (BG_GetWeaponVariant(player->client->ps.weaponVariant, weapon))
+	{
+		return player->client->ps.weaponVariant;
+	}
+	return G_Shop_HolsterLook(player, weapon);
+}
+
 /*
 ===================
 CG_DrawWeaponSelect
@@ -3254,7 +3279,7 @@ void CG_DrawWeaponSelect()
 				}
 				else
 				{
-					CG_DrawPic(holdX, y + yOffset, smallIconSize, smallIconSize, weaponInfo->weaponIcon);
+					CG_DrawPic(holdX, y + yOffset, smallIconSize, smallIconSize, CG_WeaponVariantIcon(i, weaponInfo->weaponIcon));
 				}
 			}
 			else
@@ -3265,7 +3290,7 @@ void CG_DrawWeaponSelect()
 				}
 				else
 				{
-					CG_DrawPic(holdX, y + 10 + yOffset, smallIconSize, smallIconSize, weaponInfo->weaponIcon);
+					CG_DrawPic(holdX, y + 10 + yOffset, smallIconSize, smallIconSize, CG_WeaponVariantIcon(i, weaponInfo->weaponIcon));
 				}
 			}
 
@@ -3291,7 +3316,7 @@ void CG_DrawWeaponSelect()
 			else
 			{
 				CG_DrawPic(x - bigIconSize / static_cast<float>(2), y - (static_cast<float>(bigIconSize) - smallIconSize) / 2 + yOffset, bigIconSize,
-					bigIconSize, weaponInfo->weaponIcon);
+					bigIconSize, CG_WeaponVariantIcon(cg.weaponSelect, weaponInfo->weaponIcon));
 			}
 		}
 		else
@@ -3304,7 +3329,7 @@ void CG_DrawWeaponSelect()
 			else
 			{
 				CG_DrawPic(x - bigIconSize / static_cast<float>(2), y - (static_cast<float>(bigIconSize) - smallIconSize) / 2 + 10 + yOffset, bigIconSize,
-					bigIconSize, weaponInfo->weaponIcon);
+					bigIconSize, CG_WeaponVariantIcon(cg.weaponSelect, weaponInfo->weaponIcon));
 			}
 		}
 	}
@@ -3355,7 +3380,7 @@ void CG_DrawWeaponSelect()
 				}
 				else
 				{
-					CG_DrawPic(holdX, y + yOffset, smallIconSize, smallIconSize, weaponInfo->weaponIcon);
+					CG_DrawPic(holdX, y + yOffset, smallIconSize, smallIconSize, CG_WeaponVariantIcon(i, weaponInfo->weaponIcon));
 				}
 			}
 			else
@@ -3366,7 +3391,7 @@ void CG_DrawWeaponSelect()
 				}
 				else
 				{
-					CG_DrawPic(holdX, y + 10 + yOffset, smallIconSize, smallIconSize, weaponInfo->weaponIcon);
+					CG_DrawPic(holdX, y + 10 + yOffset, smallIconSize, smallIconSize, CG_WeaponVariantIcon(i, weaponInfo->weaponIcon));
 				}
 			}
 
@@ -3386,8 +3411,18 @@ void CG_DrawWeaponSelect()
 		else
 		{
 			char text[1024];
+			const weaponVariant_t* wv = BG_GetWeaponVariant(CG_PlayerWeaponLook(cg.weaponSelect), cg.weaponSelect);
 
-			if (cgi_SP_GetStringTextString(va("SP_INGAME_%s", item->classname), text, sizeof text))
+			if (wv && wv->displayName[0])
+			{
+				// an SJE gun: its own name (2026-10-31)
+				Q_strncpyz(text, wv->displayName, sizeof text);
+				const int w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 1.0f);
+				const int ox = (SCREEN_WIDTH - w) / 2;
+				cgi_R_Font_DrawString(ox, SCREEN_HEIGHT - 24 + yOffset, text, textColor, cgs.media.qhFontSmall, -1,
+					1.0f);
+			}
+			else if (cgi_SP_GetStringTextString(va("SP_INGAME_%s", item->classname), text, sizeof text))
 			{
 				const int w = cgi_R_Font_StrLenPixels(text, cgs.media.qhFontSmall, 1.0f);
 				const int ox = (SCREEN_WIDTH - w) / 2;
@@ -4312,6 +4347,164 @@ Caused by an EV_FIRE_WEAPON event
 extern qboolean PM_WeponRestAnim(int anim);
 extern qboolean PM_RunningAnim(int anim);
 
+// ---------------------------------------------------------------------------------------------------------------
+// Weapon variants (2026-10-31, DH: every gunner NPC its own gun, the SJE guns; see weapons.h). The game puts the
+// variant's gun model in the hand (G_CreateG2AttachedWeaponModel); here: sounds, muzzle flash, shot, impacts and the
+// HUD icon. Effects are played by name (the FX scheduler registers them), sounds and models are cached here.
+// ---------------------------------------------------------------------------------------------------------------
+typedef struct cgWeaponVariantSP_s
+{
+	qboolean registered;
+	qhandle_t icon;
+	sfxHandle_t sounds[2][MAX_WEAPON_VARIANT_SOUNDS];
+	int numSounds[2];
+	qhandle_t shotModel[2];
+	sfxHandle_t shotSound[2];
+	// the effects, registered with the rest (the by-name PlayEffect never registers: unregistered ones played nothing,
+	// so an SJE gun had no shot and no impact in SP); 0 = the file is missing, the stock effect plays instead
+	int muzzleFx[2];
+	int shotFx[2];
+	int missFx[2];
+	int hitFx[2];
+} cgWeaponVariantSP_t;
+
+static cgWeaponVariantSP_t cg_weaponVariants[MAX_WEAPON_VARIANTS];
+
+static const cgWeaponVariantSP_t* CG_WeaponVariantMedia(const int variant, const int weapon, const weaponVariant_t** wv_out)
+{
+	const weaponVariant_t* wv = BG_GetWeaponVariant(variant, weapon);
+
+	if (!wv)
+	{
+		return nullptr;
+	}
+	cgWeaponVariantSP_t* cwv = &cg_weaponVariants[variant];
+	if (!cwv->registered)
+	{
+		memset(cwv, 0, sizeof * cwv);
+		cwv->registered = qtrue;
+		cwv->icon = wv->icon[0] ? cgi_R_RegisterShaderNoMip(wv->icon) : 0;
+		for (int f = 0; f < 2; f++)
+		{
+			for (int i = 0; i < wv->fire[f].numSounds; i++)
+			{
+				const sfxHandle_t sfx = cgi_S_RegisterSound(wv->fire[f].sound[i]);
+				if (sfx)
+				{
+					cwv->sounds[f][cwv->numSounds[f]++] = sfx;
+				}
+			}
+			cwv->shotModel[f] = wv->fire[f].shotModel[0] ? cgi_R_RegisterModel(wv->fire[f].shotModel) : 0;
+			cwv->shotSound[f] = wv->fire[f].shotSound[0] ? cgi_S_RegisterSound(wv->fire[f].shotSound) : 0;
+			cwv->muzzleFx[f] = wv->fire[f].muzzleFx[0] ? theFxScheduler.RegisterEffect(wv->fire[f].muzzleFx) : 0;
+			cwv->shotFx[f] = wv->fire[f].shotFx[0] ? theFxScheduler.RegisterEffect(wv->fire[f].shotFx) : 0;
+			cwv->missFx[f] = wv->fire[f].missFx[0] ? theFxScheduler.RegisterEffect(wv->fire[f].missFx) : 0;
+			cwv->hitFx[f] = wv->fire[f].hitFx[0] ? theFxScheduler.RegisterEffect(wv->fire[f].hitFx) : 0;
+		}
+	}
+	if (wv_out)
+	{
+		*wv_out = wv;
+	}
+	return cwv;
+}
+
+const char* CG_WeaponVariantMuzzleFx(const entityState_t* es, const qboolean alt_fire)
+{
+	const weaponVariant_t* wv = nullptr;
+	const cgWeaponVariantSP_t* cwv = CG_WeaponVariantMedia(es->weaponVariant, es->weapon, &wv); // registers its effects
+	const int f = alt_fire ? 1 : 0;
+
+	if (!cwv || !cwv->muzzleFx[f])
+	{
+		return nullptr; // none, or its file is missing: the stock muzzle flash
+	}
+	return wv->fire[f].muzzleFx;
+}
+
+void CG_WeaponVariantFireSound(const centity_t* cent, const qboolean alt_fire)
+{
+	const cgWeaponVariantSP_t* cwv = CG_WeaponVariantMedia(cent->currentState.weaponVariant, cent->currentState.weapon, nullptr);
+	const int f = alt_fire ? 1 : 0;
+
+	if (cwv && cwv->numSounds[f] > 0)
+	{
+		cgi_S_StartSound(nullptr, cent->currentState.number, CHAN_WEAPON, cwv->sounds[f][rand() % cwv->numSounds[f]]);
+	}
+}
+
+qboolean CG_WeaponVariantMissile(centity_t* cent)
+{
+	const entityState_t* s1 = &cent->currentState;
+	const weaponVariant_t* wv = nullptr;
+	const cgWeaponVariantSP_t* cwv = CG_WeaponVariantMedia(s1->weaponVariant, s1->weapon, &wv);
+	const int f = cent->gent && cent->gent->alt_fire ? 1 : 0;
+	vec3_t forward;
+
+	if (!cwv || (!cwv->shotFx[f] && !cwv->shotModel[f]))
+	{
+		return qfalse; // no shot effect of its own (or the file is missing): the stock shot
+	}
+	if (VectorNormalize2(s1->pos.trDelta, forward) == 0.0f)
+	{
+		forward[2] = 1.0f;
+	}
+	if (cwv->shotFx[f])
+	{
+		theFxScheduler.PlayEffect(cwv->shotFx[f], cent->lerpOrigin, forward);
+	}
+	if (cwv->shotSound[f])
+	{
+		vec3_t velocity;
+		EvaluateTrajectoryDelta(&s1->pos, cg.time, velocity);
+		cgi_S_AddLoopingSound(s1->number, cent->lerpOrigin, velocity, cwv->shotSound[f]);
+	}
+	if (cwv->shotModel[f])
+	{
+		refEntity_t ent;
+		vec3_t angles;
+
+		memset(&ent, 0, sizeof ent);
+		VectorCopy(cent->lerpOrigin, ent.origin);
+		VectorCopy(cent->lerpOrigin, ent.oldorigin);
+		ent.hModel = cwv->shotModel[f];
+		ent.renderfx = RF_NOSHADOW;
+		vectoangles(forward, angles);
+		AnglesToAxis(angles, ent.axis);
+		cgi_R_AddRefEntityToScene(&ent);
+	}
+	return qtrue;
+}
+
+qboolean CG_WeaponVariantImpact(const entityState_t* es, vec3_t origin, vec3_t dir, const qboolean hit_body, const qboolean alt_fire)
+{
+	const cgWeaponVariantSP_t* cwv = CG_WeaponVariantMedia(es->weaponVariant, es->weapon, nullptr);
+	const int f = alt_fire ? 1 : 0;
+
+	if (!cwv)
+	{
+		return qfalse;
+	}
+	const int fx = hit_body && cwv->hitFx[f] ? cwv->hitFx[f] : cwv->missFx[f];
+	if (!fx)
+	{
+		return qfalse; // no impact of its own (or the file is missing): the stock impact
+	}
+	theFxScheduler.PlayEffect(fx, origin, dir);
+	return qtrue;
+}
+
+// the weapon bar icon: an SJE gun's own icon when the player holds or owns a weapon variant of it (cheat or shop)
+qhandle_t CG_WeaponVariantIcon(const int weapon, const qhandle_t stock_icon)
+{
+	if (!g_entities[0].client)
+	{
+		return stock_icon;
+	}
+	const cgWeaponVariantSP_t* cwv = CG_WeaponVariantMedia(CG_PlayerWeaponLook(weapon), weapon, nullptr);
+	return cwv && cwv->icon ? cwv->icon : stock_icon;
+}
+
 void CG_FireWeapon(centity_t* cent, const qboolean alt_fire)
 {
 	const entityState_t* ent = &cent->currentState;
@@ -4372,6 +4565,8 @@ void CG_FireWeapon(centity_t* cent, const qboolean alt_fire)
 	}
 
 	cent->alt_fire = alt_fire;
+
+	CG_WeaponVariantFireSound(cent, alt_fire); // weapon variants (2026-10-31): an SJE gun's own fire sound
 
 	if (ent->weapon == WP_SABER)
 	{
@@ -4652,7 +4847,7 @@ void cg_missile_hit_player(const centity_t* cent, const int weapon, vec3_t origi
 
 	if (cent->gent)
 	{
-		other = &g_entities[cent->gent->s.otherentityNum];
+		other = &g_entities[cent->gent->s.otherEntityNum];
 
 		if (other->client)
 		{

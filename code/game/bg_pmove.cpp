@@ -3640,7 +3640,7 @@ static void PM_CheckAirDash()
 		te->s.time = level.time;
 		te->s.time2 = 2500;
 		te->owner = pm->gent;
-		te->s.otherentityNum = pm->ps->clientNum;
+		te->s.otherEntityNum = pm->ps->clientNum;
 		gi.linkentity(te);
 	}
 
@@ -14038,7 +14038,28 @@ void PM_SetSaberMove(saberMoveName_t new_move)
 	}
 	else if (new_move == LS_A_JUMP_T__B_ && (pm->ps->saberAnimLevel == SS_BLASTER)) // SS_BLASTER (2026-10-14)
 	{
-		anim = BOTH_JUMPATTACK6;
+		// SS_BLASTER (Jace 2026-10-31): the flip-over stab (BOTH_JUMPFLIPSTABDOWN) as its jump attack, launched as
+		// PM_SaberFlipOverAttackMove launches LS_A_FLIP_STAB: up as well as forward. Setting only the forward velocity
+		// wiped PM_SaberJumpAttackMove's upward one, so he dropped straight back down and stabbed the floor. Also
+		// ent->angle = his facing: PM_AdjustAnglesForSpinningFlip (bg_pangles.cpp) turns him 180 from it during the
+		// flip and pushes him along it, and it was left over from whatever set it last
+		vec3_t fwdAngles, jumpFwd;
+
+		VectorCopy(pm->ps->viewangles, fwdAngles);
+		fwdAngles[PITCH] = fwdAngles[ROLL] = 0;
+		//do the lunge
+		AngleVectors(fwdAngles, jumpFwd, nullptr, nullptr);
+		VectorScale(jumpFwd, 150, pm->ps->velocity);
+		pm->ps->velocity[2] = 250;
+		pm->ps->forceJumpZStart = pm->ps->origin[2]; //so we don't take damage if we land at same height
+		pm->ps->pm_flags |= PMF_JUMPING | PMF_SLOW_MO_FALL;
+		pm->cmd.upmove = 0;
+		if (pm->gent)
+		{
+			pm->gent->angle = pm->ps->viewangles[YAW];
+		}
+		PM_AddEvent(EV_JUMP);
+		anim = BOTH_JUMPFLIPSTABDOWN;
 	}
 	else if (pm->ps->saberAnimLevel == SS_BLASTER && new_move >= LS_V1_BR && new_move < LS_REFLECT_LL)
 	{

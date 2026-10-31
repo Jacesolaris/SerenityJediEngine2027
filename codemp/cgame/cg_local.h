@@ -559,7 +559,18 @@ typedef struct centity_s {
 
 	// a gun's shot (CG_MissileFromMuzzle): drawn leaving the shooter's gun muzzle, blending into its real path
 	int				muzzleOfsTrTime;	// the shot (its trajectory start) the offset was taken for
-	vec3_t			muzzleOfs;			// gun muzzle - the server's shot start
+	vec3_t			muzzleOfs;			// gun muzzle - where the shot was first drawn
+	int				muzzleSeenTime;		// cg.time the shot was first drawn (0 = not drawn from a muzzle)
+
+	// saber slice cuts on this body or piece (cg_players.c CG_SaberSliceApply), in the anchor bones' space
+	int				saberSliceCount;
+	int				saberSliceBone[MAX_SABER_SLICES];	// SABERSLICE_BONE_*
+	float			saberSlicePlane[MAX_SABER_SLICES][4];
+	int				saberSliceTime[MAX_SABER_SLICES];	// cg.time of each cut (the cut face cools down)
+	int				saberSliceInvert;					// bit i: this is the cut-off piece of cut i
+	int				saberSliceFxTime;					// next ember puff
+	int				saberSliceSpawnTime;				// piece: cg.time it was first drawn
+	void*			saberSliceGhoul2;					// the ghoul2 instance the cuts belong to
 } centity_t;
 
 //======================================================================
@@ -1585,6 +1596,7 @@ typedef struct cgMedia_s {
 
 	qhandle_t	bdecal_bodyburn1;
 	qhandle_t	bdecal_saberglow;
+	qhandle_t	saberSliceCapShader; // glowing cut face of a saber slice (vanilla renderer)
 	qhandle_t	bdecal_burn1;
 	qhandle_t	mSaberDamageGlow;
 
@@ -2107,6 +2119,10 @@ void CG_DestroyNPCClient(clientInfo_t** ci);
 
 void CG_Player(centity_t* cent);
 void CG_ResetPlayerEntity(centity_t* cent);
+qboolean CG_SaberSliceApply(centity_t* cent, refEntity_t* ent);
+qboolean CG_SaberSlicePiece(centity_t* cent);
+void CG_SaberSliceClear(centity_t* cent);
+void CG_SaberSliceTransfer(centity_t* body, centity_t* from);
 void CG_AddRefEntityWithPowerups(const refEntity_t* ent, const entityState_t* state);
 void CG_NewClientInfo(int clientNum, qboolean entities_initialized);
 sfxHandle_t	CG_CustomSound(int clientNum, const char* sound_name);
@@ -2372,6 +2388,30 @@ void CG_ShutDownG2Weapons(void);
 void CG_ScepterShutdown(void); // cg_players.c: Ragnos' scepter model
 void CG_CopyG2WeaponInstance(const centity_t* cent, int weapon_num, void* to_ghoul2);
 void* CG_G2WeaponInstance(const centity_t* cent, int weapon);
+
+// weapon variants (2026-10-31, cg_weapons.c): the SJE guns, see bg_weapons.h
+typedef struct cgWeaponVariant_s
+{
+	qboolean registered;
+	void* g2; // in the hand (*flash bolt)
+	void* g2Holster;
+	qhandle_t icon;
+	sfxHandle_t selectSound;
+	sfxHandle_t sounds[2][MAX_WEAPON_VARIANT_SOUNDS];
+	int numSounds[2];
+	fxHandle_t muzzleFx[2];
+	fxHandle_t shotFx[2];
+	fxHandle_t missFx[2];
+	fxHandle_t hitFx[2];
+	qhandle_t shotModel[2];
+	sfxHandle_t shotSound[2];
+} cgWeaponVariant_t;
+const cgWeaponVariant_t* CG_WeaponVariant(int variant, int weapon);
+void CG_SetWeaponLooks(int clientNum, const char* hex); // the shop: a player's gun looks per weapon ("wvlooks")
+void CG_WeaponVariantMuzzleFx(const entityState_t* es, fxHandle_t* muzzle_fx, fxHandle_t* alt_muzzle_fx);
+qboolean CG_WeaponVariantMissile(centity_t* cent);
+qboolean CG_WeaponVariantImpact(const entityState_t* es, vec3_t origin, vec3_t dir, qboolean hit_body, qboolean alt_fire);
+qhandle_t CG_WeaponVariantIcon(int variant, int weapon);
 void CG_CheckPlayerG2Weapons(const playerState_t* ps, centity_t* cent);
 
 void CG_SetSiegeTimerCvar(int msec);

@@ -3855,6 +3855,7 @@ void BG_PlayerStateToEntityState(playerState_t* ps, entityState_t* s, const qboo
 	}
 
 	s->weapon = ps->weapon;
+	s->weaponVariant = ps->weaponVariant; // weapon variant (2026-10-31)
 	s->groundEntityNum = ps->groundEntityNum;
 	s->ManualBlockingFlags = ps->ManualBlockingFlags; //Blockingflag on OK
 	// SJE: the class too (ps.botclass is networked, kept = pers.botclass in ClientThink): the local player's entity
@@ -4083,6 +4084,7 @@ void BG_PlayerStateToEntityStateExtraPolate(playerState_t* ps, entityState_t* s,
 		ps->entityEventSequence++;
 	}
 	s->weapon = ps->weapon;
+	s->weaponVariant = ps->weaponVariant; // weapon variant (2026-10-31)
 	s->groundEntityNum = ps->groundEntityNum;
 	s->ManualBlockingFlags = ps->ManualBlockingFlags; //Blockingflag on OK
 	// SJE: the class too (ps.botclass is networked, kept = pers.botclass in ClientThink): the local player's entity

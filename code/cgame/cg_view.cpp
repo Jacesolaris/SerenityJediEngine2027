@@ -1819,6 +1819,50 @@ float CG_ForceSpeedFOV()
 	return fov;
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// Sprint camera (2026-10-31, DH; the ported sprint FOV): while sprinting the view widens by cg_sprintFov degrees, eased
+// in and out over cg_sprintFovTime ms (the original: +20 over 300 ms). Not while zoomed, dead or in a cutscene. 0 = off.
+// ---------------------------------------------------------------------------------------------------------------
+static float cgSprintBlend = 0.0f;
+static int cgSprintBlendTime = 0;
+
+static float CG_SprintFovAdd()
+{
+	const playerState_t* ps = &cg.predictedPlayerState;
+	qboolean sprinting = ps->PlayerEffectFlags & 1 << PEF_SPRINTING ? qtrue : qfalse;
+
+	if (cg_sprintFov.value == 0.0f)
+	{
+		cgSprintBlend = 0.0f;
+		return 0.0f;
+	}
+	if (in_camera || cg.zoomMode || ps->stats[STAT_HEALTH] <= 0)
+	{
+		sprinting = qfalse;
+	}
+	if (cgSprintBlendTime != cg.time)
+	{
+		float step = 1.0f;
+
+		if (cg_sprintFovTime.value > 0.0f && cg.time > cgSprintBlendTime && cg.time - cgSprintBlendTime < 1000)
+		{
+			step = static_cast<float>(cg.time - cgSprintBlendTime) / cg_sprintFovTime.value;
+		}
+		cgSprintBlend += sprinting ? step : -step;
+		if (cgSprintBlend < 0.0f)
+		{
+			cgSprintBlend = 0.0f;
+		}
+		else if (cgSprintBlend > 1.0f)
+		{
+			cgSprintBlend = 1.0f;
+		}
+		cgSprintBlendTime = cg.time;
+	}
+	// smoothstep, so it eases in and out
+	return cg_sprintFov.value * cgSprintBlend * cgSprintBlend * (3.0f - 2.0f * cgSprintBlend);
+}
+
 /*
 ====================
 CG_CalcFov
@@ -1960,6 +2004,13 @@ static qboolean CG_CalcFov()
 			if (f <= 1.0 && !cg.renderingThirdPerson)
 			{
 				fov_x = cg_zoomFov + f * (fov_x - cg_zoomFov);
+			}
+
+			// sprint camera (2026-10-31)
+			fov_x += CG_SprintFovAdd();
+			if (fov_x > 160)
+			{
+				fov_x = 160;
 			}
 		}
 	}

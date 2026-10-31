@@ -5403,6 +5403,11 @@ static void CreateInternalShaders(void) {
 }
 
 static void CreateExternalShaders(void) {
+	// saber slice cut face (tr_backend.cpp RB_DrawItems): DH's cap images; missing = the old procedural molten colour
+	tr.saberSliceImages[0] = R_FindImageFile("gfx/effects/saberslice_caps", IMGTYPE_COLORALPHA, IMGFLAG_MIPMAP);
+	tr.saberSliceImages[1] = R_FindImageFile("gfx/effects/saberslice_caps_blood", IMGTYPE_COLORALPHA, IMGFLAG_MIPMAP);
+	tr.saberSliceImages[2] = R_FindImageFile("gfx/effects/saberslice_caps_glow", IMGTYPE_COLORALPHA, IMGFLAG_MIPMAP);
+
 	tr.projectionShadowShader = R_FindShader("projectionShadow", lightmapsNone, stylesDefault, qtrue);
 	tr.flareShader = R_FindShader("gfx/misc/flare", lightmapsNone, stylesDefault, qtrue);
 

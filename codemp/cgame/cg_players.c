@@ -6511,6 +6511,489 @@ static void CG_ForceGripEffect(vec3_t org)
 
 /*
 ===============
+Saber slice (Jedi Survivor style cuts, see g_combat.c G_SaberSlice)
+
+The server sends each cut on the flying piece (G2_MODELPART_SLICE). The first
+time we see a piece we copy the body for it and add the cut to both. The cuts
+are kept per centity in bone space; CG_SaberSliceApply turns them into the
+world space planes the renderer wants (RF_SABERSLICE), draws the glowing cut
+faces for the vanilla renderer and puffs embers while a cut is still hot.
+===============
+*/
+void CG_SaberSliceClear(centity_t* cent)
+{
+	cent->saberSliceCount = 0;
+	cent->saberSliceInvert = 0;
+	cent->saberSliceGhoul2 = NULL;
+}
+
+// ircg: the body queue copy of a dead player keeps the player's cuts
+void CG_SaberSliceTransfer(centity_t* body, centity_t* from)
+{
+	if (body && from && from->saberSliceCount > 0)
+	{
+		body->saberSliceCount = from->saberSliceCount;
+		body->saberSliceInvert = 0;
+		memcpy(body->saberSliceBone, from->saberSliceBone, sizeof body->saberSliceBone);
+		memcpy(body->saberSlicePlane, from->saberSlicePlane, sizeof body->saberSlicePlane);
+		memcpy(body->saberSliceTime, from->saberSliceTime, sizeof body->saberSliceTime);
+		body->saberSliceGhoul2 = body->ghoul2;
+		body->saberSliceFxTime = 0;
+	}
+	else if (body)
+	{
+		CG_SaberSliceClear(body);
+	}
+	if (from)
+	{
+		CG_SaberSliceClear(from);
+	}
+}
+
+static qboolean CG_SaberSliceUseCaps(void)
+{
+	char renderer[64];
+	if (cg_saberSliceCaps.integer <= 0)
+	{
+		return qfalse;
+	}
+	if (cg_saberSliceCaps.integer >= 2)
+	{
+		return qtrue;
+	}
+	// rend2 draws the inside of the body as molten metal by itself
+	trap->Cvar_VariableStringBuffer("cl_renderer", renderer, sizeof renderer);
+	return strstr(renderer, "rend2") ? qfalse : qtrue;
+}
+
+// model space (where the ghoul2 vertices are) -> world, the way the renderer places the model
+static void CG_SaberSliceModelToWorld(const refEntity_t* ent, const vec3_t in, vec3_t out)
+{
+	VectorCopy(ent->origin, out);
+	VectorMA(out, in[0], ent->axis[0], out);
+	VectorMA(out, in[1], ent->axis[1], out);
+	VectorMA(out, in[2], ent->axis[2], out);
+}
+
+static void CG_SaberSlicePlaneToWorld(const refEntity_t* ent, const float* model_plane, float* out)
+{
+	// p_world = origin + sum v_k axis[k]; the axes may be scaled (ScaleModelAxis)
+	vec3_t n = { 0, 0, 0 };
+	for (int k = 0; k < 3; k++)
+	{
+		const float len_sq = DotProduct(ent->axis[k], ent->axis[k]);
+		if (len_sq > 0.0001f)
+		{
+			VectorMA(n, model_plane[k] / len_sq, ent->axis[k], n);
+		}
+	}
+	float d = model_plane[3] + DotProduct(n, ent->origin);
+	const float len = VectorLength(n);
+	if (len > 0.0001f)
+	{
+		VectorScale(n, 1.0f / len, n);
+		d /= len;
+	}
+	VectorCopy(n, out);
+	out[3] = d;
+}
+
+static qboolean CG_SaberSliceBoneModel(void* ghoul2, const char* bone, mdxaBone_t* m, int* bolt_out)
+{
+	vec3_t no_scale = { 0, 0, 0 };
+	const int bolt = trap->G2API_AddBolt(ghoul2, 0, bone);
+	if (bolt_out)
+	{
+		*bolt_out = bolt;
+	}
+	if (bolt < 0)
+	{
+		return qfalse;
+	}
+	// no angles, no origin, no scale: the model space the renderer skins the vertices in
+	return trap->G2API_GetBoltMatrix(ghoul2, 0, bolt, m, vec3_origin, vec3_origin, cg.time, cgs.game_models, no_scale);
+}
+
+// the cut table asks whether the model's skeleton has a bone
+static int CG_SaberSliceHasBone(void* ghoul2, const char* name)
+{
+	return trap->G2API_AddBolt(ghoul2, 0, name) >= 0;
+}
+
+// the bone segment a cut slot uses on this model's skeleton (tr_types.h SaberSlice_Seg), NULL if none
+static const saberSliceSeg_t* CG_SaberSliceSeg(void* ghoul2, const int slot)
+{
+	return ghoul2 ? SaberSlice_FindSeg(slot, CG_SaberSliceHasBone, ghoul2) : NULL;
+}
+
+// the glowing cut face: the bone's cross section (ellipse) laid on the cut plane
+static void CG_SaberSliceDrawCap(const centity_t* cent, const refEntity_t* ent, const int b, const float* world_plane, const float heat, const float side)
+{
+	mdxaBone_t m_joint, m_child;
+	vec3_t joint, child, j, c, u, n, center, a, c2;
+	polyVert_t verts[16];
+	byte col[4];
+	float nu, r, rx, ry, scale = 1.0f, h;
+	const saberSliceSeg_t* slice_seg = CG_SaberSliceSeg(cent->ghoul2, b);
+	if (!slice_seg || !CG_SaberSliceBoneModel(cent->ghoul2, slice_seg->bone, &m_joint, NULL)
+		|| !CG_SaberSliceBoneModel(cent->ghoul2, slice_seg->child, &m_child, NULL))
+	{
+		return;
+	}
+	VectorSet(j, m_joint.matrix[0][3], m_joint.matrix[1][3], m_joint.matrix[2][3]);
+	VectorSet(c, m_child.matrix[0][3], m_child.matrix[1][3], m_child.matrix[2][3]);
+	CG_SaberSliceModelToWorld(ent, j, joint);
+	CG_SaberSliceModelToWorld(ent, c, child);
+	VectorSubtract(child, joint, u);
+	{
+		const float seg = VectorNormalize(u);
+		if (seg < 0.5f)
+		{
+			return;
+		}
+		VectorCopy(world_plane, n);
+		nu = DotProduct(n, u);
+		if (fabs(nu) < 0.3f)
+		{
+			nu = nu < 0.0f ? -0.3f : 0.3f;
+		}
+		// where the bone line crosses the plane
+		{
+			float t = (world_plane[3] - DotProduct(n, joint)) / nu;
+			if (t < -seg)
+			{
+				t = -seg;
+			}
+			else if (t > seg * 2.0f)
+			{
+				t = seg * 2.0f;
+			}
+			VectorMA(joint, t, u, center);
+		}
+	}
+	if (cent->modelScale[2] > 0.0f)
+	{
+		scale = cent->modelScale[2];
+	}
+	r = slice_seg->radius * scale * 0.95f;
+	rx = r;
+	ry = r;
+	if (SaberSlice_IsTorso(b))
+	{
+		// wider side to side than front to back; ent->axis[1] is the body's left
+		VectorCopy(ent->axis[1], a);
+		rx = r * 1.3f;
+		ry = r * 0.85f;
+	}
+	else
+	{
+		PerpendicularVector(a, u);
+	}
+	VectorMA(a, -DotProduct(a, u), u, a);
+	if (VectorNormalize(a) < 0.001f)
+	{
+		PerpendicularVector(a, u);
+	}
+	CrossProduct(u, a, c2);
+
+	// cool from orange-white to dark red
+	h = heat < 0.0f ? 0.0f : heat > 1.0f ? 1.0f : heat;
+	col[0] = (byte)(110 + 145 * h);
+	col[1] = (byte)(18 + 170 * h * h);
+	col[2] = (byte)(6 + 70 * h * h * h);
+	col[3] = (byte)(200 + 55 * h);
+
+	for (int i = 0; i < 16; i++)
+	{
+		const float ang = 6.2831853f * i / 16;
+		const float cs = cos(ang), sn = sin(ang);
+		vec3_t p;
+		VectorScale(a, rx * cs, p);
+		VectorMA(p, ry * sn, c2, p);
+		// slide along the bone onto the cut plane, then a hair towards the side that stays
+		VectorMA(p, -DotProduct(n, p) / nu, u, p);
+		VectorAdd(center, p, verts[i].xyz);
+		VectorMA(verts[i].xyz, 0.3f * side, n, verts[i].xyz);
+		verts[i].st[0] = 0.5f + 0.5f * cs;
+		verts[i].st[1] = 0.5f + 0.5f * sn;
+		verts[i].modulate[0] = col[0];
+		verts[i].modulate[1] = col[1];
+		verts[i].modulate[2] = col[2];
+		verts[i].modulate[3] = col[3];
+	}
+	// the cap shader comes with the mod's pk3; without it a plain vertex coloured disc
+	trap->R_AddPolysToScene(cgs.media.saberSliceCapShader ? cgs.media.saberSliceCapShader : cgs.media.whiteShader, 16, verts, 1);
+}
+
+/*
+CG_SaberSliceApply: call on the final refEntity of a sliced body or piece, just
+before it is added to the scene. Returns qfalse when a piece can't be placed
+this frame (don't draw it, or the whole body would show).
+*/
+// a droid (NPC or bot, or a piece of one) is cut metal: hot metal cut face and sparks, no flesh (DH 2026-10-31)
+static qboolean CG_SaberSliceIsMetal(const centity_t* cent)
+{
+	const centity_t* body = cent;
+	if (cent->saberSliceInvert && cent->currentState.modelIndex >= 0 && cent->currentState.modelIndex < ENTITYNUM_WORLD)
+	{
+		body = &cg_entities[cent->currentState.modelIndex]; // a flying piece: its body (CG_SaberSlicePiece)
+	}
+	switch (body->currentState.NPC_class)
+	{
+	case CLASS_SBD: case CLASS_BATTLEDROID: case CLASS_GONK: case CLASS_INTERROGATOR: case CLASS_MARK1:
+	case CLASS_MARK2: case CLASS_MOUSE: case CLASS_PROBE: case CLASS_PROTOCOL: case CLASS_R2D2: case CLASS_R5D2:
+	case CLASS_SEEKER: case CLASS_REMOTE: case CLASS_SENTRY: case CLASS_DROIDEKA: case CLASS_ASSASSIN_DROID:
+	case CLASS_SABER_DROID: case CLASS_GALAKMECH:
+		return qtrue;
+	default:
+		break;
+	}
+	switch (body->currentState.botclass)
+	{
+	case BCLASS_SBD: case BCLASS_BATTLEDROID: case BCLASS_GONK: case BCLASS_INTERROGATOR: case BCLASS_MARK1:
+	case BCLASS_MARK2: case BCLASS_MOUSE: case BCLASS_PROBE: case BCLASS_PROTOCOL: case BCLASS_R2D2: case BCLASS_R5D2:
+	case BCLASS_SEEKER: case BCLASS_SENTRY: case BCLASS_DROIDEKA: case BCLASS_ASSASSIN_DROID: case BCLASS_SABER_DROID:
+	case BCLASS_GALAKMECH:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+qboolean CG_SaberSliceApply(centity_t* cent, refEntity_t* ent)
+{
+	int count;
+	qboolean caps;
+	int cool_time;
+	float hottest = 0.0f;
+	qboolean metal;
+	static fxHandle_t sparks_fx = 0;
+
+	if (!cent || cent->saberSliceCount <= 0 || !ent || !ent->ghoul2 || !cent->ghoul2)
+	{
+		return qtrue;
+	}
+	if (cent->saberSliceGhoul2 != cent->ghoul2
+		|| ((cent->currentState.eType == ET_PLAYER || cent->currentState.eType == ET_NPC) && !(cent->currentState.eFlags & EF_DEAD)))
+	{
+		// a new model or alive again: the cuts belonged to the old body
+		CG_SaberSliceClear(cent);
+		return qtrue;
+	}
+	if (!cg_dismember.integer)
+	{
+		return cent->saberSliceInvert ? qfalse : qtrue; // this client doesn't want to see dismemberment
+	}
+
+	count = cent->saberSliceCount < MAX_SABER_SLICES ? cent->saberSliceCount : MAX_SABER_SLICES;
+	caps = CG_SaberSliceUseCaps();
+	cool_time = cg_saberSliceCoolTime.integer > 100 ? cg_saberSliceCoolTime.integer : 100;
+	metal = CG_SaberSliceIsMetal(cent);
+
+	ent->sliceCount = 0;
+	ent->sliceInvert = 0;
+	for (int s = 0; s < count; s++)
+	{
+		mdxaBone_t m;
+		float model_plane[4];
+		const qboolean piece = (cent->saberSliceInvert & 1 << s) ? qtrue : qfalse;
+		const saberSliceSeg_t* seg = CG_SaberSliceSeg(cent->ghoul2, cent->saberSliceBone[s]);
+		if (!seg || !CG_SaberSliceBoneModel(cent->ghoul2, seg->bone, &m, NULL)
+			|| !SaberSlice_PlaneFromBone((const float(*)[4])m.matrix, cent->saberSlicePlane[s], model_plane))
+		{
+			if (piece)
+			{
+				ent->renderfx &= ~RF_SABERSLICE;
+				ent->sliceCount = 0;
+				return qfalse; // the piece would show the whole body
+			}
+			continue; // the body just skips this cut for a frame
+		}
+		{
+			const int n = ent->sliceCount++;
+			const float heat = 1.0f - (float)(cg.time - cent->saberSliceTime[s]) / cool_time;
+			CG_SaberSlicePlaneToWorld(ent, model_plane, ent->slicePlane[n]);
+			ent->sliceBone[n] = cent->saberSliceBone[s];
+			if (piece)
+			{
+				ent->sliceInvert |= 1 << n;
+			}
+			if (heat > hottest)
+			{
+				hottest = heat;
+			}
+			if (caps)
+			{
+				// the body keeps the negative side, the piece the positive side
+				CG_SaberSliceDrawCap(cent, ent, cent->saberSliceBone[s], ent->slicePlane[n], heat, piece ? 1.0f : -1.0f);
+			}
+			// the renderer places the cut on the skeleton it draws (smoothed, ragdoll), so it gets the bone space
+			// plane; the world plane above was only for the cap disc. Our bolt matrices are unsmoothed: a falling
+			// ragdoll could show a cut off head on the body again (DH video 2026-10-31)
+			memcpy(ent->slicePlane[n], cent->saberSlicePlane[s], sizeof(float) * 4);
+			ent->sliceBone[n] |= SABERSLICE_PLANE_LOCAL | (metal ? SABERSLICE_METAL : 0);
+		}
+	}
+	if (ent->sliceCount <= 0)
+	{
+		ent->renderfx &= ~RF_SABERSLICE;
+		return qtrue;
+	}
+	ent->renderfx |= RF_SABERSLICE;
+	ent->sliceHeat = hottest < 0.0f ? 0.0f : hottest > 1.0f ? 1.0f : hottest;
+
+	// embers and smoke from a hot cut (sparks from hot metal)
+	if (hottest > (metal ? 0.6f : 0.25f) && cent->saberSliceFxTime <= cg.time)
+	{
+		int bolt = -1;
+		mdxaBone_t m;
+		const saberSliceSeg_t* seg = CG_SaberSliceSeg(cent->ghoul2, cent->saberSliceBone[count - 1]);
+		cent->saberSliceFxTime = cg.time + 700;
+		if (seg && CG_SaberSliceBoneModel(cent->ghoul2, seg->bone, &m, &bolt) && bolt >= 0)
+		{
+			if (metal && !sparks_fx)
+			{
+				sparks_fx = trap->FX_RegisterEffect("sparks/spark_nosnd");
+			}
+			trap->FX_PlayBoltedEffectID(metal && sparks_fx ? sparks_fx : cgs.effects.mSaberlimb_Bolton, ent->origin, cent->ghoul2, bolt,
+				cent->currentState.number, 0, 0, qtrue);
+		}
+	}
+	return qtrue;
+}
+
+// pause every animating bone of the piece's copy where it is now
+static void CG_SaberSliceFreeze(void* ghoul2, const char* bone)
+{
+	float frame = 0.0f;
+	if (trap->G2API_GetBoneFrame(ghoul2, bone, cg.time, &frame, cgs.game_models, 0))
+	{
+		trap->G2API_SetBoneAnim(ghoul2, 0, bone, (int)frame, (int)frame + 1, BONE_ANIM_OVERRIDE_FREEZE, 1.0f, cg.time, frame, 0);
+	}
+}
+
+/*
+CG_SaberSlicePiece: CG_General for a G2_MODELPART_SLICE piece, before the
+model is set up. Returns qfalse when it must not be drawn (yet).
+*/
+qboolean CG_SaberSlicePiece(centity_t* cent)
+{
+	centity_t* body;
+	const int bone = cent->currentState.generic1;
+
+	if (!cg_dismember.integer || bone < 0 || bone >= SABERSLICE_SLOT_COUNT
+		|| cent->currentState.modelIndex < 0 || cent->currentState.modelIndex >= ENTITYNUM_WORLD)
+	{
+		return qfalse;
+	}
+	body = &cg_entities[cent->currentState.modelIndex];
+
+	if (!cent->ghoul2 || cent->saberSliceGhoul2 != cent->ghoul2)
+	{
+		int anchor_bolt;
+		mdxaBone_t m;
+		if (!body->ghoul2 || !trap->G2_HaveWeGhoul2Models(body->ghoul2))
+		{
+			return qfalse;
+		}
+		if ((body->currentState.eType == ET_PLAYER || body->currentState.eType == ET_NPC) && !(body->currentState.eFlags & EF_DEAD))
+		{
+			return qfalse; // the death hasn't made it through yet: wait, or the living body would be cut
+		}
+		if (body->saberSliceGhoul2 != body->ghoul2)
+		{
+			CG_SaberSliceClear(body);
+		}
+		if (body->saberSliceCount >= MAX_SABER_SLICES)
+		{
+			return qfalse;
+		}
+
+		// the piece: a copy of the body, frozen in the pose it was cut in, turning around the cut bone
+		if (cent->ghoul2 && trap->G2_HaveWeGhoul2Models(cent->ghoul2))
+		{
+			trap->G2API_CleanGhoul2Models(&cent->ghoul2);
+		}
+		trap->G2API_DuplicateGhoul2Instance(body->ghoul2, &cent->ghoul2);
+		if (!cent->ghoul2)
+		{
+			return qfalse;
+		}
+		trap->G2API_SetRagDoll(cent->ghoul2, NULL);
+		CG_SaberSliceFreeze(cent->ghoul2, "model_root");
+		CG_SaberSliceFreeze(cent->ghoul2, "lower_lumbar");
+		CG_SaberSliceFreeze(cent->ghoul2, "Motion");
+		{
+			const saberSliceSeg_t* seg = CG_SaberSliceSeg(cent->ghoul2, bone);
+			if (seg && CG_SaberSliceBoneModel(cent->ghoul2, seg->bone, &m, &anchor_bolt) && anchor_bolt >= 0)
+			{
+				trap->G2API_SetNewOrigin(cent->ghoul2, anchor_bolt);
+			}
+		}
+
+		// the piece keeps the body's earlier cuts, plus the new one the other way round
+		cent->saberSliceCount = 0;
+		for (int i = 0; i < body->saberSliceCount && cent->saberSliceCount < MAX_SABER_SLICES - 1; i++)
+		{
+			const int n = cent->saberSliceCount++;
+			cent->saberSliceBone[n] = body->saberSliceBone[i];
+			memcpy(cent->saberSlicePlane[n], body->saberSlicePlane[i], sizeof cent->saberSlicePlane[n]);
+			cent->saberSliceTime[n] = body->saberSliceTime[i];
+		}
+		{
+			const int n = cent->saberSliceCount++;
+			cent->saberSliceBone[n] = bone;
+			VectorCopy(cent->currentState.origin2, cent->saberSlicePlane[n]);
+			cent->saberSlicePlane[n][3] = cent->currentState.angles2[0];
+			cent->saberSliceTime[n] = cg.time;
+			cent->saberSliceInvert = 1 << n;
+		}
+		cent->saberSliceGhoul2 = cent->ghoul2;
+		cent->saberSliceFxTime = 0;
+
+		// the body: hide the cut away side
+		{
+			const int n = body->saberSliceCount++;
+			body->saberSliceBone[n] = bone;
+			VectorCopy(cent->currentState.origin2, body->saberSlicePlane[n]);
+			body->saberSlicePlane[n][3] = cent->currentState.angles2[0];
+			body->saberSliceTime[n] = cg.time;
+			body->saberSliceGhoul2 = body->ghoul2;
+		}
+		cent->saberSliceSpawnTime = cg.time;
+		VectorCopy(cent->lerpOrigin, cent->turAngles);
+	}
+
+	// ExPhys moves the piece in steps: smooth it like the old limbs
+	if (DistanceSquared(cent->turAngles, cent->lerpOrigin) > 18000.0f)
+	{
+		VectorCopy(cent->lerpOrigin, cent->turAngles);
+	}
+	{
+		const float smooth_factor = 0.5f * timescale.value;
+		vec3_t pos_dif;
+		VectorSubtract(cent->lerpOrigin, cent->turAngles, pos_dif);
+		for (int k = 0; k < 3; k++)
+		{
+			cent->turAngles[k] = cent->turAngles[k] + pos_dif[k] * smooth_factor;
+			cent->lerpOrigin[k] = cent->turAngles[k];
+		}
+	}
+
+	// tumble a little while it flies off
+	{
+		const float t = (cg.time - cent->saberSliceSpawnTime) * 0.001f;
+		const float tumble = t < 0.7f ? t : 0.7f;
+		const int seed = cent->currentState.number * 7 + bone * 13;
+		const float spin = SaberSlice_IsTorso(bone) ? 40.0f : 160.0f;
+		cent->lerpAngles[PITCH] += spin * tumble * ((seed % 5) - 2) * 0.5f;
+		cent->lerpAngles[ROLL] += spin * tumble * (((seed / 5) % 5) - 2) * 0.5f;
+	}
+	return qtrue;
+}
+
+/*
+===============
 CG_AddRefEntityWithPowerups
 
 Adds a piece with modifications or duplications for powerups
@@ -12825,11 +13308,11 @@ void CG_AddSaberBlade(centity_t* cent, centity_t* scent, int renderfx, int saber
 					{	// sound originated from a client, but not one of the duelers
 						doit = 0;
 					}
-					else if (cent->currentState.number >= MAX_CLIENTS && cent->currentState.otherentityNum != ENTITYNUM_NONE &&
-						cent->currentState.otherentityNum != cg.snap->ps.clientNum &&
-						cent->currentState.otherentityNum != cg.snap->ps.duelIndex)
-					{  // sound generated by an temp entity in a snap, the otherentityNum should be the orinating
-					// client number (by hack!). If otherentityNum is ENTITYNUM_NONE, then it is one of the many sounds
+					else if (cent->currentState.number >= MAX_CLIENTS && cent->currentState.otherEntityNum != ENTITYNUM_NONE &&
+						cent->currentState.otherEntityNum != cg.snap->ps.clientNum &&
+						cent->currentState.otherEntityNum != cg.snap->ps.duelIndex)
+					{  // sound generated by an temp entity in a snap, the otherEntityNum should be the orinating
+					// client number (by hack!). If otherEntityNum is ENTITYNUM_NONE, then it is one of the many sounds
 					// I don't bother filtering, so play it. Otherwise, if not from the duelers, supress it
 						doit = 0;
 					}
@@ -16811,6 +17294,64 @@ static void CG_SaberBlasterPistolUpdate(centity_t* cent, const clientInfo_t* ci)
 	}
 }
 
+// SS_BLASTER charged shot (2026-10-31): the bryar's charge glow on the left hand pistol's muzzle while walk + dash are
+// held past SABERBLASTER_CHARGE_START (the arm out in BOTH_FORCEGRIP_HOLD), growing to full at
+// SABERBLASTER_CHARGE_FULL. The hold start is ps.weaponChargeTime - entityState constantLight for other clients
+static void CG_SaberBlasterChargeGlow(centity_t* cent) // not const: the Ghoul2 calls take the instance
+{
+	const playerState_t* ps = &cg.predictedPlayerState;
+	const qboolean local = cent->currentState.number == ps->clientNum ? qtrue : qfalse;
+	const int start = local ? ps->weaponChargeTime : cent->currentState.constantLight;
+	const int torso = local ? ps->torsoAnim : cent->currentState.torsoAnim;
+	mdxaBone_t bolt;
+	addspriteArgStruct_t fxSArgs;
+	vec3_t flash;
+
+	if (!cent->saberBlasterPistol || !cent->ghoul2 || start <= 0
+		|| torso != BOTH_FORCEGRIP_HOLD && !PM_InSaberLock(torso) // the charge, or the saberlock shot's charge
+		|| !trap->G2API_HasGhoul2ModelOnIndex(&cent->ghoul2, 2))
+	{
+		return;
+	}
+	float val = PM_InSaberLock(torso)
+		? (float)(cg.time - start) / (float)SABERBLASTER_LOCK_CHARGE
+		: (float)(cg.time - start - SABERBLASTER_CHARGE_START) / (float)(SABERBLASTER_CHARGE_FULL - SABERBLASTER_CHARGE_START);
+	if (val < 0.0f)
+	{
+		val = 0.0f;
+	}
+	else if (val > 1.0f)
+	{
+		val = 1.0f;
+	}
+	if (local)
+	{
+		CGCam_Shake(val >= 1.0f ? 0.2f : val * val * 0.6f, 100);
+	}
+	if (!trap->G2API_GetBoltMatrix(cent->ghoul2, 2, 0, &bolt, cent->turAngles, cent->lerpOrigin,
+		cg.time, cgs.game_models, cent->modelScale))
+	{
+		return;
+	}
+	BG_GiveMeVectorFromMatrix(&bolt, ORIGIN, flash);
+	CG_RegisterWeapon(WP_BRYAR_PISTOL); // cgs.media.bryarFrontFlash
+
+	val = 0.3f + val * 0.7f + Q_flrand(0.0f, 1.0f) * 0.5f;
+	VectorCopy(flash, fxSArgs.origin);
+	VectorClear(fxSArgs.vel);
+	VectorClear(fxSArgs.accel);
+	fxSArgs.scale = 3.0f * val;
+	fxSArgs.dscale = 0.0f;
+	fxSArgs.sAlpha = 0.7f;
+	fxSArgs.eAlpha = 0.7f;
+	fxSArgs.rotation = Q_flrand(0.0f, 1.0f) * 360.0f;
+	fxSArgs.bounce = 0.0f;
+	fxSArgs.life = 1.0f;
+	fxSArgs.shader = cgs.media.bryarFrontFlash;
+	fxSArgs.flags = 0x08000000; // as the bryar's own charge glow (cg_weapons.c)
+	trap->FX_AddSprite(&fxSArgs);
+}
+
 // Ragnos' scepter (2026-10-23): EF2_SCEPTER (the Possessed Tavion bot, game/ai_main.c) puts SP's WP_SCEPTER model in her
 // left hand, in ghoul2 slot 2, which single saber users do not use (bolted to *l_hand, bolt 1, like the left hand
 // pistol). Its effects are SP's, on the scepter's tip ("*flash"): beam_warmup when BOTH_SCEPTER_START begins,
@@ -17139,6 +17680,15 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 	{
 		int left_hip_in_use = 0;
 		int right_hip_in_use = 0;
+		// SS_BLASTER (Jace 2026-10-31): someone who can use the blaster saber style (Kyle Katarn's model, single one-blade
+		// saber that does not forbid it) carries one bryar pistol - the style's, on the left hip or in his left hand -
+		// so his inventory bryar pistol is not shown on the right hip as well
+		const qboolean saber_blaster_carrier = CG_HOLSTER_HAS(WP_SABER)
+			&& CG_SaberBlasterKyleModel(ci)
+			&& ci->saber[0].model[0] && !ci->saber[1].model[0]
+			&& ci->saber[0].numBlades == 1
+			&& !(ci->saber[0].saberFlags & SFL_TWO_HANDED)
+			&& !(ci->saber[0].stylesForbidden & 1 << SS_BLASTER) ? qtrue : qfalse;
 		//this player can have holstered weapons
 		//sabers
 		if (CG_HOLSTER_HAS(WP_SABER))
@@ -17342,7 +17892,8 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 		//handle rendering WP_BRYAR_PISTOL on right hip holster
 		if (right_hip_in_use //hip in use already
 			|| !(CG_HOLSTER_HAS(WP_BRYAR_PISTOL)) //don't have the WP_BRYAR_PISTOL
-			|| cent->currentState.weapon == WP_BRYAR_PISTOL) //currently using WP_BRYAR_PISTOL
+			|| cent->currentState.weapon == WP_BRYAR_PISTOL //currently using WP_BRYAR_PISTOL
+			|| saber_blaster_carrier) // SS_BLASTER: his pistol is the style's (left hip / left hand)
 		{
 			//don't render WP_BRYAR_PISTOL on right hip.
 			if (ci->holster_blaster != -1 && ci->blaster_holstered == WP_BRYAR_PISTOL)
@@ -17444,15 +17995,11 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 		// SS_BLASTER (2026-10-14): someone who can use the blaster saber style (single one-blade saber that does not
 		// forbid it) but does not use it right now carries its bryar pistol on the left hip; it takes the left hip
 		// before any other gun. With the style active the pistol is in his left hand (CG_SaberBlasterPistolUpdate).
-		if (CG_HOLSTER_HAS(WP_SABER)
-			&& CG_SaberBlasterKyleModel(ci) // Kyle Katarn only
-			&& ci->saber[0].model[0] && !ci->saber[1].model[0]
-			&& ci->saber[0].numBlades == 1
-			&& !(ci->saber[0].saberFlags & SFL_TWO_HANDED)
-			&& !(ci->saber[0].stylesForbidden & 1 << SS_BLASTER))
+		if (saber_blaster_carrier) // Kyle Katarn only
 		{
 			if (!(cent->currentState.weapon == WP_SABER && cent->currentState.fireflag == SS_BLASTER
-				&& cent->currentState.saberHolstered != 2)) // SS_BLASTER (Jace 2026-10-29): saber off = on the hip
+				&& cent->currentState.saberHolstered != 2) // SS_BLASTER (Jace 2026-10-29): saber off = on the hip
+				&& cent->currentState.weapon != WP_BRYAR_PISTOL) // (2026-10-31) the bryar in his hand is this one, as SP
 			{
 				if (ci->holster_blaster2 != -1)
 				{
@@ -18910,6 +19457,7 @@ void CG_Player(centity_t* cent)
 
 	CG_VisualWeaponsUpdate(cent, ci);
 	CG_SaberBlasterPistolUpdate(cent, ci); // SS_BLASTER (2026-10-14)
+	CG_SaberBlasterChargeGlow(cent); // the charged shot's glow (2026-10-31)
 	CG_ScepterUpdate(cent, ci); // Ragnos' scepter in the left hand (EF2_SCEPTER, 2026-10-23)
 
 	if (cent->saberWasInFlight && g2_has_weapon && cent->ghoul2weapon == CG_G2WeaponInstance(cent, WP_SABER))
@@ -19316,6 +19864,7 @@ SkipTrueView:
 	}
 
 	ScaleModelAxis(&legs);
+	CG_SaberSliceApply(cent, &legs); // saber cuts (g_combat.c G_SaberSlice)
 
 	memset(&torso, 0, sizeof torso);
 

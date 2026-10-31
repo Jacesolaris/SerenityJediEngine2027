@@ -55,6 +55,7 @@ extern cvar_t* g_debugDamage;
 extern cvar_t* g_awardStreaks;
 extern qboolean stop_icarus;
 extern cvar_t* g_dismemberment;
+extern cvar_t* g_gundismemberment;
 extern cvar_t* g_saberPickuppableDroppedSabers;
 extern cvar_t* g_timescale;
 extern cvar_t* d_slowmodeath;
@@ -297,6 +298,8 @@ gentity_t* TossClientItems(gentity_t* self)
 		if (item != nullptr && dropped == nullptr)
 		{
 			dropped = Drop_Item(self, item, 0, qtrue);
+			// the shop (2026-10-31): the gun keeps its look (weapon variant); the player who picks it up owns it
+			dropped->s.weaponVariant = BG_GetWeaponVariant(client->ps.weaponVariant, weapon) ? client->ps.weaponVariant : 0;
 
 			dropped->e_ThinkFunc = thinkF_NULL;
 			dropped->nextthink = -1;
@@ -1000,7 +1003,7 @@ void G_StartMatrixEffect(const gentity_t* ent, const int me_flags = 0, const int
 	{
 		G_SetOrigin(matrix, ent->currentOrigin);
 		gi.linkentity(matrix);
-		matrix->s.otherentityNum = ent->s.number;
+		matrix->s.otherEntityNum = ent->s.number;
 		matrix->e_clThinkFunc = clThinkF_CG_MatrixEffect;
 		matrix->s.eType = ET_THINKER;
 		matrix->svFlags |= SVF_BROADCAST; // Broadcast to all clients
@@ -1026,7 +1029,7 @@ void G_StartStasisEffect(const gentity_t* ent, const int me_flags = 0, const int
 	{
 		G_SetOrigin(stasis, ent->currentOrigin);
 		gi.linkentity(stasis);
-		stasis->s.otherentityNum = ent->s.number;
+		stasis->s.otherEntityNum = ent->s.number;
 		stasis->e_clThinkFunc = clThinkF_CG_StasisEffect;
 		stasis->s.eType = ET_THINKER;
 		stasis->svFlags |= SVF_BROADCAST; // Broadcast to all clients
@@ -1068,7 +1071,7 @@ void G_StartNextItemEffect(gentity_t* ent, const int me_flags = 0, const int len
 	{
 		G_SetOrigin(stasis, ent->currentOrigin);
 		gi.linkentity(stasis);
-		stasis->s.otherentityNum = ent->s.number;
+		stasis->s.otherEntityNum = ent->s.number;
 		stasis->e_clThinkFunc = clThinkF_CG_StasisEffect;
 		stasis->s.eType = ET_THINKER;
 		stasis->svFlags |= SVF_BROADCAST; // Broadcast to all clients
@@ -1901,6 +1904,8 @@ int G_PickPainAnim(const gentity_t* self, const vec3_t point, int hit_loc = HL_N
 
 extern void G_BounceMissile(gentity_t* ent, trace_t* trace);
 
+extern qboolean G_CorpseSeenByPlayer(const gentity_t* ent);
+
 void LimbThink(gentity_t* ent)
 {
 	//FIXME: just use object thinking?
@@ -1925,17 +1930,36 @@ void LimbThink(gentity_t* ent)
 	if (ent->s.pos.trType == TR_STATIONARY)
 	{
 		//stopped
+		if (ent->count == -1 && level.time > ent->s.apos.trTime + ent->s.apos.trDuration)
+		{
+			// saber slice piece: stays as long as its body does and goes with it (corpse removal)
+			if (ent->owner && ent->owner->inuse && ent->owner->client && ent->owner->health <= 0)
+			{
+				ent->nextthink = level.time + 500;
+				return;
+			}
+			if (G_CorpseSeenByPlayer(ent))
+			{
+				ent->nextthink = level.time + 500; // only removed out of the player's view
+				return;
+			}
+			ent->e_ThinkFunc = thinkF_G_FreeEntity;
+			ent->nextthink = level.time + FRAMETIME;
+			return;
+		}
 		if (level.time > ent->s.apos.trTime + ent->s.apos.trDuration)
 		{
-			if (ent->owner && ent->owner->m_pVehicle)
+			// old limbs: wait 5-15 s (10-15 s for vehicle pilots), then go once the player can't see them
+			if (!ent->painDebounceTime)
 			{
-				ent->nextthink = level.time + Q_irand(10000, 15000);
+				ent->painDebounceTime = level.time + (ent->owner && ent->owner->m_pVehicle ? Q_irand(10000, 15000) : Q_irand(5000, 15000));
 			}
-			else
+			if (level.time < ent->painDebounceTime || G_CorpseSeenByPlayer(ent))
 			{
-				ent->nextthink = level.time + Q_irand(5000, 15000);
+				ent->nextthink = level.time + 500;
+				return;
 			}
-
+			ent->nextthink = level.time + FRAMETIME;
 			ent->e_ThinkFunc = thinkF_G_FreeEntity;
 			//FIXME: these keep drawing for a frame or so after being freed?!  See them lerp to origin of world...
 		}
@@ -2515,6 +2539,493 @@ static qboolean G_Dismember(gentity_t* ent, vec3_t point,
 	return qtrue;
 }
 
+/*
+==============================================================================
+Saber slice (Jedi Survivor style cuts at the saber contact point)
+
+A killing saber hit cuts the body along the plane the blade swept through,
+exactly where it touched. The cut is tied to the nearest bone (anchor) so it
+follows the body (animation, ragdoll). The body hides everything on the far
+side of the plane; a copy of the body (the "piece") shows only that side and
+is thrown off like a limb. The renderers do the cutting (RF_SABERSLICE, see
+rd-common/tr_types.h and tr_saberslice.h); the cgame draws the glowing caps.
+
+g_saberSlice 0 brings back the old limb dismemberment. Guns never use this.
+==============================================================================
+*/
+static struct
+{
+	int victim = ENTITYNUM_NONE;
+	int time = 0;
+	vec3_t point = { 0, 0, 0 };
+	vec3_t swing = { 0, 0, 0 };
+	vec3_t blade = { 0, 0, 0 };
+} s_saberSliceHit;
+
+// wp_saber.cpp: remember the blade of a saber hit, just before G_Damage
+void G_SaberSliceSetHit(const gentity_t* victim, const vec3_t point, const vec3_t swing_dir, const vec3_t blade_dir)
+{
+	if (!victim)
+	{
+		return;
+	}
+	s_saberSliceHit.victim = victim->s.number;
+	s_saberSliceHit.time = level.time;
+	VectorCopy(point, s_saberSliceHit.point);
+	VectorCopy(swing_dir, s_saberSliceHit.swing);
+	VectorCopy(blade_dir, s_saberSliceHit.blade);
+}
+
+static cvar_t* G_SaberSliceCvar()
+{
+	static cvar_t* cv = nullptr;
+	if (!cv)
+	{
+		cv = gi.cvar("g_saberSlice", "1", CVAR_ARCHIVE);
+	}
+	return cv;
+}
+
+// bone position and matrix the way the game sees the body
+static qboolean G_SaberSliceBoltMatrix(gentity_t* ent, const int bolt, mdxaBone_t* matrix)
+{
+	if (bolt < 0)
+	{
+		return qfalse;
+	}
+	// the yaw the cgame draws the body with (it writes ps.legsYaw every frame)
+	const vec3_t angles = { 0, ent->client ? ent->client->ps.legsYaw : ent->currentAngles[YAW], 0 };
+	vec3_t origin;
+	VectorCopy(ent->currentOrigin, origin);
+	if (ent->client && ent->s.modelScale[2] && ent->s.modelScale[2] != 1.0f)
+	{
+		origin[2] += 24 * (ent->s.modelScale[2] - 1); // the cgame draws scaled characters this much higher
+	}
+	gi.G2API_GetBoltMatrix(ent->ghoul2, ent->playerModel, bolt, matrix, angles, origin,
+		level.time, nullptr, ent->s.modelScale);
+	return qtrue;
+}
+
+static qboolean G_SaberSliceBonePos(gentity_t* ent, const char* bone_name, vec3_t out)
+{
+	const int bolt = gi.G2API_AddBolt(&ent->ghoul2[ent->playerModel], bone_name);
+	mdxaBone_t matrix;
+	if (!G_SaberSliceBoltMatrix(ent, bolt, &matrix))
+	{
+		return qfalse;
+	}
+	vec3_t pos;
+	gi.G2API_GiveMeVectorFromMatrix(matrix, ORIGIN, pos);
+	VectorCopy(pos, out);
+	return qtrue;
+}
+
+static float G_SaberSliceSegmentDist(const vec3_t p, const vec3_t a, const vec3_t b, float* t_out)
+{
+	vec3_t ab, ap, closest;
+	VectorSubtract(b, a, ab);
+	VectorSubtract(p, a, ap);
+	const float len_sq = DotProduct(ab, ab);
+	float t = len_sq > 0.001f ? DotProduct(ap, ab) / len_sq : 0.0f;
+	t = Com_Clamp(0.0f, 1.0f, t);
+	VectorMA(a, t, ab, closest);
+	if (t_out)
+	{
+		*t_out = t;
+	}
+	return Distance(p, closest);
+}
+
+// every skeleton is cut where the cut table (tr_types.h SaberSlice_Seg) knows its bones; not vehicles,
+// the AT-ST or objects (DH 2026-10-31: saber cuts for every model)
+static qboolean G_SaberSliceExcluded(const gentity_t* ent)
+{
+	switch (ent->client->NPC_class)
+	{
+	case CLASS_VEHICLE: case CLASS_ATST: case CLASS_OBJECT:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+// a droid is cut metal: hot metal cut face, sparks (DH 2026-10-31)
+static qboolean G_SaberSliceIsMetal(const gentity_t* ent)
+{
+	switch (ent->client->NPC_class)
+	{
+	case CLASS_SBD: case CLASS_BATTLEDROID: case CLASS_GONK: case CLASS_INTERROGATOR: case CLASS_MARK1:
+	case CLASS_MARK2: case CLASS_MOUSE: case CLASS_PROBE: case CLASS_PROTOCOL: case CLASS_R2D2: case CLASS_R5D2:
+	case CLASS_SEEKER: case CLASS_REMOTE: case CLASS_SENTRY: case CLASS_DROIDEKA: case CLASS_ASSASSIN_DROID:
+	case CLASS_SABER_DROID: case CLASS_GALAKMECH:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+// the cut table asks whether the body's skeleton has a bone
+static int G_SaberSliceHasBone(void* ghl, const char* name)
+{
+	return gi.G2API_AddBolt(static_cast<CGhoul2Info*>(ghl), name) >= 0;
+}
+
+// a weapon in a hand that goes with the piece is taken off the body
+static void G_SaberSliceDropHandWeapons(gentity_t* ent, const int bone, const vec3_t normal, const float dist)
+{
+	for (int hand = 0; hand < 2; hand++)
+	{
+		if (ent->weaponModel[hand] < 0)
+		{
+			continue;
+		}
+		if (hand == 0 && ent->client->ps.saberInFlight)
+		{
+			continue;
+		}
+		qboolean gone;
+		if (SaberSlice_IsTorso(bone))
+		{
+			// the arm goes with the side its shoulder is on
+			vec3_t shoulder;
+			gone = static_cast<qboolean>(G_SaberSliceBonePos(ent, hand == 0 ? "rclavical" : "lclavical", shoulder)
+				&& DotProduct(normal, shoulder) - dist > 0.0f);
+		}
+		else if (hand == 0)
+		{
+			gone = static_cast<qboolean>(bone == SABERSLICE_BONE_RHUMERUS || bone == SABERSLICE_BONE_RRADIUS);
+		}
+		else
+		{
+			gone = static_cast<qboolean>(bone == SABERSLICE_BONE_LHUMERUS || bone == SABERSLICE_BONE_LRADIUS);
+		}
+		if (!gone)
+		{
+			continue;
+		}
+		if (ent->weaponModel[hand] > 0)
+		{
+			gi.G2API_RemoveGhoul2Model(ent->ghoul2, ent->weaponModel[hand]);
+		}
+		ent->weaponModel[hand] = -1;
+		if (hand == 0 && ent->client->ps.saberEntityNum != ENTITYNUM_NONE && ent->client->ps.saberEntityNum > 0)
+		{
+			if (g_entities[ent->client->ps.saberEntityNum].inuse)
+			{
+				G_FreeEntity(&g_entities[ent->client->ps.saberEntityNum]);
+			}
+			ent->client->ps.saberEntityNum = ENTITYNUM_NONE;
+		}
+	}
+}
+
+// models whose saber hits never get humanoid hit surfaces (G_GetHitLocFromSurfName skips them), so no hit location
+// and no DAMAGE_DISMEMBER: the SBD and droideka use humanoid-named GLAs (g_standard_humanoid says yes) but must still
+// go to the saber cut on their own (DH 2026-10-31)
+static qboolean G_SaberSliceNoHitSurfaces(const gentity_t* ent)
+{
+	if (!ent || !ent->client)
+	{
+		return qfalse;
+	}
+	switch (ent->client->NPC_class)
+	{
+	case CLASS_SBD: case CLASS_DROIDEKA: case CLASS_R2D2: case CLASS_R5D2: case CLASS_GONK: case CLASS_MOUSE:
+	case CLASS_SEEKER: case CLASS_INTERROGATOR: case CLASS_SENTRY: case CLASS_PROBE:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+/*
+G_SaberSlice: cut ent at the last saber hit on it. Returns qfalse when it can't
+(then the caller may use the old limb dismemberment).
+*/
+static qboolean G_SaberSlice(gentity_t* ent, const int hit_loc)
+{
+	if (!G_SaberSliceCvar()->integer || !ent || !ent->client || ent->playerModel < 0 || !ent->ghoul2.size())
+	{
+		return qfalse;
+	}
+	if (s_saberSliceHit.victim != ent->s.number || level.time - s_saberSliceHit.time > 150)
+	{
+		return qfalse; // no saber hit to take the blade from (e.g. a scripted dismemberment)
+	}
+	if (ent->saberSliceCount >= MAX_SABER_SLICES || ent->saberSliceInvert || G_SaberSliceExcluded(ent))
+	{
+		return qfalse;
+	}
+
+	// pick the bone segment nearest the contact point (this skeleton's segments from the cut table)
+	const float scale = ent->s.modelScale[2] > 0.0f ? ent->s.modelScale[2] : 1.0f;
+	int best_bone = -1;
+	const saberSliceSeg_t* best_seg = nullptr;
+	float best_score = 9999.0f;
+	vec3_t best_joint, best_child;
+	for (int b = 0; b < SABERSLICE_SLOT_COUNT; b++)
+	{
+		vec3_t joint, child;
+		const saberSliceSeg_t* seg = SaberSlice_FindSeg(b, G_SaberSliceHasBone, &ent->ghoul2[ent->playerModel]);
+		if (!seg || !G_SaberSliceBonePos(ent, seg->bone, joint) || !G_SaberSliceBonePos(ent, seg->child, child))
+		{
+			continue;
+		}
+		qboolean already = qfalse;
+		for (int i = 0; i < ent->saberSliceCount; i++)
+		{
+			if (ent->saberSliceBone[i] == b)
+			{
+				already = qtrue;
+			}
+		}
+		if (already)
+		{
+			continue;
+		}
+		const float score = G_SaberSliceSegmentDist(s_saberSliceHit.point, joint, child, nullptr) - seg->radius * scale;
+		if (score < best_score)
+		{
+			best_score = score;
+			best_bone = b;
+			best_seg = seg;
+			VectorCopy(joint, best_joint);
+			VectorCopy(child, best_child);
+		}
+	}
+	if (best_bone < 0 || !best_seg || best_score > 8.0f * scale)
+	{
+		return qfalse;
+	}
+
+	// the plane the blade swept through, turned towards the bone so a limb is never cut lengthwise
+	vec3_t axis, normal;
+	VectorSubtract(best_child, best_joint, axis);
+	const float seg_len = VectorNormalize(axis);
+	if (seg_len < 1.0f)
+	{
+		return qfalse;
+	}
+	CrossProduct(s_saberSliceHit.blade, s_saberSliceHit.swing, normal);
+	if (VectorNormalize(normal) < 0.001f)
+	{
+		VectorCopy(axis, normal);
+	}
+	if (DotProduct(normal, axis) < 0.0f)
+	{
+		VectorScale(normal, -1.0f, normal); // the cut away side is towards the child bone
+	}
+	const float min_cos = SaberSlice_IsTorso(best_bone) ? 0.5f : SaberSlice_IsNeck(best_bone) ? 0.6f : 0.7f;
+	const float cos_a = DotProduct(normal, axis);
+	if (cos_a < min_cos)
+	{
+		vec3_t perp;
+		VectorMA(normal, -cos_a, axis, perp);
+		if (VectorNormalize(perp) < 0.001f)
+		{
+			PerpendicularVector(perp, axis);
+		}
+		const float sin_max = sqrtf(1.0f - min_cos * min_cos);
+		VectorScale(axis, min_cos, normal);
+		VectorMA(normal, sin_max, perp, normal);
+		VectorNormalize(normal);
+	}
+
+	// through the contact point, but crossing the bone inside its segment
+	float dist = DotProduct(normal, s_saberSliceHit.point);
+	{
+		const float n_joint = DotProduct(normal, best_joint);
+		const float n_len = DotProduct(normal, axis) * seg_len;
+		float t = n_len > 0.001f ? (dist - n_joint) / n_len : 0.5f;
+		t = Com_Clamp(0.15f, 0.85f, t);
+		dist = n_joint + t * n_len;
+	}
+
+	// store the cut in the anchor bone's space
+	const int bolt = gi.G2API_AddBolt(&ent->ghoul2[ent->playerModel], best_seg->bone);
+	gi.G2API_AddBolt(&ent->ghoul2[ent->playerModel], best_seg->child); // for the cgame's caps, before the copy
+	mdxaBone_t bone_matrix;
+	if (!G_SaberSliceBoltMatrix(ent, bolt, &bone_matrix))
+	{
+		return qfalse;
+	}
+	const float world_plane[4] = { normal[0], normal[1], normal[2], dist };
+	float bone_plane[4];
+	SaberSlice_PlaneToBone(bone_matrix.matrix, world_plane, bone_plane);
+
+	// the piece: a copy of the body that shows only the cut away side
+	gentity_t* piece = G_Spawn();
+	if (!piece)
+	{
+		return qfalse;
+	}
+	vec3_t cut_center;
+	{
+		const float n_joint = DotProduct(normal, best_joint);
+		const float n_len = DotProduct(normal, axis) * seg_len;
+		const float t = n_len > 0.001f ? (dist - n_joint) / n_len : 0.5f;
+		VectorMA(best_joint, t * seg_len, axis, cut_center);
+	}
+	G_SetOrigin(piece, ent->currentOrigin);
+	gi.G2API_CopyGhoul2Instance(ent->ghoul2, piece->ghoul2, 0);
+	piece->playerModel = 0;
+	piece->craniumBone = ent->craniumBone;
+	piece->cervicalBone = ent->cervicalBone;
+	piece->thoracicBone = ent->thoracicBone;
+	piece->upperLumbarBone = ent->upperLumbarBone;
+	piece->lowerLumbarBone = ent->lowerLumbarBone;
+	piece->hipsBone = ent->hipsBone;
+	piece->rootBone = ent->rootBone;
+
+	// freeze the copy in the pose it had when it was cut, and turn it around the cut
+	piece->motionBone = ent->motionBone;
+	const int frozen_bones[] = { piece->rootBone, piece->motionBone, piece->lowerLumbarBone };
+	for (const int frozen_bone : frozen_bones)
+	{
+		if (frozen_bone >= 0) // droids and creatures may not have them
+		{
+			gi.G2API_PauseBoneAnimIndex(&piece->ghoul2[piece->playerModel], frozen_bone, cg.time);
+		}
+	}
+	gi.G2API_SetNewOrigin(&piece->ghoul2[0], bolt);
+	{
+		mdxaBone_t m;
+		vec3_t pivot;
+		G_SaberSliceBoltMatrix(ent, bolt, &m);
+		gi.G2API_GiveMeVectorFromMatrix(m, ORIGIN, pivot);
+		G_SetOrigin(piece, pivot);
+	}
+
+	// copy the body's earlier cuts (same pose, same bone space), then add this one the other way round
+	piece->saberSliceCount = 0;
+	for (int i = 0; i < ent->saberSliceCount && piece->saberSliceCount < MAX_SABER_SLICES - 1; i++)
+	{
+		const int n = piece->saberSliceCount++;
+		piece->saberSliceBone[n] = ent->saberSliceBone[i];
+		piece->saberSliceBolt[n] = ent->saberSliceBolt[i];
+		memcpy(&piece->saberSliceLocal[n * 6], &ent->saberSliceLocal[i * 6], sizeof(float) * 6);
+		piece->saberSliceTime[n] = ent->saberSliceTime[i];
+	}
+	{
+		const int n = piece->saberSliceCount++;
+		piece->saberSliceBone[n] = best_bone;
+		piece->saberSliceBolt[n] = bolt;
+		memcpy(&piece->saberSliceLocal[n * 6], bone_plane, sizeof(float) * 4);
+		piece->saberSliceTime[n] = level.time;
+		piece->saberSliceInvert = 1 << n;
+	}
+
+	piece->classname = "limb";
+	piece->owner = ent;
+	piece->enemy = ent->enemy;
+	piece->count = -1; // not a limb anim: CG_Limb must not strip the owner's weapons (G_SaberSliceDropHandWeapons does it)
+	piece->s.radius = 60;
+	piece->e_clThinkFunc = clThinkF_CG_Limb;
+	piece->e_ThinkFunc = thinkF_LimbThink;
+	piece->nextthink = level.time + FRAMETIME;
+	piece->svFlags = SVF_USE_CURRENT_ORIGIN;
+	piece->clipmask = MASK_SOLID;
+	piece->contents = CONTENTS_CORPSE;
+	const float box = SaberSlice_IsTorso(best_bone) ? 6.0f : 3.0f;
+	VectorSet(piece->mins, -box, -box, -box);
+	VectorSet(piece->maxs, box, box, box);
+	VectorCopy(ent->s.modelScale, piece->s.modelScale);
+	piece->startRGBA[0] = ent->client->renderInfo.customRGBA[0];
+	piece->startRGBA[1] = ent->client->renderInfo.customRGBA[1];
+	piece->startRGBA[2] = ent->client->renderInfo.customRGBA[2];
+
+	trace_t trace;
+	gi.trace(&trace, piece->s.pos.trBase, piece->mins, piece->maxs, piece->s.pos.trBase, piece->s.number, piece->clipmask,
+		static_cast<EG2_Collision>(0), 0);
+	if (trace.startsolid)
+	{
+		// wedged in a wall: a small box always fits
+		VectorSet(piece->mins, -2, -2, -2);
+		VectorSet(piece->maxs, 2, 2, 2);
+	}
+	VectorCopy(piece->s.pos.trBase, piece->currentOrigin);
+
+	piece->s.eType = ET_THINKER;
+	piece->physicsBounce = 0.2f;
+	piece->s.eFlags |= EF_BOUNCE_SHRAPNEL;
+	piece->s.pos.trType = TR_GRAVITY;
+	piece->s.pos.trTime = level.time;
+	VectorSet(piece->s.angles2, -1, 0, 0); // any pitch is fine when it comes to rest
+	const vec3_t piece_angles = { 0, ent->client->ps.legsYaw, 0 };
+	VectorCopy(piece_angles, piece->s.apos.trBase);
+	VectorCopy(piece_angles, piece->currentAngles);
+	piece->s.apos.trTime = level.time;
+	piece->s.apos.trType = TR_LINEAR;
+
+	// thrown along the swing, a little up; the head and small limbs fly further
+	vec3_t swing;
+	VectorCopy(s_saberSliceHit.swing, swing);
+	VectorNormalize(swing);
+	const float push = SaberSlice_IsTorso(best_bone) ? 70.0f : 140.0f;
+	VectorMA(ent->client->ps.velocity, push, swing, piece->s.pos.trDelta);
+	VectorMA(piece->s.pos.trDelta, push * 0.35f, normal, piece->s.pos.trDelta);
+	piece->s.pos.trDelta[2] += SaberSlice_IsTorso(best_bone) ? 30.0f : 60.0f;
+	VectorClear(piece->s.apos.trDelta);
+	const float spin = SaberSlice_IsTorso(best_bone) ? 60.0f : 300.0f;
+	piece->s.apos.trDelta[0] = Q_flrand(-spin, spin);
+	piece->s.apos.trDelta[1] = Q_flrand(-spin, spin);
+	piece->s.apos.trDelta[2] = Q_flrand(-spin, spin) * 0.5f;
+	gi.linkentity(piece);
+
+	// the body: hide the cut away side
+	{
+		const int n = ent->saberSliceCount++;
+		ent->saberSliceBone[n] = best_bone;
+		ent->saberSliceBolt[n] = bolt;
+		memcpy(&ent->saberSliceLocal[n * 6], bone_plane, sizeof(float) * 4);
+		ent->saberSliceTime[n] = level.time;
+	}
+	G_SaberSliceDropHandWeapons(ent, best_bone, normal, dist);
+	if (hit_loc >= 0 && hit_loc < HL_MAX)
+	{
+		ent->locationDamage[hit_loc] = Q3_INFINITE;
+	}
+	ent->client->dismembered = true;
+
+	// sparks at the contact point, smoke from both cut faces
+	G_PlayEffect(G_EffectIndex("saber/saber_cut"), cut_center, normal);
+	G_PlayEffect(G_EffectIndex("sparks/spark_nosnd"), s_saberSliceHit.point, swing);
+	{
+		// a droid's cut faces spark (hot metal), everyone else's smoke
+		const bool metal = G_SaberSliceIsMetal(ent) != qfalse;
+		const int cut_fx = G_EffectIndex(metal ? "sparks/spark_nosnd" : "saber/limb_bolton");
+		G_PlayEffect(cut_fx, ent->playerModel, bolt, ent->s.number, cut_center);
+		G_PlayEffect(cut_fx, piece->playerModel, bolt, piece->s.number, cut_center);
+	}
+
+	// only one cut per hit
+	s_saberSliceHit.victim = ENTITYNUM_NONE;
+	return qtrue;
+}
+
+// the old limb cut, or the saber slice when it's on
+static qboolean G_SaberSliceOrDismember(gentity_t* ent, vec3_t point,
+	const char* limb_bone, const char* rotate_bone, const char* limb_name,
+	const char* limb_cap_name, const char* stub_cap_name, const char* limb_tag_name,
+	const char* stub_tag_name,
+	const int limb_anim, const float limb_roll_base, const float limb_pitch_base,
+	const int hit_loc)
+{
+	if (G_SaberSliceCvar()->integer && ent->client && !G_SaberSliceExcluded(ent))
+	{
+		if (G_SaberSlice(ent, hit_loc))
+		{
+			return qtrue;
+		}
+		if (ent->saberSliceCount > 0)
+		{
+			return qfalse; // already sliced: never mix in the old limb cuts
+		}
+	}
+	return G_Dismember(ent, point, limb_bone, rotate_bone, limb_name, limb_cap_name, stub_cap_name,
+		limb_tag_name, stub_tag_name, limb_anim, limb_roll_base, limb_pitch_base, hit_loc);
+}
+
 static qboolean G_Dismemberable(const gentity_t* self, const int hit_loc)
 {
 	if (in_camera)
@@ -2817,7 +3328,7 @@ static qboolean G_DoDismembermentnormal(gentity_t* self, vec3_t point, const int
 			}
 			if (do_dismemberment)
 			{
-				return G_Dismember(self, point, limb_bone, rotate_bone, limb_name, limb_cap_name, stub_cap_name,
+				return G_SaberSliceOrDismember(self, point, limb_bone, rotate_bone, limb_name, limb_cap_name, stub_cap_name,
 					limb_tag_name,
 					stub_tag_name, anim, limb_roll_base, limb_pitch_base, hit_loc);
 			}
@@ -2831,6 +3342,16 @@ qboolean G_DoDismemberment(gentity_t* self, vec3_t point, const int mod, const i
 {
 	if (mod == MOD_SABER) //only lightsaber
 	{
+		if (!g_standard_humanoid(self) || G_SaberSliceNoHitSurfaces(self))
+		{
+			// own skeleton (droids, creatures): the saber cuts it where the cut table knows its bones (DH 2026-10-31).
+			// qfalse: no "lost the right hand" anim for these
+			if (g_dismemberment->integer && G_SaberSliceCvar()->integer && self->client)
+			{
+				G_SaberSlice(self, hit_loc);
+			}
+			return qfalse;
+		}
 		if (g_standard_humanoid(self)
 			&& (force || g_dismemberProbabilities->value > 0.0f))
 		{
@@ -2995,7 +3516,7 @@ qboolean G_DoDismemberment(gentity_t* self, vec3_t point, const int mod, const i
 			}
 			if (do_dismemberment)
 			{
-				return G_Dismember(self, point, limb_bone, rotate_bone, limb_name, limb_cap_name, stub_cap_name,
+				return G_SaberSliceOrDismember(self, point, limb_bone, rotate_bone, limb_name, limb_cap_name, stub_cap_name,
 					limb_tag_name,
 					stub_tag_name, anim, limb_roll_base, limb_pitch_base, hit_loc);
 			}
@@ -3146,7 +3667,7 @@ qboolean G_DoDismembermentcin(gentity_t* self, vec3_t point, const int mod, cons
 			}
 			if (do_dismemberment)
 			{
-				return G_Dismember(self, point, limb_bone, rotate_bone, limb_name, limb_cap_name, stub_cap_name,
+				return G_SaberSliceOrDismember(self, point, limb_bone, rotate_bone, limb_name, limb_cap_name, stub_cap_name,
 					limb_tag_name,
 					stub_tag_name, anim, limb_roll_base, limb_pitch_base, hit_loc);
 			}
@@ -3155,17 +3676,19 @@ qboolean G_DoDismembermentcin(gentity_t* self, vec3_t point, const int mod, cons
 	return qfalse;
 }
 
-static qboolean G_DoGunDismemberment(gentity_t* self, vec3_t point, const int mod, const int hit_loc)
+// a pistol hit (G_IsPistolWeapon): G_DoGunDismemberment takes an arm or a hand, nothing else (DH 2026-10-31)
+static qboolean s_gun_arms_only = qfalse;
+
+static qboolean G_DoGunDismemberment(gentity_t* self, vec3_t point, const int mod, const int hit_loc, const qboolean gun_shot)
 {
-	if (mod == MOD_BLASTER
+	if (gun_shot
+		|| mod == MOD_BLASTER
 		|| mod == MOD_BLASTER_ALT
 		|| mod == MOD_BOWCASTER
 		|| mod == MOD_BOWCASTER_ALT
-		|| mod == MOD_FLECHETTE
-		|| mod == MOD_HEADSHOT
-		|| mod == MOD_BODYSHOT)
+		|| mod == MOD_FLECHETTE)
 	{
-		if (g_standard_humanoid(self) && !NPC_IsNotDismemberable(self)
+		if (g_gundismemberment->integer > 0 && g_standard_humanoid(self) && !NPC_IsNotDismemberable(self)
 			&& g_dismemberProbabilities->value > 0.0f)
 		{
 			const char* limb_bone = nullptr, * rotate_bone = nullptr, * limb_tag_name = nullptr, * stub_tag_name = nullptr;
@@ -3220,9 +3743,8 @@ static qboolean G_DoGunDismemberment(gentity_t* self, vec3_t point, const int mo
 				limb_roll_base = 0;
 				limb_pitch_base = 0;
 				break;
-			case HL_CHEST_RT:
+			// a gun hit on the chest or back takes nothing, only arm and hand hits take arms
 			case HL_ARM_RT:
-			case HL_BACK_RT:
 				do_dismemberment = qtrue;
 				limb_bone = "rhumerus";
 				rotate_bone = "rradius";
@@ -3236,9 +3758,7 @@ static qboolean G_DoGunDismemberment(gentity_t* self, vec3_t point, const int mo
 				limb_roll_base = 0;
 				limb_pitch_base = 0;
 				break;
-			case HL_CHEST_LT:
 			case HL_ARM_LT:
-			case HL_BACK_LT:
 				do_dismemberment = qtrue;
 				limb_bone = "lhumerus";
 				rotate_bone = "lradius";
@@ -3299,6 +3819,11 @@ static qboolean G_DoGunDismemberment(gentity_t* self, vec3_t point, const int mo
 			case HL_BACK:
 			default:
 				break;
+			}
+			if (s_gun_arms_only && hit_loc != HL_ARM_RT && hit_loc != HL_ARM_LT && hit_loc != HL_HAND_RT
+				&& hit_loc != HL_HAND_LT)
+			{
+				do_dismemberment = qfalse; // a pistol takes an arm or a hand at the most
 			}
 			if (do_dismemberment)
 			{
@@ -4653,9 +5178,56 @@ GibEntity
 static void GibEntity(gentity_t* self)
 {
 	G_AddEvent(self, EV_GIB_PLAYER, 0);
-	self->takedamage = qfalse;
-	self->s.eType = ET_INVISIBLE;
-	self->contents = 0;
+}
+
+// A gun head or body shot, set by G_Damage for player_die. The MOD stays the real weapon.
+enum
+{
+	GUN_SHOT_NONE,
+	GUN_SHOT_BODY,
+	GUN_SHOT_HEAD,
+	GUN_SHOT_ARMS // a pistol: an arm or a hand at the most, no head or body gibs (DH 2026-10-31)
+};
+static int s_die_gun_shot = GUN_SHOT_NONE;
+
+// The MODs the head/body shot weapons fire. Force powers and other non-gun damage can have the attacker as the
+// inflictor, so the weapon they hold doesn't make it a gun hit.
+static qboolean G_IsGunMOD(const int mod)
+{
+	switch (mod)
+	{
+	case MOD_BLASTER:
+	case MOD_BLASTER_ALT:
+	case MOD_BOWCASTER:
+	case MOD_BOWCASTER_ALT:
+	case MOD_FLECHETTE:
+	case MOD_FLECHETTE_ALT:
+	case MOD_Z6_ROTARY_CANNON:
+	case MOD_EMPLACED:
+	case MOD_ENERGY:
+	case MOD_BRYAR:
+	case MOD_BRYAR_ALT:
+	case MOD_PISTOL:
+	case MOD_PISTOL_ALT:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+// Pistols take an arm or a hand at the most, never a head, leg or the body, and no gibs (DH 2026-10-31).
+// Same rule in SJE and MD 9, SP and MP. SJE pistol variants share their base pistol's weapon number.
+static qboolean G_IsPistolWeapon(const int weapon)
+{
+	switch (weapon)
+	{
+	case WP_BLASTER_PISTOL:
+	case WP_BRYAR_PISTOL:
+	case WP_SBD_PISTOL:
+		return qtrue;
+	default:
+		return qfalse;
+	}
 }
 
 static void GibEntity_Headshot(gentity_t* self)
@@ -4742,8 +5314,12 @@ static void G_AwardStreaks(gentity_t* self, gentity_t* attacker)
 	}
 }
 
+extern void G_Shop_Died(gentity_t* victim, gentity_t* attacker);
+
 void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, const int damage, const int means_of_death, const int dflags, const int hit_loc)
 {
+	const int gun_shot = s_die_gun_shot;
+	s_die_gun_shot = GUN_SHOT_NONE;
 	int anim = 0;
 	qboolean death_script = qfalse;
 	qboolean last_in_group = qfalse;
@@ -4768,6 +5344,11 @@ void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 		Weapon_StunFree(self->client->stun);
 	}
 
+	if (self->client->ps.pm_type != PM_DEAD)
+	{
+		G_Shop_Died(self, attacker); // the shop (2026-10-31, g_pazaak.cpp): credits for the player's kills, the loss when he dies
+	}
+
 	if (self->client->ps.pm_type == PM_DEAD && (means_of_death != MOD_SNIPER || self->flags & FL_DISINTEGRATED))
 	{
 		//do dismemberment/twitching
@@ -4786,19 +5367,19 @@ void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 
 			if (dflags & DAMAGE_DISMEMBER || means_of_death == MOD_SABER)
 			{
-				GibEntity(self);
 				G_DoDismemberment(self, self->pos1, means_of_death, hit_loc);
 			}
-			else if (means_of_death == MOD_BLASTER
+			else if (g_gundismemberment->integer > 0
+				&& (means_of_death == MOD_BLASTER
 				|| means_of_death == MOD_BLASTER_ALT
 				|| means_of_death == MOD_BOWCASTER
 				|| means_of_death == MOD_BOWCASTER_ALT
-				|| means_of_death == MOD_FLECHETTE
-				|| means_of_death == MOD_PISTOL
-				|| means_of_death == MOD_BRYAR && !NPC_IsNotDismemberable(self))
+				|| means_of_death == MOD_FLECHETTE)
+				&& (!inflictor || !G_IsPistolWeapon(inflictor->s.weapon)) // pistols never cut a body that is already dead
+				&& !NPC_IsNotDismemberable(self))
 			{
 				GibEntity(self);
-				G_DoGunDismemberment(self, self->pos1, means_of_death, hit_loc);
+				G_DoGunDismemberment(self, self->pos1, means_of_death, hit_loc, qfalse);
 			}
 			else if (means_of_death == MOD_ROCKET
 				|| means_of_death == MOD_ROCKET_ALT
@@ -5887,7 +6468,9 @@ void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 	}
 
 	//do any dismemberment if there's any to do...
-	if (dflags & DAMAGE_DISMEMBER
+	// an own skeleton (SBD, droids, creatures) never gets DAMAGE_DISMEMBER from the saber code (no humanoid hit
+	// surfaces), so a killing saber blow on one always goes to the saber cut (DH 2026-10-31)
+	if ((dflags & DAMAGE_DISMEMBER || (means_of_death == MOD_SABER && (!g_standard_humanoid(self) || G_SaberSliceNoHitSurfaces(self))))
 		&& G_DoDismemberment(self, self->pos1, means_of_death, hit_loc)
 		&& !special_anim)
 	{
@@ -5901,15 +6484,23 @@ void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 		}
 	}
 
-	if (means_of_death == MOD_BODYSHOT && !NPC_IsNotDismemberable(self))
+	if (gun_shot == GUN_SHOT_BODY && !NPC_IsNotDismemberable(self))
 	{
 		GibEntity(self);
-		G_DoGunDismemberment(self, self->pos1, means_of_death, hit_loc);
+		G_DoGunDismemberment(self, self->pos1, means_of_death, hit_loc, qtrue);
 	}
-	else if (means_of_death == MOD_HEADSHOT && !NPC_IsNotDismemberable(self))
+	else if (gun_shot == GUN_SHOT_HEAD && !NPC_IsNotDismemberable(self))
 	{
 		GibEntity_Headshot(self);
-		G_DoGunDismemberment(self, self->pos1, means_of_death, hit_loc);
+		G_DoGunDismemberment(self, self->pos1, means_of_death, hit_loc, qtrue);
+	}
+	else if (gun_shot == GUN_SHOT_ARMS && !NPC_IsNotDismemberable(self))
+	{
+		// a pistol: an arm or a hand at the most, no gibs
+		s_gun_arms_only = qtrue;
+		G_DoGunDismemberment(self, self->pos1, means_of_death, hit_loc, qtrue);
+		s_gun_arms_only = qfalse;
+		self->client->noHead = qfalse;
 	}
 	else
 	{
@@ -7401,6 +7992,9 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const 
 		damage = (damage + 1) / 2;
 	}
 
+	// weapon variants (2026-10-31): an SJE gun does its own share of its base weapon's damage
+	damage = G_WeaponVariantDamage(inflictor, attacker, damage, mod);
+
 	if (!targ->takedamage)
 	{
 		if (targ->client //client
@@ -8493,23 +9087,26 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const 
 		}
 	}
 
+	int gun_shot = GUN_SHOT_NONE;
+
 	// point can be NULL (e.g. G_KillBox telefrag damage) - the head shot code below reads point[2]
-	if (point && targ->client && attacker->client && targ->health > 0 &&
+	if (g_gundismemberment->integer > 0 && G_IsGunMOD(mod) && point && targ->client && attacker->client && targ->health > 0 &&
 		g_standard_humanoid(targ) && !NPC_IsNotDismemberable(targ))
 	{
-		// do head shots
-		if (inflictor->s.weapon == WP_BLASTER
+		// do head shots; a pistol takes an arm or a hand at the most
+		const qboolean pistol_shot = G_IsPistolWeapon(inflictor->s.weapon);
+		if (pistol_shot
+			|| inflictor->s.weapon == WP_BLASTER
 			|| inflictor->s.weapon == WP_TUSKEN_RIFLE
 			|| inflictor->s.weapon == WP_FLECHETTE
-			|| inflictor->s.weapon == WP_BRYAR_PISTOL
 			|| inflictor->s.weapon == WP_TURRET
-			|| inflictor->s.weapon == WP_BLASTER_PISTOL
 			|| inflictor->s.weapon == WP_EMPLACED_GUN
 			|| inflictor->s.weapon == WP_TUSKEN_RIFLE
 			|| inflictor->s.weapon == WP_WRIST_BLASTER
 			|| inflictor->s.weapon == WP_BOWCASTER
 			|| inflictor->s.weapon == WP_DROIDEKA
-			|| inflictor->s.weapon == WP_JAWA)
+			|| inflictor->s.weapon == WP_JAWA
+			|| inflictor->s.weapon == WP_Z6_ROTARY_CANNON)
 		{
 			float targ_maxs2 = 0.0f;
 			int height = 0;
@@ -8545,15 +9142,17 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const 
 			else
 			{
 				// Existing logic
-				if (z_ratio > 0.90f)
+				if (pistol_shot)
 				{
-					take = G_LocationDamage(point, targ, take);
-					mod = MOD_HEADSHOT;
+					gun_shot = GUN_SHOT_ARMS;
+				}
+				else if (z_ratio > 0.90f)
+				{
+					gun_shot = GUN_SHOT_HEAD;
 				}
 				else
 				{
-					take = G_LocationDamage(point, targ, take);
-					mod = MOD_BODYSHOT;
+					gun_shot = GUN_SHOT_BODY;
 				}
 			}
 		}
@@ -8570,7 +9169,7 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const 
 		vec3_t vec3;
 		// Send off an event to show a shield shell on the player, pointing in the right direction.
 		ev_ent = G_TempEntity(targ->currentOrigin, EV_SHIELD_HIT);
-		ev_ent->s.otherentityNum = targ->s.number;
+		ev_ent->s.otherEntityNum = targ->s.number;
 		ev_ent->s.eventParm = DirToByte(vec3);
 		ev_ent->s.time2 = shield_absorbed;
 	}
@@ -8993,7 +9592,9 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const 
 					VectorLength(targ->client->ps.velocity));
 			}
 
+			s_die_gun_shot = gun_shot;
 			GEntity_DieFunc(targ, inflictor, attacker, take, mod, dflags, hit_loc);
+			s_die_gun_shot = GUN_SHOT_NONE;
 		}
 		else
 		{

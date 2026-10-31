@@ -49,6 +49,7 @@ static void CG_AddSaberLight(const vec3_t org, const float radius, const vec3_t 
 	cgi_R_AddLightToScene(org, radius * radiusScale, rgb[0] * intensity, rgb[1] * intensity, rgb[2] * intensity);
 }
 
+extern qboolean WP_SaberBlasterChargeState(gentity_t* ent, vec3_t muzzle, float* frac, int* cost); // SS_BLASTER (2026-10-31)
 extern qboolean WP_SaberBladeUseSecondBladeStyle(const saberInfo_t* saber, int bladeNum);
 extern void WP_SaberSwingSound(const gentity_t* ent, int saberNum, swingType_t swing_type);
 extern qboolean PM_InKataAnim(const int anim);
@@ -6109,6 +6110,281 @@ static void CG_RGBForSaberColor(const saber_colors_t color, vec3_t rgb)
 		VectorSet(rgb, (color & 0xff) / 255.0f, (color >> 8 & 0xff) / 255.0f, (color >> 16 & 0xff) / 255.0f);
 		break;
 	}
+}
+
+/*
+===============
+Saber slice (Jedi Survivor style cuts, see g_combat.cpp G_SaberSlice)
+
+CG_SaberSliceApply turns the cuts stored on gent (bone space planes) into the
+world space planes the renderer wants (RF_SABERSLICE), draws the glowing cut
+faces for the vanilla renderer and puffs embers while a cut is still hot.
+Call it on the final refEntity, just before it is added to the scene.
+Returns qfalse when a cut-off piece can't be placed (then don't draw it,
+or the whole body would show).
+===============
+*/
+static qboolean CG_SaberSliceUseCaps()
+{
+	if (cg_saberSliceCaps.integer <= 0)
+	{
+		return qfalse;
+	}
+	if (cg_saberSliceCaps.integer >= 2)
+	{
+		return qtrue;
+	}
+	// rend2 draws the inside of the body as molten metal by itself
+	return static_cast<qboolean>(!strstr(cg_saberSliceRenderer.string, "rend2"));
+}
+
+// model space (where the ghoul2 vertices are) -> world, the way the renderer places the model
+static void CG_SaberSliceModelToWorld(const refEntity_t* ent, const vec3_t in, vec3_t out)
+{
+	VectorCopy(ent->origin, out);
+	VectorMA(out, in[0], ent->axis[0], out);
+	VectorMA(out, in[1], ent->axis[1], out);
+	VectorMA(out, in[2], ent->axis[2], out);
+}
+
+static void CG_SaberSlicePlaneToWorld(const refEntity_t* ent, const float* model_plane, float* out)
+{
+	// p_world = origin + sum v_k axis[k]; the axes may be scaled (ScaleModelAxis)
+	vec3_t n = { 0, 0, 0 };
+	for (int k = 0; k < 3; k++)
+	{
+		const float len_sq = DotProduct(ent->axis[k], ent->axis[k]);
+		if (len_sq > 0.0001f)
+		{
+			VectorMA(n, model_plane[k] / len_sq, ent->axis[k], n);
+		}
+	}
+	float d = model_plane[3] + DotProduct(n, ent->origin);
+	const float len = VectorLength(n);
+	if (len > 0.0001f)
+	{
+		VectorScale(n, 1.0f / len, n);
+		d /= len;
+	}
+	VectorCopy(n, out);
+	out[3] = d;
+}
+
+static qboolean CG_SaberSliceBoltModel(gentity_t* gent, const int bolt, mdxaBone_t* m)
+{
+	if (bolt < 0 || gent->playerModel < 0 || gent->playerModel >= gent->ghoul2.size())
+	{
+		return qfalse;
+	}
+	// no angles, no origin, no scale: the model space the renderer skins the vertices in
+	return gi.G2API_GetBoltMatrix(gent->ghoul2, gent->playerModel, bolt, m, vec3_origin, vec3_origin, cg.time,
+		cgs.model_draw, vec3_origin);
+}
+
+// the bone segment a cut slot uses on this body's skeleton (tr_types.h SaberSlice_Seg), nullptr if none
+static const saberSliceSeg_t* CG_SaberSliceSeg(gentity_t* gent, const int slot)
+{
+	if (gent->playerModel < 0 || gent->playerModel >= gent->ghoul2.size())
+	{
+		return nullptr;
+	}
+	return SaberSlice_FindSeg(slot, [](void* g2, const char* name) -> int
+		{
+			return gi.G2API_AddBolt(static_cast<CGhoul2Info*>(g2), name) >= 0;
+		}, &gent->ghoul2[gent->playerModel]);
+}
+
+// the glowing cut face: the bone's cross section (ellipse) laid on the cut plane
+static void CG_SaberSliceDrawCap(gentity_t* gent, const refEntity_t* ent, const int s, const float* world_plane, const float heat, const float side)
+{
+	const int b = gent->saberSliceBone[s];
+	const saberSliceSeg_t* slice_seg = CG_SaberSliceSeg(gent, b);
+	if (!slice_seg)
+	{
+		return;
+	}
+	const int child_bolt = gi.G2API_AddBolt(&gent->ghoul2[gent->playerModel], slice_seg->child);
+	mdxaBone_t m_joint, m_child;
+	if (!CG_SaberSliceBoltModel(gent, gent->saberSliceBolt[s], &m_joint) || !CG_SaberSliceBoltModel(gent, child_bolt, &m_child))
+	{
+		return;
+	}
+	vec3_t joint, child;
+	{
+		const vec3_t j = { m_joint.matrix[0][3], m_joint.matrix[1][3], m_joint.matrix[2][3] };
+		const vec3_t c = { m_child.matrix[0][3], m_child.matrix[1][3], m_child.matrix[2][3] };
+		CG_SaberSliceModelToWorld(ent, j, joint);
+		CG_SaberSliceModelToWorld(ent, c, child);
+	}
+	vec3_t u, n;
+	VectorSubtract(child, joint, u);
+	const float seg = VectorNormalize(u);
+	if (seg < 0.5f)
+	{
+		return;
+	}
+	VectorCopy(world_plane, n);
+	float nu = DotProduct(n, u);
+	if (fabsf(nu) < 0.3f)
+	{
+		nu = nu < 0.0f ? -0.3f : 0.3f;
+	}
+	// where the bone line crosses the plane
+	vec3_t center;
+	{
+		float t = (world_plane[3] - DotProduct(n, joint)) / nu;
+		t = Com_Clamp(-seg, seg * 2.0f, t);
+		VectorMA(joint, t, u, center);
+	}
+	// cross section axes, perpendicular to the bone
+	float scale = 1.0f;
+	if (gent->s.modelScale[2] > 0.0f)
+	{
+		scale = gent->s.modelScale[2];
+	}
+	const float r = slice_seg->radius * scale * 0.95f;
+	float rx = r, ry = r;
+	vec3_t a, c2;
+	if (SaberSlice_IsTorso(b))
+	{
+		// wider side to side than front to back; ent->axis[1] is the body's left
+		VectorCopy(ent->axis[1], a);
+		rx = r * 1.3f;
+		ry = r * 0.85f;
+	}
+	else
+	{
+		PerpendicularVector(a, u);
+	}
+	VectorMA(a, -DotProduct(a, u), u, a);
+	if (VectorNormalize(a) < 0.001f)
+	{
+		PerpendicularVector(a, u);
+	}
+	CrossProduct(u, a, c2);
+
+	// cool from orange-white to dark red
+	const float h = Com_Clamp(0.0f, 1.0f, heat);
+	const byte col[4] = {
+		static_cast<byte>(110 + 145 * h),
+		static_cast<byte>(18 + 170 * h * h),
+		static_cast<byte>(6 + 70 * h * h * h),
+		static_cast<byte>(200 + 55 * h)
+	};
+
+	constexpr int CAP_VERTS = 16;
+	polyVert_t verts[CAP_VERTS];
+	for (int i = 0; i < CAP_VERTS; i++)
+	{
+		const float ang = 6.2831853f * i / CAP_VERTS;
+		const float cs = cosf(ang), sn = sinf(ang);
+		vec3_t p;
+		VectorScale(a, rx * cs, p);
+		VectorMA(p, ry * sn, c2, p);
+		// slide along the bone onto the cut plane, then a hair towards the side that stays
+		VectorMA(p, -DotProduct(n, p) / nu, u, p);
+		VectorAdd(center, p, verts[i].xyz);
+		VectorMA(verts[i].xyz, 0.3f * side, n, verts[i].xyz);
+		verts[i].st[0] = 0.5f + 0.5f * cs;
+		verts[i].st[1] = 0.5f + 0.5f * sn;
+		verts[i].modulate[0] = col[0];
+		verts[i].modulate[1] = col[1];
+		verts[i].modulate[2] = col[2];
+		verts[i].modulate[3] = col[3];
+	}
+	// the cap shader comes with the mod's pk3; without it a plain vertex coloured disc
+	cgi_R_AddPolyToScene(cgs.media.saberSliceCapShader ? cgs.media.saberSliceCapShader : cgs.media.whiteShader, CAP_VERTS, verts);
+}
+
+qboolean CG_SaberSliceApply(gentity_t* gent, refEntity_t* ent)
+{
+	if (!gent || gent->saberSliceCount <= 0 || !ent || !ent->ghoul2 || gent->playerModel < 0)
+	{
+		return qtrue;
+	}
+	const int count = gent->saberSliceCount < MAX_SABER_SLICES ? gent->saberSliceCount : MAX_SABER_SLICES;
+	const qboolean caps = CG_SaberSliceUseCaps();
+	const int cool_time = cg_saberSliceCoolTime.integer > 100 ? cg_saberSliceCoolTime.integer : 100;
+	float hottest = 0.0f;
+	// a droid (or a piece of one) is cut metal: hot metal cut face and sparks, no flesh (DH 2026-10-31)
+	const gentity_t* body = gent->client ? gent : gent->owner;
+	qboolean metal = qfalse;
+	if (body && body->client)
+	{
+		switch (body->client->NPC_class)
+		{
+		case CLASS_SBD: case CLASS_BATTLEDROID: case CLASS_GONK: case CLASS_INTERROGATOR: case CLASS_MARK1:
+		case CLASS_MARK2: case CLASS_MOUSE: case CLASS_PROBE: case CLASS_PROTOCOL: case CLASS_R2D2: case CLASS_R5D2:
+		case CLASS_SEEKER: case CLASS_REMOTE: case CLASS_SENTRY: case CLASS_DROIDEKA: case CLASS_ASSASSIN_DROID:
+		case CLASS_SABER_DROID: case CLASS_GALAKMECH:
+			metal = qtrue;
+			break;
+		default:
+			break;
+		}
+	}
+
+	ent->sliceCount = 0;
+	ent->sliceInvert = 0;
+	for (int s = 0; s < count; s++)
+	{
+		mdxaBone_t m;
+		float model_plane[4];
+		if (!CG_SaberSliceBoltModel(gent, gent->saberSliceBolt[s], &m)
+			|| !SaberSlice_PlaneFromBone(m.matrix, &gent->saberSliceLocal[s * 6], model_plane))
+		{
+			if (gent->saberSliceInvert & 1 << s)
+			{
+				ent->renderfx &= ~RF_SABERSLICE;
+				ent->sliceCount = 0;
+				return qfalse; // the piece would show the whole body
+			}
+			continue; // the body just skips this cut for a frame
+		}
+		const int n = ent->sliceCount++;
+		CG_SaberSlicePlaneToWorld(ent, model_plane, ent->slicePlane[n]);
+		ent->sliceBone[n] = gent->saberSliceBone[s];
+		const qboolean piece = static_cast<qboolean>((gent->saberSliceInvert & 1 << s) != 0);
+		if (piece)
+		{
+			ent->sliceInvert |= 1 << n;
+		}
+		const float heat = 1.0f - static_cast<float>(cg.time - gent->saberSliceTime[s]) / cool_time;
+		if (heat > hottest)
+		{
+			hottest = heat;
+		}
+		if (caps)
+		{
+			// the body keeps the negative side, the piece the positive side
+			CG_SaberSliceDrawCap(gent, ent, s, ent->slicePlane[n], heat, piece ? 1.0f : -1.0f);
+		}
+		// the renderer places the cut on the skeleton it draws (smoothed, ragdoll), so it gets the bone space plane;
+		// the world plane above was only for the cap disc. Our bolt matrices are unsmoothed: a falling ragdoll
+		// could show a cut off head on the body again (DH video 2026-10-31)
+		memcpy(ent->slicePlane[n], &gent->saberSliceLocal[s * 6], sizeof(float) * 4);
+		ent->sliceBone[n] |= SABERSLICE_PLANE_LOCAL | (metal ? SABERSLICE_METAL : 0);
+	}
+	if (ent->sliceCount <= 0)
+	{
+		ent->renderfx &= ~RF_SABERSLICE;
+		return qtrue;
+	}
+	ent->renderfx |= RF_SABERSLICE;
+	ent->sliceHeat = Com_Clamp(0.0f, 1.0f, hottest);
+
+	// embers and smoke from a hot cut (sparks from hot metal)
+	if (hottest > (metal ? 0.6f : 0.25f) && gent->saberSliceFxTime <= cg.time)
+	{
+		gent->saberSliceFxTime = cg.time + 700;
+		const int s = count - 1;
+		if (gent->saberSliceBolt[s] >= 0)
+		{
+			CG_PlayEffectBolted(metal ? "sparks/spark_nosnd" : "saber/limb_bolton", gent->playerModel, gent->saberSliceBolt[s], gent->s.number,
+				ent->origin);
+		}
+	}
+	return qtrue;
 }
 
 /*
@@ -15403,6 +15679,7 @@ void CG_Player(centity_t* cent)
 				CG_AddBlockPointBarEnt(cent->currentState.clientNum);
 			}
 		}
+		CG_SaberSliceApply(cent->gent, &ent); // saber cuts (g_combat.cpp G_SaberSlice)
 		CG_AddRefEntityWithPowerups(&ent, cent->currentState.powerups, cent);
 		VectorCopy(tempAngles, cent->renderAngles);
 
@@ -16204,6 +16481,13 @@ void CG_Player(centity_t* cent)
 					// work the matrix axis stuff into the original axis and origins used.
 					gi.G2API_GiveMeVectorFromMatrix(matrix, ORIGIN, cent->gent->client->renderInfo.muzzlePoint);
 					gi.G2API_GiveMeVectorFromMatrix(matrix, NEGATIVE_Y, cent->gent->client->renderInfo.muzzleDir);
+					if (BG_GetWeaponVariant(cent->gent->client->ps.weaponVariant, cent->gent->client->ps.weapon))
+					{
+						// an SJE gun (weapon variant, 2026-10-31): its *flash tag lies at another angle than the stock
+						// guns' (the flash went out sideways), so the flash points along his aim, as the original gun code does
+						AngleVectors(cent->gent->client->ps.viewangles, cent->gent->client->renderInfo.muzzleDir, nullptr,
+							nullptr);
+					}
 				}
 				else
 				{
@@ -16251,6 +16535,13 @@ void CG_Player(centity_t* cent)
 					if (w_data->mAltMuzzleEffect[0])
 					{
 						effect = &w_data->mAltMuzzleEffect[0];
+					}
+				}
+				{
+					const char* variant_fx = CG_WeaponVariantMuzzleFx(&cent->currentState, cent->alt_fire); // an SJE gun's own (2026-10-31)
+					if (variant_fx)
+					{
+						effect = variant_fx;
 					}
 				}
 
@@ -17305,6 +17596,27 @@ void CG_Player(centity_t* cent)
 
 			FX_AddSprite(cent->gent->client->renderInfo.muzzlePoint, nullptr, nullptr, 3.0f * val * scale, 0.7f, 0.7f,
 				WHITE, WHITE, Q_flrand(0.0f, 1.0f) * 360, 0.0f, 1.0f, shader, FX_USE_ALPHA);
+		}
+	}
+
+	// SS_BLASTER charged shot (2026-10-31): the bryar charge glow on the left hand pistol while walk + dash are held
+	// past SABERBLASTER_CHARGE_START (game/wp_saber.cpp), full at SABERBLASTER_CHARGE_FULL
+	if (cent->gent && cent->gent->client && cent->gent->client->ps.saberAnimLevel == SS_BLASTER)
+	{
+		vec3_t muzzle;
+		float val = 0.0f;
+
+		if (WP_SaberBlasterChargeState(cent->gent, muzzle, &val, nullptr))
+		{
+			vec3_t WHITE = { 1.0f, 1.0f, 1.0f };
+
+			if (cent->currentState.number == 0)
+			{
+				CGCam_Shake(val >= 1.0f ? 0.1f : val * val * 0.3f, 100);
+			}
+			val = 0.3f + val * 0.7f + Q_flrand(0.0f, 1.0f) * 0.5f;
+			FX_AddSprite(muzzle, nullptr, nullptr, 3.0f * val, 0.7f, 0.7f, WHITE, WHITE, Q_flrand(0.0f, 1.0f) * 360, 0.0f,
+				1.0f, cgi_R_RegisterShader("gfx/effects/bryarFrontFlash"), FX_USE_ALPHA);
 		}
 	}
 }

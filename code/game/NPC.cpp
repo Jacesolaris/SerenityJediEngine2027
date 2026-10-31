@@ -218,6 +218,25 @@ constexpr auto REMOVE_DISTANCE = 128;
 #define REMOVE_DISTANCE_SQR (REMOVE_DISTANCE * REMOVE_DISTANCE)
 extern qboolean InFOVFromPlayerView(const gentity_t* ent, int hFOV, int vFOV);
 
+// corpse removal: true while the player could see this body (or body part), so it is only removed out of view
+qboolean G_CorpseSeenByPlayer(const gentity_t* ent)
+{
+	gentity_t* player = &g_entities[0];
+	if (!ent || !player->inuse || !player->client)
+	{
+		return qfalse;
+	}
+	if (DistanceSquared(player->currentOrigin, ent->currentOrigin) <= REMOVE_DISTANCE_SQR)
+	{
+		return qtrue;
+	}
+	if (InFOVFromPlayerView(ent, 110, 90) && NPC_ClearLOS(player, ent->currentOrigin)) // generous FOV check
+	{
+		return qtrue;
+	}
+	return qfalse;
+}
+
 qboolean G_OkayToRemoveCorpse(gentity_t* self)
 {
 	//if we're still on a vehicle, we won't remove ourselves until we get ejected
@@ -345,22 +364,11 @@ void NPC_RemoveBody(gentity_t* ent)
 		if (ent->NPC && ent->NPC->timeOfDeath <= level.time)
 		{
 			ent->NPC->timeOfDeath = level.time + 1000;
-			if (ent->client->playerTeam == TEAM_ENEMY || ent->client->NPC_class == CLASS_PROTOCOL)
+			// only remove bodies the player can't see (any team)
+			ent->nextthink = level.time + FRAMETIME; // try back in a second
+			if (G_CorpseSeenByPlayer(ent))
 			{
-				ent->nextthink = level.time + FRAMETIME; // try back in a second
-
-				if (DistanceSquared(g_entities[0].currentOrigin, ent->currentOrigin) <= REMOVE_DISTANCE_SQR)
-				{
-					return;
-				}
-
-				if (InFOVFromPlayerView(ent, 110, 90)) // generous FOV check
-				{
-					if (NPC_ClearLOS(&g_entities[0], ent->currentOrigin))
-					{
-						return;
-					}
-				}
+				return;
 			}
 			if (ent->enemy)
 			{
@@ -849,6 +857,13 @@ static void DeadThink()
 		}
 		else
 		{
+			if (G_CorpseSeenByPlayer(NPC))
+			{
+				// the player can see the body: check again in half a second (droids would vanish in view)
+				NPCInfo->timeOfDeath = level.time + 500 - BodyRemovalPadTime(NPC);
+				CorpsePhysics(NPC);
+				return;
+			}
 			// Start the body effect first, then delay 400ms before ditching the corpse
 			NPC_RemoveBodyEffect();
 

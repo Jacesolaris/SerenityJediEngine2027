@@ -2941,6 +2941,7 @@ void CG_Init(const int serverMessageNum, const int serverCommandSequence, const 
 
 	//Load external vehicle data
 	BG_VehicleLoadParms();
+	BG_LoadWeaponVariants(); // weapon variants (2026-10-31): the SJE guns (same file as the game, same order)
 
 	CG_Init_CGents();
 	CG_Init_CG();
@@ -3070,6 +3071,7 @@ void CG_Init(const int serverMessageNum, const int serverCommandSequence, const 
 	cgs.media.bdecal_saberglow = trap->R_RegisterShader("gfx/damage/saberglowmark");
 	cgs.media.bdecal_burn1 = trap->R_RegisterShader("gfx/damage/bodybigburnmark1");
 	cgs.media.mSaberDamageGlow = trap->R_RegisterShader("gfx/effects/saberDamageGlow");
+	cgs.media.saberSliceCapShader = trap->R_RegisterShader("gfx/effects/saberslice_cap");
 
 	//jk2 hud
 	cgs.media.JK2HUDLeftFrame = trap->R_RegisterShaderNoMip("gfx/hud/JK2static_test");

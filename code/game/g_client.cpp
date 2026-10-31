@@ -933,6 +933,9 @@ Player_RestoreFromPrevLevel
   Argument		: gentity_t *ent
 ============
 */
+extern void G_Shop_RestoreFromPrevLevel(gentity_t* ent);
+extern int G_Shop_StartCredits();
+
 static void Player_RestoreFromPrevLevel(gentity_t* ent)
 {
 	gclient_t* client = ent->client;
@@ -1053,6 +1056,7 @@ static void Player_RestoreFromPrevLevel(gentity_t* ent)
 
 	// the weapons from 32 on (the Z-6) are not in the exe's playersave string: ClientEndFrame keeps them in this cvar
 	client->ps.stats[STAT_WEAPONS2] = gi.Cvar_VariableIntegerValue("sje_playersave_weapons2");
+	G_Shop_RestoreFromPrevLevel(ent); // the shop (2026-10-31): credits, owned gun looks (sje_playersave_shop)
 
 	// Free any existing saber names that came from the game alloc zone
 	if (ent->client->ps.saber[0].name && gi.bIsFromZone(ent->client->ps.saber[0].name, TAG_G_ALLOC))
@@ -3309,9 +3313,9 @@ qboolean ClientSpawn(gentity_t* ent, SavedGameJustLoaded_e e_saved_game_just_loa
 		client->airOutTime = level.time + 12000;
 
 		// initialize credits if not set (default starting currency)
-		if (client->ps.persistant[PERS_CREDITS] == 0)
+		if (client->ps.persistant[PERS_CREDITS] == 0 && !client->pers.shopInit)
 		{
-			client->ps.persistant[PERS_CREDITS] = 1000; // default starting credits
+			client->ps.persistant[PERS_CREDITS] = G_Shop_StartCredits(); // default starting credits (g_shopStartCredits)
 		}
 
 		for (i = 0; i < 3; i++)
@@ -3408,9 +3412,9 @@ qboolean ClientSpawn(gentity_t* ent, SavedGameJustLoaded_e e_saved_game_just_loa
 		client->airOutTime = level.time + 12000;
 
 		// initialize credits if not set (default starting currency)
-		if (client->ps.persistant[PERS_CREDITS] == 0)
+		if (client->ps.persistant[PERS_CREDITS] == 0 && !client->pers.shopInit)
 		{
-			client->ps.persistant[PERS_CREDITS] = 1000; // default starting credits
+			client->ps.persistant[PERS_CREDITS] = G_Shop_StartCredits(); // default starting credits (g_shopStartCredits)
 		}
 
 		// clear entity values

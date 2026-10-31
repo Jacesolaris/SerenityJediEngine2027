@@ -148,6 +148,195 @@ void WP_TraceSetStart(const gentity_t* ent, vec3_t start)
 }
 
 //-----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------
+// Weapon variants (2026-10-31, DH: every gunner NPC its own gun, the SJE guns; see weapons.h)
+// ---------------------------------------------------------------------------------------------------------------
+extern cvar_t* g_weaponVariants;
+extern void G_CreateG2AttachedWeaponModel(gentity_t* ent, const char* ps_weapon_model, int bolt_num, int weapon_num);
+
+// the means of death a base weapon's shots do (so a variant only scales its own gun's damage)
+static bool WV_ModOfWeapon(const int weapon, const int mod)
+{
+	switch (weapon)
+	{
+	case WP_BLASTER_PISTOL:
+		return mod == MOD_BRYAR || mod == MOD_BRYAR_ALT;
+	case WP_BLASTER:
+		return mod == MOD_BLASTER || mod == MOD_BLASTER_ALT;
+	case WP_DISRUPTOR:
+		return mod == MOD_DISRUPTOR || mod == MOD_SNIPER;
+	case WP_BOWCASTER:
+		return mod == MOD_BOWCASTER || mod == MOD_BOWCASTER_ALT;
+	case WP_REPEATER:
+		return mod == MOD_REPEATER || mod == MOD_REPEATER_ALT;
+	case WP_DEMP2:
+		return mod == MOD_DEMP2 || mod == MOD_DEMP2_ALT;
+	case WP_FLECHETTE:
+		return mod == MOD_FLECHETTE || mod == MOD_FLECHETTE_ALT;
+	case WP_ROCKET_LAUNCHER:
+		return mod == MOD_ROCKET || mod == MOD_ROCKET_ALT;
+	case WP_CONCUSSION:
+		return mod == MOD_CONC || mod == MOD_CONC_ALT;
+	default:
+		return qfalse;
+	}
+}
+
+static bool WV_IsAltMod(const int mod)
+{
+	return mod == MOD_BRYAR_ALT || mod == MOD_BLASTER_ALT || mod == MOD_SNIPER || mod == MOD_BOWCASTER_ALT
+		|| mod == MOD_REPEATER_ALT || mod == MOD_DEMP2_ALT || mod == MOD_FLECHETTE_ALT || mod == MOD_ROCKET_ALT
+		|| mod == MOD_CONC_ALT;
+}
+
+// G_Damage: a shot from a variant gun does the variant's share of the base weapon's damage
+int G_WeaponVariantDamage(const gentity_t* inflictor, const gentity_t* attacker, const int damage, const int mod)
+{
+	const weaponVariant_t* wv = nullptr;
+
+	if (damage <= 0)
+	{
+		return damage;
+	}
+	if (inflictor && inflictor->s.eType == ET_MISSILE && inflictor->s.weaponVariant)
+	{
+		wv = BG_GetWeaponVariant(inflictor->s.weaponVariant, inflictor->s.weapon); // a shot: the variant it was fired with
+	}
+	else if (attacker && attacker->client && (!inflictor || inflictor == attacker))
+	{
+		wv = BG_GetWeaponVariant(attacker->client->ps.weaponVariant, attacker->client->ps.weapon); // an instant hit
+	}
+	if (!wv || !WV_ModOfWeapon(wv->baseWeapon, mod))
+	{
+		return damage;
+	}
+	const int d = static_cast<int>(damage * wv->fire[WV_IsAltMod(mod) ? 1 : 0].damageScale + 0.5f);
+	return d < 1 ? 1 : d;
+}
+
+static unsigned WV_NameHash(const char* name)
+{
+	unsigned h = 5381;
+
+	if (!name)
+	{
+		return 0;
+	}
+	while (*name)
+	{
+		const unsigned char c = static_cast<unsigned char>(*name);
+		h = h * 33 + static_cast<unsigned>(c >= 'A' && c <= 'Z' ? c + 32 : c);
+		name++;
+	}
+	return h;
+}
+
+// the least used variant of this base weapon among the living; ties go by the NPC type (and entity number)
+static int WV_PickVariant(const gentity_t* self, const int weapon)
+{
+	static int used[MAX_WEAPON_VARIANTS];
+	int candidates[MAX_WEAPON_VARIANTS];
+	int num_candidates = 0;
+	int least = 0x7fffffff;
+	const int family = BG_WeaponVariantFamily(weapon);
+
+	memset(used, 0, sizeof used);
+	for (int i = 0; i < globals.num_entities; i++)
+	{
+		if (!PInUse(i))
+		{
+			continue;
+		}
+		const gentity_t* other = &g_entities[i];
+
+		if (other == self || !other->client || other->health <= 0)
+		{
+			continue; // a dead NPC's gun is free again
+		}
+		if (other->client->ps.weaponVariant > 0 && other->client->ps.weaponVariant < bgNumWeaponVariants)
+		{
+			used[other->client->ps.weaponVariant]++;
+		}
+	}
+
+	for (int v = 1; v < bgNumWeaponVariants; v++)
+	{
+		if (bgWeaponVariants[v].baseWeapon != family || !bgWeaponVariants[v].npcUse)
+		{
+			continue;
+		}
+		if (used[v] < least)
+		{
+			least = used[v];
+			num_candidates = 0;
+		}
+		if (used[v] == least)
+		{
+			candidates[num_candidates++] = v;
+		}
+	}
+	if (!num_candidates)
+	{
+		return 0;
+	}
+	return candidates[(WV_NameHash(self->NPC_type) + static_cast<unsigned>(self->s.number) * 7u) % static_cast<unsigned>(num_candidates)];
+}
+
+// every think, before the move (ClientThink_real): gunner NPCs get a variant of the gun in their hand, and the gun
+// model in the hand becomes the variant's
+extern void G_GrenadeClientThink(gentity_t* ent);
+extern void G_Shop_PlayerThink(gentity_t* ent);
+
+void G_WeaponVariantThink(gentity_t* ent)
+{
+	gclient_t* cl = ent->client;
+
+	G_GrenadeClientThink(ent); // grenades (2026-10-31, wp_thermal.cpp): cooking in hand, burning / poisoned people
+	if (cl && ent->s.number == 0)
+	{
+		G_Shop_PlayerThink(ent); // the shop (2026-10-31, g_pazaak.cpp): the player's owned gun looks
+		return;
+	}
+
+	if (!cl || !ent->NPC || ent->s.number == 0)
+	{
+		return; // NPCs only: the player gets one only from the weaponvariant cheat
+	}
+
+	const int old_variant = cl->ps.weaponVariant;
+	const int weapon = cl->ps.weapon;
+
+	if (!g_weaponVariants->integer || bgNumWeaponVariants <= 1
+		|| weapon == WP_SABER || BG_HasWeapon(&cl->ps, WP_SABER) || cl->NPC_class == CLASS_VEHICLE)
+	{
+		// off, or a saber user (never, DH), or a vehicle
+		cl->ps.weaponVariant = 0;
+	}
+	else if (old_variant && BG_GetWeaponVariant(old_variant, weapon))
+	{
+		return; // has one for this gun
+	}
+	else if (!BG_WeaponVariantCount(weapon) || weapon == WP_THERMAL)
+	{
+		// no variants for what's in hand (melee...), or a grenade (its type is picked when thrown, G_GrenadeVariant):
+		// keep the old one for when the gun comes back
+		return;
+	}
+	else
+	{
+		cl->ps.weaponVariant = WV_PickVariant(ent, weapon);
+	}
+
+	if (cl->ps.weaponVariant != old_variant && ent->weaponModel[0] > 0 && ent->ghoul2.size()
+		&& weapon > WP_NONE && weapon != WP_SABER)
+	{
+		// the gun in the hand changes to the new variant's (or back to the stock one)
+		gi.G2API_RemoveGhoul2Model(ent->ghoul2, ent->weaponModel[0]);
+		ent->weaponModel[0] = -1;
+		G_CreateG2AttachedWeaponModel(ent, weaponData[weapon].weaponMdl, ent->handRBolt, 0);
+	}
+}
+
 gentity_t* CreateMissile(vec3_t org, vec3_t dir, const float vel, const int life, gentity_t* owner,
 	const qboolean alt_fire)
 	//-----------------------------------------------------------------------------
@@ -159,7 +348,7 @@ gentity_t* CreateMissile(vec3_t org, vec3_t dir, const float vel, const int life
 	missile->s.eType = ET_MISSILE;
 	missile->owner = owner;
 	//lmo tag owner info into state for duel Nox
-	missile->s.otherentityNum = owner->s.number;
+	missile->s.otherEntityNum = owner->s.number;
 
 	const Vehicle_t* p_veh = G_IsRidingVehicle(owner);
 
@@ -168,7 +357,20 @@ gentity_t* CreateMissile(vec3_t org, vec3_t dir, const float vel, const int life
 	missile->s.pos.trType = TR_LINEAR;
 	missile->s.pos.trTime = level.time; // - 10;	// move a bit on the very first frame
 	VectorCopy(org, missile->s.pos.trBase);
-	VectorScale(dir, vel, missile->s.pos.trDelta);
+	{
+		// weapon variants (2026-10-31): the shot carries the shooter's gun variant (its shot, impact effects and damage
+		// scale, see G_WeaponVariantDamage) and flies at the variant's speed
+		float speed = vel;
+		const weaponVariant_t* wv = owner && owner->client
+			? BG_GetWeaponVariant(owner->client->ps.weaponVariant, owner->client->ps.weapon) : nullptr;
+
+		if (wv && !p_veh)
+		{
+			missile->s.weaponVariant = owner->client->ps.weaponVariant;
+			speed *= wv->fire[alt_fire ? 1 : 0].speedScale;
+		}
+		VectorScale(dir, speed, missile->s.pos.trDelta);
+	}
 	if (p_veh)
 	{
 		missile->s.eFlags |= EF_USE_ANGLEDELTA;
@@ -847,7 +1049,7 @@ void WP_FireVehicleWeapon(gentity_t* ent, vec3_t start, vec3_t dir, const vehWea
 		{
 			missile->owner = ent;
 		}
-		missile->s.otherentityNum = ent->s.number;
+		missile->s.otherEntityNum = ent->s.number;
 		missile->s.otherentityNum2 = vehWeapon - &g_vehWeaponInfo[0];
 
 		if (vehWeapon->iLifeTime)
@@ -1578,6 +1780,168 @@ static void WP_NPCAimAtEnemy(const gentity_t* ent)
 
 extern void FireOverheatFail(gentity_t* ent);
 //---------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------
+// AI clips and reloads (2026-10-31, DH: enemies should stop to reload like real people; see weapons.h). Gunner NPCs
+// count the shots of their clip (FireWeapon -> G_AIClipShot). When it is empty they reload for the gun's reload time:
+// no firing (ps.weaponTime + shotTime), BOTH_RELOAD, the reload sound, a duck (the "duck" timer the gunner AI already
+// obeys while standing) or a run to a cover combat point close by, and now and then a "cover me" callout.
+// Clip sizes and reload times come from the weapon variant (the gun data) or the stock gun defaults (BG_WeaponClipShots).
+// The reserve ammo stays as before (NPCs top it up). g_aiReload 0 = the old endless fire; g_aiClipScale x every clip.
+// ---------------------------------------------------------------------------------------------------------------
+extern cvar_t* g_aiReload;
+extern cvar_t* g_aiClipScale;
+extern qboolean PM_HasAnimation(const gentity_t* ent, int animation);
+extern void G_AddVoiceEvent(const gentity_t* self, int event, int speak_debounce_time);
+
+constexpr float AI_RELOAD_COVER_DIST = 384.0f; // only run to cover this close
+static int aiReloadCalloutTime[TEAM_NUM_TEAMS]; // per team, so a whole squad doesn't shout at once
+
+static qboolean G_AIUsesClips(const gentity_t* ent)
+{
+	if (!g_aiReload || !g_aiReload->integer || !ent || !ent->client || !ent->NPC)
+	{
+		return qfalse;
+	}
+	if (ent->s.number == 0 || G_ControlledByPlayer(ent) || G_IsRidingVehicle(ent))
+	{
+		return qfalse; // the player keeps the manual reload
+	}
+	switch (ent->client->NPC_class)
+	{
+	case CLASS_ATST:
+	case CLASS_VEHICLE:
+	case CLASS_DROIDEKA: // has its own reload
+	case CLASS_GALAKMECH:
+	case CLASS_MARK1:
+	case CLASS_MARK2:
+	case CLASS_PROBE:
+	case CLASS_REMOTE:
+	case CLASS_SEEKER:
+	case CLASS_SENTRY:
+	case CLASS_INTERROGATOR:
+		return qfalse;
+	default:
+		break;
+	}
+	return BG_WeaponClipShots(ent->client->ps.weaponVariant, ent->client->ps.weapon) > 0 ? qtrue : qfalse;
+}
+
+static int G_AIClipSize(const gentity_t* ent)
+{
+	int clip = BG_WeaponClipShots(ent->client->ps.weaponVariant, ent->client->ps.weapon);
+
+	if (g_aiClipScale && g_aiClipScale->value > 0.0f)
+	{
+		clip = static_cast<int>(clip * g_aiClipScale->value + 0.5f);
+	}
+	return clip < 1 ? 1 : clip;
+}
+
+static void G_AIStartReload(gentity_t* ent)
+{
+	gclient_t* client = ent->client;
+	const int reload_time = BG_WeaponReloadTime(client->ps.weaponVariant, client->ps.weapon);
+
+	ent->aiClipShots = 0;
+
+	// no shooting until the reload is done
+	if (client->ps.weaponTime < reload_time)
+	{
+		client->ps.weaponTime = reload_time;
+	}
+	client->ps.weaponstate = WEAPON_RELOADING;
+	ent->NPC->shotTime = level.time + reload_time;
+
+	// stop aiming down the gun
+	client->ps.communicatingflags &= ~(1u << CF_AIMINGGUN);
+	client->IsAiming = qfalse;
+
+	if (PM_HasAnimation(ent, BOTH_RELOAD))
+	{
+		NPC_SetAnim(ent, SETANIM_TORSO, BOTH_RELOAD, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART);
+	}
+	G_SoundOnEnt(ent, CHAN_WEAPON, "sound/weapons/reload.mp3");
+
+	// get down while reloading (the gunner AI crouches while this runs and it isn't moving)
+	TIMER_Set(ent, "duck", reload_time);
+
+	// cover close by (maps with combat points): run there while reloading
+	if (ent->enemy && level.numCombatPoints > 0 && ent->NPC->combatPoint == -1)
+	{
+		vec3_t here;
+
+		VectorCopy(ent->currentOrigin, here);
+		SaveNPCGlobals();
+		SetNPCGlobals(ent);
+
+		const int cp = NPC_FindCombatPoint(ent->currentOrigin, ent->enemy->currentOrigin, here,
+			CP_COVER | CP_AVOID_ENEMY | CP_HAS_ROUTE, 0, -1);
+
+		if (cp != -1 && DistanceSquared(level.combatPoints[cp].origin, ent->currentOrigin) <
+			AI_RELOAD_COVER_DIST * AI_RELOAD_COVER_DIST)
+		{
+			vec3_t cover;
+
+			VectorCopy(level.combatPoints[cp].origin, cover);
+			NPC_SetCombatPoint(cp);
+			NPC_SetMoveGoal(ent, cover, 8, qtrue, cp);
+			TIMER_Set(ent, "verifyCP", reload_time + 1000);
+			TIMER_Set(ent, "roamTime", reload_time + 1000);
+		}
+		RestoreNPCGlobals();
+	}
+
+	// "cover me!" now and then
+	const int team = client->playerTeam;
+	if (team > TEAM_FREE && team < TEAM_NUM_TEAMS)
+	{
+		if (aiReloadCalloutTime[team] > level.time + 20000)
+		{
+			aiReloadCalloutTime[team] = 0; // a new level
+		}
+		if (aiReloadCalloutTime[team] < level.time && Q_irand(0, 1))
+		{
+			G_AddVoiceEvent(ent, Q_irand(EV_COVER1, EV_COVER5), 3000);
+			aiReloadCalloutTime[team] = level.time + Q_irand(6000, 10000);
+		}
+	}
+}
+
+// a gunner NPC fired a shot: count it, reload when the clip is empty
+static void G_AIClipShot(gentity_t* ent, const qboolean alt_fire)
+{
+	if (!G_AIUsesClips(ent))
+	{
+		return;
+	}
+	if (ent->aiClipWeapon != ent->client->ps.weapon)
+	{
+		ent->aiClipWeapon = ent->client->ps.weapon; // a fresh clip with a new gun
+		ent->aiClipShots = 0;
+	}
+
+	int cost = 1;
+	if (alt_fire)
+	{
+		// big alt shots use more of the clip
+		const weaponData_t* wd = &weaponData[ent->client->ps.weapon];
+		if (wd->energyPerShot > 0 && wd->altEnergyPerShot > wd->energyPerShot)
+		{
+			cost = wd->altEnergyPerShot / wd->energyPerShot;
+			if (cost > 8)
+			{
+				cost = 8;
+			}
+		}
+	}
+	ent->aiClipShots += cost;
+
+	if (ent->aiClipShots >= G_AIClipSize(ent))
+	{
+		G_AIStartReload(ent);
+	}
+}
+
 void FireWeapon(gentity_t* ent, const qboolean alt_fire)
 //---------------------------------------------------------
 {
@@ -2093,6 +2457,8 @@ void FireWeapon(gentity_t* ent, const qboolean alt_fire)
 	default:
 		return;
 	}
+
+	G_AIClipShot(ent, alt_fire); // AI clips and reloads (2026-10-31)
 
 	if (!ent->s.number)
 	{

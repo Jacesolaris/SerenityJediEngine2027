@@ -549,7 +549,7 @@ static qboolean PlaceShield(gentity_t* playerent)
 
 			shield->s.eFlags &= ~EF_NODRAW;
 			shield->r.svFlags &= ~SVF_NOCLIENT;
-			shield->s.otherentityNum = playerent->s.number; //mark owner info for duel
+			shield->s.otherEntityNum = playerent->s.number; //mark owner info for duel
 
 			trap->LinkEntity((sharedEntity_t*)shield);
 
@@ -1261,7 +1261,7 @@ void ItemUse_Sentry(gentity_t* ent)
 	trap->LinkEntity((sharedEntity_t*)sentry);
 
 	sentry->s.owner = ent->s.number;
-	sentry->s.otherentityNum = ent->s.number; // mark owner info for duel
+	sentry->s.otherEntityNum = ent->s.number; // mark owner info for duel
 	sentry->s.weapon = WP_TURRET; //so I can identify the entity as sentry gun client side
 	sentry->s.shouldtarget = qtrue;
 	if (level.gametype >= GT_TEAM)
@@ -2986,6 +2986,8 @@ static int Pickup_Ammo(const gentity_t* ent, const gentity_t* other)
 
 //======================================================================
 
+extern void G_Shop_PickupWeapon(gentity_t* player, const gentity_t* item);
+
 static int Pickup_Weapon(const gentity_t* ent, gentity_t* other)
 {
 	int quantity = 0;
@@ -3034,6 +3036,7 @@ static int Pickup_Weapon(const gentity_t* ent, gentity_t* other)
 	BG_GiveWeapon(other->client->ps.stats, ent->item->giTag);
 
 	G_AddEvent(other, EV_WEAPINVCHANGE, other->client->ps.stats[STAT_WEAPONS]);
+	G_Shop_PickupWeapon(other, ent); // the shop (2026-10-31): a dropped gun's look is the player's now
 
 	//Add_Ammo( other, ent->item->giTag, quantity );
 	Add_Ammo(other, ammoIndex, quantity);

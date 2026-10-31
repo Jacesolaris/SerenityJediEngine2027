@@ -63,6 +63,9 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include <qcommon\q_string.h>
 #include "g_functions.h"
 
+// SS_BLASTER saber attack / transition anim speed (SS_FAST is 1.1): Jace 2026-10-30
+#define SABERBLASTER_SABER_ANIM_SPEED	1.3f
+
 extern pmove_t* pm;
 extern pml_t pml;
 extern cvar_t* g_ICARUSDebug;
@@ -6171,8 +6174,10 @@ void PM_SaberStartTransAnim(const int saberAnimLevel, const int anim, float* ani
 				break;
 
 			case SS_FAST:
-			case SS_BLASTER: // SS_BLASTER (2026-10-14)
 				*animSpeed *= 1.1f;
+				break;
+			case SS_BLASTER: // SS_BLASTER: faster saber attacks than SS_FAST (Jace 2026-10-30)
+				*animSpeed *= SABERBLASTER_SABER_ANIM_SPEED;
 				break;
 			case SS_MEDIUM:
 				*animSpeed *= 1.0f;

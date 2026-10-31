@@ -2032,7 +2032,7 @@ static void PM_SaberLocked(void)
 		{
 			// SS_BLASTER (2026-10-14): alt attack charges the pistol (weaponChargeTime), then the charged shot at the
 			// enemy's chest (server: EV_SABERBLASTER SBE_LOCKSHOT) ends the lock as a win
-			if (!pm->ps->weaponChargeTime)
+			if (pm->ps->weaponChargeTime <= 0)
 			{
 				if (pm_saberBlasterAlt)
 				{
@@ -2042,7 +2042,9 @@ static void PM_SaberLocked(void)
 			}
 			else if (pm->cmd.serverTime - pm->ps->weaponChargeTime >= SABERBLASTER_LOCK_CHARGE)
 			{
-				pm->ps->weaponChargeTime = 0;
+				// (2026-10-31) still held: dropped until walk + dash go up, so letting go after the lock fires no
+				// second (charged) shot
+				pm->ps->weaponChargeTime = pm_saberBlasterAlt ? -1 : 0;
 				PM_AddEventWithParm(EV_SABERBLASTER, SBE_LOCKSHOT);
 				PM_SaberLockBreak(genemy, qtrue, 0);
 				return;
@@ -7573,13 +7575,27 @@ void PM_SetSaberMove(saberMoveName_t new_move)
 		}
 	}
 	//different styles use different animations for the DFA move.
-	else if (new_move == LS_A_JUMP_T__B_ && (pm->ps->fd.saberAnimLevel == SS_DESANN)) // SS_BLASTER (2026-10-14)
+	else if (new_move == LS_A_JUMP_T__B_ && (pm->ps->fd.saberAnimLevel == SS_DESANN)) 
 	{
 		anim = Q_irand(BOTH_FJSS_TR_BL, BOTH_FJSS_TL_BR);
 	}
 	else if (new_move == LS_A_JUMP_T__B_ && (pm->ps->fd.saberAnimLevel == SS_BLASTER)) // SS_BLASTER (2026-10-14)
 	{
-		anim = BOTH_JUMPATTACK6;
+		// SS_BLASTER (Jace 2026-10-31): the flip-over stab (BOTH_JUMPFLIPSTABDOWN) as its jump attack, launched as
+		// PM_SaberFlipOverAttackMove launches LS_A_FLIP_STAB: up as well as forward. Setting only the forward velocity
+		// wiped the jump attack's upward one, so he dropped straight back down and stabbed the floor
+		vec3_t fwdAngles, jumpFwd;
+
+		VectorCopy(pm->ps->viewangles, fwdAngles);
+		fwdAngles[PITCH] = fwdAngles[ROLL] = 0;
+		//do the lunge
+		AngleVectors(fwdAngles, jumpFwd, NULL, NULL);
+		VectorScale(jumpFwd, 150, pm->ps->velocity);
+		pm->ps->velocity[2] = 400;
+		PM_SetForceJumpZStart(pm->ps->origin[2]); //so we don't take damage if we land at same height
+		pm->cmd.upmove = 0;
+		PM_AddEvent(EV_JUMP);
+		anim = BOTH_JUMPFLIPSTABDOWN;
 	}
 	else if (pm->ps->fd.saberAnimLevel == SS_BLASTER && new_move >= LS_V1_BR && new_move < LS_REFLECT_LL)
 	{

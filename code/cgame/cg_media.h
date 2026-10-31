@@ -428,6 +428,7 @@ using cgMedia_t = struct
 	qhandle_t bdecal_burnmark1;
 	qhandle_t bdecal_saberglowmark;
 	qhandle_t bdecal_saberglow;
+	qhandle_t saberSliceCapShader; // glowing cut face of a saber slice (vanilla renderer)
 
 	qhandle_t messageLitOn;
 	qhandle_t messageLitOff;

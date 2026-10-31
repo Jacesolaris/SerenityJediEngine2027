@@ -158,6 +158,10 @@ static uniformInfo_t uniformsInfo[] =
 	{ "u_GrassParams",		GLSL_VEC4, 1 },
 	{ "u_GrassWaves",		GLSL_VEC4, 8 },
 	{ "u_GrassWaveParams",	GLSL_VEC4, 1 },
+	{ "u_SliceMolten",		GLSL_INT, 1 },
+	{ "u_SliceCapsMap",		GLSL_INT, 1 },
+	{ "u_SliceBloodMap",		GLSL_INT, 1 },
+	{ "u_SliceGlowMap",		GLSL_INT, 1 },
 };
 
 static void GLSL_PrintProgramInfoLog(GLuint object, qboolean developerOnly)
@@ -1588,6 +1592,9 @@ static int GLSL_LoadGPUProgramGeneric(
 		GLSL_SetUniformInt(&tr.genericShader[i], UNIFORM_LIGHTMAP, TB_LIGHTMAP);
 		GLSL_SetUniformInt(&tr.genericShader[i], UNIFORM_VOLUMETRICLIGHTMAP, 2);
 		GLSL_SetUniformInt(&tr.genericShader[i], UNIFORM_SCREENDEPTHMAP, TB_SHADOWMAP);
+		GLSL_SetUniformInt(&tr.genericShader[i], UNIFORM_SLICECAPSMAP, TB_SLICECAPSMAP);
+		GLSL_SetUniformInt(&tr.genericShader[i], UNIFORM_SLICEBLOODMAP, TB_SLICEBLOODMAP);
+		GLSL_SetUniformInt(&tr.genericShader[i], UNIFORM_SLICEGLOWMAP, TB_SLICEGLOWMAP);
 		qglUseProgram(0);
 
 		GLSL_FinishGPUShader(&tr.genericShader[i]);
@@ -2041,6 +2048,9 @@ static int GLSL_LoadGPUProgramLightAll(
 		GLSL_SetUniformInt(&tr.lightallShader[i], UNIFORM_ENVBRDFMAP, TB_ENVBRDFMAP);
 		GLSL_SetUniformInt(&tr.lightallShader[i], UNIFORM_SHADOWMAP2, TB_SHADOWMAPARRAY);
 		GLSL_SetUniformInt(&tr.lightallShader[i], UNIFORM_SSAOMAP, TB_SSAOMAP);
+		GLSL_SetUniformInt(&tr.lightallShader[i], UNIFORM_SLICECAPSMAP, TB_SLICECAPSMAP);
+		GLSL_SetUniformInt(&tr.lightallShader[i], UNIFORM_SLICEBLOODMAP, TB_SLICEBLOODMAP);
+		GLSL_SetUniformInt(&tr.lightallShader[i], UNIFORM_SLICEGLOWMAP, TB_SLICEGLOWMAP);
 		qglUseProgram(0);
 
 		GLSL_FinishGPUShader(&tr.lightallShader[i]);
@@ -2825,6 +2835,16 @@ void GLSL_LoadGPUShaders()
 	numEtcShaders += GLSL_LoadGPUProgramWeather(builder, allocator);
 	if (r_smaa->integer)
 		numEtcShaders += GLSL_LoadGPUProgramSMAA(builder, allocator);
+
+	// saber slice: these skeletal programs write gl_ClipDistance (see RB_DrawItems)
+	for (int i = 0; i < GENERICDEF_COUNT; i++)
+		tr.genericShader[i].sliceClip = (i & GENERICDEF_USE_SKELETAL_ANIMATION) != 0;
+	for (int i = 0; i < LIGHTDEF_COUNT; i++)
+		tr.lightallShader[i].sliceClip = (i & LIGHTDEF_USE_SKELETAL_ANIMATION) != 0;
+	for (int i = 0; i < FOGDEF_COUNT; i++)
+		tr.fogShader[i].sliceClip = (i & FOGDEF_USE_SKELETAL_ANIMATION) != 0;
+	for (int i = 0; i < VELOCITYDEF_COUNT; i++)
+		tr.velocityShader[i].sliceClip = (i & VELOCITYDEF_USE_SKELETAL_ANIMATION) != 0;
 
 	ri.Printf(PRINT_ALL, "loaded %i GLSL shaders (%i gen %i light %i etc) in %5.2f seconds\n",
 		numGenShaders + numLightShaders + numEtcShaders, numGenShaders, numLightShaders,

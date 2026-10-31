@@ -539,6 +539,15 @@ struct gentity_s
 
 	int reloadTime; //Every 0.2 seconds reload a bullet
 	int reloadCooldown;
+	int aiClipShots; // AI clips and reloads (2026-10-31): shots fired from the current clip (bots + NPCs)
+	int aiClipWeapon; // the weapon those shots were fired with
+	int grenadeKind; // grenades (2026-10-31): a player's grenade type (grenade command), a WP_THERMAL variant, 0 = stock
+	int grenadeCookStage; // cooking: 1 = pin pulled (cook sound), 2 = the warning beep has played
+	int grenadeDotKind; // burning or poisoned (GK_FIRE / GK_POISON) until grenadeDotEnd
+	int grenadeDotEnd;
+	int grenadeDotNext; // the next damage tick
+	int grenadeDotAttacker; // entity number of the thrower
+	int grenadeDotDamage; // damage per tick
 	int TimeOfWeaponDrop;
 	qboolean exPhysWarned;
 	int weaponfiredelaytime;
@@ -549,6 +558,10 @@ struct gentity_s
 	qboolean saberPower;
 	int saberPowerTime;
 	int next_kick_time;
+	// saber slice (g_combat.c G_SaberSlice): cuts made on this body since it last spawned
+	int saberSliceCount;
+	int saberSliceBones; // bit per SABERSLICE_BONE_* already cut
+	int saberSliceSpawn; // ps.persistant[PERS_SPAWN_COUNT] when the cuts were made
 };
 
 #define DAMAGEREDIRECT_HEAD		1
@@ -680,6 +693,14 @@ typedef struct clientPersistant_s
 	char		logout[1024];
 	qboolean	plugindetect;
 	qboolean	isbeingpunished;
+	int			weaponVariant; // weapon variant (2026-10-31): the last one this bot/NPC had, kept over respawns (ClientSpawn clears ps)
+	// the shop (2026-10-31, g_pazaak.c shop code): for this map (ClientConnect clears pers)
+	int			shopInit; // the starting credits were given
+	int			shopCredits;
+	int			shopOwned[SHOP_OWNED_WORDS]; // bits: the weapon variants (gun looks, grenade types) the player owns
+	int			shopEquip[SHOP_MAX_WEAPONS]; // per weapon number: the owned look he uses on it (0 = stock)
+	int			shopStreak; // kills in a row (each within g_shopStreakTime of the last)
+	int			shopStreakTime; // level.time of the last kill
 } clientPersistant_t;
 
 typedef struct renderInfo_s
@@ -1756,6 +1777,9 @@ qboolean G_FilterPacket(char* from);
 // g_weapon.c
 //
 void FireWeapon(gentity_t* ent, const qboolean alt_fire);
+// weapon variants (2026-10-31, g_weapon.c): SJE guns on the base weapons, see bg_weapons.h
+int G_WeaponVariantDamage(const gentity_t* inflictor, const gentity_t* attacker, int damage, int mod);
+void G_WeaponVariantThink(gentity_t* ent);
 void BlowDetpacks(const gentity_t* ent);
 void RemoveDetpacks(const gentity_t* ent);
 
@@ -1824,7 +1848,7 @@ void G_WeatherCommand_f(const gentity_t* ent);
 // g_team.c
 //
 qboolean OnSameTeam(const gentity_t* ent1, const gentity_t* ent2);
-void G_SaberBlasterFire(gentity_t* ent, qboolean charged, gentity_t* target); // SS_BLASTER (2026-10-14)
+void G_SaberBlasterFire(gentity_t* ent, int charge, gentity_t* target); // SS_BLASTER (2026-10-14); charge 0 = normal, 1 .. SABERBLASTER_CHARGE_LEVELS (2026-10-31)
 void Team_CheckDroppedItem(const gentity_t* dropped);
 
 // Holocron table Externs.

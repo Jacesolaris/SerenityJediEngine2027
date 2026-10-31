@@ -3596,6 +3596,7 @@ plain boxes.
 ===============
 */
 #define SABERBLASTER_HUD_CELLS	(SABERBLASTER_CLIP_SIZE / 2)
+extern qboolean WP_SaberBlasterChargeState(gentity_t* ent, vec3_t muzzle, float* frac, int* cost); // game/wp_saber.cpp
 static void CG_DrawSaberBlasterClip(const centity_t* cent)
 {
 	if (!cent || !cent->gent || !cent->gent->client || cent->currentState.weapon != WP_SABER
@@ -3626,6 +3627,16 @@ static void CG_DrawSaberBlasterClip(const centity_t* cent)
 	static vec4_t lit = { 0.25f, 0.65f, 1.0f, 1.0f };
 	static vec4_t half = { 0.25f, 0.65f, 1.0f, 0.45f };
 	static vec4_t spent = { 0.35f, 0.35f, 0.38f, 0.55f };
+	vec4_t chargeColor = { 1.0f, 0.55f, 0.15f, 1.0f };
+	// the charged shot (2026-10-31): while it charges, the shots it will cost (1 + its level) glow orange at the top
+	int keep = left, cost = 0;
+	float charge = 0.0f;
+
+	if (WP_SaberBlasterChargeState(cent->gent, nullptr, &charge, &cost))
+	{
+		keep = left - cost;
+		chargeColor[3] = charge >= 1.0f ? 1.0f : 0.6f + 0.4f * sinf(static_cast<float>(cg.time) * 0.02f);
+	}
 
 	if (left <= 0)
 	{
@@ -3648,6 +3659,10 @@ static void CG_DrawSaberBlasterClip(const centity_t* cent)
 		// cell 0 at the bottom: the shots left are the lit cells from the bottom up
 		const int shots = left - 2 * i;
 		const float* color = shots >= 2 ? lit : shots == 1 ? half : spent;
+		if (shots >= 1 && 2 * i + 2 > keep)
+		{
+			color = chargeColor; // a shot of this cell goes into the charged shot
+		}
 		const float cy = cellsBottom - static_cast<float>(i + 1) * cellH + 1.0f;
 		if (cell)
 		{
@@ -5418,6 +5433,30 @@ static const Vehicle_t* CG_PlayerInsideVehicle()
 CG_DrawCrosshair
 =================
 */
+// SS_BLASTER (Jace 2026-10-31): the adaptive crosshair shows while the left hand pistol is aimed - walk + dash held
+// (a shot about to go, or charging; game/wp_saber.cpp) or a shot's arm still out
+extern qboolean WP_SaberBlasterAiming(const gentity_t* ent);
+static qboolean CG_SaberBlasterAiming()
+{
+	const gentity_t* player = cg_entities[0].gent;
+
+	if (!player || !player->client)
+	{
+		return qfalse;
+	}
+	const playerState_t* ps = &player->client->ps;
+	if (ps->weapon != WP_SABER || ps->saberAnimLevel != SS_BLASTER)
+	{
+		return qfalse;
+	}
+	if (WP_SaberBlasterAiming(player))
+	{
+		return qtrue;
+	}
+	return (ps->torsoAnim == BOTH_FORCELIGHTNING || ps->torsoAnim == BOTH_FORCEGRIP_HOLD
+		|| ps->torsoAnim == BOTH_FORCELIGHTNING_RELEASE) && ps->torsoAnimTimer > 0 ? qtrue : qfalse;
+}
+
 static void CG_DrawCrosshair(vec3_t world_point)
 {
 	float w = 0.0f, h = 0.0f;
@@ -5443,7 +5482,7 @@ static void CG_DrawCrosshair(vec3_t world_point)
 	const auto in_ship = static_cast<qboolean>(ship != nullptr);
 
 	if (cg_adaptiveCrosshair.integer == 1 && !in_ship &&
-		(cg.snap->ps.weapon == WP_SABER))
+		(cg.snap->ps.weapon == WP_SABER) && !CG_SaberBlasterAiming()) // SS_BLASTER: shown while the pistol is aimed
 	{
 		if ((holding_block == qfalse &&
 			holding_block_and_attack == qfalse) ||
@@ -7686,8 +7725,8 @@ static float cg_draw_radar(const float y)
 				{
 					//I'm in a vehicle
 					//if it's targeting me, then play an alarm sound if I'm in a vehicle
-					if (cent->currentState.otherentityNum == cg.predictedPlayerState.clientNum || cent->
-						currentState.otherentityNum == cg.predictedPlayerState.m_iVehicleNum)
+					if (cent->currentState.otherEntityNum == cg.predictedPlayerState.clientNum || cent->
+						currentState.otherEntityNum == cg.predictedPlayerState.m_iVehicleNum)
 					{
 						if (radarLockSoundDebounceTime < cg.time)
 						{
@@ -7895,6 +7934,38 @@ static void CG_UseIcon()
 			CG_DrawPic(50, 285, 32, 32, cgs.media.useableHint);
 		}
 	}
+}
+
+// grenades (2026-10-31): a flash grenade whites out the screen of a player who sees it go off (G_GrenadeStatus)
+static int cgGrenadeFlashStart = 0;
+static int cgGrenadeFlashLength = 0;
+
+void CG_GrenadeFlash(const int duration)
+{
+	if (duration <= 0 || (cgGrenadeFlashStart + cgGrenadeFlashLength > cg.time + duration && cgGrenadeFlashStart <= cg.time))
+	{
+		return; // nothing, or already blinded longer
+	}
+	cgGrenadeFlashStart = cg.time;
+	cgGrenadeFlashLength = duration;
+}
+
+static void CG_DrawGrenadeFlash()
+{
+	const int t = cg.time - cgGrenadeFlashStart;
+
+	if (cgGrenadeFlashLength <= 0 || t < 0 || t >= cgGrenadeFlashLength)
+	{
+		if (t < 0)
+		{
+			cgGrenadeFlashLength = 0; // the clock went back (new map, a load)
+		}
+		return;
+	}
+	// full white for the first third, then it fades
+	const float hold = cgGrenadeFlashLength * 0.35f;
+	vec4_t white = { 1.0f, 1.0f, 1.0f, t < hold ? 1.0f : 1.0f - (t - hold) / (cgGrenadeFlashLength - hold) };
+	CG_FillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, white);
 }
 
 static void CG_Draw2DScreenTints()
@@ -8239,6 +8310,8 @@ static void CG_Draw2DScreenTints()
 
 		CG_FillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, hcolor);
 	}
+
+	CG_DrawGrenadeFlash(); // grenades (2026-10-31): blinded by a flash grenade
 }
 
 /*
@@ -9153,4 +9226,4 @@ void CG_DrawActive(const stereoFrame_t stereo_view)
 
 	// draw status bar and other floating elements
 	CG_Draw2D();
-}
+}

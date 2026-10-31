@@ -3969,8 +3969,8 @@ void UI_LoadMenus(const char* menuFile, const qboolean reset)
 	Com_Printf("--------------------- Client Initialization ---------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("---------- Genuine SerenityJediEngine-(Solaris Edition)SP--------\n");
-	Com_Printf("---------------------Build date 28/10/2026-----------------------\n"); // build date
-	Com_Printf("---------------------------Build 18------------------------------\n");
+	Com_Printf("---------------------Build date 31/10/2026-----------------------\n"); // build date
+	Com_Printf("---------------------------Build 21------------------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("------------------------LightSaber-------------------------------\n");
 	Com_Printf("-----------An elegant weapon for a more civilized age------------\n");
@@ -5290,6 +5290,60 @@ void UI_MainMenu()
 	{
 		Menus_ActivateByName("error_popmenu");
 	}
+}
+
+/*
+===============
+UI_JkoToJkaMenu
+
+The end of Jedi Outcast goes straight on to Jedi Academy (2026-10-31, DH): yavin_final's last cinematic
+(scriptsjk2/cinematics/cinematic37) sets the cvar sje_jkoToJka 1 before the closing credits. When the credits end the
+game disconnects and asks for the main menu; instead the Academy new game starts at the character menu, then the saber
+menu, whose start button runs "map yavin1" (uiScript startgame). Does what the main menu's Academy button and the new
+game menu's difficulty buttons do (ui/mainjka.menu, ui/newgame.menu); the difficulty stays the Outcast game's one.
+===============
+*/
+qboolean UI_JkoToJkaMenu()
+{
+	if (!Cvar_VariableIntegerValue("sje_jkoToJka"))
+	{
+		return qfalse;
+	}
+	Cvar_Set("sje_jkoToJka", "0");
+	ui.Cvar_Set("sv_killserver", "1"); // as UI_MainMenu
+	ui.Key_SetCatcher(KEYCATCH_UI);
+
+	// switch the campaign to Academy (the map name sets it again when yavin1 loads)
+	Cvar_Set("com_outcast", "0");
+	ui.Cmd_ExecuteText(EXEC_APPEND, "reload_strings\n");
+	ui.Cmd_ExecuteText(EXEC_APPEND, "music music/vjun3/vjun3_explore\n");
+
+	// the character list was built for Outcast (PlayerChoicejko.txt): build the Academy one (PlayerChoice.txt)
+	UI_FreeAllSpecies();
+	UI_BuildPlayerModel_List(qfalse);
+
+	// the new game defaults (ui/newgame.menu difficulty buttons)
+	ui.Cmd_ExecuteText(EXEC_APPEND, "exec playerTeam player\n");
+	Cvar_Set("g_char_model", "jedi_hm");
+	Cvar_Set("g_char_skin_head", "head_b1");
+	Cvar_Set("g_char_skin_torso", "torso_b1");
+	Cvar_Set("g_char_skin_legs", "lower_b1");
+	Cvar_Set("g_saber", "Kyle");
+	Cvar_Set("g_saber2", "none");
+	Cvar_Set("g_saber_color", "blue");
+	ui.Cmd_ExecuteText(EXEC_APPEND, "exec ext_data/class/resetclass.cfg\n");
+	UI_ClearWeapons();
+
+	Menus_CloseAll();
+	if (!Menus_ActivateByName("characterMenu"))
+	{
+		UI_LoadMenus("ui/menus.txt", qfalse);
+		if (!Menus_ActivateByName("characterMenu"))
+		{
+			Menus_ActivateByName("mainMenu"); // no Academy character menu: the normal main menu
+		}
+	}
+	return qtrue;
 }
 
 void UI_MainplusjkaMenu()

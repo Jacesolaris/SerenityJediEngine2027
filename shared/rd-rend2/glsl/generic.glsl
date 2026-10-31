@@ -51,6 +51,10 @@ layout(std140) uniform Entity
 	float u_FXVolumetricBase;
 	vec3 u_ModelLightDir;
 	float u_VertexLerp;
+	vec4 u_SlicePlanes[4]; // saber slice: world space cut planes (tr_saberslice.h)
+	vec4 u_SliceSign;
+	int u_SliceCount;
+	float u_SliceHeat;
 };
 
 #if defined(USE_DEFORM_VERTEXES) || defined(USE_RGBAGEN)
@@ -69,6 +73,7 @@ layout(std140) uniform ShaderInstance
 layout(std140) uniform Bones
 {
 	mat3x4 u_BoneMatrices[MAX_G2_BONES];
+	uvec4 u_BoneSlice[MAX_G2_BONES / 16]; // saber slice: 2 bits per cut per bone
 };
 #endif
 
@@ -427,6 +432,45 @@ mat4x3 GetBoneMatrix(uint index)
 }
 #endif
 
+#if defined(USE_SKELETAL_ANIMATION)
+// saber slice (tr_saberslice.h): one clip distance per cut, the positive side of a cut is cut away
+float SliceValue(int cut, uint mode, vec3 wsPos)
+{
+	float d = -1000.0;
+	if (mode == 1u)
+		d = dot(u_SlicePlanes[cut].xyz, wsPos) - u_SlicePlanes[cut].w;
+	else if (mode == 2u)
+		d = 1000.0;
+	return d * u_SliceSign[cut];
+}
+
+void SliceClip(vec3 wsPos)
+{
+	gl_ClipDistance[0] = 1.0;
+	gl_ClipDistance[1] = 1.0;
+	gl_ClipDistance[2] = 1.0;
+	gl_ClipDistance[3] = 1.0;
+	if (u_SliceCount <= 0)
+		return;
+
+	// the bone this vertex mostly follows
+	uint bone = attr_BoneIndexes[0];
+	float w = attr_BoneWeights[0];
+	if (attr_BoneWeights[1] > w) { bone = attr_BoneIndexes[1]; w = attr_BoneWeights[1]; }
+	if (attr_BoneWeights[2] > w) { bone = attr_BoneIndexes[2]; w = attr_BoneWeights[2]; }
+	if (attr_BoneWeights[3] > w) { bone = attr_BoneIndexes[3]; }
+	uint bits = (u_BoneSlice[bone >> 4u][(bone >> 2u) & 3u] >> ((bone & 3u) * 8u)) & 255u;
+
+	gl_ClipDistance[0] = -SliceValue(0, bits & 3u, wsPos);
+	if (u_SliceCount > 1)
+		gl_ClipDistance[1] = -SliceValue(1, (bits >> 2u) & 3u, wsPos);
+	if (u_SliceCount > 2)
+		gl_ClipDistance[2] = -SliceValue(2, (bits >> 4u) & 3u, wsPos);
+	if (u_SliceCount > 3)
+		gl_ClipDistance[3] = -SliceValue(3, (bits >> 6u) & 3u, wsPos);
+}
+#endif
+
 void main()
 {
 #if defined(USE_VERTEX_ANIMATION)
@@ -453,6 +497,9 @@ void main()
 #endif
 
 	vec4 wsPosition = u_ModelMatrix * vec4(position, 1.0);
+#if defined(USE_SKELETAL_ANIMATION)
+	SliceClip(wsPosition.xyz);
+#endif
 	gl_Position = u_viewProjectionMatrix * wsPosition;
 
 #if defined(USE_TCGEN)
@@ -545,6 +592,10 @@ layout(std140) uniform Entity
 	float u_FXVolumetricBase;
 	vec3 u_ModelLightDir;
 	float u_VertexLerp;
+	vec4 u_SlicePlanes[4]; // saber slice: world space cut planes (tr_saberslice.h)
+	vec4 u_SliceSign;
+	int u_SliceCount;
+	float u_SliceHeat;
 };
 
 uniform sampler2D u_DiffuseMap;
@@ -633,6 +684,49 @@ vec4 CalcFog(in vec3 viewOrigin, in vec3 position, in Fog fog)
 }
 #endif
 
+#if defined(USE_SKELETAL_ANIMATION)
+// saber slice: back faces of a cut model are only seen through the cut, draw them as molten metal
+uniform int u_SliceMolten;
+uniform sampler2D u_SliceCapsMap;
+uniform sampler2D u_SliceBloodMap;
+uniform sampler2D u_SliceGlowMap;
+
+vec4 SliceMoltenColor(float alpha, vec2 uv)
+{
+	if (u_SliceHeat > 1.5)
+	{
+		// a metal body (super battle droid, heat + 2): white-hot grey metal that cools to dark steel
+		float mheat = clamp(u_SliceHeat - 2.0, 0.0, 1.0);
+		float grain;
+		if ((u_SliceMolten & 4) != 0)
+			grain = 0.7 + 0.6 * dot(texture(u_SliceCapsMap, uv * 3.0).rgb, vec3(0.299, 0.587, 0.114));
+		else
+			grain = 0.88 + 0.12 * sin(gl_FragCoord.x * 0.37 + gl_FragCoord.y * 0.29) * sin(gl_FragCoord.y * 0.21 - gl_FragCoord.x * 0.13);
+		vec3 dark = vec3(0.07, 0.07, 0.075);
+		vec3 grey = vec3(0.42, 0.40, 0.39);
+		vec3 hot = vec3(1.9, 1.25, 0.75);
+		vec3 metal = mheat > 0.5 ? mix(grey, hot, (mheat - 0.5) * 2.0) : mix(dark, grey, mheat * 2.0);
+		return vec4(metal * grain, alpha);
+	}
+	float heat = clamp(u_SliceHeat, 0.0, 1.0);
+	if ((u_SliceMolten & 4) != 0)
+	{
+		// DH's cap images (gfx/effects/saberslice_caps*): charred flesh with a little blood under it,
+		// the glowing swirls fade out as the cut cools (same mix as the vanilla saberslice_inside shaders)
+		vec2 t = uv * 3.0;
+		vec3 caps = texture(u_SliceCapsMap, t).rgb;
+		vec3 blood = texture(u_SliceBloodMap, t * 0.75 + vec2(0.31, 0.17)).rgb;
+		vec3 glow = texture(u_SliceGlowMap, t).rgb;
+		vec3 base = caps * 1.2 + blood * 0.35;
+		return vec4(base * (1.0 - 0.4 * heat) + glow * (2.2 * heat), alpha);
+	}
+	vec3 hot = vec3(2.4, 0.9, 0.2);
+	vec3 cool = vec3(0.45, 0.07, 0.015);
+	float grain = 0.88 + 0.12 * sin(gl_FragCoord.x * 0.37 + gl_FragCoord.y * 0.29) * sin(gl_FragCoord.y * 0.21 - gl_FragCoord.x * 0.13);
+	return vec4(mix(cool, hot, heat) * grain, alpha);
+}
+#endif
+
 void main()
 {
 	vec4 color  = texture(u_DiffuseMap, var_DiffuseTex);
@@ -685,6 +779,11 @@ void main()
 #else
 	color *= vec4(1.0) - u_FogColorMask * fogColorOpacity.a;
 #endif
+#endif
+
+#if defined(USE_SKELETAL_ANIMATION)
+	if (((u_SliceMolten & 3) == 1 && gl_FrontFacing) || ((u_SliceMolten & 3) == 2 && !gl_FrontFacing))
+		color = SliceMoltenColor(color.a, var_DiffuseTex);
 #endif
 
 	out_Color = color;

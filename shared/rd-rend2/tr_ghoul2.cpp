@@ -3518,6 +3518,57 @@ static inline float G2_GetVertBoneWeightNotSlow(const mdxmVertex_t* pVert, const
 	return fBoneWeight;
 }
 
+/*
+==============
+Saber slice (Jedi Survivor style cuts), see tr_saberslice.h
+
+rend2 skins on the GPU, so the per bone cut modes go to the shaders with the
+bone matrices (2 bits per cut per bone) and the cut planes with the Entity
+block. Returns false when this model isn't cut.
+==============
+*/
+#include "tr_saberslice.h"
+
+static bool RB_SliceFillBoneModes(const trRefEntity_t* ent, CGhoul2Info_v& ghoul2, CGhoul2Info& g2Info,
+	int currentFrameNum, SkeletonBoneMatricesBlock& block)
+{
+	if (!R_SliceActive(ent->e) || ghoul2.size() < 1 || !ghoul2[0].mValid || !ghoul2[0].mBoneCache || !ghoul2[0].aHeader)
+		return false;
+
+	CBoneCache& mainBones = *ghoul2[0].mBoneCache;
+	const sliceModes_t* m = R_SliceBuildModes(ent->e, mainBones, ghoul2[0].aHeader, currentFrameNum);
+	if (!m)
+		return false;
+
+	memset(block.sliceModes, 0, sizeof(block.sliceModes));
+	CBoneCache* bc = g2Info.mBoneCache;
+	const int numBones = (int)bc->mBones.size() < MAX_G2_BONES ? (int)bc->mBones.size() : MAX_G2_BONES;
+
+	if (bc == &mainBones)
+	{
+		for (int b = 0; b < numBones && b < m->numBones; b++)
+		{
+			uint32_t bits = 0;
+			for (int c = 0; c < m->numCuts; c++)
+				bits |= (uint32_t)(m->mode[c][b] & 3) << (c * 2);
+			block.sliceModes[b >> 2] |= bits << ((b & 3) * 8);
+		}
+	}
+	else
+	{
+		// a saber or gun bolted onto the model goes whole with one side
+		const float boltPos[3] = { bc->rootMatrix.matrix[0][3], bc->rootMatrix.matrix[1][3], bc->rootMatrix.matrix[2][3] };
+		unsigned char boltModes[MAX_SABER_SLICES] = {};
+		R_SliceBoltOnModes(*m, mainBones, ghoul2[0].aHeader, boltPos, boltModes);
+		uint32_t bits = 0;
+		for (int c = 0; c < m->numCuts; c++)
+			bits |= (uint32_t)(boltModes[c] & 3) << (c * 2);
+		for (int b = 0; b < numBones; b++)
+			block.sliceModes[b >> 2] |= bits << ((b & 3) * 8);
+	}
+	return true;
+}
+
 void RB_TransformBones(const trRefEntity_t* ent, const trRefdef_t* refdef, int currentFrameNum, gpuFrame_t* frame)
 {
 	if (!ent->e.ghoul2 || !G2API_HaveWeGhoul2Models(*((CGhoul2Info_v*)ent->e.ghoul2)))
@@ -3586,6 +3637,12 @@ void RB_TransformBones(const trRefEntity_t* ent, const trRefdef_t* refdef, int c
 		else
 		{
 			G2_TransformGhoulBones(g2Info.mBlist, rootMatrix, g2Info, currentTime);
+			// saber slice: place the cuts (sent in bone space) on the skeleton we draw this frame,
+			// before RB_UpdateEntityConstants sends the planes to the shaders
+			if (&g2Info == &ghoul2[0] && g2Info.mBoneCache && g2Info.aHeader)
+			{
+				R_SliceResolvePlanes(const_cast<refEntity_t&>(ent->e), *g2Info.mBoneCache, g2Info.aHeader);
+			}
 		}
 
 		CBoneCache* bc = g2Info.mBoneCache;
@@ -3608,8 +3665,13 @@ void RB_TransformBones(const trRefEntity_t* ent, const trRefdef_t* refdef, int c
 			bc->boneMatrices,
 			sizeof(mat3x4_t) * bc->mBones.size());
 
+		// saber slice: a cut model also sends its per bone cut modes (needs the whole block)
+		size_t bonesBlockSize = sizeof(mat3x4_t) * bc->mBones.size();
+		if (RB_SliceFillBoneModes(ent, ghoul2, g2Info, currentFrameNum, bonesBlock))
+			bonesBlockSize = sizeof(bonesBlock);
+
 		int uboOffset = RB_AppendConstantsData(
-			frame, &bonesBlock, sizeof(mat3x4_t) * bc->mBones.size());
+			frame, &bonesBlock, bonesBlockSize);
 
 		bc->uboOffset = uboOffset;
 		bc->uboGPUFrame = currentFrameNum;

@@ -1680,12 +1680,12 @@ void G_MissileImpacted(gentity_t* ent, gentity_t* other, vec3_t impact_pos, vec3
 	if (otherValid && other->client && other->takedamage)
 	{
 		G_AddEvent(ent, EV_MISSILE_HIT, DirToByte(normal));
-		ent->s.otherentityNum = other->s.number;
+		ent->s.otherEntityNum = other->s.number;
 	}
 	else
 	{
 		G_AddEvent(ent, EV_MISSILE_MISS, DirToByte(normal));
-		ent->s.otherentityNum = otherValid ? other->s.number : ENTITYNUM_NONE;
+		ent->s.otherEntityNum = otherValid ? other->s.number : ENTITYNUM_NONE;
 	}
 
 	VectorCopy(normal, ent->pos1);
@@ -2919,7 +2919,7 @@ gentity_t* fire_grapple(gentity_t* self, vec3_t start, vec3_t dir)
 	hook->targetEnt = nullptr;
 	hook->s.pos.trType = TR_LINEAR;
 	hook->s.pos.trTime = level.time - MISSILE_PRESTEP_TIME;
-	hook->s.otherentityNum = self->s.number;
+	hook->s.otherEntityNum = self->s.number;
 	VectorCopy(start, hook->s.pos.trBase);
 	VectorScale(dir, 900, hook->s.pos.trDelta);
 	SnapVector(hook->s.pos.trDelta);
@@ -2947,7 +2947,7 @@ gentity_t* fire_stun(gentity_t* self, vec3_t start, vec3_t dir)
 	stun->targetEnt = nullptr;
 	stun->s.pos.trType = TR_LINEAR;
 	stun->s.pos.trTime = level.time - MISSILE_PRESTEP_TIME;
-	stun->s.otherentityNum = self->s.number;
+	stun->s.otherEntityNum = self->s.number;
 	VectorCopy(start, stun->s.pos.trBase);
 	VectorScale(dir, 2000, stun->s.pos.trDelta);
 	SnapVector(stun->s.pos.trDelta);

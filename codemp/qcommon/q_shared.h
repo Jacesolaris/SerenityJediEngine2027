@@ -1470,6 +1470,7 @@ typedef struct playerState_s {
 	int     SaberSmashStartTime;
 	int     SaberSmashLastStartTime;
 	int     Smash_Count;
+	int		weaponVariant; // weapon variant (2026-10-31, bg_weapons.h): 0 = the stock weapon, networked in 8 bits
 } playerState_t;
 
 typedef struct siegePers_s
@@ -1897,7 +1898,7 @@ typedef struct entityState_s {
 
 	int		emplacedOwner;
 
-	int		otherentityNum;	// shotgun sources, etc
+	int		otherEntityNum;	// shotgun sources, etc
 	int		otherentityNum2;
 
 	int		groundEntityNum;	// ENTITYNUM_NONE = in air
@@ -2076,6 +2077,7 @@ typedef struct entityState_s {
 	int SaberSmashStartTime;
 	int SaberSmashLastStartTime;
 	int Smash_Count;
+	int weaponVariant; // weapon variant (2026-10-31, bg_weapons.h): 0 = the stock weapon; players/NPCs from ps, missiles from the shooter
 } entityState_t;//any additions here must also be added to entityStateFields in msg.cpp and netf_overrides.txt in ext-data/ mp
 
 typedef enum {

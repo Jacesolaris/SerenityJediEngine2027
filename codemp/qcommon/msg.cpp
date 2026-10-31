@@ -1009,7 +1009,7 @@ netField_t entityStateFields[] =
 	{ NETF(shouldtarget), 1 },
 	// widely used, does not appear that they have to be 16 bits
 	{ NETF(trickedentindex), 16 }, //See note in PSF
-	{ NETF(otherentityNum), GENTITYNUM_BITS },
+	{ NETF(otherEntityNum), GENTITYNUM_BITS },
 	{ NETF(origin2[1]), 0 },
 	{ NETF(time2), 32 },
 	{ NETF(legsFlip), 1 },
@@ -1168,7 +1168,8 @@ netField_t entityStateFields[] =
 
 	{ NETF(SaberSmashStartTime), 32 },
 	{ NETF(SaberSmashLastStartTime), 32 },
-	{ NETF(Smash_Count), 32 }
+	{ NETF(Smash_Count), 32 },
+	{ NETF(weaponVariant), 8 } // weapon variant (2026-10-31): MAX_WEAPON_VARIANTS 256
 };
 
 // if (int)f == f and (int)f + ( 1<<(FLOAT_INT_BITS-1) ) < ( 1 << FLOAT_INT_BITS )
@@ -1725,7 +1726,8 @@ netField_t playerStateFields[] =
 
 	{ PSF(SaberSmashStartTime), 32 },
 	{ PSF(SaberSmashLastStartTime), 32 },
-	{ PSF(Smash_Count), 32 }
+	{ PSF(Smash_Count), 32 },
+	{ PSF(weaponVariant), 8 } // weapon variant (2026-10-31)
 };
 
 netField_t pilotPlayerStateFields[] =
@@ -1958,7 +1960,8 @@ netField_t pilotPlayerStateFields[] =
 
 	{ PSF(SaberSmashStartTime), 32 },
 	{ PSF(SaberSmashLastStartTime), 32 },
-	{ PSF(Smash_Count), 32 }
+	{ PSF(Smash_Count), 32 },
+	{ PSF(weaponVariant), 8 } // weapon variant (2026-10-31)
 };
 
 netField_t vehPlayerStateFields[] =
@@ -2097,7 +2100,8 @@ netField_t vehPlayerStateFields[] =
 
 	{ PSF(SaberSmashStartTime), 32 },
 	{ PSF(SaberSmashLastStartTime), 32 },
-	{ PSF(Smash_Count), 32 }
+	{ PSF(Smash_Count), 32 },
+	{ PSF(weaponVariant), 8 } // weapon variant (2026-10-31)
 };
 
 //=====_OPTIMIZED_VEHICLE_NETWORKING=======================================================================
@@ -2316,7 +2320,8 @@ netField_t	playerStateFields[] =
 
 { PSF(SaberSmashStartTime), 32 },
 { PSF(SaberSmashLastStartTime), 32 },
-{ PSF(Smash_Count), 32 }
+{ PSF(Smash_Count), 32 },
+{ PSF(weaponVariant), 8 } // weapon variant (2026-10-31)
 };
 
 //=====_OPTIMIZED_VEHICLE_NETWORKING=======================================================================

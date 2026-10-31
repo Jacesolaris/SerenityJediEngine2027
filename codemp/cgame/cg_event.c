@@ -285,7 +285,7 @@ static void CG_Obituary(entityState_t* ent)
 	clientInfo_t* ci = NULL;
 	qboolean veh_message = qfalse;
 
-	target = ent->otherentityNum;
+	target = ent->otherEntityNum;
 	attacker = ent->otherentityNum2;
 	mod = ent->eventParm;
 
@@ -1482,7 +1482,7 @@ static void CG_G2MarkEvent(entityState_t* es)
 	//es->origin should be the hit location of the projectile,
 	//whereas es->origin2 is the predicted position of the
 	//projectile. (based on the trajectory upon impact) -rww
-	centity_t* p_owner = &cg_entities[es->otherentityNum];
+	centity_t* p_owner = &cg_entities[es->otherEntityNum];
 	vec3_t start_point;
 	float size = 0.0f;
 	qhandle_t shader = 0;
@@ -1505,14 +1505,14 @@ static void CG_G2MarkEvent(entityState_t* es)
 
 		CG_G2Trace(&tr, es->origin, NULL, NULL, es->origin2, ignore, MASK_PLAYERSOLID);
 
-		if (tr.entityNum != es->otherentityNum)
+		if (tr.entityNum != es->otherEntityNum)
 		{
 			//try again if we hit an ent but not the one we wanted.
 			if (tr.entityNum < ENTITYNUM_WORLD)
 			{
 				ignore = tr.entityNum;
 				CG_G2Trace(&tr, es->origin, NULL, NULL, es->origin2, ignore, MASK_PLAYERSOLID);
-				if (tr.entityNum != es->otherentityNum)
+				if (tr.entityNum != es->otherEntityNum)
 				{
 					//didn't manage to collide with the desired person. No mark will be placed then.
 					return;
@@ -1809,8 +1809,11 @@ static void CG_SaberBlasterEvent(const int owner_num, const int parm)
 		break;
 	case SBE_FIRE:
 	case SBE_LOCKSHOT:
+	case SBE_CHARGED1: // the charged shot (2026-10-31)
+	case SBE_CHARGED2:
+	case SBE_CHARGED3:
 	{
-		const qboolean charged = parm == SBE_LOCKSHOT ? qtrue : qfalse;
+		const qboolean charged = parm != SBE_FIRE ? qtrue : qfalse;
 		const sfxHandle_t sfx = charged ? weap->altFlashSound[0] : weap->flashSound[0];
 		const fxHandle_t fx = charged ? weap->altMuzzleEffect : weap->muzzleEffect;
 		const clientInfo_t* ci = NULL;
@@ -1881,6 +1884,7 @@ static void CG_ClothBlast(const int weapon, const qboolean altFire, const vec3_t
 		strength * cg_clothExplosion.value, radius));
 }
 
+void CG_GrenadeFlash(int duration); // grenades (2026-10-31, cg_draw.c)
 void CG_EntityEvent(centity_t* cent, vec3_t position)
 {
 	entityState_t* es = NULL;
@@ -2218,6 +2222,10 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 		{
 			vec3_t up = { 0, 0, 1 };
 			trap->FX_PlayEffectID(trap->FX_RegisterEffect("flash/faceflash"), position, up, -1, -1, qfalse);
+			if (es->number == cg.snap->ps.clientNum)
+			{
+				CG_GrenadeFlash(es->eventParm > 0 ? es->eventParm * 100 : 3000); // 2026-10-31: blinded (cg_draw.c)
+			}
 		}
 		break;
 	case EV_SMOKEGRENADE:
@@ -2269,7 +2277,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 		DEBUGNAME("EV_GLOBAL_DUEL");
 		//used for beginning of power duels
 		//if (cg.predictedPlayerState.persistant[PERS_TEAM] != TEAM_SPECTATOR)
-		if (es->otherentityNum == cg.predictedPlayerState.clientNum ||
+		if (es->otherEntityNum == cg.predictedPlayerState.clientNum ||
 			es->otherentityNum2 == cg.predictedPlayerState.clientNum ||
 			es->groundEntityNum == cg.predictedPlayerState.clientNum)
 		{
@@ -3456,11 +3464,11 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 				}
 			}
 
-			if (es->otherentityNum != ENTITYNUM_NONE && es->otherentityNum2 != ENTITYNUM_NONE)
+			if (es->otherEntityNum != ENTITYNUM_NONE && es->otherentityNum2 != ENTITYNUM_NONE)
 			{
 				centity_t* saber_owner = &cg_entities[es->otherentityNum2];
 
-				saber_owner->serverSaberHitIndex = es->otherentityNum;
+				saber_owner->serverSaberHitIndex = es->otherEntityNum;
 				saber_owner->serverSaberHitTime = cg.time;
 
 				if (es->eventParm)
@@ -3487,11 +3495,11 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 				qhandle_t block_sound = trap->S_RegisterSound(va("sound/weapons/saber/saberblock%d", Q_irand(1, 90)));
 				qhandle_t knock_sound = trap->S_RegisterSound(va("sound/weapons/saber/saberknock%d", Q_irand(1, 4)));
 				qboolean no_clash_flare = qfalse;
-				// The server puts the blocker in otherentityNum (the temp event entity itself never has
+				// The server puts the blocker in otherEntityNum (the temp event entity itself never has
 				// the FLAG_PERFECTBLOCK bit). userInt3 is networked, so read it from the blocker as SP does.
-				const qboolean perfect_block = (es->otherentityNum >= 0 && es->otherentityNum < ENTITYNUM_WORLD
-					&& es->otherentityNum != es->otherentityNum2
-					&& (cg_entities[es->otherentityNum].currentState.userInt3 & (1 << FLAG_PERFECTBLOCK)))
+				const qboolean perfect_block = (es->otherEntityNum >= 0 && es->otherEntityNum < ENTITYNUM_WORLD
+					&& es->otherEntityNum != es->otherentityNum2
+					&& (cg_entities[es->otherEntityNum].currentState.userInt3 & (1 << FLAG_PERFECTBLOCK)))
 					? qtrue
 					: qfalse;
 
@@ -3829,11 +3837,11 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 				{	// sound originated from a client, but not one of the duelers
 					doit = 0;
 				}
-				else if (es->number >= MAX_CLIENTS && es->otherentityNum != ENTITYNUM_NONE &&
-					es->otherentityNum != cg.snap->ps.clientNum &&
-					es->otherentityNum != cg.snap->ps.duelIndex)
-				{  // sound generated by an temp entity in a snap, the otherentityNum should be the orinating
-				   // client number (by hack!). If otherentityNum is ENTITYNUM_NONE, then it is one of the many sounds
+				else if (es->number >= MAX_CLIENTS && es->otherEntityNum != ENTITYNUM_NONE &&
+					es->otherEntityNum != cg.snap->ps.clientNum &&
+					es->otherEntityNum != cg.snap->ps.duelIndex)
+				{  // sound generated by an temp entity in a snap, the otherEntityNum should be the orinating
+				   // client number (by hack!). If otherEntityNum is ENTITYNUM_NONE, then it is one of the many sounds
 				   // I don't bother filtering, so play it. Otherwise, if not from the duelers, supress it
 					doit = 0;
 				}
@@ -3880,11 +3888,11 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 				{	// sound originated from a client, but not one of the duelers
 					doit = 0;
 				}
-				else if (es->number >= MAX_CLIENTS && es->otherentityNum != ENTITYNUM_NONE &&
-					es->otherentityNum != cg.snap->ps.clientNum &&
-					es->otherentityNum != cg.snap->ps.duelIndex)
-				{  // sound generated by an temp entity in a snap, the otherentityNum should be the orinating
-				   // client number (by hack!). If otherentityNum is ENTITYNUM_NONE, then it is one of the many sounds
+				else if (es->number >= MAX_CLIENTS && es->otherEntityNum != ENTITYNUM_NONE &&
+					es->otherEntityNum != cg.snap->ps.clientNum &&
+					es->otherEntityNum != cg.snap->ps.duelIndex)
+				{  // sound generated by an temp entity in a snap, the otherEntityNum should be the orinating
+				   // client number (by hack!). If otherEntityNum is ENTITYNUM_NONE, then it is one of the many sounds
 				   // I don't bother filtering, so play it. Otherwise, if not from the duelers, supress it
 					doit = 0;
 				}
@@ -3943,11 +3951,11 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 				{	// sound originated from a client, but not one of the duelers
 					doit = 0;
 				}
-				else if (es->number >= MAX_CLIENTS && es->otherentityNum != ENTITYNUM_NONE &&
-					es->otherentityNum != cg.snap->ps.clientNum &&
-					es->otherentityNum != cg.snap->ps.duelIndex)
-				{  // sound generated by an temp entity in a snap, the otherentityNum should be the orinating
-				   // client number (by hack!). If otherentityNum is ENTITYNUM_NONE, then it is one of the many sounds
+				else if (es->number >= MAX_CLIENTS && es->otherEntityNum != ENTITYNUM_NONE &&
+					es->otherEntityNum != cg.snap->ps.clientNum &&
+					es->otherEntityNum != cg.snap->ps.duelIndex)
+				{  // sound generated by an temp entity in a snap, the otherEntityNum should be the orinating
+				   // client number (by hack!). If otherEntityNum is ENTITYNUM_NONE, then it is one of the many sounds
 				   // I don't bother filtering, so play it. Otherwise, if not from the duelers, supress it
 					doit = 0;
 				}
@@ -4082,7 +4090,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 
 	case EV_SLAMTIMER:
 		DEBUGNAME("EV_SLAMTIMER");
-		if (es->otherentityNum == cg.predictedPlayerState.clientNum)
+		if (es->otherEntityNum == cg.predictedPlayerState.clientNum)
 		{
 			CG_SlamTimingBar(es->time, es->time2);
 		}
@@ -4090,7 +4098,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 
 	case EV_DASHTIMER:
 		DEBUGNAME("EV_DASHTIMER");
-		if (es->otherentityNum == cg.predictedPlayerState.clientNum)
+		if (es->otherEntityNum == cg.predictedPlayerState.clientNum)
 		{
 			CG_DashTimingBar(es->time, es->time2);
 		}
@@ -4218,11 +4226,11 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 				{	// sound originated from a client, but not one of the duelers
 					doit = 0;
 				}
-				else if (es->number >= MAX_CLIENTS && es->otherentityNum != ENTITYNUM_NONE &&
-					es->otherentityNum != cg.snap->ps.clientNum &&
-					es->otherentityNum != cg.snap->ps.duelIndex)
-				{  // sound generated by an temp entity in a snap, the otherentityNum should be the orinating
-				   // client number (by hack!). If otherentityNum is ENTITYNUM_NONE, then it is one of the many sounds
+				else if (es->number >= MAX_CLIENTS && es->otherEntityNum != ENTITYNUM_NONE &&
+					es->otherEntityNum != cg.snap->ps.clientNum &&
+					es->otherEntityNum != cg.snap->ps.duelIndex)
+				{  // sound generated by an temp entity in a snap, the otherEntityNum should be the orinating
+				   // client number (by hack!). If otherEntityNum is ENTITYNUM_NONE, then it is one of the many sounds
 				   // I don't bother filtering, so play it. Otherwise, if not from the duelers, supress it
 					doit = 0;
 				}
@@ -4265,11 +4273,11 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 				{	// sound originated from a client, but not one of the duelers
 					doit = 0;
 				}
-				else if (es->number >= MAX_CLIENTS && es->otherentityNum != ENTITYNUM_NONE &&
-					es->otherentityNum != cg.snap->ps.clientNum &&
-					es->otherentityNum != cg.snap->ps.duelIndex)
-				{  // sound generated by an temp entity in a snap, the otherentityNum should be the orinating
-				   // client number (by hack!). If otherentityNum is ENTITYNUM_NONE, then it is one of the many sounds
+				else if (es->number >= MAX_CLIENTS && es->otherEntityNum != ENTITYNUM_NONE &&
+					es->otherEntityNum != cg.snap->ps.clientNum &&
+					es->otherEntityNum != cg.snap->ps.duelIndex)
+				{  // sound generated by an temp entity in a snap, the otherEntityNum should be the orinating
+				   // client number (by hack!). If otherEntityNum is ENTITYNUM_NONE, then it is one of the many sounds
 				   // I don't bother filtering, so play it. Otherwise, if not from the duelers, supress it
 					doit = 0;
 				}
@@ -4314,7 +4322,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 
 	case EV_SCOREPLUM:
 		DEBUGNAME("EV_SCOREPLUM");
-		CG_ScorePlum(cent->currentState.otherentityNum, cent->lerpOrigin, cent->currentState.time);
+		CG_ScorePlum(cent->currentState.otherEntityNum, cent->lerpOrigin, cent->currentState.time);
 		break;
 
 	case EV_CTFMESSAGE:
@@ -4443,9 +4451,9 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 			if (cg.snap->ps.duelInProgress)
 			{ // this client is dueling
 				// note special encoding:
-				//  otherentityNum has owner number
+				//  otherEntityNum has owner number
 				//  otherentityNum2 has hit entitiy number
-				if (es->otherentityNum != cg.snap->ps.clientNum && es->otherentityNum != cg.snap->ps.duelIndex)
+				if (es->otherEntityNum != cg.snap->ps.clientNum && es->otherEntityNum != cg.snap->ps.duelIndex)
 				{
 					doit = 0;
 				}
@@ -4463,6 +4471,10 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 				else if (CG_VehicleWeaponImpact(cent))
 				{
 					//a vehicle missile that uses an overridden impact effect...
+				}
+				else if (CG_WeaponVariantImpact(es, position, dir, qtrue, (cent->currentState.eFlags & EF_ALT_FIRING) ? qtrue : qfalse))
+				{
+					// weapon variants (2026-10-31): an SJE gun's own impact
 				}
 				else if (cent->currentState.eFlags & EF_ALT_FIRING)
 				{
@@ -4493,9 +4505,9 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 			if (cg.snap->ps.duelInProgress)
 			{ // this client is dueling
 				// note special encoding:
-				//  otherentityNum has owner number
+				//  otherEntityNum has owner number
 				//  otherentityNum2 has hit entitiy number
-				if (es->otherentityNum != cg.snap->ps.clientNum && es->otherentityNum != cg.snap->ps.duelIndex)
+				if (es->otherEntityNum != cg.snap->ps.clientNum && es->otherEntityNum != cg.snap->ps.duelIndex)
 				{
 					doit = 0;
 				}
@@ -4514,6 +4526,10 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 				else if (CG_VehicleWeaponImpact(cent))
 				{
 					//a vehicle missile that used an overridden impact effect...
+				}
+				else if (CG_WeaponVariantImpact(es, position, dir, qfalse, (cent->currentState.eFlags & EF_ALT_FIRING) ? qtrue : qfalse))
+				{
+					// weapon variants (2026-10-31): an SJE gun's own impact
 				}
 				else if (cent->currentState.eFlags & EF_ALT_FIRING)
 				{
@@ -4543,9 +4559,9 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 			if (cg.snap->ps.duelInProgress)
 			{ // this client is dueling
 				// note special encoding:
-				//  otherentityNum has owner number
+				//  otherEntityNum has owner number
 				//  otherentityNum2 has hit entitiy number
-				if (es->otherentityNum != cg.snap->ps.clientNum && es->otherentityNum != cg.snap->ps.duelIndex)
+				if (es->otherEntityNum != cg.snap->ps.clientNum && es->otherEntityNum != cg.snap->ps.duelIndex)
 				{
 					doit = 0;
 				}
@@ -4564,6 +4580,10 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 				else if (CG_VehicleWeaponImpact(cent))
 				{
 					//a vehicle missile that used an overridden impact effect...
+				}
+				else if (CG_WeaponVariantImpact(es, position, dir, qfalse, (cent->currentState.eFlags & EF_ALT_FIRING) ? qtrue : qfalse))
+				{
+					// weapon variants (2026-10-31): an SJE gun's own impact
 				}
 				else if (cent->currentState.eFlags & EF_ALT_FIRING)
 				{
@@ -4585,11 +4605,11 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 			if (cg.snap->ps.duelInProgress)
 			{ // this client is dueling
 				// note special encoding:
-				//  otherentityNum has owner number
+				//  otherEntityNum has owner number
 				//  if owner num is ENTITYNUM_NONE then always play it
-				if (es->otherentityNum != ENTITYNUM_NONE &&
-					es->otherentityNum != cg.snap->ps.clientNum &&
-					es->otherentityNum != cg.snap->ps.duelIndex)
+				if (es->otherEntityNum != ENTITYNUM_NONE &&
+					es->otherEntityNum != cg.snap->ps.clientNum &&
+					es->otherEntityNum != cg.snap->ps.duelIndex)
 				{
 					doit = 0;
 				}
@@ -4694,11 +4714,11 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 			if (cg.snap->ps.duelInProgress)
 			{ // this client is dueling
 				// note special encoding:
-				//  otherentityNum has owner number
+				//  otherEntityNum has owner number
 				//  if owner num is ENTITYNUM_NONE then always play it
-				if (es->otherentityNum != ENTITYNUM_NONE &&
-					es->otherentityNum != cg.snap->ps.clientNum &&
-					es->otherentityNum != cg.snap->ps.duelIndex)
+				if (es->otherEntityNum != ENTITYNUM_NONE &&
+					es->otherEntityNum != cg.snap->ps.clientNum &&
+					es->otherEntityNum != cg.snap->ps.duelIndex)
 				{
 					doit = 0;
 				}
@@ -5246,7 +5266,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 	case EV_SHIELD_HIT:
 		DEBUGNAME("EV_SHIELD_HIT");
 		ByteToDir(es->eventParm, dir);
-		CG_PlayerShieldHit(es->otherentityNum, dir, es->time2);
+		CG_PlayerShieldHit(es->otherEntityNum, dir, es->time2);
 		break;
 
 	case EV_DEBUG_LINE:
@@ -5305,7 +5325,7 @@ void CG_CheckEvents(centity_t* cent)
 		// if this is a player event set the entity number of the client entity number
 		if (cent->currentState.eFlags & EF_PLAYER_EVENT)
 		{
-			cent->currentState.number = cent->currentState.otherentityNum;
+			cent->currentState.number = cent->currentState.otherEntityNum;
 		}
 
 		cent->previousEvent = 1;

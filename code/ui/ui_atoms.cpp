@@ -92,6 +92,12 @@ void UI_SetActiveMenu(const char* menuname, const char* menuID)
 
 	if (Q_stricmp(menuname, "mainMenu") == 0)
 	{
+		extern qboolean UI_JkoToJkaMenu();
+		if (UI_JkoToJkaMenu())
+		{
+			// the end of Jedi Outcast: on to the Jedi Academy character menu (2026-10-31)
+			return;
+		}
 		if (!ui_g_newgameplusJKA.integer && !ui_g_newgameplusJKO.integer)
 		{
 			UI_MainMenu();

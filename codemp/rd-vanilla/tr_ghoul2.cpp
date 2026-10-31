@@ -2831,6 +2831,8 @@ static void G2_ProcessGeneratedSurfaceBolts(CGhoul2Info& ghoul2, const mdxaBone_
 #endif
 }
 
+#include "tr_saberslice.h" // saber slice: R_SliceMetal, R_SliceResolvePlanes
+
 static void RenderSurfaces(CRenderSurface& RS) //also ended up just ripping right from SP.
 {
 #ifdef G2_PERFORMANCE_ANALYSIS
@@ -2958,6 +2960,25 @@ static void RenderSurfaces(CRenderSurface& RS) //also ended up just ripping righ
 			newSurf->surfaceData = surface;
 			newSurf->boneCache = RS.boneCache;
 			R_AddDrawSurf((surfaceType_t*)newSurf, (shader_t*)shader, RS.fogNum, qfalse);
+
+			// saber slice: draw the inside of a cut model (its back faces, only seen through the cut) in a glowing
+			// colour, so the cut face has exactly the body's shape (rend2 does this in its shaders)
+			if (tr.currentEntity && (tr.currentEntity->e.renderfx & RF_SABERSLICE) && tr.currentEntity->e.sliceCount > 0
+				&& shader->sort == SS_OPAQUE && shader->cullType == CT_FRONT_SIDED)
+			{
+				const float heat = tr.currentEntity->e.sliceHeat;
+				const int level = heat > 0.75f ? 0 : heat > 0.45f ? 1 : heat > 0.2f ? 2 : 3;
+				shader_t* inside = R_SliceMetal(tr.currentEntity->e) && tr.saberSliceMetalShader[level]
+					? tr.saberSliceMetalShader[level] // a metal body (super battle droid): hot metal
+					: tr.saberSliceInsideShader[level];
+				if (inside)
+				{
+					const auto insideSurf = new CRenderableSurface;
+					insideSurf->surfaceData = surface;
+					insideSurf->boneCache = RS.boneCache;
+					R_AddDrawSurf(reinterpret_cast<surfaceType_t*>(insideSurf), inside, RS.fogNum, qfalse);
+				}
+			}
 
 #ifdef _G2_GORE
 			if (RS.gore_set)
@@ -3860,6 +3881,11 @@ void R_AddGhoulSurfaces(trRefEntity_t* ent)
 			else
 			{
 				G2_TransformGhoulBones(ghoul2[i].mBlist, rootMatrix, ghoul2[i], currentTime);
+				// saber slice: place the cuts (sent in bone space) on the skeleton we draw this frame
+				if (i == 0 && ghoul2[0].mBoneCache && ghoul2[0].aHeader)
+				{
+					R_SliceResolvePlanes(ent->e, *ghoul2[0].mBoneCache, ghoul2[0].aHeader);
+				}
 			}
 			whichLod = G2_ComputeLOD(ent, ghoul2[i].currentModel, ghoul2[i].mLodBias);
 			G2_FindOverrideSurface(-1, ghoul2[i].mSlist); //reset the quick surface override lookup;
@@ -5057,9 +5083,236 @@ qjobs::Pool* R_RenderJobPool()
 
 //This is a slightly mangled version of the same function from the sof2sp base.
 //It provides a pretty significant performance increase over the existing one.
+
+/*
+==============
+Saber slice (Jedi Survivor style cuts), see tr_saberslice.h
+
+The vanilla renderer skins ghoul2 on the CPU, so the cut is done exactly here:
+every triangle of the surface that crosses a cut plane is clipped against it,
+triangles on the cut away side are dropped. The game draws the glowing cut caps.
+==============
+*/
+#include "tr_saberslice.h"
+
+static int G2_SliceDominantBone(const mdxmVertex_t* v, const int* piBoneReferences)
+{
+	const int numWeights = G2_GetVertWeights(v);
+	int best = 0;
+	float bestWeight = -1.0f;
+	float total = 0.0f;
+	for (int k = 0; k < numWeights; k++)
+	{
+		const float w = k < numWeights - 1 ? G2_GetVertBoneWeightNotSlow(v, k) : 1.0f - total;
+		total += w;
+		if (w > bestWeight)
+		{
+			bestWeight = w;
+			best = k;
+		}
+	}
+	return piBoneReferences[G2_GetVertBoneIndex(v, best)];
+}
+
+/*
+RB_SaberSliceSurface: clips the surface just written to tess (numVerts vertices from
+baseVertex, numIndexes indexes from baseIndex) against the entity's cut planes.
+origVert maps each tess vertex to its vertex in the mdxm surface (gore), or nullptr.
+Returns how many vertexes the caller should add to tess.numVertexes (the clip adds
+new ones after the surface's own) and sets outNumIndexes.
+*/
+static int RB_SaberSliceSurface(const CRenderableSurface* surf, const mdxmSurface_t* surface, const int baseVertex,
+	const int numVerts, const int baseIndex, const int numIndexes, const int* origVert, int* outNumIndexes)
+{
+	*outNumIndexes = numIndexes;
+
+	const trRefEntity_t* ent = backEnd.currentEntity;
+	if (!ent || !surface || !surf->boneCache || !R_SliceActive(ent->e) || !ent->e.ghoul2)
+	{
+		return numVerts;
+	}
+	CGhoul2Info_v& ghoul2 = *static_cast<CGhoul2Info_v*>(ent->e.ghoul2);
+	if (!ghoul2.IsValid() || ghoul2.size() < 1 || !ghoul2[0].mValid || !ghoul2[0].mBoneCache || !ghoul2[0].aHeader)
+	{
+		return numVerts;
+	}
+	CBoneCache& mainBones = *ghoul2[0].mBoneCache;
+	const sliceModes_t* m = R_SliceBuildModes(ent->e, mainBones, ghoul2[0].aHeader, tr.frameCount);
+	if (!m || numVerts > SHADER_MAX_VERTEXES)
+	{
+		return numVerts;
+	}
+
+	// a saber or gun bolted onto the model goes whole with one side
+	const bool boltOn = surf->boneCache != &mainBones;
+	unsigned char boltModes[MAX_SABER_SLICES] = {};
+	if (boltOn)
+	{
+		const float boltPos[3] = {
+			surf->boneCache->rootMatrix.matrix[0][3],
+			surf->boneCache->rootMatrix.matrix[1][3],
+			surf->boneCache->rootMatrix.matrix[2][3] };
+		R_SliceBoltOnModes(*m, mainBones, ghoul2[0].aHeader, boltPos, boltModes);
+	}
+
+	// per vertex value for each cut, > 0 = cut away
+	static float vd[SHADER_MAX_VERTEXES][MAX_SABER_SLICES];
+	static glIndex_t outIdx[SHADER_MAX_INDEXES];
+
+	const int* piBoneReferences = reinterpret_cast<const int*>(reinterpret_cast<const byte*>(surface) + surface->ofsBoneReferences);
+	const auto verts = reinterpret_cast<const mdxmVertex_t*>(reinterpret_cast<const byte*>(surface) + surface->ofsVerts);
+	bool anyCut = false;
+	bool anyKept = false;
+	for (int j = 0; j < numVerts; j++)
+	{
+		int bone = 0;
+		if (!boltOn)
+		{
+			const int ov = origVert ? origVert[j] : j;
+			bone = ov >= 0 && ov < surface->numVerts ? G2_SliceDominantBone(&verts[ov], piBoneReferences) : 0;
+			if (bone < 0 || bone >= m->numBones)
+			{
+				bone = 0;
+			}
+		}
+		bool kept = true;
+		for (int c = 0; c < m->numCuts; c++)
+		{
+			const unsigned char mode = boltOn ? boltModes[c] : m->mode[c][bone];
+			vd[j][c] = R_SliceValue(*m, c, mode, tess.xyz[baseVertex + j]);
+			if (vd[j][c] > 0.0f)
+			{
+				kept = false;
+			}
+		}
+		if (kept)
+		{
+			anyKept = true;
+		}
+		else
+		{
+			anyCut = true;
+		}
+	}
+	if (!anyCut)
+	{
+		return numVerts;
+	}
+	if (!anyKept)
+	{
+		*outNumIndexes = 0;
+		return numVerts;
+	}
+
+	int nextVert = numVerts; // local index of the next new vertex
+	int outCount = 0;
+	for (int t = 0; t + 2 < numIndexes; t += 3)
+	{
+		int poly[3 + MAX_SABER_SLICES * 2];
+		int polyCount = 3;
+		for (int k = 0; k < 3; k++)
+		{
+			poly[k] = static_cast<int>(tess.indexes[baseIndex + t + k]) - baseVertex;
+		}
+
+		bool dropped = false;
+		for (int c = 0; c < m->numCuts && !dropped; c++)
+		{
+			int numIn = 0;
+			for (int k = 0; k < polyCount; k++)
+			{
+				if (vd[poly[k]][c] <= 0.0f)
+				{
+					numIn++;
+				}
+			}
+			if (numIn == polyCount)
+			{
+				continue;
+			}
+			if (numIn == 0)
+			{
+				dropped = true;
+				break;
+			}
+
+			int out[3 + MAX_SABER_SLICES * 2];
+			int outN = 0;
+			for (int k = 0; k < polyCount && outN < static_cast<int>(ARRAY_LEN(out)) - 1; k++)
+			{
+				const int a = poly[k];
+				const int b = poly[(k + 1) % polyCount];
+				const float da = vd[a][c];
+				const float db = vd[b][c];
+				if (da <= 0.0f)
+				{
+					out[outN++] = a;
+				}
+				if ((da <= 0.0f) != (db <= 0.0f))
+				{
+					if (baseVertex + nextVert >= SHADER_MAX_VERTEXES - 1)
+					{
+						dropped = true; // no room for a new vertex: drop the triangle
+						break;
+					}
+					const float f = da / (da - db);
+					const int nv = nextVert++;
+					const int gA = baseVertex + a, gB = baseVertex + b, gN = baseVertex + nv;
+					for (int x = 0; x < 3; x++)
+					{
+						tess.xyz[gN][x] = tess.xyz[gA][x] + f * (tess.xyz[gB][x] - tess.xyz[gA][x]);
+						tess.normal[gN][x] = tess.normal[gA][x] + f * (tess.normal[gB][x] - tess.normal[gA][x]);
+					}
+					tess.xyz[gN][3] = 1.0f;
+					tess.normal[gN][3] = 0.0f;
+					VectorNormalize(tess.normal[gN]);
+					tess.texCoords[gN][0][0] = tess.texCoords[gA][0][0] + f * (tess.texCoords[gB][0][0] - tess.texCoords[gA][0][0]);
+					tess.texCoords[gN][0][1] = tess.texCoords[gA][0][1] + f * (tess.texCoords[gB][0][1] - tess.texCoords[gA][0][1]);
+					for (int x = 0; x < 4; x++)
+					{
+						tess.svars.colors[gN][x] = static_cast<byte>(tess.svars.colors[gA][x] + f * (tess.svars.colors[gB][x] - tess.svars.colors[gA][x]));
+					}
+					for (int cc = 0; cc < m->numCuts; cc++)
+					{
+						vd[nv][cc] = vd[a][cc] + f * (vd[b][cc] - vd[a][cc]);
+					}
+					vd[nv][c] = 0.0f;
+					out[outN++] = nv;
+				}
+			}
+			if (dropped || outN < 3)
+			{
+				dropped = true;
+				break;
+			}
+			memcpy(poly, out, sizeof(int) * outN);
+			polyCount = outN;
+		}
+		if (dropped)
+		{
+			continue;
+		}
+		for (int k = 1; k + 1 < polyCount; k++)
+		{
+			if (baseIndex + outCount + 3 > SHADER_MAX_INDEXES)
+			{
+				break;
+			}
+			outIdx[outCount++] = static_cast<glIndex_t>(baseVertex + poly[0]);
+			outIdx[outCount++] = static_cast<glIndex_t>(baseVertex + poly[k]);
+			outIdx[outCount++] = static_cast<glIndex_t>(baseVertex + poly[k + 1]);
+		}
+	}
+
+	memcpy(&tess.indexes[baseIndex], outIdx, sizeof(glIndex_t) * outCount);
+	*outNumIndexes = outCount;
+	return nextVert;
+}
+
 void RB_SurfaceGhoul(CRenderableSurface* surf)
 {
 	PROFILE_ZONE("Ghoul2 surface (skin + cloth)");
+	CRenderableSurface* const sliceSurf = surf; // surf is reused by the gore loop below
 #ifdef G2_PERFORMANCE_ANALYSIS
 	G2PerformanceTimer_RB_SurfaceGhoul.Start();
 #endif
@@ -5083,6 +5336,7 @@ void RB_SurfaceGhoul(CRenderableSurface* surf)
 		RB_CheckOverflow(numVerts, indexes);
 		indexes *= 3;
 
+		const int* goreMap = data; // gore vertex -> mdxm surface vertex
 		data += numVerts;
 
 		baseIndex = tess.numIndexes;
@@ -5167,8 +5421,11 @@ void RB_SurfaceGhoul(CRenderableSurface* surf)
 		{
 			*indexPtr++ = baseVertex + *triangles++;
 		}
-		tess.numIndexes += indexes;
-		tess.numVertexes += numVerts;
+		// saber slice: clip the gore marks with the body
+		int sliceNumIndexes = indexes;
+		const int sliceNumVerts = RB_SaberSliceSurface(sliceSurf, sliceSurf->surfaceData, baseVertex, numVerts, baseIndex, indexes, goreMap, &sliceNumIndexes);
+		tess.numIndexes += sliceNumIndexes;
+		tess.numVertexes += sliceNumVerts;
 		return;
 	}
 #endif
@@ -5298,7 +5555,13 @@ void RB_SurfaceGhoul(CRenderableSurface* surf)
 	}
 #endif
 
-	tess.numVertexes += surface->numVerts;
+	// saber slice: clip the surface against the cut planes (adds the new edge vertices)
+	{
+		int sliceNumIndexes = tess.numIndexes - baseIndex;
+		const int sliceNumVerts = RB_SaberSliceSurface(sliceSurf, surface, baseVertex, surface->numVerts, baseIndex, tess.numIndexes - baseIndex, nullptr, &sliceNumIndexes);
+		tess.numIndexes = baseIndex + sliceNumIndexes;
+		tess.numVertexes += sliceNumVerts;
+	}
 
 #ifdef G2_PERFORMANCE_ANALYSIS
 	G2Time_RB_SurfaceGhoul += G2PerformanceTimer_RB_SurfaceGhoul.End();
@@ -6114,4 +6377,4 @@ qboolean R_LoadMDXA(model_t* mod, void* buffer, const char* mod_name, qboolean& 
 	}
 #endif
 	return qtrue;
-}
+}

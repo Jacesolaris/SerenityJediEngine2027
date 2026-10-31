@@ -4106,6 +4106,20 @@ static void CreateExternalShaders(void) {
 	tr.projectionShadowShader = R_FindShader("projectionShadow", lightmapsNone, stylesDefault, qtrue);
 	tr.projectionShadowShader->sort = SS_STENCIL_SHADOW;
 	tr.sunShader = R_FindShader("sun", lightmapsNone, stylesDefault, qtrue);
+
+	// saber slice: the glowing inside of a cut model (shaders/saberslice.shader); missing shaders = no inside drawn
+	for (int i = 0; i < 4; i++)
+	{
+		char name[MAX_QPATH];
+		Com_sprintf(name, sizeof(name), "gfx/effects/saberslice_inside%i", i + 1);
+		tr.saberSliceInsideShader[i] = R_FindShader(name, lightmapsNone, stylesDefault, qtrue);
+		if (tr.saberSliceInsideShader[i] && tr.saberSliceInsideShader[i]->defaultShader)
+			tr.saberSliceInsideShader[i] = nullptr;
+		Com_sprintf(name, sizeof(name), "gfx/effects/saberslice_metal%i", i + 1);
+		tr.saberSliceMetalShader[i] = R_FindShader(name, lightmapsNone, stylesDefault, qtrue);
+		if (tr.saberSliceMetalShader[i] && tr.saberSliceMetalShader[i]->defaultShader)
+			tr.saberSliceMetalShader[i] = nullptr;
+	}
 }
 
 /*

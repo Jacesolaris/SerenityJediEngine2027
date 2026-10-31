@@ -818,9 +818,16 @@ struct EntityBlock
 	float fxVolumetricBase;
 	vec3_t modelLightDir;
 	float vertexLerp;
+	// saber slice (tr_saberslice.h): world space cut planes, +1/-1 per cut, number of cuts, glow 0..1
+	vec4_t slicePlanes[MAX_SABER_SLICES];
+	vec4_t sliceSign;
+	int sliceCount;
+	float sliceHeat;
+	float slicePad[2];
 	bool operator == (const EntityBlock& other) const
 	{
 		return (
+			this->sliceCount == 0 && other.sliceCount == 0 &&
 			Matrix16Compare(this->modelMatrix, other.modelMatrix) == qtrue &&
 			VectorCompare4(this->lightOrigin, other.lightOrigin) == qtrue &&
 			VectorCompare(this->ambientLight, other.ambientLight) == qtrue &&
@@ -846,6 +853,9 @@ struct ShaderInstanceBlock
 struct SkeletonBoneMatricesBlock
 {
 	mat3x4_t matrices[MAX_G2_BONES];
+	// saber slice: 2 bits per cut per bone (SLICE_KEEP / PLANE / GONE), 4 bones per uint.
+	// Only filled (and uploaded) for sliced models, read only when the Entity block has cuts.
+	uint32_t sliceModes[MAX_G2_BONES / 4];
 };
 
 struct TemporalBlock
@@ -918,6 +928,11 @@ enum
 	TB_SSAOMAP = 9,
 	NUM_TEXTURE_BUNDLES = 10
 };
+
+// saber slice cut face textures (tr_backend.cpp RB_DrawItems), units past the shader bundles
+constexpr int TB_SLICECAPSMAP = 10;
+constexpr int TB_SLICEBLOODMAP = 11;
+constexpr int TB_SLICEGLOWMAP = 12;
 
 typedef enum
 {
@@ -1563,6 +1578,10 @@ typedef enum
 	UNIFORM_GRASSPARAMS,
 	UNIFORM_GRASSWAVES,
 	UNIFORM_GRASSWAVEPARAMS,
+	UNIFORM_SLICEMOLTEN,
+	UNIFORM_SLICECAPSMAP,
+	UNIFORM_SLICEBLOODMAP,
+	UNIFORM_SLICEGLOWMAP,
 
 	UNIFORM_COUNT
 } uniform_t;
@@ -1593,6 +1612,9 @@ typedef struct shaderProgram_s
 
 	// uniform blocks
 	uint32_t uniformBlocks;
+
+	// saber slice: this program writes gl_ClipDistance[0..3] (skeletal generic/lightall/fog/velocity)
+	bool sliceClip;
 } shaderProgram_t;
 
 // trRefdef_t holds everything that comes in refdef_t,
@@ -2382,7 +2404,7 @@ struct bufferBinding_t
 
 // the renderer front end should never modify glstate_t
 typedef struct glstate_s {
-	int			currenttextures[NUM_TEXTURE_BUNDLES];
+	int			currenttextures[32]; // all units GL_SelectTexture allows (the saber slice caps use 10-12)
 	int			currenttmu;
 	int			texEnv[2];
 	int			faceCulling;
@@ -2410,6 +2432,7 @@ typedef struct glstate_s {
 	matrix_t        modelview;
 	matrix_t        projection;
 	matrix_t		modelviewProjection;
+	int				sliceClipCount;	// saber slice: GL_CLIP_DISTANCE0.. enabled
 } glstate_t;
 
 typedef enum {
@@ -2583,6 +2606,7 @@ typedef struct trGlobals_s {
 	image_t* dlightImage;	// inverse-quare highlight for projective adding
 	image_t* flareImage;
 	image_t* whiteImage;			// full of 0xff
+	image_t* saberSliceImages[3];	// saber slice cut face: caps, blood, glow (gfx/effects/saberslice_caps*), nullptr = procedural
 	image_t* whiteImage3D;
 	image_t* identityLightImage;	// full of tr.identityLightByte
 

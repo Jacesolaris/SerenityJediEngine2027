@@ -563,6 +563,9 @@ void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 void AddScore(const gentity_t* ent, const int score);
 qboolean SpotWouldTelefrag(const gentity_t* spot, team_t checkteam);
 void G_RemoveWeaponModels(gentity_t* ent);
+// weapon variants (2026-10-31, g_weapon.cpp): SJE guns on the base weapons, see weapons.h
+int G_WeaponVariantDamage(const gentity_t* inflictor, const gentity_t* attacker, int damage, int mod);
+void G_WeaponVariantThink(gentity_t* ent);
 void G_RemoveHolsterModels(gentity_t* ent);
 
 //

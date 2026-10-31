@@ -1796,7 +1796,7 @@ static void R_Register(void)
 	r_meshClothGust = ri.Cvar_Get("r_meshClothGust", "0.5", CVAR_ARCHIVE, "");
 	r_Ghoul2AnimSmooth = ri.Cvar_Get("r_ghoul2animsmooth", "0.3", CVAR_NONE, "");
 	r_Ghoul2UnSqashAfterSmooth = ri.Cvar_Get("r_ghoul2unsqashaftersmooth", "1", CVAR_NONE, "");
-	broadsword = ri.Cvar_Get("broadsword", "0", CVAR_ARCHIVE, "");
+	broadsword = ri.Cvar_Get("broadsword", "1", CVAR_ARCHIVE, "");
 	broadsword_kickbones = ri.Cvar_Get("broadsword_kickbones", "1", CVAR_NONE, "");
 	broadsword_kickorigin = ri.Cvar_Get("broadsword_kickorigin", "1", CVAR_NONE, "");
 	broadsword_dontstopanim = ri.Cvar_Get("broadsword_dontstopanim", "0", CVAR_NONE, "");

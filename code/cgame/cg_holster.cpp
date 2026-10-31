@@ -184,6 +184,12 @@ static int Hls_PlaceType(const hlsGun_t* gun, const int place)
 static CGhoul2Info_v* hlsWeaponG2[WP_NUM_WEAPONS];
 static qhandle_t hlsWeaponModel[WP_NUM_WEAPONS];
 static qboolean hlsWeaponTried[WP_NUM_WEAPONS];
+// The gun looks (weapon variants, 2026-10-31): the variant's world model instead (the player's owned look for that
+// weapon, G_Shop_HolsterLook; an NPC's own gun look when the holstered gun is that weapon)
+static CGhoul2Info_v* hlsVariantG2[MAX_WEAPON_VARIANTS];
+static qhandle_t hlsVariantModel[MAX_WEAPON_VARIANTS];
+static qboolean hlsVariantTried[MAX_WEAPON_VARIANTS];
+extern int G_Shop_HolsterLook(const gentity_t* ent, int weapon);
 
 // ------------------------------------------------------------------------------------------------
 // holster.cfg
@@ -407,6 +413,52 @@ static CGhoul2Info_v* Hls_WeaponG2(const int weapon)
 	return hlsWeaponG2[weapon];
 }
 
+// The look's model for the holster (created the first time it is needed; nullptr: draw the stock gun)
+static CGhoul2Info_v* Hls_VariantG2(const int look)
+{
+	if (look <= 0 || look >= MAX_WEAPON_VARIANTS || look >= bgNumWeaponVariants)
+	{
+		return nullptr;
+	}
+	if (!hlsVariantTried[look])
+	{
+		hlsVariantTried[look] = qtrue;
+		const char* modelFile = bgWeaponVariants[look].worldModel;
+		const qhandle_t model = modelFile[0] ? cgi_R_RegisterModel(modelFile) : 0;
+		if (model)
+		{
+			const auto g2 = new CGhoul2Info_v;
+			if (gi.G2API_InitGhoul2Model(*g2, modelFile, model, NULL_HANDLE, NULL_HANDLE, 0, 0) >= 0)
+			{
+				hlsVariantG2[look] = g2;
+				hlsVariantModel[look] = model;
+			}
+			else
+			{
+				delete g2;
+			}
+		}
+	}
+	return hlsVariantG2[look];
+}
+
+// The look of a holstered gun: the player's owned one for that weapon, an NPC's own gun look (kept while he holds
+// something else) when it is for that weapon; 0 = the stock gun
+static int Hls_Look(const centity_t* cent, const int weapon)
+{
+	const gentity_t* gent = cent->gent;
+	if (!gent || !gent->client)
+	{
+		return 0;
+	}
+	if (cent->currentState.number == 0)
+	{
+		return G_Shop_HolsterLook(gent, weapon);
+	}
+	const int look = gent->client->ps.weaponVariant;
+	return look && BG_GetWeaponVariant(look, weapon) ? look : 0;
+}
+
 // Applies a rotation (degrees) about one axis (PITCH, YAW or ROLL) to the axis (multiplayer's ApplyAxisRotation)
 static void Hls_RotateAxis(vec3_t axis[3], const int rotType, const float value)
 {
@@ -456,7 +508,7 @@ static void Hls_RotateAxis(vec3_t axis[3], const int rotType, const float value)
 
 // Draws one gun in one holster place (multiplayer's CG_HolsteredWeaponRender)
 static void Hls_Render(centity_t* cent, const holsterModel_t* model, const int holsterType, const int weapon,
-	const vec3_t g2Angles, const vec3_t origin, const int playerRenderfx, const float shadowPlane,
+	const vec3_t g2Angles, const vec3_t origin, const int playerRenderfx, const float shadowPlane, const int look,
 	const float pullIn = 0.0f)
 {
 	holster_t h = model->data[holsterType];
@@ -479,7 +531,13 @@ static void Hls_Render(centity_t* cent, const holsterModel_t* model, const int h
 		return; // not set up (or disabled) for this model
 	}
 
-	CGhoul2Info_v* weaponG2 = Hls_WeaponG2(weapon);
+	CGhoul2Info_v* weaponG2 = Hls_VariantG2(look); // the gun look, else the stock gun
+	qhandle_t weaponModel = weaponG2 ? hlsVariantModel[look] : 0;
+	if (!weaponG2)
+	{
+		weaponG2 = Hls_WeaponG2(weapon);
+		weaponModel = hlsWeaponModel[weapon];
+	}
 	if (!weaponG2)
 	{
 		return;
@@ -537,7 +595,7 @@ static void Hls_Render(centity_t* cent, const holsterModel_t* model, const int h
 	// (the world's origin height) cast the gun's shadow far off on any floor above or below that
 	ent.renderfx = (playerRenderfx & (RF_THIRD_PERSON | RF_SHADOW_PLANE | RF_SHADOW_ONLY)) | RF_LIGHTING_ORIGIN;
 	ent.shadowPlane = shadowPlane;
-	ent.hModel = hlsWeaponModel[weapon];
+	ent.hModel = weaponModel;
 	ent.ghoul2 = weaponG2;
 	ent.radius = 64.0f;
 	if (cent->currentState.powerups & 1 << PW_CLOAKED)
@@ -595,7 +653,8 @@ void CG_HolsteredWeapons(centity_t* cent, const vec3_t g2Angles, const vec3_t or
 		{
 			if (gun.right == cg_holsterdebug.integer || gun.left == cg_holsterdebug.integer)
 			{
-				Hls_Render(cent, model, cg_holsterdebug.integer, gun.weapon, g2Angles, origin, playerRenderfx, shadowPlane);
+				Hls_Render(cent, model, cg_holsterdebug.integer, gun.weapon, g2Angles, origin, playerRenderfx, shadowPlane,
+					Hls_Look(cent, gun.weapon));
 				break;
 			}
 		}
@@ -719,7 +778,8 @@ void CG_HolsteredWeapons(centity_t* cent, const vec3_t g2Angles, const vec3_t or
 		}
 		if (const hlsGun_t* gun = Hls_Gun(weapon))
 		{
-			Hls_Render(cent, model, Hls_PlaceType(gun, p), weapon, g2Angles, origin, playerRenderfx, shadowPlane);
+			Hls_Render(cent, model, Hls_PlaceType(gun, p), weapon, g2Angles, origin, playerRenderfx, shadowPlane,
+				Hls_Look(cent, weapon));
 		}
 	}
 	// not drawn while the pistol is in his hand: the bryar pistol selected as a weapon, or the saber in the blaster
@@ -727,7 +787,7 @@ void CG_HolsteredWeapons(centity_t* cent, const vec3_t g2Angles, const vec3_t or
 	if (blasterHip && inHand != WP_BRYAR_PISTOL && !(inHand == WP_SABER && client->ps.saberAnimLevel == SS_BLASTER
 		&& client->ps.saber[0].Active())) // SS_BLASTER (Jace 2026-10-29): saber off = pistol on the hip
 	{
-		Hls_Render(cent, model, HLR_BRYARPISTOL_L, WP_BRYAR_PISTOL, g2Angles, origin, playerRenderfx, shadowPlane,
+		Hls_Render(cent, model, HLR_BRYARPISTOL_L, WP_BRYAR_PISTOL, g2Angles, origin, playerRenderfx, shadowPlane, 0,
 			cg_blasterHipPullIn.value); // SS_BLASTER (2026-10-15): closer to the body
 		hlsBlasterHip[cent->currentState.number] = qtrue;
 	}
@@ -771,6 +831,17 @@ void CG_HolsterShutdown()
 		}
 		hlsWeaponModel[i] = 0;
 		hlsWeaponTried[i] = qfalse;
+	}
+	for (int i = 0; i < MAX_WEAPON_VARIANTS; i++)
+	{
+		if (hlsVariantG2[i])
+		{
+			gi.G2API_CleanGhoul2Models(*hlsVariantG2[i]);
+			delete hlsVariantG2[i];
+			hlsVariantG2[i] = nullptr;
+		}
+		hlsVariantModel[i] = 0;
+		hlsVariantTried[i] = qfalse;
 	}
 	hlsNumModels = 0; // holster.cfg files are read again (they may have changed)
 	memset(hlsPlaces, 0, sizeof hlsPlaces);

@@ -90,6 +90,14 @@ int MenuFontToHandle(int i_menu_font);
 #define PZK_MENU_BOARD	"sje_pazaakholo"
 #define PZK_MENU_CARDS	"sje_cardselholo"
 
+// the shop and the talk question (2026-10-31, at the end of the file)
+static qboolean UI_Shop_OwnerDraw(int ownerDraw, float x, float y, float w, float h);
+static qboolean UI_Shop_Script(const char* name, void* argsPtr);
+static void UI_Shop_Process(int argc, const char** argv);
+#ifdef PZK_SP
+static qboolean UI_Shop_Key(int key);
+#endif
+
 static void Pazaak_SendAction(const char* text);
 
 /*
@@ -1019,6 +1027,10 @@ static void SJE_Pazaak_DrawHowTo(const float x, float y, const float w)
 qboolean UI_Pazaak_OwnerDraw(const int ownerDraw, const float x, const float y, const float w, const float h, const qhandle_t shader)
 {
 	int type = 0, id = 0;
+	if (UI_Shop_OwnerDraw(ownerDraw, x, y, w, h))
+	{
+		return qtrue; // the shop (3000+)
+	}
 	if (ownerDraw < PZK_OD_BASE || ownerDraw >= PZK_OD_BASE + 1000)
 	{
 		return qfalse;
@@ -1181,6 +1193,10 @@ qboolean UI_Pazaak_Script(const char* name, void* argsPtr)
 	int a = 0, b = 0;
 	menuDef_t* menu = NULL;
 
+	if (!Q_stricmpn(name, "shop_", 5))
+	{
+		return UI_Shop_Script(name, argsPtr); // the shop and the talk question
+	}
 	if (Q_stricmpn(name, "pzk_", 4))
 	{
 		return qfalse;
@@ -1968,6 +1984,16 @@ qboolean UI_Pazaak_ConsoleCommand(const char* cmd)
 		trap->Cmd_Argv(i + 1, args[i], sizeof(args[i]));
 		argv[i] = args[i];
 	}
+	if (argc > 0 && !Q_stricmp(argv[0], "shop"))
+	{
+		UI_Shop_Process(argc - 1, argv + 1); // "pzk shop <open|state|close> ..." (g_pazaak.c shop code)
+		return qtrue;
+	}
+	if (argc > 0 && !Q_stricmp(argv[0], "talk"))
+	{
+		UI_Shop_Process(argc, argv); // "pzk talk <question> ..."
+		return qtrue;
+	}
 	UI_Pazaak_Process(argc, argv);
 	return qtrue;
 }
@@ -2130,4 +2156,746 @@ void UI_Pazaak_Frame(void)
 	Pzk_Frame(&pzkLocal, now);
 }
 
+#endif
+
+/*
+===========================================================================
+The shop and the talk question (2026-10-31, DH: buy the SJE guns like pazaak is played; SJE SP + MP)
+
+The game decides (g_pazaak shop code), this shows it:
+- the shop menu "sje_shop" (ui/pazaak/sje_shop.menu, MP sje_shop_mp.menu): tabs Pistols / Rifles / Heavy /
+  Grenades / Supplies, 9 rows a page (icon, name, price, owned / in use), the credits and the last message.
+  The list comes from ext_data/sje_weaponvariants.dat, read here in the same order as the game reads it (the row's
+  variant number is what "shopbuy" sends). Supplies: an ammo refill, a bacta canister / medpac.
+- the talk question "sje_talk" (ui/pazaak/sje_talk.menu, MP sje_talk_mp.menu), the pazaak challenge look:
+  "Challenge to pazaak" / "Buy items" / "Leave" (keys 1 2 3, escape = leave in SP), answered with "shoptalk N".
+The game's words: SP the console command "uishop <what> ...", MP "uipzk shop <what> ..." / "uipzk talk ..." (the
+"pzk" server command, passed on by the cgame):
+- open / state <credits> <owned bits> <equipped bits> <ammo price> <bacta price> "<message>"
+- talk "<question>" <pazaak allowed>
+- close
+SP pauses the world for the talk question only: the shop needs the game to answer the buys.
+===========================================================================
+*/
+
+#define SHOP_FILE			"ext_data/sje_weaponvariants.dat"
+#ifdef PZK_SP
+#define SHOP_MENU_FILE		"ui/pazaak/sje_shop.menu"
+#define SHOP_TALK_FILE		"ui/pazaak/sje_talk.menu"
+#else
+#define SHOP_MENU_FILE		"ui/pazaak/sje_shop_mp.menu"
+#define SHOP_TALK_FILE		"ui/pazaak/sje_talk_mp.menu"
+#endif
+#define SHOP_MENU			"sje_shop"
+#define SHOP_TALK_MENU		"sje_talk"
+#define SHOP_OD_BASE		3000	// ownerdraws: + type * 100 + slot
+#define SHOP_OD_HEADER		0		// 0 = title, 1 = credits, 2 = message, 3 = page
+#define SHOP_OD_TAB			1		// 0..SHOP_NUM_CATS - 1
+#define SHOP_OD_ROW			2		// 0..SHOP_ROWS - 1
+#define SHOP_ROWS			9
+#define SHOP_NUM_CATS		5
+#define SHOP_CAT_SUPPLIES	4
+#define SHOP_MAX_ITEMS		256
+#define SHOP_ITEM_AMMO_ID	1000	// = SHOP_ITEM_AMMO / SHOP_ITEM_BACTA of the game
+#define SHOP_ITEM_BACTA_ID	1001
+
+typedef struct
+{
+	int id; // variant number (or SHOP_ITEM_*_ID)
+	int cat;
+	int price; // 0: the game's default (the menu shows the default too)
+	char name[64];
+	char icon[MAX_QPATH];
+	qhandle_t iconShader;
+	int iconTried;
+} shopItem_t;
+
+static shopItem_t shopItems[SHOP_MAX_ITEMS];
+static int shopNumItems = -1; // -1 = the file was not read yet
+static int shopOpen = 0, shopTalkOpen = 0;
+static int shopCat = 0, shopPage = 0, shopHover = -1, shopTabHover = -1;
+static int shopCredits = 0, shopAmmoPrice = 0, shopBactaPrice = 0;
+static unsigned int shopOwnedBits[8], shopEquipBits[8];
+static char shopMessage[128];
+static qhandle_t shopWhite = 0;
+#ifndef PZK_SP
+static char shopFileBuf[262144];
+#endif
+
+static void Shop_SendCmd(const char* text);
+
+static const char* shopCatNames[SHOP_NUM_CATS] = { "Pistols", "Rifles", "Heavy", "Grenades", "Supplies" };
+
+// The tab of a base weapon name of the file ("WP_BLASTER"...), -1 = not sold
+static int Shop_CatOf(const char* base)
+{
+	static const char* cats[][2] = {
+		{ "WP_BRYAR_PISTOL", "0" }, { "WP_BLASTER_PISTOL", "0" }, { "WP_BRYAR_OLD", "0" },
+		{ "WP_BLASTER", "1" }, { "WP_DISRUPTOR", "1" }, { "WP_BOWCASTER", "1" },
+		{ "WP_REPEATER", "2" }, { "WP_DEMP2", "2" }, { "WP_FLECHETTE", "2" }, { "WP_ROCKET_LAUNCHER", "2" },
+		{ "WP_CONCUSSION", "2" }, { "WP_THERMAL", "3" }
+	};
+	int i;
+	for (i = 0; i < (int)(sizeof(cats) / sizeof(cats[0])); i++)
+	{
+		if (!Q_stricmp(base, cats[i][0]))
+		{
+			return cats[i][1][0] - '0';
+		}
+	}
+	return -1;
+}
+
+// A small tokenizer for the variant file: words, "quoted strings", { }, // and /* */ comments
+static const char* Shop_Token(const char** p, char* out, const int size)
+{
+	const char* s = *p;
+	int n = 0;
+
+	out[0] = 0;
+	for (;;)
+	{
+		while (*s && (unsigned char)*s <= ' ')
+		{
+			s++;
+		}
+		if (s[0] == '/' && s[1] == '/')
+		{
+			while (*s && *s != '\n')
+			{
+				s++;
+			}
+			continue;
+		}
+		if (s[0] == '/' && s[1] == '*')
+		{
+			s += 2;
+			while (*s && !(s[0] == '*' && s[1] == '/'))
+			{
+				s++;
+			}
+			if (*s)
+			{
+				s += 2;
+			}
+			continue;
+		}
+		break;
+	}
+	if (!*s)
+	{
+		*p = s;
+		return NULL;
+	}
+	if (*s == '"')
+	{
+		s++;
+		while (*s && *s != '"')
+		{
+			if (n < size - 1)
+			{
+				out[n++] = *s;
+			}
+			s++;
+		}
+		if (*s)
+		{
+			s++;
+		}
+	}
+	else
+	{
+		while (*s && (unsigned char)*s > ' ')
+		{
+			if (n < size - 1)
+			{
+				out[n++] = *s;
+			}
+			s++;
+		}
+	}
+	out[n] = 0;
+	*p = s;
+	return out;
+}
+
+static void Shop_ParseFile(const char* text)
+{
+	const char* p = text;
+	char tok[MAX_QPATH], key[64];
+	int variant = 0;
+
+	while (Shop_Token(&p, tok, sizeof(tok)))
+	{
+		// <classname> { key value ... }: every block is a variant, numbered from 1 in file order (as the game does)
+		char base[64];
+		shopItem_t item;
+
+		if (!Shop_Token(&p, tok, sizeof(tok)) || Q_stricmp(tok, "{"))
+		{
+			break;
+		}
+		variant++;
+		memset(&item, 0, sizeof(item));
+		base[0] = 0;
+		item.id = variant;
+		while (Shop_Token(&p, key, sizeof(key)) && Q_stricmp(key, "}"))
+		{
+			if (!Shop_Token(&p, tok, sizeof(tok)))
+			{
+				break;
+			}
+			if (!Q_stricmp(key, "name"))
+			{
+				Q_strncpyz(item.name, tok, sizeof(item.name));
+			}
+			else if (!Q_stricmp(key, "base"))
+			{
+				Q_strncpyz(base, tok, sizeof(base));
+			}
+			else if (!Q_stricmp(key, "icon"))
+			{
+				Q_strncpyz(item.icon, tok, sizeof(item.icon));
+			}
+			else if (!Q_stricmp(key, "price"))
+			{
+				item.price = atoi(tok);
+			}
+		}
+		item.cat = Shop_CatOf(base);
+		if (item.cat < 0 || variant >= 256 || shopNumItems >= SHOP_MAX_ITEMS - 2)
+		{
+			continue;
+		}
+		if (item.price <= 0)
+		{
+			item.price = item.cat == 3 ? 150 : 300; // BG_WeaponVariantPrice's default
+		}
+		if (!item.name[0])
+		{
+			Q_strncpyz(item.name, "?", sizeof(item.name));
+		}
+		shopItems[shopNumItems++] = item;
+	}
+}
+
+static void Shop_LoadItems(void)
+{
+	shopItem_t* it;
+
+	if (shopNumItems >= 0)
+	{
+		return;
+	}
+	shopNumItems = 0;
+	{
+#ifdef PZK_SP
+		char* buf = NULL;
+		const int len = ui.FS_ReadFile(SHOP_FILE, (void**)&buf);
+		if (len > 0 && buf)
+		{
+			Shop_ParseFile(buf);
+		}
+		if (buf)
+		{
+			ui.FS_FreeFile(buf);
+		}
+#else
+		fileHandle_t f = 0;
+		const int len = trap->FS_Open(SHOP_FILE, &f, FS_READ);
+		if (len > 0 && len < (int)sizeof(shopFileBuf) && f)
+		{
+			trap->FS_Read(shopFileBuf, len, f);
+			shopFileBuf[len] = 0;
+			Shop_ParseFile(shopFileBuf);
+		}
+		if (f)
+		{
+			trap->FS_Close(f);
+		}
+#endif
+	}
+	// supplies
+	it = &shopItems[shopNumItems++];
+	memset(it, 0, sizeof(*it));
+	it->id = SHOP_ITEM_AMMO_ID;
+	it->cat = SHOP_CAT_SUPPLIES;
+	Q_strncpyz(it->name, "Ammo refill (all your guns)", sizeof(it->name));
+	Q_strncpyz(it->icon, "gfx/hud/i_icon_ammo", sizeof(it->icon));
+	it = &shopItems[shopNumItems++];
+	memset(it, 0, sizeof(*it));
+	it->id = SHOP_ITEM_BACTA_ID;
+	it->cat = SHOP_CAT_SUPPLIES;
+#ifdef PZK_SP
+	Q_strncpyz(it->name, "Bacta canister", sizeof(it->name));
+	Q_strncpyz(it->icon, "gfx/hud/i_icon_bacta", sizeof(it->icon));
+#else
+	Q_strncpyz(it->name, "Medpac", sizeof(it->name));
+	Q_strncpyz(it->icon, "gfx/hud/i_icon_medkit", sizeof(it->icon));
+#endif
+}
+
+static int Shop_CatCount(const int cat)
+{
+	int i, n = 0;
+	for (i = 0; i < shopNumItems; i++)
+	{
+		if (shopItems[i].cat == cat)
+		{
+			n++;
+		}
+	}
+	return n;
+}
+
+static int Shop_NumPages(void)
+{
+	const int n = Shop_CatCount(shopCat);
+	return n > 0 ? (n + SHOP_ROWS - 1) / SHOP_ROWS : 1;
+}
+
+// The item on this row of the page (NULL: empty row)
+static shopItem_t* Shop_RowItem(const int row)
+{
+	int i, n = 0;
+	const int want = shopPage * SHOP_ROWS + row;
+
+	for (i = 0; i < shopNumItems; i++)
+	{
+		if (shopItems[i].cat != shopCat)
+		{
+			continue;
+		}
+		if (n++ == want)
+		{
+			return &shopItems[i];
+		}
+	}
+	return NULL;
+}
+
+static int Shop_Bit(const unsigned int* bits, const int v)
+{
+	return v > 0 && v < 256 && bits[v >> 5] & 1u << (v & 31) ? 1 : 0;
+}
+
+static int Shop_ItemPrice(const shopItem_t* it)
+{
+	if (it->id == SHOP_ITEM_AMMO_ID)
+	{
+		return shopAmmoPrice;
+	}
+	if (it->id == SHOP_ITEM_BACTA_ID)
+	{
+		return shopBactaPrice;
+	}
+	return it->price;
+}
+
+static void Shop_ReadBits(const char* hex, unsigned int* bits)
+{
+	int i, j;
+	memset(bits, 0, sizeof(unsigned int) * 8);
+	for (i = 0; i < 8 && hex; i++)
+	{
+		unsigned int w = 0;
+		for (j = 0; j < 8; j++)
+		{
+			const char c = hex[i * 8 + j];
+			if (!c)
+			{
+				return;
+			}
+			w = w << 4 | (unsigned int)(c >= 'a' ? c - 'a' + 10 : c >= 'A' ? c - 'A' + 10 : c - '0');
+		}
+		bits[i] = w;
+	}
+}
+
+static void Shop_CloseMenu(const int tellGame)
+{
+	if (!shopOpen)
+	{
+		return;
+	}
+	shopOpen = 0;
+	shopHover = shopTabHover = -1;
+	Menus_CloseByName(SHOP_MENU);
+	PZK_SetCatcher(PZK_GetCatcher() & ~KEYCATCH_UI);
+	if (tellGame)
+	{
+		Shop_SendCmd("shopclosed\n");
+	}
+}
+
+static void Shop_OpenMenu(void)
+{
+	menuDef_t* menu = Menus_FindByName(SHOP_MENU);
+	if (!menu)
+	{
+		UI_ParseMenu(SHOP_MENU_FILE); // not in the menu lists, load it on demand
+		menu = Menus_FindByName(SHOP_MENU);
+	}
+	if (!menu)
+	{
+		Com_Printf("Shop: could not load %s\n", SHOP_MENU_FILE);
+		return;
+	}
+	if (!shopOpen)
+	{
+		shopPage = 0;
+	}
+	Menus_ActivateByName(SHOP_MENU);
+	PZK_SetCatcher(PZK_GetCatcher() | KEYCATCH_UI);
+	shopOpen = 1;
+}
+
+static void Shop_TalkClose(void)
+{
+	if (!shopTalkOpen)
+	{
+		return;
+	}
+	shopTalkOpen = 0;
+	Menus_CloseByName(SHOP_TALK_MENU);
+	PZK_SetCatcher(PZK_GetCatcher() & ~KEYCATCH_UI);
+#ifdef PZK_SP
+	PZK_CvarSet("cl_paused", "0");
+#endif
+}
+
+static void Shop_SendCmd(const char* text)
+{
+#ifdef PZK_SP
+	ui.Cmd_ExecuteText(EXEC_APPEND, text);
+#else
+	trap->Cmd_ExecuteText(EXEC_APPEND, text);
+#endif
+}
+
+static void Shop_TalkAnswer(const int answer)
+{
+	if (!shopTalkOpen)
+	{
+		return;
+	}
+	Shop_TalkClose();
+	Shop_SendCmd(va("shoptalk %i\n", answer));
+}
+
+static void Shop_TalkOpen(const char* text)
+{
+	menuDef_t* menu = Menus_FindByName(SHOP_TALK_MENU);
+	if (!menu)
+	{
+		UI_ParseMenu(SHOP_TALK_FILE);
+		menu = Menus_FindByName(SHOP_TALK_MENU);
+	}
+	if (!menu)
+	{
+		Com_Printf("Shop: could not load %s\n", SHOP_TALK_FILE);
+		Shop_SendCmd("shoptalk 0\n");
+		return;
+	}
+	PZK_CvarSet("ui_shopTalk", text && text[0] ? text : "What do you want to do?");
+	Menus_ActivateByName(SHOP_TALK_MENU);
+	PZK_SetCatcher(PZK_GetCatcher() | KEYCATCH_UI);
+#ifdef PZK_SP
+	PZK_CvarSet("cl_paused", "1"); // the world waits for the answer
+#endif
+	shopTalkOpen = 1;
+}
+
+// The game's words: argv[0] = open / state / talk / close
+static void UI_Shop_Process(const int argc, const char** argv)
+{
+	if (argc < 1)
+	{
+		return;
+	}
+	if (!Q_stricmp(argv[0], "talk"))
+	{
+		Shop_TalkOpen(argc > 1 ? argv[1] : "");
+		return;
+	}
+	if (!Q_stricmp(argv[0], "close"))
+	{
+		Shop_CloseMenu(0);
+		Shop_TalkClose();
+		return;
+	}
+	if (Q_stricmp(argv[0], "open") && Q_stricmp(argv[0], "state"))
+	{
+		return;
+	}
+	Shop_LoadItems();
+	shopCredits = argc > 1 ? atoi(argv[1]) : 0;
+	Shop_ReadBits(argc > 2 ? argv[2] : "", shopOwnedBits);
+	Shop_ReadBits(argc > 3 ? argv[3] : "", shopEquipBits);
+	shopAmmoPrice = argc > 4 ? atoi(argv[4]) : 0;
+	shopBactaPrice = argc > 5 ? atoi(argv[5]) : 0;
+	Q_strncpyz(shopMessage, argc > 6 ? argv[6] : "", sizeof(shopMessage));
+	if (!Q_stricmp(argv[0], "open"))
+	{
+		Shop_OpenMenu();
+	}
+}
+
+/*
+--------------------------
+Drawing
+--------------------------
+*/
+
+static void Shop_Fill(const float x, const float y, const float w, const float h, const float* color)
+{
+	if (!shopWhite)
+	{
+		shopWhite = PZK_RegisterShader("white");
+	}
+	PZK_SetColor(color);
+	PZK_DrawPic(x, y, w, h, shopWhite);
+	PZK_SetColor(NULL);
+}
+
+static void Shop_Text(const float x, const float y, const char* text, const float* color, const float scale, const int align)
+{
+	const int font = PZK_DefaultFont();
+	float tx = x;
+	if (align)
+	{
+		const float w = PZK_TextWidth(text, font, 1.0f) * scale;
+		tx = align == 1 ? x - w * 0.5f : x - w;
+	}
+	PZK_DrawText(tx, y, text, (float*)color, font, scale);
+}
+
+static void Shop_DrawRow(const int row, const float x, const float y, const float w, const float h)
+{
+	static const float bg[4] = { 0.10f, 0.14f, 0.20f, 0.85f };
+	static const float bgHover[4] = { 0.25f, 0.35f, 0.50f, 0.95f };
+	static const float white[4] = { 1, 1, 1, 1 };
+	static const float gold[4] = { 1.0f, 0.8f, 0.2f, 1 };
+	static const float green[4] = { 0.4f, 1.0f, 0.4f, 1 };
+	static const float grey[4] = { 0.6f, 0.6f, 0.6f, 1 };
+	static const float red[4] = { 1.0f, 0.4f, 0.35f, 1 };
+	shopItem_t* it = Shop_RowItem(row);
+	const char* status;
+	const float* statusColor;
+	int price;
+
+	if (!it)
+	{
+		return;
+	}
+	Shop_Fill(x, y, w, h, row == shopHover ? bgHover : bg);
+	if (!it->iconTried)
+	{
+		it->iconTried = 1;
+		it->iconShader = it->icon[0] ? PZK_RegisterShader(it->icon) : 0;
+	}
+	if (it->iconShader)
+	{
+		PZK_DrawPic(x + 4, y + 2, (h - 4) * 2.0f, h - 4, it->iconShader);
+	}
+	Shop_Text(x + 12 + (h - 4) * 2.0f, y + h * 0.5f - 8, it->name, white, 0.55f, 0);
+
+	price = Shop_ItemPrice(it);
+	if (it->id < SHOP_ITEM_AMMO_ID && it->cat != 3 && Shop_Bit(shopEquipBits, it->id))
+	{
+		status = "In use";
+		statusColor = green;
+	}
+	else if (it->id < SHOP_ITEM_AMMO_ID && it->cat != 3 && Shop_Bit(shopOwnedBits, it->id))
+	{
+		status = "Owned: use";
+		statusColor = grey;
+	}
+	else
+	{
+		status = va("%i cr%s", price, it->cat == 3 ? " (x3)" : "");
+		statusColor = shopCredits >= price ? gold : red;
+		if (it->cat == 3 && Shop_Bit(shopEquipBits, it->id))
+		{
+			status = va("%i cr (x3) - throwing", price);
+		}
+	}
+	Shop_Text(x + w - 8, y + h * 0.5f - 8, status, statusColor, 0.55f, 2);
+}
+
+static qboolean UI_Shop_OwnerDraw(const int ownerDraw, const float x, const float y, const float w, const float h)
+{
+	static const float white[4] = { 1, 1, 1, 1 };
+	static const float gold[4] = { 1.0f, 0.8f, 0.2f, 1 };
+	static const float tabBg[4] = { 0.10f, 0.14f, 0.20f, 0.85f };
+	static const float tabOn[4] = { 0.30f, 0.45f, 0.65f, 1.0f };
+	static const float tabHover[4] = { 0.20f, 0.30f, 0.45f, 0.95f };
+	const int type = (ownerDraw - SHOP_OD_BASE) / 100;
+	const int id = (ownerDraw - SHOP_OD_BASE) % 100;
+
+	if (ownerDraw < SHOP_OD_BASE || ownerDraw >= SHOP_OD_BASE + 1000)
+	{
+		return qfalse;
+	}
+	Shop_LoadItems();
+	switch (type)
+	{
+	case SHOP_OD_HEADER:
+		if (id == 0)
+		{
+			Shop_Text(x, y, "Shop", gold, 0.8f, 0);
+		}
+		else if (id == 1)
+		{
+			Shop_Text(x + w, y, va("Credits: %i", shopCredits), gold, 0.7f, 2);
+		}
+		else if (id == 2)
+		{
+			Shop_Text(x, y, shopMessage, white, 0.55f, 0);
+		}
+		else if (id == 3)
+		{
+			Shop_Text(x + w * 0.5f, y, va("Page %i / %i", shopPage + 1, Shop_NumPages()), white, 0.55f, 1);
+		}
+		break;
+	case SHOP_OD_TAB:
+		if (id >= 0 && id < SHOP_NUM_CATS)
+		{
+			Shop_Fill(x, y, w, h, id == shopCat ? tabOn : id == shopTabHover ? tabHover : tabBg);
+			Shop_Text(x + w * 0.5f, y + h * 0.5f - 8, shopCatNames[id], id == shopCat ? gold : white, 0.6f, 1);
+		}
+		break;
+	case SHOP_OD_ROW:
+		if (id >= 0 && id < SHOP_ROWS)
+		{
+			Shop_DrawRow(id, x, y, w, h);
+		}
+		break;
+	default:
+		break;
+	}
+	return qtrue;
+}
+
+/*
+--------------------------
+Scripts ("uiScript shop_*") and keys
+--------------------------
+*/
+
+static qboolean UI_Shop_Script(const char* name, void* argsPtr)
+{
+	pzkArgs_t args = (pzkArgs_t)argsPtr;
+	int a = 0, b = 0;
+
+	if (!Q_stricmp(name, "shop_cat"))
+	{
+		if (Int_Parse(args, &a) && a >= 0 && a < SHOP_NUM_CATS)
+		{
+			shopCat = a;
+			shopPage = 0;
+		}
+	}
+	else if (!Q_stricmp(name, "shop_page"))
+	{
+		if (Int_Parse(args, &a))
+		{
+			shopPage += a;
+			if (shopPage >= Shop_NumPages())
+			{
+				shopPage = 0;
+			}
+			else if (shopPage < 0)
+			{
+				shopPage = Shop_NumPages() - 1;
+			}
+		}
+	}
+	else if (!Q_stricmp(name, "shop_buy"))
+	{
+		if (Int_Parse(args, &a) && a >= 0 && a < SHOP_ROWS)
+		{
+			const shopItem_t* it = Shop_RowItem(a);
+			if (it)
+			{
+				Shop_SendCmd(va("shopbuy %i\n", it->id));
+			}
+		}
+	}
+	else if (!Q_stricmp(name, "shop_hover"))
+	{
+		if (Int_Parse(args, &a) && Int_Parse(args, &b))
+		{
+			if (b)
+			{
+				shopHover = a;
+			}
+			else if (shopHover == a)
+			{
+				shopHover = -1;
+			}
+		}
+	}
+	else if (!Q_stricmp(name, "shop_tabhover"))
+	{
+		if (Int_Parse(args, &a) && Int_Parse(args, &b))
+		{
+			if (b)
+			{
+				shopTabHover = a;
+			}
+			else if (shopTabHover == a)
+			{
+				shopTabHover = -1;
+			}
+		}
+	}
+	else if (!Q_stricmp(name, "shop_close"))
+	{
+		Shop_CloseMenu(1);
+	}
+	else if (!Q_stricmp(name, "shop_talk"))
+	{
+		if (Int_Parse(args, &a))
+		{
+			Shop_TalkAnswer(a);
+		}
+	}
+	else
+	{
+		return qfalse;
+	}
+	return qtrue;
+}
+
+#ifdef PZK_SP
+// Keys while the talk question or the shop is open (qtrue = used): talk 1 2 3, escape (SP, UI_Pazaak_ChallengeKey)
+static qboolean UI_Shop_Key(const int key)
+{
+	if (shopTalkOpen)
+	{
+		if (key == '1')
+		{
+			Shop_TalkAnswer(1);
+			return qtrue;
+		}
+		if (key == '2')
+		{
+			Shop_TalkAnswer(2);
+			return qtrue;
+		}
+		if (key == '3' || key == A_ESCAPE)
+		{
+			Shop_TalkAnswer(0);
+			return qtrue;
+		}
+		return qfalse;
+	}
+	if (shopOpen && key == A_ESCAPE)
+	{
+		Shop_CloseMenu(1);
+		return qtrue;
+	}
+	return qfalse;
+}
 #endif

@@ -1633,6 +1633,11 @@ static void CG_RestoreClientGhoul_f(void)
 			body->teamPowerType = 0; //dark side
 
 		CG_BodyQueueCopy(body, clent->currentState.number, weapon_index);
+		CG_SaberSliceTransfer(body, clent); // the body keeps the saber cuts
+	}
+	else
+	{
+		CG_SaberSliceClear(clent);
 	}
 
 	//reattach any missing limbs
@@ -1673,6 +1678,12 @@ static void CG_Pazaak_f(void)
 	}
 	Q_strcat(buf, sizeof buf, "\n");
 	trap->SendConsoleCommand(buf);
+}
+
+// "wvlooks <client> [hex]": the gun looks a player uses per weapon (the shop, g_pazaak.c), for his holstered guns
+static void CG_WeaponLooks_f(void)
+{
+	CG_SetWeaponLooks(atoi(CG_Argv(1)), CG_Argv(2));
 }
 
 static void CG_CenterPrint_f(void)
@@ -1846,6 +1857,7 @@ static serverCommand_t commands[] = {
 	{ "LMSWin", CG_LMSWin_f },
 	{ "LMSLose", CG_LMSLose_f },
 	{ "openadminmenu", CG_AdminMenu_f },
+	{ "wvlooks", CG_WeaponLooks_f },
 };
 
 static const size_t num_commands = ARRAY_LEN(commands);

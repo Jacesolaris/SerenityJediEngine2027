@@ -568,6 +568,114 @@ static void Cmd_Give_f(gentity_t* ent)
 	G_Give(ent, name, ConcatArgs(2), trap->Argc());
 }
 
+// weaponvariant [name|number|0] (cheat, 2026-10-31): hold an SJE gun (a weapon variant) on your current weapon, to see
+// and hear it; no name lists the variants of the weapon in hand. NPCs and bots get theirs by themselves.
+extern void G_Shop_GiveVariant(gentity_t* ent, int v);
+extern void G_Shop_EquipStock(gentity_t* ent, int weapon);
+extern qboolean G_Shop_Owns(const gentity_t* ent, int variant);
+
+static void Cmd_WeaponVariant_f(gentity_t* ent)
+{
+	char arg[MAX_TOKEN_CHARS] = { 0 };
+	const int weapon = ent->client->ps.weapon;
+
+	trap->Argv(1, arg, sizeof arg);
+	if (!arg[0])
+	{
+		int n = 0;
+		for (int i = 1; i < bgNumWeaponVariants; i++)
+		{
+			if (bgWeaponVariants[i].baseWeapon == BG_WeaponVariantFamily(weapon))
+			{
+				trap->SendServerCommand(ent - g_entities, va("print \"%3i %s (%s)\n\"", i, bgWeaponVariants[i].name,
+					bgWeaponVariants[i].displayName));
+				n++;
+			}
+		}
+		trap->SendServerCommand(ent - g_entities, va("print \"%i variants for this weapon (%i loaded), now: %i\n\"", n,
+			bgNumWeaponVariants - 1, ent->client->ps.weaponVariant));
+		return;
+	}
+
+	int v = atoi(arg);
+	if (v == 0 && Q_stricmp(arg, "0"))
+	{
+		v = BG_WeaponVariantByName(arg);
+	}
+	if (v != 0 && !BG_GetWeaponVariant(v, weapon))
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"No such variant for the weapon in hand.\n\"");
+		return;
+	}
+	ent->client->ps.weaponVariant = v;
+	// the shop (2026-10-31): the player now owns it and uses it on this weapon (G_Shop_PlayerThink keeps it on)
+	if (v)
+	{
+		G_Shop_GiveVariant(ent, v);
+	}
+	else
+	{
+		G_Shop_EquipStock(ent, weapon);
+	}
+}
+
+// grenade [name|number|next|0] (2026-10-31, not a cheat): the grenade type you throw (a WP_THERMAL weapon variant);
+// no name lists them. 0 = the stock thermal.
+static void Cmd_Grenade_f(gentity_t* ent)
+{
+	char arg[MAX_TOKEN_CHARS] = { 0 };
+	int v;
+
+	trap->Argv(1, arg, sizeof arg);
+
+	if (!arg[0])
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"  0 Thermal Detonator (stock)\n\"");
+		for (int i = 1; i < bgNumWeaponVariants; i++)
+		{
+			if (bgWeaponVariants[i].baseWeapon == WP_THERMAL)
+			{
+				trap->SendServerCommand(ent - g_entities, va("print \"%3i %s (%s)%s\n\"", i, bgWeaponVariants[i].displayName, bgWeaponVariants[i].name,
+					G_Shop_Owns(ent, i) ? "" : " - not owned, buy it in the shop"));
+			}
+		}
+		trap->SendServerCommand(ent - g_entities, va("print \"now: %i. grenade <number|name|next>\n\"", ent->grenadeKind));
+		return;
+	}
+	if (!Q_stricmp(arg, "next"))
+	{
+		v = 0;
+		for (int i = ent->grenadeKind + 1; i < bgNumWeaponVariants; i++)
+		{
+			if (bgWeaponVariants[i].baseWeapon == WP_THERMAL && G_Shop_Owns(ent, i))
+			{
+				v = i;
+				break;
+			}
+		}
+	}
+	else
+	{
+		v = atoi(arg);
+		if (v == 0 && Q_stricmp(arg, "0"))
+		{
+			v = BG_WeaponVariantByName(arg);
+		}
+	}
+	if (v != 0 && !BG_GetWeaponVariant(v, WP_THERMAL))
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"No such grenade.\n\"");
+		return;
+	}
+	if (v != 0 && !G_Shop_Owns(ent, v) && !trap->Cvar_VariableIntegerValue("sv_cheats"))
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"You don't have that grenade: buy it in the shop.\n\"");
+		return;
+	}
+	ent->grenadeKind = v;
+	trap->SendServerCommand(ent - g_entities, va("print \"Grenade: %s\n\"", v ? bgWeaponVariants[v].displayName : "Thermal Detonator"));
+}
+
 static void Cmd_GiveOther_f(const gentity_t* ent)
 {
 	char name[MAX_TOKEN_CHARS] = { 0 };
@@ -4370,6 +4478,8 @@ command_t commands[] = {
 	{ "forcechanged", Cmd_ForceChanged_f, 0 },
 	{ "gc", Cmd_GameCommand_f, CMD_NOINTERMISSION },
 	{ "give", Cmd_Give_f, CMD_CHEAT | CMD_ALIVE | CMD_NOINTERMISSION },
+	{ "weaponvariant", Cmd_WeaponVariant_f, CMD_CHEAT | CMD_ALIVE | CMD_NOINTERMISSION },
+	{ "grenade", Cmd_Grenade_f, CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "giveother", Cmd_GiveOther_f, CMD_CHEAT | CMD_NOINTERMISSION },
 	{ "god", Cmd_God_f, CMD_CHEAT | CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "kill", Cmd_Kill_f, CMD_ALIVE | CMD_NOINTERMISSION },

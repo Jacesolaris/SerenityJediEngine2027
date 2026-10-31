@@ -533,6 +533,8 @@ static qboolean Pickup_Saber(gentity_t* self, qboolean hadSaber, gentity_t* pick
 
 extern void CG_ChangeWeapon(int num);
 
+extern void G_Shop_PickupWeapon(gentity_t* player, const gentity_t* item);
+
 static int Pickup_Weapon(gentity_t* ent, gentity_t* other)
 {
 	int quantity = 0;
@@ -555,6 +557,7 @@ static int Pickup_Weapon(gentity_t* ent, gentity_t* other)
 		hadWeapon = qtrue;
 	}
 	BG_GiveWeapon(&other->client->ps, ent->item->giTag);
+	G_Shop_PickupWeapon(other, ent); // the shop (2026-10-31): a dropped gun's look is the player's now
 
 	if (ent->item->giTag == WP_SABER && (!hadWeapon || ent->NPC_type != nullptr))
 	{

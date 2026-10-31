@@ -1142,6 +1142,12 @@ extern cvar_t* g_sentryexplode;
 constexpr auto SABERBLASTER_CLIP_SIZE = 20; // bryar shots per clip
 constexpr auto SABERBLASTER_RELOAD_TIME = 1000; // ms, alt attack + attack
 constexpr auto SABERBLASTER_CLIP_SLOT = AMMO_MAX; // unused ps.ammo[] slot: shots used from the clip (0 = full clip)
+// the charged shot (Jace 2026-10-31): walk + dash fire on release; held past CHARGE_START the shot charges, a level
+// more every (CHARGE_FULL - CHARGE_START) / (CHARGE_LEVELS - 1) ms, full at CHARGE_FULL (= the saberlock shot).
+// A charged shot costs 1 + its level from the clip
+constexpr int SABERBLASTER_CHARGE_START = 300; // ms held before the charge starts (shorter = a tap, a normal shot)
+constexpr int SABERBLASTER_CHARGE_FULL = 1500; // ms held to full charge
+constexpr int SABERBLASTER_CHARGE_LEVELS = 3;
 int BG_NextSaberStyleInCycle(int style);
 extern cvar_t* g_saberBlasterAimArc;
 extern cvar_t* g_saberBlasterAIFire; // SS_BLASTER (2026-10-24)

@@ -5495,6 +5495,7 @@ static const char* g_bindCommands[] = {
 	"use_barrier",
 	"use_decca",
 	"pazaak",
+	"shop", // the shop menu (2026-10-31, g_pazaak shop code)
 	"+md_wheel", // the radial weapon wheel (cgame)
 	"+md_forcewheel" // the same wheel on the force ring
 };

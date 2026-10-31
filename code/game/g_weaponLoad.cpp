@@ -1590,3 +1590,419 @@ void WP_LoadWeaponParms()
 
 	gi.FS_FreeFile(buffer); //let go of the buffer
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Weapon variants (2026-10-31, from Jedi Knight Galaxies): see bg_weapons.h. Loaded by the game at InitGame (the SP
+// cgame is in the same DLL and reads the same table).
+// ---------------------------------------------------------------------------------------------------------------
+weaponVariant_t bgWeaponVariants[MAX_WEAPON_VARIANTS];
+int bgNumWeaponVariants = 1;
+
+static const struct
+{
+	const char* name;
+	int weapon;
+} wvWeaponNames[] =
+{
+	{ "WP_BRYAR_PISTOL", WP_BLASTER_PISTOL }, // the MP name: SP's pistol is WP_BLASTER_PISTOL
+	{ "WP_BLASTER_PISTOL", WP_BLASTER_PISTOL },
+	{ "WP_BLASTER", WP_BLASTER },
+	{ "WP_DISRUPTOR", WP_DISRUPTOR },
+	{ "WP_BOWCASTER", WP_BOWCASTER },
+	{ "WP_REPEATER", WP_REPEATER },
+	{ "WP_DEMP2", WP_DEMP2 },
+	{ "WP_FLECHETTE", WP_FLECHETTE },
+	{ "WP_ROCKET_LAUNCHER", WP_ROCKET_LAUNCHER },
+	{ "WP_CONCUSSION", WP_CONCUSSION },
+	{ "WP_THERMAL", WP_THERMAL },
+};
+
+// the pistols share their variants (SP: the old bryar WP_BRYAR_PISTOL uses the blaster pistol's)
+int BG_WeaponVariantFamily(const int weapon)
+{
+	if (weapon == WP_BRYAR_PISTOL)
+	{
+		return WP_BLASTER_PISTOL;
+	}
+	return weapon;
+}
+
+const weaponVariant_t* BG_GetWeaponVariant(const int variant, const int weapon)
+{
+	if (variant <= 0 || variant >= bgNumWeaponVariants || weapon <= WP_NONE || weapon == WP_SABER)
+	{
+		return NULL;
+	}
+	if (bgWeaponVariants[variant].baseWeapon != BG_WeaponVariantFamily(weapon))
+	{
+		return NULL;
+	}
+	return &bgWeaponVariants[variant];
+}
+
+int BG_WeaponVariantByName(const char* name)
+{
+	if (!name || !name[0])
+	{
+		return 0;
+	}
+	for (int i = 1; i < bgNumWeaponVariants; i++)
+	{
+		if (!Q_stricmp(bgWeaponVariants[i].name, name))
+		{
+			return i;
+		}
+	}
+	return 0;
+}
+
+int BG_WeaponVariantCount(const int weapon)
+{
+	int n = 0;
+	for (int i = 1; i < bgNumWeaponVariants; i++)
+	{
+		if (bgWeaponVariants[i].baseWeapon == BG_WeaponVariantFamily(weapon) && bgWeaponVariants[i].npcUse)
+		{
+			n++;
+		}
+	}
+	return n;
+}
+
+int BG_WeaponVariantFireTime(const int variant, const int weapon, const int fire_time, const qboolean alt_fire)
+{
+	const weaponVariant_t* wv = BG_GetWeaponVariant(variant, weapon);
+
+	if (!wv || fire_time <= 0)
+	{
+		return fire_time;
+	}
+	const int t = (int)(fire_time * wv->fire[alt_fire ? 1 : 0].fireTimeScale);
+	return t < 50 ? 50 : t;
+}
+
+// AI clips and reloads (2026-10-31, see bg_weapons.h): the shots an NPC/bot fires before it must reload
+int BG_WeaponClipShots(const int variant, const int weapon)
+{
+	const weaponVariant_t* wv = BG_GetWeaponVariant(variant, weapon);
+
+	if (wv && wv->clipShots > 0)
+	{
+		return wv->clipShots;
+	}
+	switch (weapon)
+	{
+	case WP_BLASTER_PISTOL:
+	case WP_BRYAR_PISTOL:
+		return 16;
+	case WP_BLASTER:
+		return 30;
+	case WP_DISRUPTOR:
+		return 8;
+	case WP_BOWCASTER:
+		return 15;
+	case WP_REPEATER:
+		return 50;
+	case WP_DEMP2:
+		return 20;
+	case WP_FLECHETTE:
+		return 10;
+	case WP_ROCKET_LAUNCHER:
+		return 2;
+	case WP_CONCUSSION:
+		return 6;
+	case WP_Z6_ROTARY_CANNON:
+		return 100;
+	default:
+		return 0; // no clip: melee, sabers, grenades, mines, droid and vehicle guns
+	}
+}
+
+// AI clips and reloads: how long the reload takes, ms
+int BG_WeaponReloadTime(const int variant, const int weapon)
+{
+	const weaponVariant_t* wv = BG_GetWeaponVariant(variant, weapon);
+
+	if (wv && wv->reloadTime > 0)
+	{
+		return wv->reloadTime;
+	}
+	switch (weapon)
+	{
+	case WP_BLASTER_PISTOL:
+	case WP_BRYAR_PISTOL:
+		return 1200;
+	case WP_DISRUPTOR:
+	case WP_FLECHETTE:
+		return 2200;
+	case WP_REPEATER:
+	case WP_ROCKET_LAUNCHER:
+		return 3000;
+	case WP_CONCUSSION:
+		return 2500;
+	case WP_Z6_ROTARY_CANNON:
+		return 3500;
+	default:
+		return 2000;
+	}
+}
+
+// grenades (2026-10-31): the "grenade" key of a WP_THERMAL variant
+// the shop (2026-10-31): what a variant costs (grenades: a pack of 3)
+int BG_WeaponVariantPrice(const int variant)
+{
+	if (variant <= 0 || variant >= bgNumWeaponVariants)
+	{
+		return 0;
+	}
+	if (bgWeaponVariants[variant].price > 0)
+	{
+		return bgWeaponVariants[variant].price;
+	}
+	return bgWeaponVariants[variant].baseWeapon == WP_THERMAL ? 150 : 300;
+}
+
+int BG_GrenadeKindByName(const char* name)
+{
+	static const char* kinds[GK_NUM_KINDS] = { "frag", "fire", "freeze", "stun", "flash", "smoke", "poison", "heal" };
+
+	for (int i = 0; name && i < GK_NUM_KINDS; i++)
+	{
+		if (!Q_stricmp(name, kinds[i]))
+		{
+			return i;
+		}
+	}
+	return GK_FRAG;
+}
+
+static float WV_ClampScale(const float f)
+{
+	if (f < 0.25f)
+	{
+		return 0.25f;
+	}
+	if (f > 4.0f)
+	{
+		return 4.0f;
+	}
+	return f;
+}
+
+// one "key value" line of a variant block; alt = the alt fire's values ("alt" in front of the key)
+static void WV_ParseKey(weaponVariant_t* wv, const char* key, const char* value, qboolean* has_alt)
+{
+	weaponVariantFire_t* fire = &wv->fire[0];
+
+	if (!Q_stricmpn(key, "alt", 3))
+	{
+		fire = &wv->fire[1];
+		key += 3;
+		*has_alt = qtrue;
+	}
+
+	if (!Q_stricmp(key, "name"))
+	{
+		Q_strncpyz(wv->displayName, value, sizeof wv->displayName);
+	}
+	else if (!Q_stricmp(key, "base"))
+	{
+		for (int i = 0; i < (int)ARRAY_LEN(wvWeaponNames); i++)
+		{
+			if (!Q_stricmp(wvWeaponNames[i].name, value))
+			{
+				wv->baseWeapon = wvWeaponNames[i].weapon;
+				break;
+			}
+		}
+	}
+	else if (!Q_stricmp(key, "npc"))
+	{
+		wv->npcUse = atoi(value) ? qtrue : qfalse;
+	}
+	else if (!Q_stricmp(key, "worldmodel"))
+	{
+		Q_strncpyz(wv->worldModel, value, sizeof wv->worldModel);
+	}
+	else if (!Q_stricmp(key, "icon"))
+	{
+		Q_strncpyz(wv->icon, value, sizeof wv->icon);
+	}
+	else if (!Q_stricmp(key, "selectsound"))
+	{
+		Q_strncpyz(wv->selectSound, value, sizeof wv->selectSound);
+	}
+	else if (!Q_stricmp(key, "firesound"))
+	{
+		if (fire->numSounds < MAX_WEAPON_VARIANT_SOUNDS)
+		{
+			Q_strncpyz(fire->sound[fire->numSounds], value, sizeof fire->sound[0]);
+			fire->numSounds++;
+		}
+	}
+	else if (!Q_stricmp(key, "muzzlefx"))
+	{
+		Q_strncpyz(fire->muzzleFx, value, sizeof fire->muzzleFx);
+	}
+	else if (!Q_stricmp(key, "shotfx"))
+	{
+		Q_strncpyz(fire->shotFx, value, sizeof fire->shotFx);
+	}
+	else if (!Q_stricmp(key, "shotmodel"))
+	{
+		Q_strncpyz(fire->shotModel, value, sizeof fire->shotModel);
+	}
+	else if (!Q_stricmp(key, "shotsound"))
+	{
+		Q_strncpyz(fire->shotSound, value, sizeof fire->shotSound);
+	}
+	else if (!Q_stricmp(key, "missfx"))
+	{
+		Q_strncpyz(fire->missFx, value, sizeof fire->missFx);
+	}
+	else if (!Q_stricmp(key, "hitfx"))
+	{
+		Q_strncpyz(fire->hitFx, value, sizeof fire->hitFx);
+	}
+	else if (!Q_stricmp(key, "damagescale"))
+	{
+		fire->damageScale = WV_ClampScale(atof(value));
+	}
+	else if (!Q_stricmp(key, "firetimescale"))
+	{
+		fire->fireTimeScale = WV_ClampScale(atof(value));
+	}
+	else if (!Q_stricmp(key, "speedscale"))
+	{
+		fire->speedScale = WV_ClampScale(atof(value));
+	}
+	else if (!Q_stricmp(key, "clip"))
+	{
+		wv->clipShots = atoi(value) < 0 ? 0 : atoi(value) > 500 ? 500 : atoi(value);
+	}
+	else if (!Q_stricmp(key, "reload"))
+	{
+		wv->reloadTime = atoi(value) < 0 ? 0 : atoi(value) > 10000 ? 10000 : atoi(value);
+	}
+	else if (!Q_stricmp(key, "grenade"))
+	{
+		wv->grenadeKind = BG_GrenadeKindByName(value);
+	}
+	else if (!Q_stricmp(key, "radius"))
+	{
+		wv->radiusScale = WV_ClampScale(atof(value));
+	}
+	else if (!Q_stricmp(key, "effecttime"))
+	{
+		wv->effectTime = atoi(value) < 0 ? 0 : atoi(value) > 30000 ? 30000 : atoi(value);
+	}
+	else if (!Q_stricmp(key, "price"))
+	{
+		wv->price = atoi(value) < 0 ? 0 : atoi(value) > 30000 ? 30000 : atoi(value);
+	}
+}
+
+void BG_LoadWeaponVariants(void)
+{
+	char* buf = nullptr;
+
+	memset(bgWeaponVariants, 0, sizeof bgWeaponVariants);
+	bgNumWeaponVariants = 1;
+
+	const int len = gi.FS_ReadFile(WEAPON_VARIANT_FILE, reinterpret_cast<void**>(&buf));
+	if (len <= 0 || !buf)
+	{
+		return; // no file: stock weapons only
+	}
+
+	const char* p = buf;
+	COM_BeginParseSession();
+
+	while (p)
+	{
+		char name[64];
+		const char* token = COM_ParseExt(&p, qtrue);
+
+		if (!token[0])
+		{
+			break;
+		}
+		Q_strncpyz(name, token, sizeof name);
+
+		token = COM_ParseExt(&p, qtrue);
+		if (Q_stricmp(token, "{"))
+		{
+			gi.Printf(S_COLOR_YELLOW "WARNING: %s: '{' expected after %s\n", WEAPON_VARIANT_FILE, name);
+			break;
+		}
+
+		if (bgNumWeaponVariants >= MAX_WEAPON_VARIANTS)
+		{
+			gi.Printf(S_COLOR_YELLOW "WARNING: %s: more than %d variants, the rest are skipped\n", WEAPON_VARIANT_FILE, MAX_WEAPON_VARIANTS - 1);
+			SkipBracedSection(&p, 1);
+			break;
+		}
+
+		weaponVariant_t* wv = &bgWeaponVariants[bgNumWeaponVariants];
+		qboolean has_alt = qfalse;
+
+		memset(wv, 0, sizeof * wv);
+		Q_strncpyz(wv->name, name, sizeof wv->name);
+		Q_strncpyz(wv->displayName, name, sizeof wv->displayName);
+		wv->npcUse = qtrue;
+		wv->fire[0].damageScale = wv->fire[0].fireTimeScale = wv->fire[0].speedScale = 1.0f;
+		wv->radiusScale = 1.0f; // grenades: the stock blast radius
+		wv->fire[1].damageScale = wv->fire[1].fireTimeScale = wv->fire[1].speedScale = 0.0f; // 0 = take the primary's
+
+		while (1)
+		{
+			char key[64];
+
+			token = COM_ParseExt(&p, qtrue);
+			if (!token[0])
+			{
+				break;
+			}
+			if (!Q_stricmp(token, "}"))
+			{
+				break;
+			}
+			Q_strncpyz(key, token, sizeof key);
+			token = COM_ParseExt(&p, qfalse);
+			WV_ParseKey(wv, key, token, &has_alt);
+		}
+
+		// the alt fire: whatever the file left empty comes from the primary
+		{
+			weaponVariantFire_t* alt = &wv->fire[1];
+			const weaponVariantFire_t* pri = &wv->fire[0];
+
+			if (!alt->numSounds)
+			{
+				memcpy(alt->sound, pri->sound, sizeof alt->sound);
+				alt->numSounds = pri->numSounds;
+			}
+			if (!alt->muzzleFx[0]) Q_strncpyz(alt->muzzleFx, pri->muzzleFx, sizeof alt->muzzleFx);
+			if (!alt->shotFx[0]) Q_strncpyz(alt->shotFx, pri->shotFx, sizeof alt->shotFx);
+			if (!alt->shotModel[0]) Q_strncpyz(alt->shotModel, pri->shotModel, sizeof alt->shotModel);
+			if (!alt->shotSound[0]) Q_strncpyz(alt->shotSound, pri->shotSound, sizeof alt->shotSound);
+			if (!alt->missFx[0]) Q_strncpyz(alt->missFx, pri->missFx, sizeof alt->missFx);
+			if (!alt->hitFx[0]) Q_strncpyz(alt->hitFx, pri->hitFx, sizeof alt->hitFx);
+			if (alt->damageScale <= 0.0f) alt->damageScale = pri->damageScale;
+			if (alt->fireTimeScale <= 0.0f) alt->fireTimeScale = pri->fireTimeScale;
+			if (alt->speedScale <= 0.0f) alt->speedScale = pri->speedScale;
+		}
+		(void)has_alt;
+
+		if (wv->baseWeapon <= WP_NONE || wv->baseWeapon == WP_SABER || !wv->worldModel[0])
+		{
+			gi.Printf(S_COLOR_YELLOW "WARNING: %s: variant %s has no gun base weapon or no worldmodel, skipped\n", WEAPON_VARIANT_FILE, name);
+			continue;
+		}
+		bgNumWeaponVariants++;
+	}
+
+	COM_EndParseSession();
+	gi.FS_FreeFile(buf);
+	gi.Printf("Weapon variants: %d loaded from %s\n", bgNumWeaponVariants - 1, WEAPON_VARIANT_FILE);
+}

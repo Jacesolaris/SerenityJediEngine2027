@@ -895,7 +895,7 @@ gentity_t* CreateMissile(vec3_t org, vec3_t dir, const float vel, const int life
 	missile->parent = owner;
 	missile->r.ownerNum = owner->s.number;
 	//lmo tag owner info into state for duel Nox
-	missile->s.otherentityNum = owner->s.number;
+	missile->s.otherEntityNum = owner->s.number;
 
 	if (alt_fire)
 	{
@@ -908,7 +908,20 @@ gentity_t* CreateMissile(vec3_t org, vec3_t dir, const float vel, const int life
 
 	SnapVector(org);
 	VectorCopy(org, missile->s.pos.trBase);
-	VectorScale(dir, vel, missile->s.pos.trDelta);
+	{
+		// weapon variants (2026-10-31): the shot carries the shooter's gun variant (its shot, impact effects and damage
+		// scale, see G_WeaponVariantDamage) and flies at the variant's speed
+		float speed = vel;
+		const weaponVariant_t* wv = owner && owner->client
+			? BG_GetWeaponVariant(owner->client->ps.weaponVariant, owner->client->ps.weapon) : NULL;
+
+		if (wv)
+		{
+			missile->s.weaponVariant = owner->client->ps.weaponVariant;
+			speed *= wv->fire[alt_fire ? 1 : 0].speedScale;
+		}
+		VectorScale(dir, speed, missile->s.pos.trDelta);
+	}
 	VectorCopy(org, missile->r.currentOrigin);
 	SnapVector(missile->s.pos.trDelta);
 
@@ -1992,7 +2005,7 @@ killProj:
 	if (other->takedamage && other->client && !is_knocked_saber)
 	{
 		G_AddEvent(ent, EV_MISSILE_HIT, DirToByte(trace->plane.normal));
-		ent->s.otherentityNum = other->s.number;
+		ent->s.otherEntityNum = other->s.number;
 	}
 	else if (trace->surfaceFlags & SURF_METALSTEPS)
 	{
@@ -2208,7 +2221,7 @@ void g_run_missile(gentity_t* ent)
 			BG_EvaluateTrajectory(&ent->s.pos, level.time, ent->s.origin2);
 
 			//the index for whoever we are hitting
-			ent->s.otherentityNum = tr.entityNum;
+			ent->s.otherEntityNum = tr.entityNum;
 
 			if (VectorCompare(ent->s.origin, ent->s.origin2))
 			{
@@ -2239,7 +2252,7 @@ void g_run_missile(gentity_t* ent)
 			return;
 		}
 
-		if (tr.entityNum == ent->s.otherentityNum)
+		if (tr.entityNum == ent->s.otherEntityNum)
 		{
 			//if the impact event other and the trace ent match then it's ok to do the g2 mark
 			ent->s.trickedentindex = 1;
@@ -2309,7 +2322,7 @@ gentity_t* fire_grapple(gentity_t* self, vec3_t start, vec3_t dir)
 	hook->targetEnt = NULL;
 	hook->s.pos.trType = TR_LINEAR;
 	hook->s.pos.trTime = level.time - MISSILE_PRESTEP_TIME; // move a bit on the very first frame
-	hook->s.otherentityNum = self->s.number; // use to match beam in client
+	hook->s.otherEntityNum = self->s.number; // use to match beam in client
 	VectorCopy(start, hook->s.pos.trBase);
 	VectorScale(dir, g_grapple_shoot_speed.integer, hook->s.pos.trDelta); // lmo scale speed!
 	SnapVector(hook->s.pos.trDelta); // save net bandwidth
@@ -2337,7 +2350,7 @@ gentity_t* fire_stun(gentity_t* self, vec3_t start, vec3_t dir)
 	stun->targetEnt = NULL;
 	stun->s.pos.trType = TR_LINEAR;
 	stun->s.pos.trTime = level.time - MISSILE_PRESTEP_TIME;
-	stun->s.otherentityNum = self->s.number;
+	stun->s.otherEntityNum = self->s.number;
 	VectorCopy(start, stun->s.pos.trBase);
 	VectorScale(dir, 2000, stun->s.pos.trDelta);
 	SnapVector(stun->s.pos.trDelta);

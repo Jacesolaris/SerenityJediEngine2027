@@ -19553,8 +19553,10 @@ The last word on a bot's move this frame, like a singleplayer NPC moves:
 // and in sight - a short burst through the player's own fire path (Walk + Dash: auto aim, clip, anim), then a pause
 // (g_saberBlasterAIFire ms on average, shorter for better bots; 0 = never) - and reloads (Walk + Dash + Attack) when
 // the clip is empty and nobody is in saber reach. Close up he fights with the saber as before.
+// (2026-10-31) the pistol fires as Walk + Dash go up: a burst is a tap (a normal shot) or, now and then with enough
+// left in the clip, a hold to a full charge (a charged shot, better bots more often)
 #define BOT_BLASTER_SABER_REACH	128.0f
-#define BOT_BLASTER_BURST		300
+#define BOT_BLASTER_BURST		150
 static int bot_blaster_burst_end[MAX_CLIENTS];
 static int bot_blaster_next_burst[MAX_CLIENTS];
 
@@ -19596,7 +19598,13 @@ static void bot_saber_blaster(const bot_state_t* bs, usercmd_t* ucmd)
 		const float skill = bs->settings.skill < 1.0f ? 1.0f : bs->settings.skill > 5.0f ? 5.0f : bs->settings.skill;
 		const int pause = (int)(g_saberBlasterAIFire.integer * (0.5f + (5.0f - skill) * 0.25f));
 
-		bot_blaster_burst_end[client] = level.time + BOT_BLASTER_BURST;
+		int burst = BOT_BLASTER_BURST;
+		if (SABERBLASTER_CLIP_SIZE - ps->ammo[SABERBLASTER_CLIP_SLOT] > SABERBLASTER_CHARGE_LEVELS
+			&& Q_irand(0, 9) < (int)skill)
+		{
+			burst = SABERBLASTER_CHARGE_FULL + 100; // a charged shot
+		}
+		bot_blaster_burst_end[client] = level.time + burst;
 		bot_blaster_next_burst[client] = bot_blaster_burst_end[client] + Q_irand(pause / 2, pause * 3 / 2);
 	}
 

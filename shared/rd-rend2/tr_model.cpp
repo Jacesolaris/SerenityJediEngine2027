@@ -309,7 +309,8 @@ qhandle_t RE_RegisterModel(const char* name)
 	}
 
 	if (strlen(name) >= MAX_QPATH) {
-		ri.Printf(PRINT_ALL, "Model name exceeds MAX_QPATH\n");
+		// SJE (Jace 2026-10-29): name the model, so the long path can be found and fixed
+		ri.Printf(PRINT_WARNING, "Model name exceeds MAX_QPATH (%d chars, max %d): %s\n", static_cast<int>(strlen(name)), MAX_QPATH - 1, name);
 		return 0;
 	}
 

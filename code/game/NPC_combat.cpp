@@ -1323,6 +1323,8 @@ void ShootThink()
 		delay = NPCInfo->burstSpacing + Q_irand(-150, 150);
 	}
 
+	// weapon variants (2026-10-31): each SJE gun its own rate of fire
+	delay = BG_WeaponVariantFireTime(client->ps.weaponVariant, client->ps.weapon, delay, qfalse);
 	NPCInfo->shotTime = level.time + delay;
 	NPC->attackDebounceTime = level.time + NPC_AttackDebounceForWeapon();
 }
@@ -1339,6 +1341,7 @@ extern qboolean PM_SaberInSpecialAttack(int anim);
 extern qboolean PM_SpinningSaberAnim(int anim);
 extern qboolean PM_SpinningAnim(int anim);
 extern void WP_ReloadGun(gentity_t* ent);
+extern cvar_t* g_aiReload;
 
 extern void BubbleShield_TurnOn();
 extern qboolean droideka_npc(const gentity_t* ent);
@@ -1408,7 +1411,16 @@ void WeaponThink()
 		}
 	}
 
-	if (NPC->client->ps.ammo[weaponData[client->ps.weapon].ammoIndex] < weaponData[client->ps.weapon].energyPerShot)
+	const int most_per_shot = weaponData[client->ps.weapon].altEnergyPerShot > weaponData[client->ps.weapon].energyPerShot
+		? weaponData[client->ps.weapon].altEnergyPerShot : weaponData[client->ps.weapon].energyPerShot;
+
+	if (g_aiReload->integer && most_per_shot > 0 && NPC->client->ps.ammo[weaponData[client->ps.weapon].ammoIndex] < most_per_shot * 2)
+	{
+		// AI clips and reloads (2026-10-31): the clip decides when to reload (G_AIClipShot); the reserve is topped up
+		// quietly, as the original NPC code does
+		Add_Ammo(NPC, client->ps.weapon, most_per_shot * 20);
+	}
+	else if (NPC->client->ps.ammo[weaponData[client->ps.weapon].ammoIndex] < weaponData[client->ps.weapon].energyPerShot)
 	{
 		Add_Ammo(NPC, client->ps.weapon, weaponData[client->ps.weapon].energyPerShot * 10);
 		NPC_SetAnim(NPC, SETANIM_TORSO, BOTH_RELOAD, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);

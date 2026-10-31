@@ -504,7 +504,7 @@ static void CG_General(centity_t* cent)
 			VectorMA(end, lerped.origin[i], cent->currentState.angles, end);
 		}
 
-		parent = &cg_entities[cent->currentState.otherentityNum];
+		parent = &cg_entities[cent->currentState.otherEntityNum];
 		gi.G2API_GetBoltMatrix(parent->gent->ghoul2, 0, 0, &mat, parent->lerpAngles, parent->lerpOrigin, cg.time,
 			cgs.model_draw, cent->currentState.modelScale);
 
@@ -539,7 +539,7 @@ static void CG_General(centity_t* cent)
 			VectorMA(end, lerped.origin[i], cent->currentState.angles, end);
 		}
 
-		parent = &cg_entities[cent->currentState.otherentityNum];
+		parent = &cg_entities[cent->currentState.otherEntityNum];
 		gi.G2API_GetBoltMatrix(parent->gent->ghoul2, 0, 0, &mat, parent->lerpAngles, parent->lerpOrigin, cg.time,
 			cgs.model_draw, cent->currentState.modelScale);
 		gi.G2API_GiveMeVectorFromMatrix(mat, ORIGIN, start);
@@ -780,8 +780,8 @@ static void CG_General(centity_t* cent)
 			{
 				//thrown saber
 				//light?  sound?
-				if (cent->gent->owner->client && g_entities[cent->currentState.otherentityNum].client && g_entities[cent
-					->currentState.otherentityNum].client->ps.saber[0].Active() &&
+				if (cent->gent->owner->client && g_entities[cent->currentState.otherEntityNum].client && g_entities[cent
+					->currentState.otherEntityNum].client->ps.saber[0].Active() &&
 					cent->gent->owner->client->ps.saberEntityState != SES_STUCK &&
 					cent->gent->owner->client->ps.saberEntityState != SES_STUCK_BODY)
 				{
@@ -923,6 +923,10 @@ static void CG_General(centity_t* cent)
 	{
 		//FIXME: if I'm a rather large model, this will look kind of stupid...
 		CG_ForcePushBlur(cent->lerpOrigin);
+	}
+	if (cent->gent && cent->gent->saberSliceCount > 0 && ent.ghoul2 && !CG_SaberSliceApply(cent->gent, &ent))
+	{
+		return; // a saber cut piece that can't be placed this frame (would show the whole body)
 	}
 	CG_AddRefEntWithTransportEffect(cent, &ent);
 
@@ -1262,6 +1266,12 @@ static void CG_Missile(centity_t* cent)
 		VectorCopy(s1->angles, cent->lerpAngles);
 	}
 
+	if (s1->weaponVariant && !s1->otherentityNum2 && !(s1->powerups & 1 << PW_FORCE_PROJECTILE)
+		&& CG_WeaponVariantMissile(cent))
+	{
+		return; // weapon variants (2026-10-31): an SJE gun's shot, with its own effect
+	}
+
 	if (s1->otherentityNum2 && (g_vehWeaponInfo[s1->otherentityNum2].iShotFX || g_vehWeaponInfo[s1->otherentityNum2].
 		iModel))
 	{
@@ -1405,7 +1415,7 @@ static void CG_Missile(centity_t* cent)
 			VectorMA(end, i, s1->angles, end);
 		}
 
-		const centity_t* parent = &cg_entities[s1->otherentityNum];
+		const centity_t* parent = &cg_entities[s1->otherEntityNum];
 		gi.G2API_GetBoltMatrix(parent->gent->ghoul2, 1, 0, &mat, parent->lerpAngles, parent->lerpOrigin, cg.time,
 			cgs.model_draw, cent->currentState.modelScale);
 
@@ -1438,7 +1448,7 @@ static void CG_Missile(centity_t* cent)
 			VectorMA(end, i, s1->angles, end);
 		}
 
-		const centity_t* parent = &cg_entities[s1->otherentityNum];
+		const centity_t* parent = &cg_entities[s1->otherEntityNum];
 		gi.G2API_GetBoltMatrix(parent->gent->ghoul2, 1, 0, &mat, parent->lerpAngles, parent->lerpOrigin, cg.time,
 			cgs.model_draw, cent->currentState.modelScale);
 		gi.G2API_GiveMeVectorFromMatrix(mat, ORIGIN, start);
@@ -2464,15 +2474,15 @@ void CG_MatrixEffect(const centity_t* cent)
 	bool stop_effect = total_elapsed_time > cent->currentState.eventParm || cg.missionStatusShow || in_camera;
 
 	if (!stop_effect && cent->currentState.boltInfo & MEF_HIT_GROUND_STOP && g_entities[cent->currentState.
-		otherentityNum].client)
+		otherEntityNum].client)
 	{
-		if (g_entities[cent->currentState.otherentityNum].client->ps.groundEntityNum != ENTITYNUM_NONE)
+		if (g_entities[cent->currentState.otherEntityNum].client->ps.groundEntityNum != ENTITYNUM_NONE)
 		{
 			stop_effect = true;
 		}
-		else if (g_entities[cent->currentState.otherentityNum].client->NPC_class == CLASS_VEHICLE)
+		else if (g_entities[cent->currentState.otherEntityNum].client->NPC_class == CLASS_VEHICLE)
 		{
-			const Vehicle_t* p_veh = g_entities[cent->currentState.otherentityNum].m_pVehicle;
+			const Vehicle_t* p_veh = g_entities[cent->currentState.otherEntityNum].m_pVehicle;
 			if (p_veh && !(p_veh->m_ulFlags & VEH_FLYING))
 			{
 				stop_effect = true;
@@ -2481,8 +2491,8 @@ void CG_MatrixEffect(const centity_t* cent)
 	}
 	if (!stop_effect && cent->currentState.boltInfo & MEF_LOOK_AT_ENEMY)
 	{
-		if (!g_entities[cent->currentState.otherentityNum].lastEnemy ||
-			!g_entities[cent->currentState.otherentityNum].lastEnemy->inuse)
+		if (!g_entities[cent->currentState.otherEntityNum].lastEnemy ||
+			!g_entities[cent->currentState.otherEntityNum].lastEnemy->inuse)
 		{
 			stop_effect = true;
 		}
@@ -2524,14 +2534,14 @@ void CG_MatrixEffect(const centity_t* cent)
 		vec3_t to_enemy;
 		vec3_t to_enemy_angles;
 
-		VectorCopy(cg_entities[g_entities[cent->currentState.otherentityNum].lastEnemy->s.number].lerpOrigin, to_enemy);
-		VectorSubtract(cg_entities[cent->currentState.otherentityNum].lerpOrigin, to_enemy, to_enemy);
+		VectorCopy(cg_entities[g_entities[cent->currentState.otherEntityNum].lastEnemy->s.number].lerpOrigin, to_enemy);
+		VectorSubtract(cg_entities[cent->currentState.otherEntityNum].lerpOrigin, to_enemy, to_enemy);
 		vectoangles(to_enemy, to_enemy_angles);
 
 		cg.overrides.active |= CG_OVERRIDE_3RD_PERSON_ANG;
 		cg.overrides.thirdPersonAngle =
 			to_enemy_angles[1] -
-			cg_entities[cent->currentState.otherentityNum].lerpAngles[1] +
+			cg_entities[cent->currentState.otherEntityNum].lerpAngles[1] +
 			145.0f;
 		cg.overrides.thirdPersonAngle = AngleNormalize180(cg.overrides.thirdPersonAngle);
 
@@ -2650,15 +2660,15 @@ void CG_StasisEffect(const centity_t* cent)
 	bool stop_effect = total_elapsed_time > cent->currentState.eventParm || cg.missionStatusShow || in_camera;
 
 	if (!stop_effect && cent->currentState.boltInfo & MEF_HIT_GROUND_STOP && g_entities[cent->currentState.
-		otherentityNum].client)
+		otherEntityNum].client)
 	{
-		if (g_entities[cent->currentState.otherentityNum].client->ps.groundEntityNum != ENTITYNUM_NONE)
+		if (g_entities[cent->currentState.otherEntityNum].client->ps.groundEntityNum != ENTITYNUM_NONE)
 		{
 			stop_effect = true;
 		}
-		else if (g_entities[cent->currentState.otherentityNum].client->NPC_class == CLASS_VEHICLE)
+		else if (g_entities[cent->currentState.otherEntityNum].client->NPC_class == CLASS_VEHICLE)
 		{
-			const Vehicle_t* p_veh = g_entities[cent->currentState.otherentityNum].m_pVehicle;
+			const Vehicle_t* p_veh = g_entities[cent->currentState.otherEntityNum].m_pVehicle;
 			if (p_veh && !(p_veh->m_ulFlags & VEH_FLYING))
 			{
 				stop_effect = true;
@@ -2667,8 +2677,8 @@ void CG_StasisEffect(const centity_t* cent)
 	}
 	if (!stop_effect && cent->currentState.boltInfo & MEF_LOOK_AT_ENEMY)
 	{
-		if (!g_entities[cent->currentState.otherentityNum].lastEnemy ||
-			!g_entities[cent->currentState.otherentityNum].lastEnemy->inuse)
+		if (!g_entities[cent->currentState.otherEntityNum].lastEnemy ||
+			!g_entities[cent->currentState.otherEntityNum].lastEnemy->inuse)
 		{
 			stop_effect = true;
 		}
@@ -2710,14 +2720,14 @@ void CG_StasisEffect(const centity_t* cent)
 		vec3_t to_enemy;
 		vec3_t to_enemy_angles;
 
-		VectorCopy(cg_entities[g_entities[cent->currentState.otherentityNum].lastEnemy->s.number].lerpOrigin, to_enemy);
-		VectorSubtract(cg_entities[cent->currentState.otherentityNum].lerpOrigin, to_enemy, to_enemy);
+		VectorCopy(cg_entities[g_entities[cent->currentState.otherEntityNum].lastEnemy->s.number].lerpOrigin, to_enemy);
+		VectorSubtract(cg_entities[cent->currentState.otherEntityNum].lerpOrigin, to_enemy, to_enemy);
 		vectoangles(to_enemy, to_enemy_angles);
 
 		cg.overrides.active |= CG_OVERRIDE_3RD_PERSON_ANG;
 		cg.overrides.thirdPersonAngle =
 			to_enemy_angles[1] -
-			cg_entities[cent->currentState.otherentityNum].lerpAngles[1] +
+			cg_entities[cent->currentState.otherEntityNum].lerpAngles[1] +
 			145.0f;
 		cg.overrides.thirdPersonAngle = AngleNormalize180(cg.overrides.thirdPersonAngle);
 

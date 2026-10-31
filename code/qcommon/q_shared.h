@@ -2261,6 +2261,7 @@ public:
 	int     SaberSmashStartTime;
 	int     SaberSmashLastStartTime;
 	int     Smash_Count;
+	int     weaponVariant; // weapon variant (2026-10-31, weapons.h): 0 = the stock weapon
 
 #endif // !JK2_MODE
 
@@ -2533,6 +2534,7 @@ public:
 		saved_game.write<int32_t>(SaberSmashStartTime);
 		saved_game.write<int32_t>(SaberSmashLastStartTime);
 		saved_game.write<int32_t>(Smash_Count);
+		saved_game.write<int32_t>(weaponVariant); // weapon variant (2026-10-31)
 #endif // !JK2_MODE
 	}
 
@@ -2805,6 +2807,7 @@ public:
 		saved_game.read<int32_t>(SaberSmashStartTime);
 		saved_game.read<int32_t>(SaberSmashLastStartTime);
 		saved_game.read<int32_t>(Smash_Count);
+		saved_game.read<int32_t>(weaponVariant); // weapon variant (2026-10-31)
 #endif // !JK2_MODE
 	}
 }; // PlayerStateBase
@@ -3004,7 +3007,7 @@ using entityState_t = struct entityState_s
 	vec3_t angles;
 	vec3_t angles2;
 
-	int otherentityNum; // shotgun sources, etc
+	int otherEntityNum; // shotgun sources, etc
 	int otherentityNum2;
 
 	int groundEntityNum; // -1 = in air
@@ -3142,6 +3145,7 @@ using entityState_t = struct entityState_s
 	int SaberSmashStartTime;
 	int SaberSmashLastStartTime;
 	int Smash_Count;
+	int weaponVariant; // weapon variant (2026-10-31, weapons.h): 0 = the stock weapon; NPCs from ps, missiles from the shooter
 
 #ifndef JK2_MODE
 	qboolean isPortalEnt;
@@ -3162,7 +3166,7 @@ using entityState_t = struct entityState_s
 		saved_game.write<float>(origin2);
 		saved_game.write<float>(angles);
 		saved_game.write<float>(angles2);
-		saved_game.write<int32_t>(otherentityNum);
+		saved_game.write<int32_t>(otherEntityNum);
 		saved_game.write<int32_t>(otherentityNum2);
 		saved_game.write<int32_t>(groundEntityNum);
 		saved_game.write<int32_t>(constantLight);
@@ -3270,6 +3274,7 @@ using entityState_t = struct entityState_s
 		saved_game.write<int32_t>(SaberSmashStartTime);
 		saved_game.write<int32_t>(SaberSmashLastStartTime);
 		saved_game.write<int32_t>(Smash_Count);
+		saved_game.write<int32_t>(weaponVariant); // weapon variant (2026-10-31)
 #endif // !JK2_MODE
 	}
 
@@ -3288,7 +3293,7 @@ using entityState_t = struct entityState_s
 		saved_game.read<float>(origin2);
 		saved_game.read<float>(angles);
 		saved_game.read<float>(angles2);
-		saved_game.read<int32_t>(otherentityNum);
+		saved_game.read<int32_t>(otherEntityNum);
 		saved_game.read<int32_t>(otherentityNum2);
 		saved_game.read<int32_t>(groundEntityNum);
 		saved_game.read<int32_t>(constantLight);
@@ -3396,6 +3401,7 @@ using entityState_t = struct entityState_s
 		saved_game.read<int32_t>(SaberSmashStartTime);
 		saved_game.read<int32_t>(SaberSmashLastStartTime);
 		saved_game.read<int32_t>(Smash_Count);
+		saved_game.read<int32_t>(weaponVariant); // weapon variant (2026-10-31)
 #endif // !JK2_MODE
 	}
 };

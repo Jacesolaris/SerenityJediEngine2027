@@ -34,6 +34,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define ACT_ACTIVE		qtrue
 #define ACT_INACTIVE	qfalse
 extern void NPC_UseResponse(gentity_t* self, const gentity_t* user, qboolean useWhenDone);
+extern qboolean G_Shop_CanTalk(const gentity_t* player, const gentity_t* npc);
+extern qboolean G_Shop_TryTalk(gentity_t* player, const gentity_t* npc);
 extern qboolean PM_CrouchAnim(int anim);
 extern qboolean BG_InDeathAnim(int anim);
 /*
@@ -191,7 +193,7 @@ void G_PlayEffect(const int fx_id, const int entNum, const vec3_t fwd)
 
 	gentity_t* tent = G_TempEntity(g_entities[entNum].currentOrigin, EV_PLAY_EFFECT);
 	tent->s.eventParm = fx_id;
-	tent->s.otherentityNum = entNum;
+	tent->s.otherEntityNum = entNum;
 	VectorSet(tent->maxs, FX_ENT_RADIUS, FX_ENT_RADIUS, FX_ENT_RADIUS);
 	VectorScale(tent->maxs, -1, tent->mins);
 	VectorCopy(fwd, tent->pos3);
@@ -206,7 +208,7 @@ void G_PlayEffect(const char* name, const int clientNum)
 {
 	gentity_t* tent = G_TempEntity(g_entities[clientNum].currentOrigin, EV_PLAY_MUZZLE_EFFECT);
 	tent->s.eventParm = G_EffectIndex(name);
-	tent->s.otherentityNum = clientNum;
+	tent->s.otherEntityNum = clientNum;
 	VectorSet(tent->maxs, FX_ENT_RADIUS, FX_ENT_RADIUS, FX_ENT_RADIUS);
 	VectorScale(tent->maxs, -1, tent->mins);
 }
@@ -1448,7 +1450,7 @@ void G_AddEvent(gentity_t* ent, int event, int event_parm)
 
 		temp = G_Spawn();
 		temp->s.eType = ET_EVENT_ONLY;
-		temp->s.otherentityNum = ent->s.number;
+		temp->s.otherEntityNum = ent->s.number;
 		G_SetOrigin(temp, ent->s.origin);
 		G_AddEvent(temp, event, eventParm);
 		temp->freeAfterEvent = qtrue;
@@ -2124,6 +2126,10 @@ qboolean CanUseInfrontOf(const gentity_t* ent)
 	{
 		return qtrue;
 	}
+	if (G_Shop_CanTalk(ent, target))
+	{
+		return qtrue; // the shop (2026-10-31): a friendly NPC to talk to (pazaak / buy items)
+	}
 
 	if (CanUseInfrontOfPartOfLevel(ent))
 	{
@@ -2260,6 +2266,12 @@ void TryUse(gentity_t* ent)
 	{
 		NPC_SetAnim(ent, SETANIM_TORSO, BOTH_BUTTON_HOLD, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 		GEntity_UseFunc(target, ent, ent);
+		return;
+	}
+	if (G_Shop_TryTalk(ent, target))
+	{
+		// the shop (2026-10-31, DH): a friendly NPC asks "challenge to pazaak / buy items" (g_pazaak.cpp)
+		NPC_UseResponse(target, ent, qfalse);
 		return;
 	}
 	if (target->client

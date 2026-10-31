@@ -542,8 +542,8 @@ static void CG_Special(const centity_t* cent)
 	{
 		// The portable shield should go through a different rendering function.
 		if (!cg.snap->ps.duelInProgress ||
-			s1->otherentityNum == cg.snap->ps.clientNum ||
-			s1->otherentityNum == cg.snap->ps.duelIndex)
+			s1->otherEntityNum == cg.snap->ps.clientNum ||
+			s1->otherEntityNum == cg.snap->ps.duelIndex)
 		{
 			FX_DrawPortableShield(cent);
 		}
@@ -894,7 +894,7 @@ static void CG_General(centity_t* cent)
 			VectorMA(end, lerped.origin[i], cent->currentState.angles, end);
 		}
 
-		parent = &cg_entities[cent->currentState.otherentityNum];
+		parent = &cg_entities[cent->currentState.otherEntityNum];
 		trap->G2API_GetBoltMatrix(parent->ghoul2, 0, 0, &mat, parent->turAngles, parent->lerpOrigin, cg.time,
 			cgs.game_models, parent->modelScale);
 
@@ -929,7 +929,7 @@ static void CG_General(centity_t* cent)
 			VectorMA(end, lerped.origin[i], cent->currentState.angles, end);
 		}
 
-		parent = &cg_entities[cent->currentState.otherentityNum];
+		parent = &cg_entities[cent->currentState.otherEntityNum];
 		trap->G2API_GetBoltMatrix(parent->ghoul2, 0, 0, &mat, parent->turAngles, parent->lerpOrigin, cg.time,
 			cgs.game_models, parent->modelScale);
 		BG_GiveMeVectorFromMatrix(&mat, ORIGIN, start);
@@ -944,8 +944,8 @@ static void CG_General(centity_t* cent)
 
 	if (cg.snap->ps.duelInProgress &&
 		((cent->currentState.weapon == WP_SABER &&
-			cent->currentState.otherentityNum != cg.snap->ps.clientNum &&
-			cent->currentState.otherentityNum != cg.snap->ps.duelIndex) ||
+			cent->currentState.otherEntityNum != cg.snap->ps.clientNum &&
+			cent->currentState.otherEntityNum != cg.snap->ps.duelIndex) ||
 			cent->currentState.eType & ET_BODY ||
 			cent->currentState.weapon == G2_MODEL_PART))
 	{ // don't render flying sabers owned by others, bodies or body parts
@@ -1077,7 +1077,18 @@ static void CG_General(centity_t* cent)
 	ent.shaderRGBA[2] = cent->currentState.customRGBA[2];
 	ent.shaderRGBA[3] = cent->currentState.customRGBA[3];
 
-	if (cent->currentState.modelGhoul2 >= G2_MODELPART_HEAD &&
+	if (cent->currentState.modelGhoul2 == G2_MODELPART_SLICE && cent->currentState.weapon == G2_MODEL_PART)
+	{
+		// saber slice piece (cg_players.c)
+		if (!CG_SaberSlicePiece(cent))
+		{
+			return;
+		}
+		do_not_set_model = qtrue;
+		ent.radius = cent->currentState.g2radius;
+		ent.hModel = 0;
+	}
+	else if (cent->currentState.modelGhoul2 >= G2_MODELPART_HEAD &&
 		cent->currentState.modelGhoul2 <= G2_MODELPART_RLEG &&
 		/*cent->currentState.modelIndex < MAX_CLIENTS &&*/
 		cent->currentState.weapon == G2_MODEL_PART)
@@ -1566,6 +1577,12 @@ static void CG_General(centity_t* cent)
 		VectorClear(cent->modelScale);
 	}
 
+	// saber cuts on a body or a cut-off piece
+	if (cent->saberSliceCount > 0 && ent.ghoul2 && !CG_SaberSliceApply(cent, &ent))
+	{
+		return;
+	}
+
 	if (cent->currentState.time > cg.time && cent->currentState.weapon == WP_EMPLACED_GUN)
 	{
 		float val = 0.0f;
@@ -1746,8 +1763,8 @@ static void CG_General(centity_t* cent)
 		cent->currentState.bolt1)  // lmo using same bolt1 hack to recognise sentry! (see above and SP_PAS in g_items.c)
 	{ // if entity is a trip mine, detpack, sentry gun consider duel NoX
 		if (!cg.snap->ps.duelInProgress ||
-			cent->currentState.otherentityNum == cg.snap->ps.clientNum ||
-			cent->currentState.otherentityNum == cg.snap->ps.duelIndex)
+			cent->currentState.otherEntityNum == cg.snap->ps.clientNum ||
+			cent->currentState.otherEntityNum == cg.snap->ps.duelIndex)
 		{
 			trap->R_AddRefEntityToScene(&ent);
 		}
@@ -1916,8 +1933,8 @@ static void CG_General(centity_t* cent)
 		int beam_id = 0;
 		//if force sight is active, render the laser multiple times up to the force sight level to increase visibility
 		if (!cg.snap->ps.duelInProgress ||
-			cent->currentState.otherentityNum == cg.snap->ps.clientNum ||
-			cent->currentState.otherentityNum == cg.snap->ps.duelIndex)
+			cent->currentState.otherEntityNum == cg.snap->ps.clientNum ||
+			cent->currentState.otherEntityNum == cg.snap->ps.duelIndex)
 		{ // dont render if neither you nor opponent are owner
 			if (cent->currentState.bolt2 == 1)
 			{
@@ -2851,13 +2868,14 @@ CG_MissileFromMuzzle
 
 The server starts a gun's shot at a point worked out from the eye (calcmuzzlePoint, g_weapon.c): in third person
 that is below / beside the gun the player holds, so the bolt came out under the muzzle (SP starts it at the gun's
-muzzle bolt). Here the shot is drawn from the shooter's gun muzzle (the *flash bolt of his weapon model, as the
-muzzle flash) and blends into its real path over its first MUZZLE_BLEND_MSEC. Visual only: where the shot goes and
+muzzle bolt). Here the shot is first drawn at the shooter's gun muzzle (the *flash bolt of his weapon model, as the
+muzzle flash) and blends into its real path over MUZZLE_BLEND_MSEC from then. Visual only: where the shot goes and
 what it hits are the server's (Jace 2026-10-29).
 ===============
 */
-#define MUZZLE_BLEND_MSEC	150
-#define MUZZLE_MAX_OFS		48.0f
+#define MUZZLE_BLEND_MSEC	120		// from the muzzle into the shot's real path
+#define MUZZLE_MAX_OFS		64.0f	// the gun muzzle is this near the shot's start
+#define MUZZLE_NEW_SHOT_MSEC	400	// older than this when first seen: not a new shot (came into view)
 
 static qboolean CG_MissileGunFlash(centity_t* owner, const int model, vec3_t out)
 {
@@ -2880,13 +2898,16 @@ static void CG_MissileFromMuzzle(centity_t* cent)
 
 	if (cent->muzzleOfsTrTime != s1->pos.trTime)
 	{
-		// a new shot: the offset from its start to the shooter's gun muzzle, taken once
+		// a new shot: the offset from where it is first drawn to the shooter's gun muzzle, taken once. The server
+		// steps a new shot forward (MISSILE_PRESTEP_TIME) and it reaches us a snapshot later, so it is first seen well
+		// in front of the gun: the offset is to that first position, not to the shot's start (2026-10-30)
 		cent->muzzleOfsTrTime = s1->pos.trTime;
+		cent->muzzleSeenTime = 0;
 		VectorClear(cent->muzzleOfs);
 
-		if (age >= MUZZLE_BLEND_MSEC || s1->otherentityNum < 0 || s1->otherentityNum >= ENTITYNUM_WORLD)
+		if (age >= MUZZLE_NEW_SHOT_MSEC || s1->otherEntityNum < 0 || s1->otherEntityNum >= ENTITYNUM_WORLD)
 		{
-			return;
+			return; // an old shot coming into view: drawn where it is
 		}
 		switch (s1->weapon)
 		{
@@ -2908,7 +2929,7 @@ static void CG_MissileFromMuzzle(centity_t* cent)
 		{
 			return;
 		}
-		centity_t* owner = &cg_entities[s1->otherentityNum];
+		centity_t* owner = &cg_entities[s1->otherEntityNum];
 		if (!owner->currentValid || !owner->ghoul2
 			|| owner->currentState.eType != ET_PLAYER && owner->currentState.eType != ET_NPC
 			|| owner->currentState.weapon != s1->weapon || owner->currentState.m_iVehicleNum)
@@ -2916,7 +2937,7 @@ static void CG_MissileFromMuzzle(centity_t* cent)
 			return;
 		}
 		// the local player in first person: the shot already starts by the view weapon
-		if (s1->otherentityNum == cg.snap->ps.clientNum && !cg.renderingThirdPerson)
+		if (s1->otherEntityNum == cg.snap->ps.clientNum && !cg.renderingThirdPerson)
 		{
 			return;
 		}
@@ -2939,13 +2960,23 @@ static void CG_MissileFromMuzzle(centity_t* cent)
 		}
 		if (found)
 		{
-			VectorSubtract(best, s1->pos.trBase, cent->muzzleOfs);
+			VectorSubtract(best, cent->lerpOrigin, cent->muzzleOfs); // muzzle - where the shot is now
+			cent->muzzleSeenTime = cg.time;
 		}
 	}
 
-	if (age < MUZZLE_BLEND_MSEC && !VectorCompare(cent->muzzleOfs, vec3_origin))
+	if (cent->muzzleSeenTime)
 	{
-		const float f = age <= 0 ? 1.0f : 1.0f - (float)age / (float)MUZZLE_BLEND_MSEC;
+		const int since = cg.time - cent->muzzleSeenTime;
+
+		if (since < 0 || since >= MUZZLE_BLEND_MSEC)
+		{
+			cent->muzzleSeenTime = 0;
+			return;
+		}
+		// drawn from the muzzle on its first frame, then the offset shrinks to nothing (eased out)
+		float f = 1.0f - (float)since / (float)MUZZLE_BLEND_MSEC;
+		f *= f;
 		VectorMA(cent->lerpOrigin, f, cent->muzzleOfs, cent->lerpOrigin);
 	}
 }
@@ -2958,8 +2989,8 @@ static void CG_Missile(centity_t* cent)
 
 	if (cg.snap->ps.duelInProgress &&
 		cent->currentState.eType == ET_MISSILE &&
-		cent->currentState.otherentityNum != cg.snap->ps.clientNum &&
-		cent->currentState.otherentityNum != cg.snap->ps.duelIndex)
+		cent->currentState.otherEntityNum != cg.snap->ps.clientNum &&
+		cent->currentState.otherEntityNum != cg.snap->ps.duelIndex)
 	{ //dont render missiles (includes dead sabers) if duel nox
 		return;
 	}
@@ -3092,7 +3123,7 @@ static void CG_Missile(centity_t* cent)
 			VectorMA(end, lerped.origin[i], s1->angles, end);
 		}
 
-		parent = &cg_entities[s1->otherentityNum];
+		parent = &cg_entities[s1->otherEntityNum];
 		trap->G2API_GetBoltMatrix(parent->ghoul2, 1, 0, &mat, parent->turAngles, parent->lerpOrigin, cg.time,
 			cgs.game_models, parent->modelScale);
 
@@ -3130,7 +3161,7 @@ static void CG_Missile(centity_t* cent)
 			VectorMA(end, lerped.origin[i], s1->angles, end);
 		}
 
-		parent = &cg_entities[s1->otherentityNum];
+		parent = &cg_entities[s1->otherEntityNum];
 		trap->G2API_GetBoltMatrix(parent->ghoul2, 1, 0, &mat, parent->turAngles, parent->lerpOrigin, cg.time,
 			cgs.game_models, parent->modelScale);
 		BG_GiveMeVectorFromMatrix(&mat, ORIGIN, start);
@@ -3145,6 +3176,12 @@ static void CG_Missile(centity_t* cent)
 
 	// calculate the axis
 	//VectorCopy(s1->angles, cent->lerpAngles);
+
+	if (s1->weaponVariant && !s1->otherentityNum2 && !(s1->powerups & 1 << PW_FORCE_PROJECTILE)
+		&& CG_WeaponVariantMissile(cent))
+	{
+		return; // weapon variants (2026-10-31): an SJE gun's shot, with its own effect
+	}
 
 	if (s1->otherentityNum2 && s1->weapon != WP_SABER)
 	{

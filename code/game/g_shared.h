@@ -659,6 +659,13 @@ public:
 
 	usercmd_t cmd; // we would lose angles if not persistant
 
+	// the shop (2026-10-31, g_pazaak.cpp shop code): saved, and carried over level changes (sje_playersave_shop)
+	int shopInit; // the starting credits were given
+	int shopOwned[SHOP_OWNED_WORDS]; // bits: the weapon variants (gun looks, grenade types) the player owns
+	int shopEquip[SHOP_MAX_WEAPONS]; // per weapon number: the owned look he uses on it (0 = stock)
+	int shopStreak; // kills in a row (each within g_shopStreakTime of the last)
+	int shopStreakTime; // level.time of the last kill
+
 	void sg_export(
 		ojk::SavedGameHelper& saved_game) const
 	{
@@ -671,6 +678,11 @@ public:
 		saved_game.write<int16_t>(cmd_angles);
 		saved_game.skip(2);
 		saved_game.write<>(teamState);
+		saved_game.write<int32_t>(shopInit);
+		saved_game.write<int32_t>(shopOwned);
+		saved_game.write<int32_t>(shopEquip);
+		saved_game.write<int32_t>(shopStreak);
+		saved_game.write<int32_t>(shopStreakTime);
 	}
 
 	void sg_import(
@@ -685,6 +697,11 @@ public:
 		saved_game.read<int16_t>(cmd_angles);
 		saved_game.skip(2);
 		saved_game.read<>(teamState);
+		saved_game.read<int32_t>(shopInit);
+		saved_game.read<int32_t>(shopOwned);
+		saved_game.read<int32_t>(shopEquip);
+		saved_game.read<int32_t>(shopStreak);
+		saved_game.read<int32_t>(shopStreakTime);
 	}
 }; // clientPersistant_t
 
@@ -1574,6 +1591,15 @@ struct gentity_s
 
 	int reloadTime = 0; //Every 0.2 seconds reload a bullet
 	int reloadCooldown = 0;
+	int aiClipShots = 0; // AI clips and reloads (2026-10-31): shots fired from the current clip
+	int aiClipWeapon = 0; // the weapon those shots were fired with
+	int grenadeKind = 0; // grenades (2026-10-31): the player's grenade type (grenade command), a WP_THERMAL variant, 0 = stock
+	int grenadeCookStage = 0; // cooking: 1 = pin pulled (cook sound), 2 = the warning beep has played
+	int grenadeDotKind = 0; // burning or poisoned (GK_FIRE / GK_POISON) until grenadeDotEnd
+	int grenadeDotEnd = 0;
+	int grenadeDotNext = 0; // the next damage tick
+	int grenadeDotAttacker = 0; // entity number of the thrower
+	int grenadeDotDamage = 0; // damage per tick
 	int weaponfiredelaytime = 0;
 	int TimeOfWeaponDrop = 0;
 
@@ -1588,6 +1614,16 @@ struct gentity_s
 	int lastKataTime; // timestamp (level.time) when kata is next allowed; 0 = allowed now
 	int Dash_Count;
 	int Dash_NPC_Count;
+
+	// Saber slice (Jedi Survivor style cuts at the saber contact point), see G_SaberSlice.
+	// Each cut is a plane tied to an anchor bone; the cgame turns it into refEntity_t::slicePlane.
+	int saberSliceCount = 0;
+	int saberSliceBone[MAX_SABER_SLICES] = {}; // SABERSLICE_BONE_*
+	int saberSliceBolt[MAX_SABER_SLICES] = {}; // bolt at the anchor bone on ghoul2[playerModel]
+	float saberSliceLocal[MAX_SABER_SLICES * 6] = {}; // per cut: plane in the anchor bone's space (nx ny nz d), 2 spare
+	int saberSliceInvert = 0; // bit i set: this entity is the cut-off piece of slice i
+	int saberSliceTime[MAX_SABER_SLICES] = {}; // level.time of each cut (the cut face cools down)
+	int saberSliceFxTime = 0; // cgame: next ember puff from the cut faces (not saved)
 
 	void sg_export(
 		ojk::SavedGameHelper& saved_game) const
@@ -1792,6 +1828,14 @@ struct gentity_s
 
 		saved_game.write<int32_t>(reloadTime);
 		saved_game.write<int32_t>(reloadCooldown);
+		saved_game.write<int32_t>(aiClipShots);
+		saved_game.write<int32_t>(aiClipWeapon);
+		saved_game.write<int32_t>(grenadeKind);
+		saved_game.write<int32_t>(grenadeDotKind);
+		saved_game.write<int32_t>(grenadeDotEnd);
+		saved_game.write<int32_t>(grenadeDotNext);
+		saved_game.write<int32_t>(grenadeDotAttacker);
+		saved_game.write<int32_t>(grenadeDotDamage);
 		saved_game.write<int32_t>(weaponfiredelaytime);
 		saved_game.write<int32_t>(TimeOfWeaponDrop);
 
@@ -1805,6 +1849,13 @@ struct gentity_s
 		saved_game.write<int32_t>(lastKataTime);
 		saved_game.write<int32_t>(Dash_Count);
 		saved_game.write<int32_t>(Dash_NPC_Count);
+
+		saved_game.write<int32_t>(saberSliceCount);
+		saved_game.write<int32_t>(saberSliceBone);
+		saved_game.write<int32_t>(saberSliceBolt);
+		saved_game.write<float>(saberSliceLocal);
+		saved_game.write<int32_t>(saberSliceInvert);
+		saved_game.write<int32_t>(saberSliceTime);
 	}
 
 	void sg_import(
@@ -2010,6 +2061,14 @@ struct gentity_s
 
 		saved_game.read<int32_t>(reloadTime);
 		saved_game.read<int32_t>(reloadCooldown);
+		saved_game.read<int32_t>(aiClipShots);
+		saved_game.read<int32_t>(aiClipWeapon);
+		saved_game.read<int32_t>(grenadeKind);
+		saved_game.read<int32_t>(grenadeDotKind);
+		saved_game.read<int32_t>(grenadeDotEnd);
+		saved_game.read<int32_t>(grenadeDotNext);
+		saved_game.read<int32_t>(grenadeDotAttacker);
+		saved_game.read<int32_t>(grenadeDotDamage);
 		saved_game.read<int32_t>(weaponfiredelaytime);
 		saved_game.read<int32_t>(TimeOfWeaponDrop);
 
@@ -2023,6 +2082,13 @@ struct gentity_s
 		saved_game.read<int32_t>(lastKataTime);
 		saved_game.read<int32_t>(Dash_Count);
 		saved_game.read<int32_t>(Dash_NPC_Count);
+
+		saved_game.read<int32_t>(saberSliceCount);
+		saved_game.read<int32_t>(saberSliceBone);
+		saved_game.read<int32_t>(saberSliceBolt);
+		saved_game.read<float>(saberSliceLocal);
+		saved_game.read<int32_t>(saberSliceInvert);
+		saved_game.read<int32_t>(saberSliceTime);
 	}
 };
 #endif //#ifdef GAME_INCLUDE

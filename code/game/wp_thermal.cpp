@@ -37,6 +37,369 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "wp_saber.h"
 #include "w_local.h"
 
+//---------------------------------------------------------------------------------------------------------------------
+// Grenades (2026-10-31, DH: the SJE grenades and grenade cooking, SJE SP + MP; see grenadeKind_t in weapons.h)
+//
+// Grenade types are WP_THERMAL weapon variants (ext_data/sje_weaponvariants.dat, "grenade <kind>"). The type is picked
+// when the grenade is thrown (G_GrenadeVariant): the player's pick (grenade command), an NPC's own (by its NPC type,
+// some keep the stock thermal). The thrown grenade carries it in s.weaponVariant (its own model and blast effect), and
+// G_GrenadeBlast does the blast: damage, radius and a status effect on everyone in reach (fire, poison, freeze, stun,
+// flash, smoke, bacta heal). g_weaponVariants 0 = stock thermals only.
+//
+// Cooking (g_grenadeCook 1, the player): hold the throw past a full wind-up (TD_VELOCITY ms) and the fuse starts
+// burning in the hand (the pin sound). The thrown grenade blows that much sooner; the warning beep comes in the hand,
+// and held too long it goes off in the hand. Quick and full-strength throws keep the old 2 s fuse.
+//---------------------------------------------------------------------------------------------------------------------
+extern cvar_t* g_weaponVariants;
+extern cvar_t* g_grenadeCook;
+extern void CG_GrenadeFlash(int duration);
+extern void player_Freeze(const gentity_t* self);
+extern qboolean G_ControlledByPlayer(const gentity_t* self);
+extern Vehicle_t* G_IsRidingVehicle(const gentity_t* pEnt);
+
+#define GRENADE_WARN_TIME	800		// the warning beep before the blast (thermalDetonatorExplode)
+#define GRENADE_DOT_TICK	500		// burn / poison damage every ...ms
+
+// default ms of each kind's status effect (the variant's "effecttime" overrides), and its share of the thermal's damage
+static const int grenadeKindTime[GK_NUM_KINDS] = { 0, 5000, 4000, 3000, 4000, 0, 8000, 0 };
+static const float grenadeKindDamage[GK_NUM_KINDS] = { 1.0f, 0.6f, 0.1f, 0.3f, 0.1f, 0.0f, 0.15f, 0.0f };
+
+static unsigned G_GrenadeHash(const char* name)
+{
+	unsigned h = 5381;
+
+	while (name && *name)
+	{
+		const unsigned char c = static_cast<unsigned char>(*name);
+		h = h * 33 + static_cast<unsigned>(c >= 'A' && c <= 'Z' ? c + 32 : c);
+		name++;
+	}
+	return h;
+}
+
+// the grenade type someone throws, a WP_THERMAL variant; 0 = the stock thermal
+static int G_GrenadeVariant(const gentity_t* ent)
+{
+	if (!ent || !ent->client || !g_weaponVariants->integer)
+	{
+		return 0;
+	}
+	if (BG_GetWeaponVariant(ent->client->ps.weaponVariant, WP_THERMAL))
+	{
+		return ent->client->ps.weaponVariant; // the weaponvariant cheat on a thermal
+	}
+	if (!ent->NPC || ent->s.number == 0)
+	{
+		return BG_GetWeaponVariant(ent->grenadeKind, WP_THERMAL) ? ent->grenadeKind : 0; // the player's pick
+	}
+	if (ent->client->ps.weapon == WP_SABER || BG_HasWeapon(&ent->client->ps, WP_SABER))
+	{
+		return 0; // saber users never (DH)
+	}
+
+	// an NPC: its own type, by NPC type and entity number; one slot more than there are types = the stock thermal
+	const int n = BG_WeaponVariantCount(WP_THERMAL);
+	if (!n)
+	{
+		return 0;
+	}
+	int pick = static_cast<int>((G_GrenadeHash(ent->NPC_type) + static_cast<unsigned>(ent->s.number) * 7u) % static_cast<unsigned>(n + 1));
+	for (int v = 1; v < bgNumWeaponVariants; v++)
+	{
+		if (bgWeaponVariants[v].baseWeapon == WP_THERMAL && bgWeaponVariants[v].npcUse && pick-- == 0)
+		{
+			return v;
+		}
+	}
+	return 0;
+}
+
+static qboolean G_GrenadeIsDroid(const gentity_t* ent)
+{
+	switch (ent->client->NPC_class)
+	{
+	case CLASS_ATST:
+	case CLASS_GONK:
+	case CLASS_INTERROGATOR:
+	case CLASS_MARK1:
+	case CLASS_MARK2:
+	case CLASS_MOUSE:
+	case CLASS_PROBE:
+	case CLASS_PROTOCOL:
+	case CLASS_R2D2:
+	case CLASS_R5D2:
+	case CLASS_REMOTE:
+	case CLASS_SEEKER:
+	case CLASS_SENTRY:
+	case CLASS_SBD:
+	case CLASS_BATTLEDROID:
+	case CLASS_DROIDEKA:
+	case CLASS_ASSASSIN_DROID:
+	case CLASS_SABER_DROID:
+	case CLASS_VEHICLE:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+// fire or poison: damage every GRENADE_DOT_TICK ms until the time runs out (a new dose restarts the clock)
+static void G_GrenadeDot(gentity_t* victim, const gentity_t* attacker, const int kind, const int time, const int damage)
+{
+	victim->grenadeDotKind = kind;
+	victim->grenadeDotEnd = level.time + time;
+	victim->grenadeDotDamage = damage;
+	victim->grenadeDotAttacker = attacker ? attacker->s.number : ENTITYNUM_WORLD;
+	if (victim->grenadeDotNext < level.time)
+	{
+		victim->grenadeDotNext = level.time + GRENADE_DOT_TICK;
+	}
+}
+
+// what a grenade type does to someone in its blast (alive, in sight of it)
+static void G_GrenadeStatus(gentity_t* victim, gentity_t* attacker, const int kind, const int time, const vec3_t org)
+{
+	gclient_t* cl = victim->client;
+
+	switch (kind)
+	{
+	case GK_FIRE:
+		if (victim->waterlevel < 2 && !G_GrenadeIsDroid(victim))
+		{
+			G_GrenadeDot(victim, attacker, GK_FIRE, time, 4);
+		}
+		break;
+
+	case GK_POISON:
+		if (!G_GrenadeIsDroid(victim))
+		{
+			G_GrenadeDot(victim, attacker, GK_POISON, time, 3);
+		}
+		break;
+
+	case GK_FREEZE:
+		if (cl->NPC_class != CLASS_VEHICLE && cl->NPC_class != CLASS_RANCOR && cl->NPC_class != CLASS_ATST
+			&& !G_IsRidingVehicle(victim))
+		{
+			cl->ps.stasisTime = level.time + time; // held like Force Stasis
+			VectorClear(cl->ps.velocity);
+			player_Freeze(victim);
+			G_PlayEffect("cryoban/stuck", victim->currentOrigin);
+		}
+		break;
+
+	case GK_STUN:
+	{
+		vec3_t dir;
+
+		VectorSubtract(victim->currentOrigin, org, dir);
+		dir[2] = 0.0f;
+		VectorNormalize(dir);
+		if (!G_GrenadeIsDroid(victim) && cl->NPC_class != CLASS_RANCOR && !G_IsRidingVehicle(victim))
+		{
+			G_Knockdown(victim, attacker, dir, 300, qtrue);
+		}
+		cl->ps.powerups[PW_STUNNED] = level.time + time; // NPCs can't fire, the stun look
+		cl->ps.powerups[PW_SHOCKED] = level.time + (time < 2000 ? time : 2000);
+	}
+	break;
+
+	case GK_FLASH:
+	{
+		// blinded: fully when looking at the blast, a third as long when looking away
+		vec3_t fwd, to;
+
+		AngleVectors(cl->ps.viewangles, fwd, nullptr, nullptr);
+		VectorSubtract(org, victim->currentOrigin, to);
+		VectorNormalize(to);
+		const int t = DotProduct(fwd, to) > 0.3f ? time : time / 3;
+
+		if (victim->s.number == 0 || G_ControlledByPlayer(victim))
+		{
+			CG_GrenadeFlash(t); // the player's screen whites out
+		}
+		else if (victim->NPC && !G_GrenadeIsDroid(victim))
+		{
+			victim->NPC->confusionTime = level.time + t; // can't find anyone
+			cl->ps.powerups[PW_STUNNED] = level.time + t; // and can't fire
+		}
+	}
+	break;
+
+	case GK_HEAL:
+		if (victim == attacker || (attacker && OnSameTeam(victim, attacker)))
+		{
+			const int max_health = cl->ps.stats[STAT_MAX_HEALTH] > 0 ? cl->ps.stats[STAT_MAX_HEALTH] : victim->max_health;
+
+			victim->health += 50;
+			if (victim->health > max_health)
+			{
+				victim->health = max_health;
+			}
+			cl->ps.stats[STAT_HEALTH] = victim->health;
+			victim->grenadeDotEnd = 0; // bacta cures fire and poison
+			G_PlayEffect("force/heal", victim->currentOrigin);
+		}
+		break;
+
+	default:
+		break;
+	}
+}
+
+// thermalDetonatorExplode: the blast of a grenade type; qfalse = a stock thermal (the old blast)
+static qboolean G_GrenadeBlast(gentity_t* ent)
+{
+	static gentity_t* victims[MAX_GENTITIES];
+	const weaponVariant_t* wv = BG_GetWeaponVariant(ent->s.weaponVariant, WP_THERMAL);
+
+	if (!wv)
+	{
+		return qfalse;
+	}
+	const int kind = wv->grenadeKind >= 0 && wv->grenadeKind < GK_NUM_KINDS ? wv->grenadeKind : GK_FRAG;
+	const float radius = weaponData[WP_THERMAL].splashRadius * wv->radiusScale;
+	const int damage = static_cast<int>(weaponData[WP_THERMAL].splashDamage * wv->fire[ent->alt_fire ? 1 : 0].damageScale
+		* grenadeKindDamage[kind]);
+	const int time = wv->effectTime > 0 ? wv->effectTime : grenadeKindTime[kind];
+	gentity_t* attacker = ent->owner;
+	vec3_t org;
+
+	VectorSet(org, ent->currentOrigin[0], ent->currentOrigin[1], ent->currentOrigin[2] + 8);
+	ent->takedamage = qfalse; // don't allow double deaths!
+
+	G_PlayEffect(wv->fire[0].missFx[0] ? wv->fire[0].missFx : "thermal/explosion", ent->currentOrigin);
+	if (kind == GK_FRAG || kind == GK_FIRE || kind == GK_STUN)
+	{
+		G_PlayEffect("thermal/shockwave", ent->currentOrigin);
+	}
+	if (damage > 0)
+	{
+		G_RadiusDamage(ent->currentOrigin, attacker, damage, radius, nullptr, kind == GK_POISON ? MOD_GAS : MOD_EXPLOSIVE_SPLASH);
+	}
+
+	if (kind != GK_FRAG && kind != GK_SMOKE)
+	{
+		const int count = G_RadiusList(org, radius, ent, qtrue, victims);
+
+		for (int i = 0; i < count; i++)
+		{
+			gentity_t* victim = victims[i];
+
+			if (victim && victim->client && victim->health > 0 && CanDamage(victim, org))
+			{
+				G_GrenadeStatus(victim, attacker, kind, time, org);
+			}
+		}
+	}
+
+	G_FreeEntity(ent);
+	return qtrue;
+}
+
+// how long the player has been cooking the grenade in hand (the hold past a full wind-up), ms; 0 = not cooking
+static int G_GrenadeCookTime(const gentity_t* ent)
+{
+	if (!g_grenadeCook->integer || !ent || !ent->client || ent->s.number != 0 || ent->client->ps.weaponChargeTime <= 0)
+	{
+		return 0; // the player only: NPCs throw at once
+	}
+	const int cook = level.time - ent->client->ps.weaponChargeTime - TD_VELOCITY;
+	if (cook <= 0)
+	{
+		return 0;
+	}
+	return cook < TD_TIME + GRENADE_WARN_TIME ? cook : TD_TIME + GRENADE_WARN_TIME;
+}
+
+// held too long: it goes off in the hand (uses up the grenade)
+static void G_GrenadeBlowInHand(gentity_t* ent)
+{
+	gclient_t* cl = ent->client;
+	const int ammo_index = weaponData[WP_THERMAL].ammoIndex;
+
+	ent->grenadeCookStage = 0;
+	gentity_t* bolt = WP_DropThermal(ent);
+
+	if (cl->ps.ammo[ammo_index] > 0)
+	{
+		cl->ps.ammo[ammo_index] -= weaponData[WP_THERMAL].energyPerShot > 0 ? weaponData[WP_THERMAL].energyPerShot : 1;
+		if (cl->ps.ammo[ammo_index] < 0)
+		{
+			cl->ps.ammo[ammo_index] = 0;
+		}
+	}
+	cl->ps.weaponstate = WEAPON_READY;
+	cl->ps.weaponChargeTime = 0;
+	cl->ps.weaponTime = 1000;
+
+	if (bolt)
+	{
+		VectorClear(bolt->s.pos.trDelta);
+		bolt->count = 1; // no second warning
+		bolt->e_ThinkFunc = thinkF_thermalDetonatorExplode;
+		bolt->nextthink = level.time;
+	}
+}
+
+// every think (from G_WeaponVariantThink): cooking the grenade in hand, and burning / poisoned people
+void G_GrenadeClientThink(gentity_t* ent)
+{
+	gclient_t* cl = ent->client;
+
+	if (!cl)
+	{
+		return;
+	}
+
+	// cooking
+	if (cl->ps.weapon == WP_THERMAL && (cl->ps.weaponstate == WEAPON_CHARGING || cl->ps.weaponstate == WEAPON_CHARGING_ALT)
+		&& ent->health > 0)
+	{
+		const int cook = G_GrenadeCookTime(ent);
+
+		if (cook > 0 && ent->grenadeCookStage < 1)
+		{
+			ent->grenadeCookStage = 1;
+			G_SoundOnEnt(ent, CHAN_AUTO, "sound/weapons/grenade_cook.mp3"); // the pin
+		}
+		if (cook >= TD_TIME && ent->grenadeCookStage < 2)
+		{
+			ent->grenadeCookStage = 2;
+			G_Sound(ent, G_SoundIndex("sound/weapons/thermal/warning.wav"));
+		}
+		if (cook >= TD_TIME + GRENADE_WARN_TIME)
+		{
+			G_GrenadeBlowInHand(ent);
+		}
+	}
+	else
+	{
+		ent->grenadeCookStage = 0;
+	}
+
+	// burning / poisoned
+	if (ent->grenadeDotEnd)
+	{
+		if (ent->health <= 0 || level.time >= ent->grenadeDotEnd || (ent->grenadeDotKind == GK_FIRE && ent->waterlevel >= 2))
+		{
+			ent->grenadeDotEnd = 0; // over, dead, or water put the fire out
+		}
+		else if (level.time >= ent->grenadeDotNext)
+		{
+			gentity_t* attacker = ent->grenadeDotAttacker >= 0 && ent->grenadeDotAttacker < ENTITYNUM_WORLD
+				&& g_entities[ent->grenadeDotAttacker].inuse ? &g_entities[ent->grenadeDotAttacker] : nullptr;
+			vec3_t org;
+
+			ent->grenadeDotNext = level.time + GRENADE_DOT_TICK;
+			VectorSet(org, ent->currentOrigin[0], ent->currentOrigin[1], ent->currentOrigin[2] + 20);
+			G_PlayEffect(ent->grenadeDotKind == GK_FIRE ? "player/fire" : "player/poison", org);
+			G_Damage(ent, attacker, attacker, nullptr, ent->currentOrigin, ent->grenadeDotDamage,
+				DAMAGE_NO_KNOCKBACK | DAMAGE_NO_ARMOR, ent->grenadeDotKind == GK_FIRE ? MOD_BURNING : MOD_GAS);
+		}
+	}
+}
+
 //---------------------
 //	Thermal Detonator
 //---------------------
@@ -68,6 +431,11 @@ void thermalDetonatorExplode(gentity_t* ent)
 	else
 	{
 		vec3_t pos;
+
+		if (G_GrenadeBlast(ent))
+		{
+			return; // a grenade type (2026-10-31): its own blast and status effect
+		}
 
 		VectorSet(pos, ent->currentOrigin[0], ent->currentOrigin[1], ent->currentOrigin[2] + 8);
 
@@ -380,16 +748,30 @@ gentity_t* WP_FireThermalDetonator(gentity_t* ent, const qboolean alt_fire)
 		damageScale = TD_NPC_DAMAGE_CUT;
 	}
 
+	// grenade cooking (2026-10-31): the time the player held it past a full wind-up comes off the fuse
+	const int cook = G_GrenadeCookTime(ent);
+
 	if (alt_fire == qfalse && ent->s.number == 0)
 	{
 		bolt->e_ThinkFunc = thinkF_WP_ThermalThink;
 		bolt->nextthink = level.time + TD_THINK_TIME;
-		bolt->delay = level.time + TD_TIME;
+		bolt->delay = level.time + TD_TIME - cook;
 	}
 	else
 	{
 		bolt->e_ThinkFunc = thinkF_thermalDetonatorExplode;
-		bolt->nextthink = level.time + TD_TIME;
+		bolt->nextthink = level.time + TD_TIME - cook;
+	}
+	if (cook >= TD_TIME)
+	{
+		// the warning already beeped in the hand: straight to the blast
+		bolt->count = 1;
+		bolt->e_ThinkFunc = thinkF_thermalDetonatorExplode;
+		bolt->nextthink = level.time + (TD_TIME + GRENADE_WARN_TIME - cook > 50 ? TD_TIME + GRENADE_WARN_TIME - cook : 50);
+	}
+	if (ent->client)
+	{
+		ent->grenadeCookStage = 0;
 	}
 
 	bolt->mass = 10;
@@ -507,6 +889,7 @@ gentity_t* WP_FireThermalDetonator(gentity_t* ent, const qboolean alt_fire)
 	bolt->s.eType = ET_MISSILE;
 	bolt->svFlags = SVF_USE_CURRENT_ORIGIN;
 	bolt->s.weapon = WP_THERMAL;
+	bolt->s.weaponVariant = G_GrenadeVariant(ent); // grenades (2026-10-31): the grenade type (its model, blast, effect)
 
 	if (alt_fire == qtrue)
 	{

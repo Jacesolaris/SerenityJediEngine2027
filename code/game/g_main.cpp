@@ -198,6 +198,7 @@ cvar_t* g_saberBreaking; // breakable saber staffs: 0 off, 1 NPCs only, 2 everyo
 cvar_t* g_saberRestrictForce;
 cvar_t* g_saberPickuppableDroppedSabers;
 cvar_t* g_dismemberProbabilities;
+cvar_t* g_gundismemberment;
 cvar_t* com_outcast;
 cvar_t* g_saberRealisticImpact;
 
@@ -254,6 +255,10 @@ cvar_t* g_IsSaberDoingAttackDamage;
 cvar_t* g_DebugSaberCombat;
 
 cvar_t* g_allowgunnerbash;
+cvar_t* g_weaponVariants; // weapon variants (2026-10-31): gunner NPCs each get their own gun (SJE guns)
+cvar_t* g_aiReload; // AI clips and reloads (2026-10-31): gunner NPCs stop to reload when their clip is empty
+cvar_t* g_aiClipScale; // x every AI clip size
+cvar_t* g_grenadeCook; // grenades (2026-10-31): 1 = the player can cook a grenade (hold past a full throw), 0 = old
 cvar_t* g_allowslipping;
 cvar_t* g_allowClimbing;
 
@@ -720,6 +725,7 @@ static void G_InitCvars()
 	g_saberRealisticCombat = gi.cvar("g_saberRealisticCombat", "2", CVAR_ARCHIVE);
 	//makes collision more precise, increases damage
 	g_dismemberProbabilities = gi.cvar("g_dismemberProbabilities", "1", CVAR_ARCHIVE);
+	g_gundismemberment = gi.cvar("g_gundismemberment", "1", CVAR_ARCHIVE | CVAR_SAVEGAME | CVAR_NORESTART);
 	//0 = ignore probabilities, 1 = use probabilities
 	g_saberDamageCapping = gi.cvar("g_saberDamageCapping", "1", CVAR_ARCHIVE);
 	//caps damage of sabers vs players and NPC who use sabers
@@ -859,6 +865,14 @@ static void G_InitCvars()
 	g_DebugSaberCombat = gi.cvar("g_DebugSaberCombat", "0", CVAR_ARCHIVE);
 
 	g_allowgunnerbash = gi.cvar("g_allowgunnerbash", "1", CVAR_ARCHIVE | CVAR_SAVEGAME | CVAR_NORESTART);
+	// gunner NPCs each get their own gun: a weapon variant (SJE guns, ext_data/sje_weaponvariants.dat) of their weapon,
+	// the least used one; saber users never (0: the stock guns) (DH 2026-10-31)
+	g_weaponVariants = gi.cvar("g_weaponVariants", "1", CVAR_ARCHIVE | CVAR_NORESTART);
+	// gunner NPCs count their shots and stop to reload when the clip is empty: reload anim + sound, duck or run to
+	// cover, a callout (clip sizes from the weapon variants / the gun data) (DH 2026-10-31). 0 = the old endless fire
+	g_aiReload = gi.cvar("g_aiReload", "1", CVAR_ARCHIVE | CVAR_NORESTART);
+	g_aiClipScale = gi.cvar("g_aiClipScale", "1", CVAR_ARCHIVE | CVAR_NORESTART);
+	g_grenadeCook = gi.cvar("g_grenadeCook", "1", CVAR_ARCHIVE | CVAR_NORESTART);
 
 	g_allowslipping = gi.cvar("g_allowslipping", "1", CVAR_ARCHIVE | CVAR_SAVEGAME | CVAR_NORESTART);
 
@@ -1031,6 +1045,8 @@ static void init_game(const char* mapname, const char* spawntarget, const int ch
 	IT_LoadItemParms();
 
 	IT_LoadWeatherParms();
+
+	BG_LoadWeaponVariants(); // weapon variants (2026-10-31): the SJE guns for gunner NPCs
 
 	clear_registered_items();
 

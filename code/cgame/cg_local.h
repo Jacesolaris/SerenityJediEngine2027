@@ -663,6 +663,8 @@ extern vmCvar_t cg_autoswitch;
 extern vmCvar_t cg_simpleItems;
 extern vmCvar_t cg_fov;
 extern vmCvar_t cg_fovAspectAdjust;
+extern vmCvar_t cg_sprintFov;
+extern vmCvar_t cg_sprintFovTime;
 extern vmCvar_t cg_endcredits;
 extern vmCvar_t cg_updatedDataPadForcePower1;
 extern vmCvar_t cg_updatedDataPadForcePower2;
@@ -670,6 +672,10 @@ extern vmCvar_t cg_updatedDataPadForcePower3;
 extern vmCvar_t cg_updatedDataPadObjective;
 extern vmCvar_t cg_drawBreath;
 extern vmCvar_t cg_drawAirBar;
+extern vmCvar_t cg_saberSliceCaps;
+extern vmCvar_t cg_saberSliceCoolTime;
+extern vmCvar_t cg_saberSliceRenderer;
+qboolean CG_SaberSliceApply(gentity_t* gent, refEntity_t* ent);
 extern vmCvar_t cg_roffdebug;
 #ifndef FINAL_BUILD
 extern	vmCvar_t		cg_roffval1;
@@ -939,6 +945,12 @@ void CG_RegisterItemVisuals(int itemNum);
 void CG_RegisterItemSounds(int itemNum);
 
 void CG_FireWeapon(centity_t* cent, const qboolean alt_fire);
+// weapon variants (2026-10-31, cg_weapons.cpp): the SJE guns, see weapons.h (the gun model in the hand is the game's)
+const char* CG_WeaponVariantMuzzleFx(const entityState_t* es, qboolean alt_fire);
+void CG_WeaponVariantFireSound(const centity_t* cent, qboolean alt_fire);
+qboolean CG_WeaponVariantMissile(centity_t* cent);
+qboolean CG_WeaponVariantImpact(const entityState_t* es, vec3_t origin, vec3_t dir, qboolean hit_body, qboolean alt_fire);
+qhandle_t CG_WeaponVariantIcon(int weapon, qhandle_t stock_icon);
 
 void CG_AddViewWeapon(playerState_t* ps);
 void CG_AddViewWeaponDuals(playerState_t* ps);

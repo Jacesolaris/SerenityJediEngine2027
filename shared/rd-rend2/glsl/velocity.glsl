@@ -50,6 +50,10 @@ layout(std140) uniform Entity
 	float u_FXVolumetricBase;
 	vec3 u_ModelLightDir;
 	float u_VertexLerp;
+	vec4 u_SlicePlanes[4]; // saber slice: world space cut planes (tr_saberslice.h)
+	vec4 u_SliceSign;
+	int u_SliceCount;
+	float u_SliceHeat;
 };
 
 layout(std140) uniform PreviousEntity
@@ -78,6 +82,7 @@ layout(std140) uniform ShaderInstance
 layout(std140) uniform Bones
 {
 	mat3x4 u_BoneMatrices[MAX_G2_BONES];
+	uvec4 u_BoneSlice[MAX_G2_BONES / 16]; // saber slice: 2 bits per cut per bone
 };
 
 layout(std140) uniform PreviousBones
@@ -328,6 +333,45 @@ mat4x3 GetBoneMatrix(mat3x4 bone)
 }
 #endif
 
+#if defined(USE_SKELETAL_ANIMATION)
+// saber slice (tr_saberslice.h): one clip distance per cut, the positive side of a cut is cut away
+float SliceValue(int cut, uint mode, vec3 wsPos)
+{
+	float d = -1000.0;
+	if (mode == 1u)
+		d = dot(u_SlicePlanes[cut].xyz, wsPos) - u_SlicePlanes[cut].w;
+	else if (mode == 2u)
+		d = 1000.0;
+	return d * u_SliceSign[cut];
+}
+
+void SliceClip(vec3 wsPos)
+{
+	gl_ClipDistance[0] = 1.0;
+	gl_ClipDistance[1] = 1.0;
+	gl_ClipDistance[2] = 1.0;
+	gl_ClipDistance[3] = 1.0;
+	if (u_SliceCount <= 0)
+		return;
+
+	// the bone this vertex mostly follows
+	uint bone = attr_BoneIndexes[0];
+	float w = attr_BoneWeights[0];
+	if (attr_BoneWeights[1] > w) { bone = attr_BoneIndexes[1]; w = attr_BoneWeights[1]; }
+	if (attr_BoneWeights[2] > w) { bone = attr_BoneIndexes[2]; w = attr_BoneWeights[2]; }
+	if (attr_BoneWeights[3] > w) { bone = attr_BoneIndexes[3]; }
+	uint bits = (u_BoneSlice[bone >> 4u][(bone >> 2u) & 3u] >> ((bone & 3u) * 8u)) & 255u;
+
+	gl_ClipDistance[0] = -SliceValue(0, bits & 3u, wsPos);
+	if (u_SliceCount > 1)
+		gl_ClipDistance[1] = -SliceValue(1, (bits >> 2u) & 3u, wsPos);
+	if (u_SliceCount > 2)
+		gl_ClipDistance[2] = -SliceValue(2, (bits >> 4u) & 3u, wsPos);
+	if (u_SliceCount > 3)
+		gl_ClipDistance[3] = -SliceValue(3, (bits >> 6u) & 3u, wsPos);
+}
+#endif
+
 void main()
 {
 #if defined(USE_VERTEX_ANIMATION)
@@ -382,6 +426,9 @@ void main()
 #endif
 
 	vec4 wsPosition = u_ModelMatrix * vec4(position, 1.0);
+#if defined(USE_SKELETAL_ANIMATION)
+	SliceClip(wsPosition.xyz);
+#endif
 	gl_Position = u_viewProjectionMatrix * wsPosition;
 
 	var_Position = gl_Position;

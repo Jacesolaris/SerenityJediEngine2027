@@ -7,7 +7,7 @@ if not defined FOUND (
 	pause
 	exit /b 1
 )
-if not exist build-analysis\nul (mkdir build-tracy)
+if not exist build-tracy\nul (mkdir build-tracy)
 pushd build-tracy
 cmake -G "Visual Studio 18 2026" -A X64 -D UseTracy=ON -D CMAKE_INSTALL_PREFIX=../install ..
 popd
