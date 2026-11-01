@@ -1211,6 +1211,25 @@ static void GL_SliceClip(int count)
 	glState.sliceClipCount = count;
 }
 
+// SJE saber slice options (shaders generic.glsl / lightall.glsl): 0 = r_saberSliceFlatCap, 1 = r_saberSliceSeam
+static int RB_SliceCvar(const int which)
+{
+	static cvar_t* flatCap = nullptr;
+	static cvar_t* seam = nullptr;
+	if (!flatCap)
+	{
+#ifdef REND2_SP
+		flatCap = ri.Cvar_Get("r_saberSliceFlatCap", "1", CVAR_ARCHIVE_ND);
+		seam = ri.Cvar_Get("r_saberSliceSeam", "1", CVAR_ARCHIVE_ND);
+#else
+		flatCap = ri.Cvar_Get("r_saberSliceFlatCap", "1", CVAR_ARCHIVE_ND, "Saber cuts: the cut face is drawn as a flat cap (1) or as the inside of the body (0)");
+		seam = ri.Cvar_Get("r_saberSliceSeam", "1", CVAR_ARCHIVE_ND, "Saber cuts: glowing band along the cut edge that cools with the cut (1 on, 0 off)");
+#endif
+	}
+	const cvar_t* c = which == 0 ? flatCap : seam;
+	return c ? c->integer : 0;
+}
+
 static void RB_DrawItems(
 	int numDrawItems,
 	const DrawItem* drawItems,
@@ -1258,7 +1277,13 @@ static void RB_DrawItems(
 					GL_BindToTMU(tr.saberSliceImages[2], TB_SLICEGLOWMAP);
 					molten |= 4;
 				}
+				// SJE: r_saberSliceFlatCap - the faces seen through the cut are shaded as the flat cap (8)
+				if (RB_SliceCvar(0))
+					molten |= 8;
 			}
+			// SJE: r_saberSliceSeam - a glowing band along the cut on the body's surface (16)
+			if (sliceCount > 0 && RB_SliceCvar(1))
+				molten |= 16;
 			GLSL_SetUniformInt(drawItem.program, UNIFORM_SLICEMOLTEN, molten);
 		}
 		else

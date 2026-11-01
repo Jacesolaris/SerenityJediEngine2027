@@ -54,6 +54,9 @@ namespace {
 	const float	MC_FLOOR_GAP = 0.8f;		// units cloth keeps above the floor
 	const float	MC_WELD = 0.01f;
 	const int	MC_SETTLE_STEPS = 40;
+	const int	MC_REST_STEPS = 30;			// SJE r_meshClothSleep: 16 ms steps at rest (~0.5 s) before the cloth sleeps
+	const float	MC_REST_SPEED = 0.03f;		//   at rest: no free point moved more than this in a step (~2 units/s)
+	const float	MC_REST_DRIFT = 0.25f;		//   and the pose and body capsules moved less than this since the rest began
 	const float	MC_DEFAULT_SPIN = 0.0f;		// degrees/s, 0 = no spin limit unless the config sets one		// 0.64 s of settling when a character appears	// bind-pose distance that counts as the same point
 
 	enum mcRuleType_t { MC_RULE_ABOVE, MC_RULE_NEAR, MC_RULE_SEGMENT };
@@ -116,6 +119,14 @@ namespace {
 		std::vector<int>					linkA, linkB;
 		std::vector<char>					linkBend;
 		std::vector<int>					tris;			// particle indices
+		// SJE: isometric bending (r_meshClothBendModel 1, Bergou et al. 2006 quadratic bending): one stencil per
+		// edge shared by two triangles - the edge's two points, then the two opposite points - with its
+		// cotangent weights from the bind pose. Built lazily on the main thread (MC_Prepare).
+		mutable std::vector<int>			bendSt;			// 4 particles per stencil
+		mutable std::vector<float>			bendW;			// 4 cotangent weights per stencil (they sum to 0)
+		mutable std::vector<float>			bendAlpha;		// per stencil: XPBD compliance (-1 = no bending resistance)
+		mutable std::vector<float>			bendBs;			// per stencil: 0..1 bend stiffness (old projection)
+		mutable bool						bendBuilt = false;
 
 		// What is drawn. Dense cloth is simulated on a coarse grid of its own
 		// vertices (like the separate simulation mesh of game cloth tools); every
@@ -167,6 +178,18 @@ namespace {
 		std::vector<float>	offPrev, offCur;	// cloth offset from the animation after the last two steps (for drawing between steps)
 		std::vector<float>	pPrevStep, pCurStep;	// world positions after the last two steps
 		vec3_t				oPrevStep = {}, oCurStep = {};	// character origin at those two steps
+		// SJE: sleeping cloth (r_meshClothSleep): cloth that has come to rest, on a character that stands still,
+		// stops simulating until the pose, the body capsules, the wind or a blast moves it again
+		bool				asleep = false;
+		int					restSteps = 0;		// 16 ms steps the cloth has been at rest
+		std::vector<float>	restRef;			// animated pose when the rest began (3 per particle)
+		float				restCaps[8] = {};	// body capsule signature then (sums of the ends and radii, count)
+		// SJE: per-step constants (were worked out per particle or per link in every substep)
+		std::vector<float>	kSpread, kShape, kBendLink;
+		// SJE: self-collision in every substep (r_meshClothSelfSub): close pairs found once per step
+		std::vector<int>	selfPairs;			// 2 particles per pair
+		// SJE: per-triangle air (r_meshClothAero), isometric bending multipliers (one per stencil)
+		std::vector<float>	aeroDv, aeroW, bendLambda;
 	};
 
 	std::vector<mcDef_t>										g_defs;
@@ -851,6 +874,58 @@ namespace {
 		}
 	}
 
+	// SJE: isometric bending stencils (r_meshClothBendModel 1). For an edge (x0 x1) shared by the triangles
+	// (x0 x1 x2) and (x0 x1 x3), the curvature vector H = sum w_i x_i with the cotangent weights
+	// w = { c03 + c04, c01 + c02, -c01 - c03, -c02 - c04 } (Bergou, Wardetzky, Harmon, Zorin & Grinspun 2006,
+	// "A Quadratic Bending Model for Inextensible Surfaces"; c0k = cot of the angle at x0, c1k at x1).
+	// Lazy, main thread.
+	static float CotAngle(const float* u, const float* v) {
+		vec3_t c;
+		mcCross(u, v, c);
+		const float s = mcLen(c), d = mcDot(u, v);
+		if (s < 1e-6f) return d >= 0.0f ? 20.0f : -20.0f;
+		const float r = d / s;
+		return r > 20.0f ? 20.0f : (r < -20.0f ? -20.0f : r);
+	}
+	static void ComputeBendStencils(const mcGroup_t* g) {
+		if (g->bendBuilt) return;
+		g->bendBuilt = true;
+		g->bendSt.clear(); g->bendW.clear(); g->bendAlpha.clear(); g->bendBs.clear();
+		if ((int)g->bindPos.size() < g->numParticles * 3) return;
+		std::unordered_map<unsigned long long, int> firstTri;	// edge -> opposite point of the first triangle on it
+		std::unordered_map<unsigned long long, char> usedEdge;
+		auto ekey = [](int a, int b) { if (a > b) { const int t = a; a = b; b = t; } return ((unsigned long long)a << 32) | (unsigned)b; };
+		for (size_t t = 0; t + 2 < g->tris.size(); t += 3) {
+			const int pi[3] = { g->tris[t], g->tris[t + 1], g->tris[t + 2] };
+			if (pi[0] == pi[1] || pi[1] == pi[2] || pi[0] == pi[2]) continue;
+			for (int k = 0; k < 3; k++) {
+				const int x0 = pi[k], x1 = pi[(k + 1) % 3], o = pi[(k + 2) % 3];
+				if (x0 < 0 || x1 < 0 || o < 0 || x0 >= g->numParticles || x1 >= g->numParticles || o >= g->numParticles) continue;
+				const unsigned long long ek = ekey(x0, x1);
+				auto it = firstTri.find(ek);
+				if (it == firstTri.end()) { firstTri[ek] = o; continue; }
+				if (usedEdge.count(ek) || it->second == o) continue;
+				usedEdge[ek] = 1;
+				const int x2 = it->second, x3 = o;
+				if (g->freedom[x0] <= 0.0f && g->freedom[x1] <= 0.0f && g->freedom[x2] <= 0.0f && g->freedom[x3] <= 0.0f) continue;
+				const float* p0 = &g->bindPos[x0 * 3], * p1 = &g->bindPos[x1 * 3], * p2 = &g->bindPos[x2 * 3], * p3 = &g->bindPos[x3 * 3];
+				vec3_t e0, e1, e2, e3, e4, ne0, c;
+				mcSub(p1, p0, e0); mcSub(p2, p0, e1); mcSub(p3, p0, e2); mcSub(p2, p1, e3); mcSub(p3, p1, e4);
+				mcScale(e0, -1.0f, ne0);
+				mcCross(e0, e1, c); const float A0 = 0.5f * mcLen(c);
+				mcCross(e0, e2, c); const float A1 = 0.5f * mcLen(c);
+				if (A0 < 1e-4f || A1 < 1e-4f) continue;
+				const float c01 = CotAngle(e0, e1), c02 = CotAngle(e0, e2), c03 = CotAngle(ne0, e3), c04 = CotAngle(ne0, e4);
+				const int st[4] = { x0, x1, x2, x3 };
+				const float w[4] = { c03 + c04, c01 + c02, -c01 - c03, -c02 - c04 };
+				float bs = 0.0f;
+				for (int j = 0; j < 4; j++) { g->bendSt.push_back(st[j]); g->bendW.push_back(w[j]); bs += 0.25f * g->bend[st[j]]; }
+				g->bendBs.push_back(bs);
+				g->bendAlpha.push_back(BendCompliance(bs));
+			}
+		}
+	}
+
 	// Solver settings for one substep, from mcParams_t
 	struct mcSolve_t {
 		float	bendScale;	// exponent for the old projection's bend (1 / substeps)
@@ -859,7 +934,103 @@ namespace {
 		int		xpbdIters;	// XPBD passes per substep
 		float	liftLimit;	// -2 = per surface, -1 = no limit, N = units
 		int		edgeCol;	// 1: cloth edges against arms, fists and hilts
+		float	tetherK;	// SJE: fraction of the over-tether distance reeled in per substep (per-step constant)
+		const float* bendK;	// SJE: per link, old projection's bend fraction per substep (nullptr = work it out)
+		int		bendModel;	// SJE: 1 = isometric bending stencils instead of the bend links
 	};
+
+	// SJE: isometric bending (r_meshClothBendModel 1). The curvature vector of each stencil, H(x) = sum w_i x_i,
+	// is zero for a flat stencil and points along the stencil's normal as it folds. Its size along the cloth's
+	// own current normal is pulled toward the animated cloth's (h = H(t) . n(t)), a scalar XPBD constraint
+	// C = H(x) . n(x) - h with the gradient w_i n(x) (the normal held for the pass). So a cape swung out keeps
+	// the folds the model has, in whatever direction it hangs, instead of being pulled toward the animated pose.
+	static void StencilNormal(const float* x0, const float* x1, const float* x2, const float* x3, float* n) {
+		vec3_t e0, e1, e2, n1, n2;
+		mcSub(x1, x0, e0); mcSub(x2, x0, e1); mcSub(x3, x0, e2);
+		mcCross(e0, e1, n1);
+		mcCross(e2, e0, n2);
+		mcNorm(n1); mcNorm(n2);
+		mcAdd(n1, n2, n);
+		mcNorm(n);
+	}
+	static void SolveBendStencils(const mcGroup_t* g, mcInstance_t* in, const mcSolve_t& sv) {
+		const size_t ns = g->bendAlpha.size();
+		if (!ns || g->bendSt.size() != ns * 4 || g->bendW.size() != ns * 4) return;
+		if (in->bendLambda.size() != ns) in->bendLambda.resize(ns);
+		std::fill(in->bendLambda.begin(), in->bendLambda.end(), 0.0f);
+		const float ih2 = 1.0f / (sv.h * sv.h);
+		const int iters = !sv.xpbd ? 1 : (sv.xpbdIters < 1 ? 1 : (sv.xpbdIters > 8 ? 8 : sv.xpbdIters));
+		for (int it = 0; it < iters; it++) {
+			for (size_t s = 0; s < ns; s++) {
+				const float alpha = g->bendAlpha[s];
+				if (alpha < 0.0f) continue;
+				const int* st = &g->bendSt[s * 4];
+				const float* w = &g->bendW[s * 4];
+				float wi[4], den = 0.0f;
+				for (int j = 0; j < 4; j++) { wi[j] = g->freedom[st[j]] > 0.0f ? 1.0f : 0.0f; den += wi[j] * w[j] * w[j]; }
+				if (den < 1e-6f) continue;
+				const float* x[4] = { &in->p[st[0] * 3], &in->p[st[1] * 3], &in->p[st[2] * 3], &in->p[st[3] * 3] };
+				const float* t[4] = { &in->target[st[0] * 3], &in->target[st[1] * 3], &in->target[st[2] * 3], &in->target[st[3] * 3] };
+				vec3_t H = { 0, 0, 0 }, Ht = { 0, 0, 0 }, nx, nt;
+				for (int j = 0; j < 4; j++) { mcMA(H, w[j], x[j], H); mcMA(Ht, w[j], t[j], Ht); }
+				StencilNormal(x[0], x[1], x[2], x[3], nx);
+				StencilNormal(t[0], t[1], t[2], t[3], nt);
+				if (mcDot(nx, nx) < 0.5f || mcDot(nt, nt) < 0.5f) continue;	// folded flat onto itself: no normal
+				const float C = mcDot(H, nx) - mcDot(Ht, nt);
+				float dl;
+				if (sv.xpbd) {
+					const float at = alpha * ih2;
+					dl = (-C - at * in->bendLambda[s]) / (den + at);
+					in->bendLambda[s] += dl;
+				}
+				else {
+					// old projection: the per-substep fraction of the bend, as for the bend links
+					const float bs = g->bendBs[s] < 0.99f ? g->bendBs[s] : 0.99f;
+					const float kb = bs <= 0.0f ? 0.0f : 1.0f - powf(1.0f - bs, sv.bendScale);
+					dl = -C * kb / den;
+				}
+				for (int j = 0; j < 4; j++) {
+					if (wi[j] <= 0.0f) continue;
+					float* pj = &in->p[st[j] * 3];
+					mcMA(pj, w[j] * dl, nx, pj);
+				}
+			}
+		}
+	}
+
+	// SJE: self-collision every substep (r_meshClothSelfSub 1; Mueller, "Ten Minute Physics" 15): the close
+	// pairs are found once per 16 ms step with a widened radius (BuildSelfPairs, below SelfCollide), then
+	// kept apart in every substep, with cloth-on-cloth friction: a touching pair loses part of its sliding
+	// against each other (their velocities are blended toward the pair's mean).
+	static void SolveSelfPairs(const mcGroup_t* g, mcInstance_t* in, float frictionScale) {
+		if (in->selfPairs.empty()) return;
+		const float thick = g->selfThick * in->linkScale;
+		if (!(thick > 0.05f) || thick > 64.0f) return;
+		for (size_t i = 0; i + 1 < in->selfPairs.size(); i += 2) {
+			const int p = in->selfPairs[i], q = in->selfPairs[i + 1];
+			float* a = &in->p[p * 3], * b = &in->p[q * 3];
+			vec3_t d;
+			mcSub(a, b, d);
+			const float len = mcLen(d);
+			if (len >= thick || len < 1e-5f) continue;
+			const float corr = 0.5f * (thick - len) / len;
+			mcMA(a, corr, d, a);
+			mcMA(b, -corr, d, b);
+			// a separation, not a throw
+			float* pa = &in->prev[p * 3], * pb = &in->prev[q * 3];
+			mcMA(pa, corr, d, pa);
+			mcMA(pb, -corr, d, pb);
+			// friction: blend both velocities toward their mean (v = p - prev, so prev moves the other way)
+			const float fk = Clamp01(0.35f * (g->fricK[p] + g->fricK[q]) * frictionScale);	// default 0.21
+			if (fk <= 0.0f) continue;
+			vec3_t va, vb, dv;
+			mcSub(a, pa, va);
+			mcSub(b, pb, vb);
+			mcSub(vb, va, dv);			// mean - va = 0.5 (vb - va)
+			mcMA(pa, -0.5f * fk, dv, pa);
+			mcMA(pb, 0.5f * fk, dv, pb);
+		}
+	}
 
 	// One pass over every constraint, Gauss-Seidel. bendK is the per-substep
 	// fraction of the bend error removed (stiffness made independent of the
@@ -889,6 +1060,7 @@ namespace {
 				for (size_t l = 0; l < g->linkA.size(); l++) {
 					const float alpha = g->linkAlpha[l];
 					if (alpha < 0.0f) continue;
+					if (sv.bendModel && g->linkBend[l]) continue;	// SJE: the stencils below bend it instead
 					const int a = g->linkA[l], b = g->linkB[l];
 					const float wa = g->freedom[a] > 0.0f ? 1.0f : 0.0f, wb = g->freedom[b] > 0.0f ? 1.0f : 0.0f;
 					if (wa + wb == 0.0f) continue;
@@ -924,16 +1096,24 @@ namespace {
 				if (len < 1e-5f) continue;
 				float k = (len - rest) / (len * (wa + wb));
 				if (g->linkBend[l]) {
-					const float bs = 0.5f * (g->bend[a] + g->bend[b]);
-					if (bs <= 0.0f || bendScale <= 0.0f) continue;
+					if (sv.bendModel) continue;	// SJE: the stencils below bend it instead
 					// the fraction of the fold removed per substep, so that one
 					// 16 ms step removes 'bend' of it whatever the substep count
-					k *= 1.0f - powf(1.0f - (bs < 0.99f ? bs : 0.99f), bendScale);
+					// (SJE: worked out once per step in Step, not per link per substep)
+					float kb;
+					if (sv.bendK) kb = sv.bendK[l];
+					else {
+						const float bs = 0.5f * (g->bend[a] + g->bend[b]);
+						kb = bs <= 0.0f || bendScale <= 0.0f ? 0.0f : 1.0f - powf(1.0f - (bs < 0.99f ? bs : 0.99f), bendScale);
+					}
+					if (kb <= 0.0f) continue;
+					k *= kb;
 				}
 				mcMA(pa, k * wa, d, pa);
 				mcMA(pb, -k * wb, d, pb);
 			}
 		}
+		if (sv.bendModel) SolveBendStencils(g, in, sv);
 		for (int p = 0; p < g->numParticles; p++) {
 			const float f = g->freedom[p];
 			float* pp = &in->p[p * 3];
@@ -990,7 +1170,7 @@ namespace {
 			}
 			const float len = mcLen(d);
 			if (len > maxLen && len > 1e-5f && !MCDBG_OFF("NOTETHER")) {
-				const float k = 1.0f - powf(0.85f, bendScale > 0.0f ? bendScale * 6.0f : 6.0f);	// ~15% per 16/6 ms, frame-rate independent
+				const float k = sv.tetherK;	// ~15% per 16/6 ms, frame-rate independent (SJE: per-step constant)
 				float target = len - (len - maxLen) * k;
 				if (target > 2.0f * maxLen) target = 2.0f * maxLen;
 				mcMA(t, target / len, d, pp);
@@ -1101,6 +1281,9 @@ namespace {
 		in->pinPrev.clear();
 		in->side[0] = 1.0f; in->side[1] = in->side[2] = 0.0f;
 		in->pinTime = time;
+		in->asleep = false;
+		in->restSteps = 0;
+		in->restRef.clear();
 	}
 
 	// Velocity pass after a substep's constraints, for vertices touching the
@@ -1183,6 +1366,52 @@ namespace {
 					// a separation, not a throw
 					mcMA(&in->prev[p * 3], corr, d, &in->prev[p * 3]);
 					mcMA(&in->prev[q * 3], -corr, d, &in->prev[q * 3]);
+				}
+			}
+		}
+	}
+
+	// SJE: r_meshClothSelfSub: the pairs of self-colliding particles closer than twice the cloth thickness
+	// (cloth moves during a step: the wider radius catches pairs that close in on each other in it), found
+	// once per 16 ms step with the same sorted-cell broad phase as SelfCollide. Solved per substep in
+	// SolveSelfPairs.
+	void BuildSelfPairs(const mcGroup_t* g, mcInstance_t* in) {
+		in->selfPairs.clear();
+		if (!g->anySelf) return;
+		const float thick = g->selfThick * in->linkScale;
+		if (!(thick > 0.05f) || thick > 64.0f) return;
+		const float cell = 2.0f * thick;
+		auto cellOf = [&](const float* v, int k) { return (long long)floorf(v[k] / cell); };
+		auto key = [](long long x, long long y, long long z) { return (x * 73856093LL) ^ (y * 19349663LL) ^ (z * 83492791LL); };
+		struct cellEntry_t { long long key; int p; };
+		thread_local static std::vector<cellEntry_t> cells;
+		cells.clear();
+		for (int p = 0; p < g->numParticles; p++) {
+			if (g->freedom[p] <= 0.0f || !g->selfCol[p]) continue;
+			const float* v = &in->p[p * 3];
+			cells.push_back({ key(cellOf(v, 0), cellOf(v, 1), cellOf(v, 2)), p });
+		}
+		std::sort(cells.begin(), cells.end(), [](const cellEntry_t& x, const cellEntry_t& y) { return x.key < y.key; });
+		const size_t maxPairs = 65536 * 2;	// safety cap (a broken scale bunching the whole cloth together)
+		for (int p = 0; p < g->numParticles && in->selfPairs.size() < maxPairs; p++) {
+			if (g->freedom[p] <= 0.0f || !g->selfCol[p]) continue;
+			const float* a = &in->p[p * 3];
+			const long long cx = cellOf(a, 0), cy = cellOf(a, 1), cz = cellOf(a, 2);
+			for (long long dx = -1; dx <= 1; dx++) for (long long dy = -1; dy <= 1; dy++) for (long long dz = -1; dz <= 1; dz++) {
+				const long long k = key(cx + dx, cy + dy, cz + dz);
+				auto it = std::lower_bound(cells.begin(), cells.end(), k, [](const cellEntry_t& e, long long v) { return e.key < v; });
+				for (; it != cells.end() && it->key == k; ++it) {
+					const int q = it->p;
+					if (q <= p) continue;
+					vec3_t bd;
+					mcSub(&g->bindPos[p * 3], &g->bindPos[q * 3], bd);
+					if (mcLen(bd) * in->linkScale < 2.5f * thick) continue;	// neighbours in the cloth
+					vec3_t d;
+					mcSub(a, &in->p[q * 3], d);
+					if (mcDot(d, d) >= cell * cell) continue;
+					if (in->selfPairs.size() >= maxPairs) break;
+					in->selfPairs.push_back(p);
+					in->selfPairs.push_back(q);
 				}
 			}
 		}
@@ -1440,6 +1669,61 @@ namespace {
 		}
 	}
 
+	// SJE: per-triangle air (r_meshClothAero 1). Each triangle feels the air by its own normal, area and mean
+	// velocity relative to the wind: the normal ("sail") drag as before, plus extra lift (the drag's part across
+	// the airflow, half again). Each point gets the area-weighted mean of its triangles' velocity change
+	// (force / lumped mass), so small or sliver triangles no longer weigh as much as big ones and the push
+	// follows the real faces instead of the averaged point normals. Per substep, before the points move.
+	static void TriangleAir(const mcGroup_t* g, mcInstance_t* in, const mcParams_t* prm, const vec3_t windNow,
+		const float* windF, float h) {
+		const size_t n3 = (size_t)g->numParticles * 3;
+		in->aeroDv.assign(n3, 0.0f);
+		in->aeroW.assign(g->numParticles, 0.0f);
+		const float wetW = 1.0f + Clamp01(prm->wet);
+		for (size_t t = 0; t + 2 < g->tris.size(); t += 3) {
+			const int i0 = g->tris[t], i1 = g->tris[t + 1], i2 = g->tris[t + 2];
+			if (g->freedom[i0] <= 0.0f && g->freedom[i1] <= 0.0f && g->freedom[i2] <= 0.0f) continue;
+			const float* a = &in->p[i0 * 3], * b = &in->p[i1 * 3], * c = &in->p[i2 * 3];
+			vec3_t e1, e2, nn;
+			mcSub(b, a, e1);
+			mcSub(c, a, e2);
+			mcCross(e1, e2, nn);
+			const float area2 = mcNorm(nn);
+			if (area2 < 1e-6f) continue;
+			// mean velocity (per substep) relative to the air
+			vec3_t u = { 0, 0, 0 }, vi;
+			const int id[3] = { i0, i1, i2 };
+			float wf = 0.0f, invW = 0.0f;
+			for (int k = 0; k < 3; k++) {
+				mcSub(&in->p[id[k] * 3], &in->prev[id[k] * 3], vi);
+				mcAdd(u, vi, u);
+				wf += windF ? windF[id[k]] : 1.0f;
+				invW += 1.0f / (g->weight[id[k]] * wetW);
+			}
+			mcScale(u, 1.0f / 3.0f, u);
+			mcMA(u, -h * wf / 3.0f, windNow, u);
+			invW *= 1.0f / 3.0f;
+			float kn = prm->drag * h * invW;
+			if (kn > 1.0f) kn = 1.0f;
+			const float un = mcDot(u, nn);
+			vec3_t dv;
+			mcScale(nn, -un * kn, dv);
+			// lift: the part of the push across the airflow, half again
+			const float ul = mcLen(u);
+			if (ul > 1e-6f) {
+				vec3_t uh, side;
+				mcScale(u, 1.0f / ul, uh);
+				mcMA(dv, -mcDot(dv, uh), uh, side);
+				mcMA(dv, 0.5f, side, dv);
+			}
+			const float area = 0.5f * area2;
+			for (int k = 0; k < 3; k++) {
+				mcMA(&in->aeroDv[id[k] * 3], area, dv, &in->aeroDv[id[k] * 3]);
+				in->aeroW[id[k]] += area;
+			}
+		}
+	}
+
 	// One 16 ms step, split into substeps ("Small Steps in Physics
 	// Simulation", Macklin et al. 2019): many short steps with a single
 	// constraint pass each keep the fabric from stretching or wobbling far
@@ -1458,6 +1742,33 @@ namespace {
 		solve.xpbdIters = prm->xpbdIters;
 		solve.liftLimit = prm->liftLimit < -1.5f ? -2.0f : prm->liftLimit;
 		solve.edgeCol = prm->edgeCol;
+		// SJE: per-step constants. These powf()s ran per particle (tether, spread, shape) or per bend link in
+		// every substep; they only depend on the substep count and the static settings.
+		solve.tetherK = 1.0f - powf(0.85f, bendScale * 6.0f);
+		solve.bendModel = prm->bendModel == 1 && !g->bendAlpha.empty() ? 1 : 0;
+		solve.bendK = nullptr;
+		if (!(solve.xpbd && g->linkAlpha.size() == g->linkA.size()) && !solve.bendModel) {
+			std::vector<float>& kb = in->kBendLink;
+			kb.resize(g->linkA.size());
+			for (size_t l = 0; l < g->linkA.size(); l++) {
+				kb[l] = 0.0f;
+				if (!g->linkBend[l]) continue;
+				const float bs = 0.5f * (g->bend[g->linkA[l]] + g->bend[g->linkB[l]]);
+				if (bs > 0.0f) kb[l] = 1.0f - powf(1.0f - (bs < 0.99f ? bs : 0.99f), bendScale);
+			}
+			solve.bendK = kb.data();
+		}
+		{
+			std::vector<float>& ksp = in->kSpread, & ksh = in->kShape;
+			ksp.resize(g->numParticles);
+			ksh.resize(g->numParticles);
+			const float isub = 1.0f / sub;
+			for (int p = 0; p < g->numParticles; p++) {
+				const float sp = g->spread[p], sh = g->shape[p] * prm->shapeScale;
+				ksp[p] = sp > 0.0f ? 1.0f - powf(1.0f - Clamp01(sp), isub) : 0.0f;
+				ksh[p] = sh > 0.0f ? 1.0f - powf(1.0f - Clamp01(sh), isub) : 0.0f;
+			}
+		}
 		std::vector<float>& n = in->scratchN;
 		// wind with slow gusts: two incommensurate sines, so it never repeats visibly
 		vec3_t windNow;
@@ -1497,6 +1808,12 @@ namespace {
 		in->contactN.resize(tgtTo.size());
 		in->contact.resize(g->numParticles);
 		in->targetSub.assign(tgtFrom.begin(), tgtFrom.end());
+		// SJE: r_meshClothSelfSub: the close pairs once per step, kept apart in every substep
+		const bool selfSub = prm->selfSub && g->anySelf;
+		if (selfSub) BuildSelfPairs(g, in);
+		else in->selfPairs.clear();
+		// SJE: r_meshClothAero: the air pushes each triangle (by its own normal, area and velocity)
+		const bool aero = prm->aero && g->tris.size() >= 3;
 		for (int s = 0; s < sub; s++) {
 			const float t1 = (float)(s + 1) / sub;
 			if (s > 0) in->targetSub.assign(in->target.begin(), in->target.end());
@@ -1504,6 +1821,7 @@ namespace {
 			std::fill(in->push.begin(), in->push.end(), 0.0f);
 			std::fill(in->contact.begin(), in->contact.end(), 0);
 			ParticleNormals(g, in->p, n);
+			if (aero) TriangleAir(g, in, prm, windNow, flutter ? windF.data() : nullptr, h);
 			for (int p = 0; p < g->numParticles; p++) {
 				const float f = g->freedom[p];
 				float* pp = &in->p[p * 3], * pv = &in->prev[p * 3];
@@ -1545,7 +1863,14 @@ namespace {
 					if (kt > 0.5f) kt = 0.5f;
 					vec3_t relT;
 					mcMA(rel, -vn, nn, relT);
-					mcMA(v, -vn * kn, nn, v);
+					if (aero) {
+						// SJE: the triangles' push (normal drag + lift), area-weighted onto this point
+						const float aw = in->aeroW[p];
+						if (aw > 1e-8f) mcMA(v, 1.0f / aw, &in->aeroDv[p * 3], v);
+					}
+					else {
+						mcMA(v, -vn * kn, nn, v);
+					}
 					mcMA(v, -kt, relT, v);
 				}
 				mcCopy(pp, pv);
@@ -1559,28 +1884,81 @@ namespace {
 				// sideways-only pull toward the animated shape: stops a cape
 				// rolling up into a rope in saber spins, while it still trails,
 				// swings and lifts freely front to back and up and down
-				const float sp = g->spread[p];
+				const float sp = in->kSpread[p];
 				if (sp > 0.0f) {
-					const float k = 1.0f - powf(1.0f - Clamp01(sp), 1.0f / sub);
+					const float k = sp;
 					vec3_t d;
 					mcSub(&in->target[p * 3], pp, d);
 					mcMA(pp, k * mcDot(d, in->side), in->side, pp);
 				}
 				// optional pull toward the modelled shape (off unless configured)
-				const float sh = g->shape[p] * prm->shapeScale;
+				const float sh = in->kShape[p];
 				if (sh > 0.0f) {
-					const float k = 1.0f - powf(1.0f - Clamp01(sh), 1.0f / sub);
+					const float k = sh;
 					vec3_t d;
 					mcSub(&in->target[p * 3], pp, d);
 					mcMA(pp, k, d, pp);
 				}
 			}
 			SolveConstraints(g, in, caps, ncaps, solve);
+			if (selfSub) SolveSelfPairs(g, in, prm->frictionScale);
 			FloorCollide(g, in, prm);
 			ContactVelocity(g, in, prm->frictionScale);
 		}
 		in->impulse.clear();
-		SelfCollide(g, in);
+		if (!selfSub) SelfCollide(g, in);
+	}
+
+	// SJE: sleeping cloth (r_meshClothSleep 1). A cape on a character standing still settles and then keeps
+	// re-solving the same rest shape every step. Once it has been at rest for MC_REST_STEPS steps (no free
+	// point moving, the pose and the body capsules staying put, no wind) it stops simulating and is drawn
+	// where it came to rest. Any change wakes it: the pose or a capsule moving MC_REST_DRIFT, wind, or a
+	// blast or force push.
+	static void CapsSignature(const mcCapsule_t* caps, int ncaps, float* sig) {
+		for (int k = 0; k < 8; k++) sig[k] = 0.0f;
+		for (int c = 0; c < ncaps; c++) {
+			for (int k = 0; k < 3; k++) { sig[k] += caps[c].a[k]; sig[3 + k] += caps[c].b[k]; }
+			sig[6] += caps[c].r;
+		}
+		sig[7] = (float)ncaps;
+	}
+	static bool RestPoseHolds(const mcInstance_t* in, const std::vector<float>& target, const float* capSig, const mcParams_t* prm) {
+		if (mcDot(prm->wind, prm->wind) > 1e-4f) return false;
+		if (in->restRef.size() != target.size()) return false;
+		for (int k = 0; k < 8; k++) if (fabsf(capSig[k] - in->restCaps[k]) > MC_REST_DRIFT) return false;
+		const float d2 = MC_REST_DRIFT * MC_REST_DRIFT;
+		for (size_t i = 0; i + 2 < target.size(); i += 3) {
+			vec3_t d;
+			mcSub(&target[i], &in->restRef[i], d);
+			if (mcDot(d, d) > d2) return false;
+		}
+		return true;
+	}
+	static void TrackRest(const mcGroup_t* g, mcInstance_t* in, const std::vector<float>& target, const float* capSig,
+		const mcParams_t* prm, int steps) {
+		bool still = RestPoseHolds(in, target, capSig, prm) && in->pCurStep.size() == in->p.size() && in->pPrevStep.size() == in->p.size();
+		if (still) {
+			const float s2 = MC_REST_SPEED * MC_REST_SPEED;
+			for (int p = 0; p < g->numParticles && still; p++) {
+				if (g->freedom[p] <= 0.0f) continue;
+				vec3_t d;
+				mcSub(&in->pCurStep[p * 3], &in->pPrevStep[p * 3], d);
+				if (mcDot(d, d) > s2) still = false;
+			}
+		}
+		if (!still) {
+			in->restSteps = 0;
+			in->restRef.assign(target.begin(), target.end());
+			for (int k = 0; k < 8; k++) in->restCaps[k] = capSig[k];
+			return;
+		}
+		in->restSteps += steps;
+		if (in->restSteps < MC_REST_STEPS) return;
+		in->asleep = true;
+		// drawn from the last step alone while asleep (no blend between two slightly different steps)
+		in->pPrevStep = in->pCurStep;
+		in->offPrev = in->offCur;
+		mcCopy(in->oCurStep, in->oPrevStep);
 	}
 
 	void Simulate(const mcGroup_t* g, mcInstance_t* in, int timeMs, const vec3_t origin, const vec3_t axis[3],
@@ -1620,6 +1998,19 @@ namespace {
 			nuse++;
 		}
 		const int nnear = CullCapsules(g, target, useCaps, nuse, nearCaps, 32);
+		// SJE: sleeping cloth (r_meshClothSleep)
+		float capSig[8];
+		CapsSignature(nearCaps, nnear, capSig);
+		bool sleeping = false;
+		if (in->active && in->asleep) {
+			sleeping = prm->sleep && in->impulse.empty() && RestPoseHolds(in, target, capSig, prm);
+			if (!sleeping) {
+				in->asleep = false;
+				in->restSteps = 0;
+				in->restRef.assign(target.begin(), target.end());
+				for (int k = 0; k < 8; k++) in->restCaps[k] = capSig[k];
+			}
+		}
 		if (!in->active) {
 			in->target.assign(target.begin(), target.end());
 			Reset(in, timeMs);
@@ -1640,6 +2031,23 @@ namespace {
 			in->pCurStep = in->p;
 			mcCopy(origin, in->oPrevStep);
 			mcCopy(origin, in->oCurStep);
+			in->restRef.assign(target.begin(), target.end());
+			for (int k = 0; k < 8; k++) in->restCaps[k] = capSig[k];
+		}
+		else if (sleeping) {
+			// SJE: asleep - no steps; keep every clock and reference current so waking up carries on smoothly
+			mcCopy(axis[2], in->up);
+			mcNorm(in->up);
+			mcCopy(origin, in->lastOrigin);
+			in->originTime = timeMs;
+			in->originVel[0] = in->originVel[1] = in->originVel[2] = 0.0f;
+			in->pinPrev.assign(target.begin(), target.end());
+			in->pinTime = timeMs;
+			in->targetPrev.assign(target.begin(), target.end());
+			in->simTarget.assign(target.begin(), target.end());
+			in->target.assign(target.begin(), target.end());
+			in->lastTime = timeMs;
+			in->accum = 0;
 		}
 		else {
 			mcCopy(axis[2], in->up);
@@ -1743,6 +2151,9 @@ namespace {
 				if (steps > 0) in->simTarget.assign(to.begin(), to.end());
 				in->targetPrev.assign(target.begin(), target.end());
 				in->lastTime = timeMs;
+				// SJE: r_meshClothSleep - count the steps the cloth has been at rest
+				if (!prm->sleep) in->restSteps = 0;
+				else if (steps > 0) TrackRest(g, in, target, capSig, prm, steps);
 			}
 			// frames without a full step still follow the current pose, so a
 			// fast limb never ends up inside stale cloth
@@ -2084,6 +2495,7 @@ bool MC_Prepare(const void* surfacePtr, const void* instanceKey, int timeMs, mcR
 	// here, on the main thread, so MC_Run (maybe on a job worker) only ever reads the group
 	ComputeRootDist(g);
 	ComputeLinkAlpha(g);
+	ComputeBendStencils(g);	// SJE: r_meshClothBendModel stencils
 
 	run->instance = in;
 	run->group = g;

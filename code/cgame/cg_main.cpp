@@ -430,9 +430,11 @@ vmCvar_t cg_ignitionSpeedvader;
 
 vmCvar_t cg_smoothCamera;
 vmCvar_t cg_speedTrail;
+vmCvar_t cg_precacheWeaponVariants;
 vmCvar_t cg_saberLightRadius; // saber-only light (DH 2026-10-27): cg_saberLightRadius / cg_saberLightIntensity scale only lightsaber light, on top of r_dlightRadius / r_dlightIntensity
 vmCvar_t cg_saberLightIntensity;
 vmCvar_t cg_wheelSlowmo; // weapon / force wheel (cg_main.cpp): 1 = the game runs at a quarter speed while it is open
+vmCvar_t cg_wheelHold; // weapon / force wheel: 0 = a press opens it and it stays open (as MD), 1 = held open (old)
 vmCvar_t cg_fovViewmodel;
 vmCvar_t cg_fovViewmodelAdjust;
 
@@ -672,9 +674,11 @@ static cvarTable_t cvarTable[] = {
 
 	{ &cg_smoothCamera, "cg_smoothCamera", "1", CVAR_ARCHIVE },
 	{ &cg_speedTrail, "cg_speedTrail", "0", CVAR_ARCHIVE },
+	{ &cg_precacheWeaponVariants, "cg_precacheWeaponVariants", "1", CVAR_ARCHIVE },
 	{ &cg_saberLightRadius, "cg_saberLightRadius", "0.703125", CVAR_ARCHIVE }, // saber light reach (1 = as before)
 	{ &cg_saberLightIntensity, "cg_saberLightIntensity", "1.070312", CVAR_ARCHIVE }, // saber light strength (1 = as before)
 	{ &cg_wheelSlowmo, "cg_wheelSlowmo", "1", CVAR_ARCHIVE }, // weapon / force wheel: slow the game while it is open
+	{ &cg_wheelHold, "cg_wheelHold", "0", CVAR_ARCHIVE }, // weapon / force wheel: 0 stays open after a press, 1 held open
 	{ &cg_fovViewmodel, "cg_fovViewmodel", "0", CVAR_ARCHIVE },
 	{ &cg_fovViewmodelAdjust, "cg_fovViewmodelAdjust", "1", CVAR_ARCHIVE },
 
@@ -2325,6 +2329,10 @@ static void CG_RegisterGraphics()
 			CG_RegisterWeapon(i);
 		}
 	}
+
+	// the weapon variants (the SJE guns) too, so their first shot doesn't stutter (cg_precacheWeaponVariants)
+	CG_LoadingString("weapon variants");
+	CG_PrecacheWeaponVariants();
 
 	CG_LoadingString("static models");
 	CG_CreateMiscEnts();
@@ -5169,11 +5177,12 @@ void CG_DrawDataPadForceSelect()
 ===============================================================================
 Weapon / force wheel (ported from MovieDuels, Jace 2026-10-29)
 
-Hold the key bound to +md_wheel (Weapon Wheel) or +md_forcewheel (Force Wheel): a radial overlay of the player's
-weapons or force powers, every slot in a fixed place, the ones he doesn't carry / know faded. Point with the mouse, let
-go of the key or press attack to take it; the mouse wheel switches the rings. While it is open the mouse turns the view
-only a little (the turn moves the pointer; the view is given back on close) and, with cg_wheelSlowmo 1, the game runs
-at a quarter speed.
+Press the key bound to +md_wheel (Weapon Wheel) or +md_forcewheel (Force Wheel): a radial overlay of the player's
+weapons or force powers, every slot in a fixed place, the ones he doesn't carry / know faded. It stays open (as MD,
+DH 2026-11-01); point with the mouse, press the same key again or attack to take it; the other wheel key or the mouse
+wheel switches the rings. cg_wheelHold 1: the old way, held open while the key is down, the pick on letting go.
+While it is open the mouse turns the view only a little (the turn moves the pointer; the view is given back on close)
+and, with cg_wheelSlowmo 1, the game runs at a quarter speed.
 ===============================================================================
 */
 constexpr int MDW_MAX_ITEMS = 64;
@@ -5197,6 +5206,7 @@ constexpr float MDW_TIMESCALE = 0.25f; // the game speed while the wheel is open
 
 extern cvar_t* g_timescale;
 extern vmCvar_t cg_wheelSlowmo; // 1: the game runs at a quarter speed while the wheel is open
+extern vmCvar_t cg_wheelHold; // 0: a press opens the wheel and it stays open, 1: held open while the key is down
 extern qboolean playerUsableWeapons[WP_NUM_WEAPONS];
 void CG_ChangeWeapon(int num);
 
@@ -5216,6 +5226,7 @@ static struct
 	bool blockButtons; // attack / alt attack belong to the wheel (also the press that closed it, until let go)
 	qhandle_t panelShader, sliceShader;
 	sfxHandle_t clickSound;
+	bool keyDown[2]; // the Weapon Wheel / Force Wheel key is down (its auto-repeat is not a second press)
 } mdWheel;
 
 static void CG_MDWheel_GetCmd(usercmd_t* cmd)
@@ -5434,6 +5445,7 @@ void CG_MDWheel_Reset()
 	mdWheel.open = false;
 	mdWheel.oldTimescale = 0.0f;
 	mdWheel.blockButtons = false;
+	mdWheel.keyDown[0] = mdWheel.keyDown[1] = false;
 	mdWheel.panelShader = 0; // registered again (a vid_restart can change the renderer's handles)
 }
 
@@ -5474,21 +5486,65 @@ static void CG_MDWheel_Open(const int ring)
 	}
 }
 
-// +md_wheel / -md_wheel (the Weapon Wheel bind): held open, the pick on letting go
+// a wheel key pressed (0 Weapon Wheel, 1 Force Wheel). cg_wheelHold 0 (as MD): closed - it opens on that ring; open -
+// the same key again takes the pick, the other wheel key switches to its ring. cg_wheelHold 1: opens, held open.
+static void CG_MDWheel_KeyDown(const int ring)
+{
+	if (mdWheel.keyDown[ring])
+	{
+		return; // the key's auto-repeat
+	}
+	mdWheel.keyDown[ring] = true;
+	if (!mdWheel.open)
+	{
+		CG_MDWheel_Open(ring);
+		return;
+	}
+	if (cg_wheelHold.integer)
+	{
+		return;
+	}
+	if (mdWheel.ring == ring)
+	{
+		CG_MDWheel_Close(qtrue);
+	}
+	else
+	{
+		mdWheel.ring = ring;
+		mdWheel.hover = -1;
+		cgi_S_StartLocalSound(mdWheel.clickSound, CHAN_LOCAL_SOUND);
+	}
+}
+
+static void CG_MDWheel_KeyUp(const int ring)
+{
+	mdWheel.keyDown[ring] = false;
+	if (cg_wheelHold.integer)
+	{
+		CG_MDWheel_Close(qtrue); // held open: the pick on letting go
+	}
+}
+
+// +md_wheel / -md_wheel (the Weapon Wheel bind)
 void CG_MDWheel_Down_f()
 {
-	CG_MDWheel_Open(0);
+	CG_MDWheel_KeyDown(0);
 }
 
 // +md_forcewheel / -md_forcewheel: the same wheel on the force ring (the Force Wheel bind)
 void CG_MDWheel_ForceDown_f()
 {
-	CG_MDWheel_Open(1);
+	CG_MDWheel_KeyDown(1);
 }
 
 void CG_MDWheel_Up_f()
 {
-	CG_MDWheel_Close(qtrue);
+	CG_MDWheel_KeyUp(0);
+}
+
+void CG_MDWheel_ForceUp_f()
+{
+	CG_MDWheel_KeyUp(1);
 }
 
 // "md_wheel_menu [force]": the old wheel menus' binds ("uimenu ingameweaponwheelMenu" / "uimenu ingameforcewheelMenu",

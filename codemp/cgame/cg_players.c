@@ -6631,7 +6631,7 @@ static void CG_SaberSliceDrawCap(const centity_t* cent, const refEntity_t* ent, 
 {
 	mdxaBone_t m_joint, m_child;
 	vec3_t joint, child, j, c, u, n, center, a, c2;
-	polyVert_t verts[16];
+	polyVert_t verts[16] = { 0 };
 	byte col[4];
 	float nu, r, rx, ry, scale = 1.0f, h;
 	const saberSliceSeg_t* slice_seg = CG_SaberSliceSeg(cent->ghoul2, b);

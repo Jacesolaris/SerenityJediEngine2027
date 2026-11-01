@@ -3835,6 +3835,10 @@ static void CreateExternalShaders(void) {
 		if (tr.saberSliceMetalShader[i] && tr.saberSliceMetalShader[i]->defaultShader)
 			tr.saberSliceMetalShader[i] = nullptr;
 	}
+	// SJE: the cgame's cut cap shader (vertex coloured, glows) draws the seam band along the cut edge
+	tr.saberSliceSeamShader = R_FindShader("gfx/effects/saberslice_cap", lightmapsNone, stylesDefault, qtrue);
+	if (tr.saberSliceSeamShader && tr.saberSliceSeamShader->defaultShader)
+		tr.saberSliceSeamShader = nullptr;
 }
 
 /*

@@ -58,6 +58,11 @@ from a config text (ext_data/meshcloth.dat), one line per surface:
 		   turns). Default 2. 'lift off' = no limit: capes can blow up and
 		   over the head (also needs a long enough tether).
 
+Optional (SJE 2026-11-01): r_meshClothSleep 1 (default) lets cloth at rest sleep until the pose, the
+body, wind or a blast moves it; r_meshClothSelfSub 1 (default) solves self-collision in every substep,
+with cloth-on-cloth friction; r_meshClothBendModel 1 uses isometric (cotangent) bending instead of bend
+links; r_meshClothAero 1 pushes each triangle with the air (drag + lift) instead of each point.
+
 The solver is XPBD (r_meshClothXPBD 1: compliance from bend/stretch,
 r_meshClothXPBDIter passes per substep) or plain position-based dynamics
 (r_meshClothXPBD 0), with substeps (r_meshClothIter
@@ -91,6 +96,10 @@ struct mcParams_t {
 	float	frictionScale = 1.0f;	// r_meshClothFriction: multiplies every surface's friction (0 = frictionless)
 	float	liftLimit = -2.0f;	// r_meshClothLift: overrides every surface's 'lift': -2 = use the config, -1 = no limit, N = units
 	int		edgeCol = 0;	// r_meshClothEdgeCol: 1 = cloth edges are also pushed off arms, fists and hilts
+	int		sleep = 0;		// r_meshClothSleep: 1 = cloth at rest on a character standing still stops simulating until something moves it
+	int		selfSub = 0;	// r_meshClothSelfSub: 1 = self-collision ('self' surfaces) in every substep, with cloth-on-cloth friction
+	int		bendModel = 0;	// r_meshClothBendModel: 0 = bend links (default), 1 = isometric (cotangent) bending
+	int		aero = 0;		// r_meshClothAero: 1 = the air pushes each triangle (drag + lift, area-weighted) instead of each point
 	int		floor;			// 1: floorPt / floorN hold the floor plane under the character (world)
 	float	floorPt[3];
 	float	floorN[3];

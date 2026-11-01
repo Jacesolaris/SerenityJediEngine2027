@@ -1024,6 +1024,7 @@ using trGlobals_t = struct trGlobals_s {
 	shader_t* sunShader;
 	shader_t* saberSliceInsideShader[4]; // saber slice: glowing inside of a cut model, hot -> cool
 	shader_t* saberSliceMetalShader[4]; // saber slice: hot metal inside (super battle droid), hot -> cool
+	shader_t* saberSliceSeamShader; // SJE saber slice: glowing band along the cut edge (r_saberSliceSeam), vertex coloured
 
 	int						numLightmaps;
 	image_t* lightmaps[MAX_LIGHTMAPS];

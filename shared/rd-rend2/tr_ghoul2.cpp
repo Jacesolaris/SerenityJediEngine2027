@@ -3965,6 +3965,10 @@ static cvar_t* MC_ClothCvar(const char* name, const char* value, const char* des
 //  r_meshClothLift      -2 = each surface's 'lift', -1 = no limit, N = units a cape may rise above its attached edge
 //  r_meshClothEdgeCol   1 = cloth edges are pushed off arms, fists and hilts too (no forearm through a cape)
 //  r_meshClothHilt      1 = saber hilt colliders; r_meshClothHiltLen / HiltBack / HiltRadius set their size
+//  r_meshClothSleep     1 = cloth at rest on a character standing still stops simulating until something moves it
+//  r_meshClothSelfSub   1 = self-collision in every substep, with cloth-on-cloth friction (0 = once per step, old)
+//  r_meshClothBendModel 0 = bend links (default), 1 = isometric (cotangent) bending
+//  r_meshClothAero      1 = the air pushes each triangle (drag + lift), 0 = each point (default)
 static void MC_SolverParams(mcParams_t& prm)
 {
 	static cvar_t* xp = nullptr;
@@ -3972,6 +3976,10 @@ static void MC_SolverParams(mcParams_t& prm)
 	static cvar_t* fr = nullptr;
 	static cvar_t* li = nullptr;
 	static cvar_t* ec = nullptr;
+	static cvar_t* sl = nullptr;
+	static cvar_t* ss = nullptr;
+	static cvar_t* bm = nullptr;
+	static cvar_t* ae = nullptr;
 	if (!xp)
 	{
 		xp = MC_ClothCvar("r_meshClothXPBD", "1", "Mesh cloth solver: 1 XPBD (stiffness independent of substeps), 0 old projection");
@@ -3979,6 +3987,10 @@ static void MC_SolverParams(mcParams_t& prm)
 		fr = MC_ClothCvar("r_meshClothFriction", "1", "Scales mesh cloth friction on the body and floor (0 frictionless)");
 		li = MC_ClothCvar("r_meshClothLift", "-2", "How high mesh cloth may rise above its attached edge: -2 per surface, -1 no limit, N units");
 		ec = MC_ClothCvar("r_meshClothEdgeCol", "1", "Mesh cloth edges collide with arms, fists and saber hilts (1 on, 0 off)");
+		sl = MC_ClothCvar("r_meshClothSleep", "1", "Mesh cloth at rest sleeps until the pose, body, wind or a blast moves it (1 on, 0 off)");
+		ss = MC_ClothCvar("r_meshClothSelfSub", "1", "Mesh cloth self-collision in every substep with cloth-on-cloth friction (1 on, 0 once per step)");
+		bm = MC_ClothCvar("r_meshClothBendModel", "0", "Mesh cloth bending: 0 bend links, 1 isometric (cotangent) bending");
+		ae = MC_ClothCvar("r_meshClothAero", "0", "Mesh cloth air: 0 per point, 1 per triangle (drag + lift)");
 		mc_hilt = MC_ClothCvar("r_meshClothHilt", "1", "Saber hilts push mesh cloth (1 on, 0 off)");
 		mc_hiltLen = MC_ClothCvar("r_meshClothHiltLen", "9", "Mesh cloth hilt collider length in front of the fist");
 		mc_hiltBack = MC_ClothCvar("r_meshClothHiltBack", "4", "Mesh cloth hilt collider length behind the fist");
@@ -3989,6 +4001,10 @@ static void MC_SolverParams(mcParams_t& prm)
 	prm.frictionScale = fr && fr->value > 0.0f ? fr->value : 0.0f;
 	prm.liftLimit = li ? li->value : -2.0f;
 	prm.edgeCol = ec ? ec->integer : 0;
+	prm.sleep = sl ? sl->integer : 0;
+	prm.selfSub = ss ? ss->integer : 0;
+	prm.bendModel = bm ? bm->integer : 0;
+	prm.aero = ae ? ae->integer : 0;
 }
 
 // The weather on one character's cloth (key: its bone cache, the cloth's own key), main thread:

@@ -719,6 +719,8 @@ extern vmCvar_t cg_smoothPlayerPlatAccel;
 
 extern vmCvar_t cg_smoothCamera;
 extern vmCvar_t cg_speedTrail;
+extern vmCvar_t cg_precacheWeaponVariants;
+void CG_PrecacheWeaponVariants();
 extern vmCvar_t cg_fovViewmodel;
 extern vmCvar_t cg_fovViewmodelAdjust;
 
@@ -932,6 +934,7 @@ void CG_DPPrevForcePower_f();
 void CG_MDWheel_Down_f();
 void CG_MDWheel_ForceDown_f();
 void CG_MDWheel_Up_f();
+void CG_MDWheel_ForceUp_f();
 void CG_MDWheel_Menu_f();
 void CG_MDWheel_Reset();
 void CG_MDWheel_Frame();

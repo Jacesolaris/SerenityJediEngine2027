@@ -1042,7 +1042,7 @@ static int shopOpenHealth = 0;
 static int shopNextCheck = 0;
 static qboolean shopTalkBar = qfalse; // the open talk question is a bar challenge (Pzk_TryChallenge)
 static qboolean shopBarHeld = qfalse; // the bar's held script waits until the shop menu is closed
-static int shopTalkFrom = 0;          // nobody can be talked to before this time (kejim_post: Jan, the first 30 s)
+static int shopTalkFrom = 0;          // nobody can be talked to before this time (kejim_post: Jan, vjun1: Kyle, the first 30 s)
 
 #define SHOP_MAX_CREDITS	9999999
 #define SHOP_PACK			3		// thermals in a grenade pack
@@ -1063,7 +1063,8 @@ static void G_Shop_Init()
 	shopTalkBar = qfalse;
 	shopBarHeld = qfalse;
 	// DH: on kejim_post Jan can't be talked to for the first 30 seconds (the opening)
-	shopTalkFrom = !Q_stricmp(level.mapname, "kejim_post") ? level.time + 30000 : 0;
+	// DH 2026-11-01: vjun1 too (Kyle stands in front of the player after the opening cutscene)
+	shopTalkFrom = !Q_stricmp(level.mapname, "kejim_post") || !Q_stricmp(level.mapname, "vjun1") ? level.time + 30000 : 0;
 }
 
 // The shop menu of a bar challenge closed: the held script goes on now

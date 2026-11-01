@@ -1306,7 +1306,7 @@ static void Shop_Buy(gentity_t* ent, const int item)
 	BG_GiveWeapon(cl->ps.stats, weapon);
 	G_AddEvent(ent, EV_WEAPINVCHANGE, cl->ps.stats[STAT_WEAPONS]);
 	{
-		const int a = weaponData[weapon].ammoIndex;
+		const int a = weapon > WP_NONE && weapon < WP_NUM_WEAPONS ? weaponData[weapon].ammoIndex : AMMO_NONE;
 		if (a > AMMO_NONE && a < AMMO_MAX && cl->ps.ammo[a] < ammoData[a].max / 2)
 		{
 			cl->ps.ammo[a] = ammoData[a].max / 2;

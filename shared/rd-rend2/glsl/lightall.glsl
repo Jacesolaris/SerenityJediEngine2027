@@ -91,6 +91,12 @@ uniform sampler2D u_NormalMap;
 
 out vec4 var_TexCoords;
 out vec4 var_Color;
+#if defined(USE_SKELETAL_ANIMATION)
+// saber slice (SJE): world position and the per-cut values (> 0 = cut away, +-1000 = not a plane cut here)
+// for the flat cap and the glowing seam in the fragment stage
+out vec3 var_SlicePos;
+out vec4 var_SliceD;
+#endif
 
 #if defined(PER_PIXEL_LIGHTING)
 out vec4 var_Normal;
@@ -249,6 +255,8 @@ void SliceClip(vec3 wsPos)
 	gl_ClipDistance[1] = 1.0;
 	gl_ClipDistance[2] = 1.0;
 	gl_ClipDistance[3] = 1.0;
+	var_SlicePos = wsPos;
+	var_SliceD = vec4(-1000.0);
 	if (u_SliceCount <= 0)
 		return;
 
@@ -260,13 +268,23 @@ void SliceClip(vec3 wsPos)
 	if (attr_BoneWeights[3] > w) { bone = attr_BoneIndexes[3]; }
 	uint bits = (u_BoneSlice[bone >> 4u][(bone >> 2u) & 3u] >> ((bone & 3u) * 8u)) & 255u;
 
-	gl_ClipDistance[0] = -SliceValue(0, bits & 3u, wsPos);
+	var_SliceD.x = SliceValue(0, bits & 3u, wsPos);
+	gl_ClipDistance[0] = -var_SliceD.x;
 	if (u_SliceCount > 1)
-		gl_ClipDistance[1] = -SliceValue(1, (bits >> 2u) & 3u, wsPos);
+	{
+		var_SliceD.y = SliceValue(1, (bits >> 2u) & 3u, wsPos);
+		gl_ClipDistance[1] = -var_SliceD.y;
+	}
 	if (u_SliceCount > 2)
-		gl_ClipDistance[2] = -SliceValue(2, (bits >> 4u) & 3u, wsPos);
+	{
+		var_SliceD.z = SliceValue(2, (bits >> 4u) & 3u, wsPos);
+		gl_ClipDistance[2] = -var_SliceD.z;
+	}
 	if (u_SliceCount > 3)
-		gl_ClipDistance[3] = -SliceValue(3, (bits >> 6u) & 3u, wsPos);
+	{
+		var_SliceD.w = SliceValue(3, (bits >> 6u) & 3u, wsPos);
+		gl_ClipDistance[3] = -var_SliceD.w;
+	}
 }
 #endif
 
@@ -518,6 +536,10 @@ uniform int u_AlphaTestType;
 
 in vec4 var_TexCoords;
 in vec4 var_Color;
+#if defined(USE_SKELETAL_ANIMATION)
+in vec3 var_SlicePos;	// saber slice (SJE): see the vertex stage
+in vec4 var_SliceD;
+#endif
 
 #if defined(PER_PIXEL_LIGHTING)
 in vec4 var_Normal;
@@ -1158,6 +1180,77 @@ vec4 SliceMoltenColor(float alpha, vec2 uv)
 	float grain = 0.88 + 0.12 * sin(gl_FragCoord.x * 0.37 + gl_FragCoord.y * 0.29) * sin(gl_FragCoord.y * 0.21 - gl_FragCoord.x * 0.13);
 	return vec4(mix(cool, hot, heat) * grain, alpha);
 }
+
+// SJE (r_saberSliceFlatCap, u_SliceMolten & 8): a back face seen through a cut is drawn as the flat cap the
+// ray passes through on its way in. For a closed body, the view ray from the camera to this fragment entered
+// the kept part where it crossed the last cut plane facing the camera; that point is shaded instead, with the
+// cut texture laid flat on the plane, so the cut reads as a solid flat face instead of a hollow shell. The
+// pixels are the same ones the back faces cover, so no depth or stencil work is needed (the depth stays the
+// back face's: other models passing inside the cut body are the only case that could tell).
+bool SliceCapPoint(out vec3 capPos, out vec3 capN)
+{
+	vec3 C = u_ViewOrigin;
+	float best = -1.0;
+	capN = vec3(0.0, 0.0, 1.0);
+	for (int c = 0; c < 4; c++)
+	{
+		if (c >= u_SliceCount)
+			break;
+		float sP = var_SliceD[c];
+		if (abs(sP) > 500.0)
+			continue;	// not a plane cut on this part of the body
+		float sC = (dot(u_SlicePlanes[c].xyz, C) - u_SlicePlanes[c].w) * u_SliceSign[c];
+		if (sC <= 0.0 || sC - sP < 0.0001)
+			continue;	// the camera is on the kept side of this cut: not the face we look through
+		float t = sC / (sC - sP);
+		if (t > best)
+		{
+			best = t;
+			capN = u_SlicePlanes[c].xyz * u_SliceSign[c];
+		}
+	}
+	capPos = C + (var_SlicePos - C) * clamp(best, 0.0, 1.0);
+	capN = normalize(capN);
+	return best > 0.0;
+}
+
+vec4 SliceCapColor(float alpha, vec2 uv)
+{
+	vec3 X, N;
+	if (!SliceCapPoint(X, N))
+		return SliceMoltenColor(alpha, uv);
+	vec3 a = normalize(cross(N, abs(N.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0)));
+	vec3 b = cross(N, a);
+	vec4 col = SliceMoltenColor(alpha, vec2(dot(X, a), dot(X, b)) * (1.0 / 40.0));
+	// a flat face: a little darker seen edge-on
+	col.rgb *= 0.65 + 0.35 * abs(dot(N, normalize(u_ViewOrigin - X)));
+	return col;
+}
+
+// SJE (r_saberSliceSeam, u_SliceMolten & 16): a glowing cauterised band on the body's own surface along the
+// cut edge, hot orange (metal: white hot) fading to nothing as the cut cools
+vec3 SliceSeam()
+{
+	float d = 1000.0;
+	for (int c = 0; c < 4; c++)
+	{
+		if (c >= u_SliceCount)
+			break;
+		d = min(d, -var_SliceD[c]);	// distance from the cut on the kept side
+	}
+	const float width = 1.6;
+	if (d >= width)
+		return vec3(0.0);
+	float k = 1.0 - max(d, 0.0) / width;
+	k *= k;
+	if (u_SliceHeat > 1.5)
+	{
+		float mheat = clamp(u_SliceHeat - 2.0, 0.0, 1.0);
+		return vec3(2.2, 1.7, 1.2) * (k * mheat);
+	}
+	float heat = clamp(u_SliceHeat, 0.0, 1.0);
+	return mix(vec3(0.6, 0.06, 0.0), vec3(2.8, 1.2, 0.35), heat) * (k * heat);
+}
 #endif
 
 void main()
@@ -1383,7 +1476,9 @@ void main()
 	out_Color.a = diffuse.a;
 #if defined(USE_SKELETAL_ANIMATION)
 	if (((u_SliceMolten & 3) == 1 && gl_FrontFacing) || ((u_SliceMolten & 3) == 2 && !gl_FrontFacing))
-		out_Color = SliceMoltenColor(out_Color.a, var_TexCoords.xy);
+		out_Color = (u_SliceMolten & 8) != 0 ? SliceCapColor(out_Color.a, var_TexCoords.xy) : SliceMoltenColor(out_Color.a, var_TexCoords.xy);
+	else if ((u_SliceMolten & 16) != 0)
+		out_Color.rgb += SliceSeam();
 #endif
 	out_Glow = mix(vec4(0.0, 0.0, 0.0, out_Color.a), out_Color, u_EnableTextures.x);
 }

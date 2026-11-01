@@ -700,6 +700,7 @@ void RE_WorldEffectCommand(const char* command)
 			tr.weatherSystem->weatherSlots[i].active = false;
 		tr.weatherSystem->activeWeatherTypes = 0;
 		tr.weatherSystem->frozen = false;
+		tr.weatherSystem->pain = 0.0f;
 		return;
 	}
 
@@ -714,6 +715,7 @@ void RE_WorldEffectCommand(const char* command)
 		VectorClear(tr.weatherSystem->constWindDirection);	// constantwind adds up: a reloaded map doubled it
 		VectorClear(tr.weatherSystem->windDirection);
 		tr.weatherSystem->frozen = false;
+		tr.weatherSystem->pain = 0.0f;	// no acid rain left
 	}
 	else if (WE_PRESET(0))
 	{
@@ -724,6 +726,7 @@ void RE_WorldEffectCommand(const char* command)
 		VectorClear(tr.weatherSystem->constWindDirection);	// constantwind adds up: a reloaded map doubled it
 		VectorClear(tr.weatherSystem->windDirection);
 		tr.weatherSystem->frozen = false;
+		tr.weatherSystem->pain = 0.0f;	// no acid rain left
 	}
 
 	// Freeze / UnFreeze - Stops All Particle Motion Updates
@@ -896,7 +899,7 @@ void RE_WorldEffectCommand(const char* command)
 
 		tr.weatherSystem->weatherSlots[WEATHER_RAIN].velocityOrientationScale = 1.0f;
 
-		//tr.weatherSystem->pain = 0.1f;
+		tr.weatherSystem->pain = 0.1f;	// acid rain hurts whoever stands outside in it (SP: g_active.cpp via WE_IsOutsideCausingPain)
 
 		VectorSet4(tr.weatherSystem->weatherSlots[WEATHER_RAIN].color, 0.34f, 0.7f, 0.34f, 0.7f);
 		VectorScale(
@@ -919,7 +922,7 @@ void RE_WorldEffectCommand(const char* command)
 
 		tr.weatherSystem->weatherSlots[WEATHER_RAIN].velocityOrientationScale = 1.0f;
 
-		//tr.weatherSystem->pain = 0.1f;
+		tr.weatherSystem->pain = 0.1f;	// acid rain hurts whoever stands outside in it (SP: g_active.cpp via WE_IsOutsideCausingPain)
 
 		VectorSet4(tr.weatherSystem->weatherSlots[WEATHER_RAIN].color, 0.34f, 0.7f, 0.34f, 0.7f);
 		VectorScale(

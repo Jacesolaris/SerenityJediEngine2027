@@ -2409,6 +2409,7 @@ typedef struct cgWeaponVariant_s
 const cgWeaponVariant_t* CG_WeaponVariant(int variant, int weapon);
 void CG_SetWeaponLooks(int clientNum, const char* hex); // the shop: a player's gun looks per weapon ("wvlooks")
 void CG_WeaponVariantMuzzleFx(const entityState_t* es, fxHandle_t* muzzle_fx, fxHandle_t* alt_muzzle_fx);
+void CG_PrecacheWeaponVariants(void); // map load (2026-11-01): every variant's media, cg_precacheWeaponVariants
 qboolean CG_WeaponVariantMissile(centity_t* cent);
 qboolean CG_WeaponVariantImpact(const entityState_t* es, vec3_t origin, vec3_t dir, qboolean hit_body, qboolean alt_fire);
 qhandle_t CG_WeaponVariantIcon(int variant, int weapon);

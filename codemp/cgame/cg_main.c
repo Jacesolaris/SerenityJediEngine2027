@@ -1861,6 +1861,9 @@ static void CG_RegisterGraphics(void)
 		}
 	}
 
+	// the weapon variants (the SJE guns) too, so their first shot doesn't stutter (cg_precacheWeaponVariants)
+	CG_PrecacheWeaponVariants();
+
 	//	CG_LoadingString( "BSP instances" );
 
 	for (i = 1; i < MAX_SUB_BSP; i++)

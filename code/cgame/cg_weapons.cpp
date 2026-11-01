@@ -4409,6 +4409,41 @@ static const cgWeaponVariantSP_t* CG_WeaponVariantMedia(const int variant, const
 	return cwv;
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// Map load (2026-11-01, DH: the new guns' effects stuttered the first time they played, worst in rend2): register
+// every weapon variant's effects, sounds, icon and models while the map loads instead of on first use.
+// cg_precacheWeaponVariants 0 = the old way (each variant loads the first time someone holds or fires it).
+// ---------------------------------------------------------------------------------------------------------------
+void CG_PrecacheWeaponVariants()
+{
+	if (!cg_precacheWeaponVariants.integer)
+	{
+		return;
+	}
+	for (int v = 1; v < bgNumWeaponVariants; v++)
+	{
+		const weaponVariant_t* wv = &bgWeaponVariants[v];
+		if (!CG_WeaponVariantMedia(v, wv->baseWeapon, nullptr))
+		{
+			continue;
+		}
+		if (wv->worldModel[0])
+		{
+			cgi_R_RegisterModel(wv->worldModel); // the game puts it in the hand (G_CreateG2AttachedWeaponModel)
+		}
+		CG_RegisterWeapon(wv->baseWeapon); // the base weapon's own media (trails, sounds the variant lacks)
+	}
+	// the grenade status effects the game plays by name (G_GrenadeBlast / G_GrenadeClientThink)
+	static const char* const grenade_fx[] = {
+		"thermal/explosion", "thermal/shockwave", "cryoban/explosion", "cryoban/stuck", "flash/faceflash",
+		"smoke/smokegrenade", "player/fire", "player/poison", "force/heal"
+	};
+	for (const char* const fx : grenade_fx)
+	{
+		theFxScheduler.RegisterEffect(fx);
+	}
+}
+
 const char* CG_WeaponVariantMuzzleFx(const entityState_t* es, const qboolean alt_fire)
 {
 	const weaponVariant_t* wv = nullptr;

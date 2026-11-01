@@ -2572,6 +2572,76 @@ void G2API_SetSurfaceOnOffFromSkin(CGhoul2Info* ghlInfo, const qhandle_t renderS
 // set up each surface ready for rendering in the back end
 #include "tr_saberslice.h" // saber slice: R_SliceMetal, R_SliceResolvePlanes
 
+constexpr float R_SLICE_SEAM_WIDTH = 1.6f;
+constexpr int R_SLICE_MAX_CAP_SEGS = 2048;
+
+// SJE saber slice options (vanilla): 0 r_saberSliceInsideCull, 1 r_saberSliceCap, 2 r_saberSliceSeam
+static int R_SliceOption(const int which)
+{
+	static cvar_t* cv[3] = { nullptr, nullptr, nullptr };
+	if (!cv[0])
+	{
+#ifdef R_SLICE_CVAR_DESC
+		cv[0] = ri.Cvar_Get("r_saberSliceInsideCull", "1", CVAR_ARCHIVE_ND, "Saber cuts: draw the inside of a cut body only where a cut crosses it (1 on, 0 every surface)");
+		cv[1] = ri.Cvar_Get("r_saberSliceCap", "1", CVAR_ARCHIVE_ND, "Saber cuts: close the cut with an exact flat cap (1 on, 0 off)");
+		cv[2] = ri.Cvar_Get("r_saberSliceSeam", "1", CVAR_ARCHIVE_ND, "Saber cuts: glowing band along the cut edge that cools with the cut (1 on, 0 off)");
+#else
+		cv[0] = ri.Cvar_Get("r_saberSliceInsideCull", "1", CVAR_ARCHIVE_ND);
+		cv[1] = ri.Cvar_Get("r_saberSliceCap", "1", CVAR_ARCHIVE_ND);
+		cv[2] = ri.Cvar_Get("r_saberSliceSeam", "1", CVAR_ARCHIVE_ND);
+#endif
+	}
+	return which >= 0 && which < 3 && cv[which] ? cv[which]->integer : 0;
+}
+
+static bool R_SliceIsInsideShader(const shader_t* sh)
+{
+	if (!sh)
+	{
+		return false;
+	}
+	for (int i = 0; i < 4; i++)
+	{
+		if (sh == tr.saberSliceInsideShader[i] || sh == tr.saberSliceMetalShader[i])
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+/*
+R_SliceSurfaceShowsCut (front end, SJE r_saberSliceInsideCull): false when no cut can show through this
+surface, so its inside (and seam) pass isn't added at all. Bolt-ons (sabers, guns) go whole with one side
+and never show a cut face. Not with r_smp: the slice caches belong to the render thread then (the back end
+still skips the inside of a surface no cut crosses).
+*/
+static bool R_SliceSurfaceShowsCut(const mdxmSurface_t* surface, const CBoneCache* surfBones)
+{
+	const trRefEntity_t* ent = tr.currentEntity;
+	if (!ent || !ent->e.ghoul2 || !surface || R_SmpActive())
+	{
+		return true;
+	}
+	CGhoul2Info_v& ghoul2 = *static_cast<CGhoul2Info_v*>(ent->e.ghoul2);
+	if (!ghoul2.IsValid() || ghoul2.size() < 1 || !ghoul2[0].mValid || !ghoul2[0].mBoneCache || !ghoul2[0].aHeader)
+	{
+		return true;
+	}
+	if (surfBones != ghoul2[0].mBoneCache)
+	{
+		return false;
+	}
+	const sliceModes_t* m = R_SliceBuildModes(ent->e, *ghoul2[0].mBoneCache, ghoul2[0].aHeader, tr.frameCount);
+	if (!m)
+	{
+		return false;
+	}
+	const int* refs = reinterpret_cast<const int*>(reinterpret_cast<const byte*>(surface) + surface->ofsBoneReferences);
+	return R_SliceSurfaceCrossed(*m, refs, surface->numBoneReferences);
+}
+
+
 static void RenderSurfaces(CRenderSurface& RS)
 {
 	int offFlags = 0;
@@ -2699,20 +2769,33 @@ static void RenderSurfaces(CRenderSurface& RS)
 
 			// saber slice: draw the inside of a cut model (its back faces, only seen through the cut) in a glowing
 			// colour, so the cut face has exactly the body's shape (rend2 does this in its shaders)
+			// SJE: only for surfaces a cut can show through (r_saberSliceInsideCull), plus the glowing seam band along
+			// the cut while it is hot (r_saberSliceSeam); the exact flat cap is added to the inside pass by the clipper
 			if (tr.currentEntity && (tr.currentEntity->e.renderfx & RF_SABERSLICE) && tr.currentEntity->e.sliceCount > 0
-				&& shader->sort == SS_OPAQUE && shader->cullType == CT_FRONT_SIDED)
+				&& shader->sort == SS_OPAQUE)
 			{
 				const float heat = tr.currentEntity->e.sliceHeat;
-				const int level = heat > 0.75f ? 0 : heat > 0.45f ? 1 : heat > 0.2f ? 2 : 3;
-				shader_t* inside = R_SliceMetal(tr.currentEntity->e) && tr.saberSliceMetalShader[level]
-					? tr.saberSliceMetalShader[level] // a metal body (super battle droid): hot metal
-					: tr.saberSliceInsideShader[level];
-				if (inside)
+				const bool showsCut = !R_SliceOption(0) || R_SliceSurfaceShowsCut(surface, RS.boneCache);
+				if (showsCut && shader->cullType == CT_FRONT_SIDED)
 				{
-					CRenderableSurface* insideSurf = AllocRS();
-					insideSurf->surfaceData = surface;
-					insideSurf->boneCache = RS.boneCache;
-					R_AddDrawSurf(reinterpret_cast<surfaceType_t*>(insideSurf), inside, RS.fogNum, qfalse);
+					const int level = heat > 0.75f ? 0 : heat > 0.45f ? 1 : heat > 0.2f ? 2 : 3;
+					shader_t* inside = R_SliceMetal(tr.currentEntity->e) && tr.saberSliceMetalShader[level]
+						? tr.saberSliceMetalShader[level] // a metal body (super battle droid): hot metal
+						: tr.saberSliceInsideShader[level];
+					if (inside)
+					{
+						CRenderableSurface* insideSurf = AllocRS();
+						insideSurf->surfaceData = surface;
+						insideSurf->boneCache = RS.boneCache;
+						R_AddDrawSurf(reinterpret_cast<surfaceType_t*>(insideSurf), inside, RS.fogNum, qfalse);
+					}
+				}
+				if (showsCut && heat > 0.02f && tr.saberSliceSeamShader && R_SliceOption(2))
+				{
+					CRenderableSurface* seamSurf = AllocRS();
+					seamSurf->surfaceData = surface;
+					seamSurf->boneCache = RS.boneCache;
+					R_AddDrawSurf(reinterpret_cast<surfaceType_t*>(seamSurf), tr.saberSliceSeamShader, RS.fogNum, qfalse);
 				}
 			}
 
@@ -3347,6 +3430,10 @@ static bool MC_WaterHeight(const vec3_t origin, float* z)
 //  r_meshClothLift      -2 = each surface's 'lift', -1 = no limit, N = units a cape may rise above its attached edge
 //  r_meshClothEdgeCol   1 = cloth edges are pushed off arms, fists and hilts too (no forearm through a cape)
 //  r_meshClothHilt      1 = saber hilt colliders; r_meshClothHiltLen / HiltBack / HiltRadius set their size
+//  r_meshClothSleep     1 = cloth at rest on a character standing still stops simulating until something moves it
+//  r_meshClothSelfSub   1 = self-collision in every substep, with cloth-on-cloth friction (0 = once per step, old)
+//  r_meshClothBendModel 0 = bend links (default), 1 = isometric (cotangent) bending
+//  r_meshClothAero      1 = the air pushes each triangle (drag + lift), 0 = each point (default)
 static void MC_SolverParams(mcParams_t& prm)
 {
 	static cvar_t* xp = nullptr;
@@ -3354,6 +3441,10 @@ static void MC_SolverParams(mcParams_t& prm)
 	static cvar_t* fr = nullptr;
 	static cvar_t* li = nullptr;
 	static cvar_t* ec = nullptr;
+	static cvar_t* sl = nullptr;
+	static cvar_t* ss = nullptr;
+	static cvar_t* bm = nullptr;
+	static cvar_t* ae = nullptr;
 	if (!xp)
 	{
 		xp = ri.Cvar_Get("r_meshClothXPBD", "1", CVAR_ARCHIVE_ND);
@@ -3361,6 +3452,10 @@ static void MC_SolverParams(mcParams_t& prm)
 		fr = ri.Cvar_Get("r_meshClothFriction", "1", CVAR_ARCHIVE_ND);
 		li = ri.Cvar_Get("r_meshClothLift", "-2", CVAR_ARCHIVE_ND);
 		ec = ri.Cvar_Get("r_meshClothEdgeCol", "1", CVAR_ARCHIVE_ND);
+		sl = ri.Cvar_Get("r_meshClothSleep", "1", CVAR_ARCHIVE_ND);
+		ss = ri.Cvar_Get("r_meshClothSelfSub", "1", CVAR_ARCHIVE_ND);
+		bm = ri.Cvar_Get("r_meshClothBendModel", "0", CVAR_ARCHIVE_ND);
+		ae = ri.Cvar_Get("r_meshClothAero", "0", CVAR_ARCHIVE_ND);
 		mc_hilt = ri.Cvar_Get("r_meshClothHilt", "1", CVAR_ARCHIVE_ND);
 		mc_hiltLen = ri.Cvar_Get("r_meshClothHiltLen", "9", CVAR_ARCHIVE_ND);
 		mc_hiltBack = ri.Cvar_Get("r_meshClothHiltBack", "4", CVAR_ARCHIVE_ND);
@@ -3371,6 +3466,10 @@ static void MC_SolverParams(mcParams_t& prm)
 	prm.frictionScale = fr && fr->value > 0.0f ? fr->value : 0.0f;
 	prm.liftLimit = li ? li->value : -2.0f;
 	prm.edgeCol = ec ? ec->integer : 0;
+	prm.sleep = sl ? sl->integer : 0;
+	prm.selfSub = ss ? ss->integer : 0;
+	prm.bendModel = bm ? bm->integer : 0;
+	prm.aero = ae ? ae->integer : 0;
 }
 
 // The weather on one character's cloth (key: its bone cache, the cloth's own key), main thread:
@@ -4306,11 +4405,22 @@ baseVertex, numIndexes indexes from baseIndex) against the entity's cut planes.
 origVert maps each tess vertex to its vertex in the mdxm surface (gore), or nullptr.
 Returns how many vertexes the caller should add to tess.numVertexes (the clip adds
 new ones after the surface's own) and sets outNumIndexes.
+
+SJE 2026-11-01, by the shader being drawn:
+  inside pass (saberslice_inside / _metal): skipped when no cut crosses the surface
+	(r_saberSliceInsideCull), and closed with the exact flat cap built from the clip
+	edge (r_saberSliceCap): the new edge points of every clipped triangle are joined
+	into loops on each cut plane and each loop is filled with a fan from its centre.
+  seam pass (saberslice_cap, r_saberSliceSeam): only the band of the kept surface
+	within R_SLICE_SEAM_WIDTH of a cut is drawn, in vertex colours from the heat,
+	fading away from the edge.
 */
 static int RB_SaberSliceSurface(const CRenderableSurface* surf, const mdxmSurface_t* surface, const int baseVertex,
 	const int numVerts, const int baseIndex, const int numIndexes, const int* origVert, int* outNumIndexes)
 {
-	*outNumIndexes = numIndexes;
+	const bool seamPass = tess.shader && tess.shader == tr.saberSliceSeamShader;
+	const bool insidePass = R_SliceIsInsideShader(tess.shader);
+	*outNumIndexes = seamPass ? 0 : numIndexes; // the seam pass draws nothing unless a cut crosses the surface
 
 	const trRefEntity_t* ent = backEnd.currentEntity;
 	if (!ent || !surface || !surf->boneCache || !R_SliceActive(ent->e) || !ent->e.ghoul2)
@@ -4382,6 +4492,11 @@ static int RB_SaberSliceSurface(const CRenderableSurface* surf, const mdxmSurfac
 	}
 	if (!anyCut)
 	{
+		// SJE r_saberSliceInsideCull: no cut runs through this surface, so its inside can't be seen
+		if (insidePass && R_SliceOption(0))
+		{
+			*outNumIndexes = 0;
+		}
 		return numVerts;
 	}
 	if (!anyKept)
@@ -4391,55 +4506,44 @@ static int RB_SaberSliceSurface(const CRenderableSurface* surf, const mdxmSurfac
 	}
 
 	int nextVert = numVerts; // local index of the next new vertex
-	int outCount = 0;
-	for (int t = 0; t + 2 < numIndexes; t += 3)
-	{
-		int poly[3 + MAX_SABER_SLICES * 2];
-		int polyCount = 3;
-		for (int k = 0; k < 3; k++)
-		{
-			poly[k] = static_cast<int>(tess.indexes[baseIndex + t + k]) - baseVertex;
-		}
 
-		bool dropped = false;
-		for (int c = 0; c < m->numCuts && !dropped; c++)
+	// clip the polygon poly (polyCount points) to the side of cut c where s * (vd - off) <= 0, adding the new
+	// points where it crosses. false: the polygon is gone (or there was no room for a new vertex).
+	auto clipPoly = [&](int* poly, int& polyCount, const int c, const float s, const float off) -> bool
 		{
 			int numIn = 0;
 			for (int k = 0; k < polyCount; k++)
 			{
-				if (vd[poly[k]][c] <= 0.0f)
+				if (s * (vd[poly[k]][c] - off) <= 0.0f)
 				{
 					numIn++;
 				}
 			}
 			if (numIn == polyCount)
 			{
-				continue;
+				return true;
 			}
 			if (numIn == 0)
 			{
-				dropped = true;
-				break;
+				return false;
 			}
-
-			int out[3 + MAX_SABER_SLICES * 2];
+			int out[3 + MAX_SABER_SLICES * 2 + 2];
 			int outN = 0;
 			for (int k = 0; k < polyCount && outN < static_cast<int>(ARRAY_LEN(out)) - 1; k++)
 			{
 				const int a = poly[k];
 				const int b = poly[(k + 1) % polyCount];
-				const float da = vd[a][c];
-				const float db = vd[b][c];
+				const float da = s * (vd[a][c] - off);
+				const float db = s * (vd[b][c] - off);
 				if (da <= 0.0f)
 				{
 					out[outN++] = a;
 				}
 				if ((da <= 0.0f) != (db <= 0.0f))
 				{
-					if (baseVertex + nextVert >= SHADER_MAX_VERTEXES - 1)
+					if (baseVertex + nextVert >= SHADER_MAX_VERTEXES - 1 || nextVert >= SHADER_MAX_VERTEXES)
 					{
-						dropped = true; // no room for a new vertex: drop the triangle
-						break;
+						return false; // no room for a new vertex: drop the triangle
 					}
 					const float f = da / (da - db);
 					const int nv = nextVert++;
@@ -4462,20 +4566,96 @@ static int RB_SaberSliceSurface(const CRenderableSurface* surf, const mdxmSurfac
 					{
 						vd[nv][cc] = vd[a][cc] + f * (vd[b][cc] - vd[a][cc]);
 					}
-					vd[nv][c] = 0.0f;
+					vd[nv][c] = off; // exactly on the clip plane (the cap and the seam look for these)
 					out[outN++] = nv;
 				}
 			}
-			if (dropped || outN < 3)
+			if (outN < 3)
 			{
-				dropped = true;
-				break;
+				return false;
 			}
 			memcpy(poly, out, sizeof(int) * outN);
 			polyCount = outN;
+			return true;
+		};
+
+	// SJE r_saberSliceCap: the edges of the clipped mesh that lie on a cut plane
+	const bool wantCap = insidePass && R_SliceOption(1) && !boltOn;
+	static int capSeg[R_SLICE_MAX_CAP_SEGS][3]; // local vertex a, b, cut
+	int numCapSegs = 0;
+	float windSign = 0.0f; // > 0: a triangle's (b - a) x (c - a) points along its outward normal
+	if (wantCap)
+	{
+		for (int t = 0; t + 2 < numIndexes; t += 3)
+		{
+			const int i0 = static_cast<int>(tess.indexes[baseIndex + t]);
+			const int i1 = static_cast<int>(tess.indexes[baseIndex + t + 1]);
+			const int i2 = static_cast<int>(tess.indexes[baseIndex + t + 2]);
+			vec3_t e1, e2, cr, ns;
+			VectorSubtract(tess.xyz[i1], tess.xyz[i0], e1);
+			VectorSubtract(tess.xyz[i2], tess.xyz[i0], e2);
+			CrossProduct(e1, e2, cr);
+			VectorAdd(tess.normal[i0], tess.normal[i1], ns);
+			VectorAdd(ns, tess.normal[i2], ns);
+			windSign += DotProduct(cr, ns);
+		}
+	}
+
+	const int seamCuts = m->numCuts;
+	int outCount = 0;
+	for (int t = 0; t + 2 < numIndexes; t += 3)
+	{
+		int poly[3 + MAX_SABER_SLICES * 2 + 2];
+		int polyCount = 3;
+		for (int k = 0; k < 3; k++)
+		{
+			poly[k] = static_cast<int>(tess.indexes[baseIndex + t + k]) - baseVertex;
+		}
+
+		bool dropped = false;
+		for (int c = 0; c < m->numCuts && !dropped; c++)
+		{
+			if (!clipPoly(poly, polyCount, c, 1.0f, 0.0f))
+			{
+				dropped = true;
+			}
 		}
 		if (dropped)
 		{
+			continue;
+		}
+		if (seamPass)
+		{
+			// only the band of this polygon within R_SLICE_SEAM_WIDTH of each cut
+			for (int c = 0; c < seamCuts; c++)
+			{
+				bool nearCut = false;
+				for (int k = 0; k < polyCount && !nearCut; k++)
+				{
+					nearCut = vd[poly[k]][c] > -R_SLICE_SEAM_WIDTH;
+				}
+				if (!nearCut)
+				{
+					continue;
+				}
+				int band[3 + MAX_SABER_SLICES * 2 + 2];
+				int bandCount = polyCount;
+				memcpy(band, poly, sizeof(int) * polyCount);
+				if (!clipPoly(band, bandCount, c, -1.0f, -R_SLICE_SEAM_WIDTH))
+				{
+					continue;
+				}
+				for (int k = 1; k + 1 < bandCount; k++)
+				{
+					if (baseIndex + outCount + 3 > SHADER_MAX_INDEXES)
+					{
+						break;
+					}
+					outIdx[outCount++] = static_cast<glIndex_t>(baseVertex + band[0]);
+					outIdx[outCount++] = static_cast<glIndex_t>(baseVertex + band[k]);
+					outIdx[outCount++] = static_cast<glIndex_t>(baseVertex + band[k + 1]);
+				}
+			}
 			continue;
 		}
 		for (int k = 1; k + 1 < polyCount; k++)
@@ -4487,6 +4667,212 @@ static int RB_SaberSliceSurface(const CRenderableSurface* surf, const mdxmSurfac
 			outIdx[outCount++] = static_cast<glIndex_t>(baseVertex + poly[0]);
 			outIdx[outCount++] = static_cast<glIndex_t>(baseVertex + poly[k]);
 			outIdx[outCount++] = static_cast<glIndex_t>(baseVertex + poly[k + 1]);
+		}
+		if (wantCap)
+		{
+			for (int k = 0; k < polyCount && numCapSegs < R_SLICE_MAX_CAP_SEGS; k++)
+			{
+				const int a = poly[k], b = poly[(k + 1) % polyCount];
+				for (int c = 0; c < m->numCuts; c++)
+				{
+					if (vd[a][c] == 0.0f && vd[b][c] == 0.0f && numCapSegs < R_SLICE_MAX_CAP_SEGS)
+					{
+						capSeg[numCapSegs][0] = a;
+						capSeg[numCapSegs][1] = b;
+						capSeg[numCapSegs][2] = c;
+						numCapSegs++;
+					}
+				}
+			}
+		}
+	}
+
+	if (seamPass && outCount > 0)
+	{
+		// vertex colours from the heat, fading with the distance from the cut; pushed a little off the skin
+		const float heat = ent->e.sliceHeat < 0.0f ? 0.0f : (ent->e.sliceHeat > 1.0f ? 1.0f : ent->e.sliceHeat);
+		const bool metal = R_SliceMetal(ent->e);
+		float rgb[3];
+		for (int x = 0; x < 3; x++)
+		{
+			static const float coolF[3] = { 0.6f, 0.06f, 0.0f }, hotF[3] = { 1.0f, 0.75f, 0.35f };
+			static const float coolM[3] = { 0.55f, 0.35f, 0.25f }, hotM[3] = { 1.0f, 0.92f, 0.8f };
+			rgb[x] = metal ? coolM[x] + (hotM[x] - coolM[x]) * heat : coolF[x] + (hotF[x] - coolF[x]) * heat;
+		}
+		for (int j = 0; j < nextVert; j++)
+		{
+			float dist = 1000.0f;
+			for (int c = 0; c < m->numCuts; c++)
+			{
+				const float d = -vd[j][c] < 0.0f ? 0.0f : -vd[j][c];
+				if (d < dist)
+				{
+					dist = d;
+				}
+			}
+			float k = 1.0f - dist / R_SLICE_SEAM_WIDTH;
+			k = k < 0.0f ? 0.0f : k * k * heat;
+			const int g = baseVertex + j;
+			for (int x = 0; x < 3; x++)
+			{
+				tess.vertexColors[g][x] = static_cast<byte>(255.0f * rgb[x]);
+				tess.xyz[g][x] += 0.2f * tess.normal[g][x];
+			}
+			tess.vertexColors[g][3] = static_cast<byte>(255.0f * k);
+			tess.texCoords[g][0][0] = tess.texCoords[g][0][1] = 0.5f; // the cap image's white middle
+		}
+	}
+
+	if (wantCap && numCapSegs > 0 && windSign != 0.0f)
+	{
+		// join the segments into loops: their ends meet at the same points (each clipped triangle made its own
+		// copies), found by position on a 1/16 unit grid; one loop (or several, e.g. both legs) per cut plane
+		static int parent[R_SLICE_MAX_CAP_SEGS * 2];
+		static long long keyOf[R_SLICE_MAX_CAP_SEGS * 2];
+		const int numEnds = numCapSegs * 2;
+		for (int i = 0; i < numEnds; i++)
+		{
+			const int lv = capSeg[i >> 1][i & 1];
+			const float* p = tess.xyz[baseVertex + lv];
+			const long long qx = static_cast<long long>(floorf(p[0] * 16.0f + 0.5f)) & 0xFFFFF;
+			const long long qy = static_cast<long long>(floorf(p[1] * 16.0f + 0.5f)) & 0xFFFFF;
+			const long long qz = static_cast<long long>(floorf(p[2] * 16.0f + 0.5f)) & 0xFFFFF;
+			keyOf[i] = (static_cast<long long>(capSeg[i >> 1][2]) << 60) ^ (qx << 40) ^ (qy << 20) ^ qz;
+			parent[i] = i;
+		}
+		auto findRoot = [&](int i)
+			{
+				while (parent[i] != i)
+				{
+					parent[i] = parent[parent[i]];
+					i = parent[i];
+				}
+				return i;
+			};
+		auto unite = [&](const int a, const int b)
+			{
+				const int ra = findRoot(a), rb = findRoot(b);
+				if (ra != rb)
+				{
+					parent[ra] = rb;
+				}
+			};
+		// the two ends of a segment belong together; ends at the same point too (sort by key)
+		static int order[R_SLICE_MAX_CAP_SEGS * 2];
+		for (int i = 0; i < numEnds; i++)
+		{
+			order[i] = i;
+			if (i & 1)
+			{
+				unite(i - 1, i);
+			}
+		}
+		std::sort(order, order + numEnds, [](const int a, const int b) { return keyOf[a] < keyOf[b]; });
+		for (int i = 1; i < numEnds; i++)
+		{
+			if (keyOf[order[i]] == keyOf[order[i - 1]])
+			{
+				unite(order[i], order[i - 1]);
+			}
+		}
+		// one centre per loop: the length-weighted middle of its segments
+		static float centre[R_SLICE_MAX_CAP_SEGS][4];
+		static int centreVert[R_SLICE_MAX_CAP_SEGS];
+		for (int s = 0; s < numCapSegs; s++)
+		{
+			centre[s][0] = centre[s][1] = centre[s][2] = centre[s][3] = 0.0f;
+			centreVert[s] = -1;
+		}
+		for (int s = 0; s < numCapSegs; s++)
+		{
+			const int r = findRoot(s * 2) >> 1;
+			const float* a = tess.xyz[baseVertex + capSeg[s][0]];
+			const float* b = tess.xyz[baseVertex + capSeg[s][1]];
+			const float len = Distance(a, b);
+			for (int x = 0; x < 3; x++)
+			{
+				centre[r][x] += 0.5f * len * (a[x] + b[x]);
+			}
+			centre[r][3] += len;
+		}
+		auto addCapVert = [&](const float* p, const float* n, const float* ta, const float* tb) -> int
+			{
+				if (baseVertex + nextVert >= SHADER_MAX_VERTEXES - 1 || nextVert >= SHADER_MAX_VERTEXES)
+				{
+					return -1;
+				}
+				const int lv = nextVert++;
+				const int g = baseVertex + lv;
+				VectorCopy(p, tess.xyz[g]);
+				tess.xyz[g][3] = 1.0f;
+				VectorCopy(n, tess.normal[g]);
+				tess.normal[g][3] = 0.0f;
+				tess.texCoords[g][0][0] = DotProduct(p, ta) * (1.0f / 40.0f);
+				tess.texCoords[g][0][1] = DotProduct(p, tb) * (1.0f / 40.0f);
+				for (int x = 0; x < 4; x++)
+				{
+					tess.svars.colors[g][x] = 255;
+					tess.vertexColors[g][x] = 255;
+				}
+				for (int cc = 0; cc < m->numCuts; cc++)
+				{
+					vd[lv][cc] = 0.0f;
+				}
+				return lv;
+			};
+		for (int s = 0; s < numCapSegs; s++)
+		{
+			const int c = capSeg[s][2];
+			const int r = findRoot(s * 2) >> 1;
+			if (centre[r][3] <= 1e-4f)
+			{
+				continue;
+			}
+			// the cap faces the cut away side; drawn by the inside shader (it shows the faces that point away
+			// from the camera), so it is wound like a mesh triangle whose outside points into the body
+			vec3_t into, ta, tb;
+			VectorScale(m->plane[c], -m->sign[c], into);
+			VectorNormalize(into);
+			PerpendicularVector(ta, into);
+			CrossProduct(into, ta, tb);
+			if (centreVert[r] < 0)
+			{
+				vec3_t cp;
+				VectorScale(centre[r], 1.0f / centre[r][3], cp);
+				centreVert[r] = addCapVert(cp, into, ta, tb);
+				if (centreVert[r] < 0)
+				{
+					break;
+				}
+			}
+			int a = addCapVert(tess.xyz[baseVertex + capSeg[s][0]], into, ta, tb);
+			int b = addCapVert(tess.xyz[baseVertex + capSeg[s][1]], into, ta, tb);
+			if (a < 0 || b < 0)
+			{
+				break;
+			}
+			vec3_t e1, e2, cr;
+			VectorSubtract(tess.xyz[baseVertex + a], tess.xyz[baseVertex + centreVert[r]], e1);
+			VectorSubtract(tess.xyz[baseVertex + b], tess.xyz[baseVertex + centreVert[r]], e2);
+			CrossProduct(e1, e2, cr);
+			const float facing = DotProduct(cr, into);
+			if (facing == 0.0f)
+			{
+				continue;
+			}
+			if ((facing > 0.0f) != (windSign > 0.0f))
+			{
+				const int sw = a;
+				a = b;
+				b = sw;
+			}
+			if (baseIndex + outCount + 3 > SHADER_MAX_INDEXES)
+			{
+				break;
+			}
+			outIdx[outCount++] = static_cast<glIndex_t>(baseVertex + centreVert[r]);
+			outIdx[outCount++] = static_cast<glIndex_t>(baseVertex + a);
+			outIdx[outCount++] = static_cast<glIndex_t>(baseVertex + b);
 		}
 	}
 

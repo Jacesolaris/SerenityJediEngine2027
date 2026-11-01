@@ -42,6 +42,12 @@ enum
 };
 
 constexpr int SLICE_MAX_BONES = 256;
+
+// bounds-checked read of a per-bone flag array (the bone index comes from the GLA; keeps Code Analysis happy)
+static inline unsigned char R_SliceFlag(const unsigned char* flags, const int bone)
+{
+	return bone >= 0 && bone < SLICE_MAX_BONES ? flags[bone] : 0;
+}
 constexpr float SLICE_FAR = 1000.0f;
 
 struct sliceModes_t
@@ -356,7 +362,7 @@ static inline void R_SliceResolvePlanes(refEntity_t& e, TBoneCache& bones, const
 		{
 			info = R_SliceSkelInfo(gla);
 		}
-		const int a = b < SABERSLICE_SLOT_COUNT ? info->anchor[b] : -1;
+		const int a = info && b < SABERSLICE_SLOT_COUNT ? info->anchor[b] : -1;
 		float model[4];
 		bool ok = false;
 		if (a >= 0 && a < numBones)
@@ -364,7 +370,7 @@ static inline void R_SliceResolvePlanes(refEntity_t& e, TBoneCache& bones, const
 			// the bolt matrix the game made the plane with: bone * base pose, axes normalized (G2API_GetBoltMatrix)
 			const mdxaBone_t& r = bones.EvalRender(a);
 			const mdxaBone_t& base = R_SliceSkel(gla, a)->BasePoseMat;
-			float m[3][4];
+			float m[3][4] = {{0}};
 			for (int i = 0; i < 3; i++)
 			{
 				for (int j = 0; j < 4; j++)
@@ -403,7 +409,7 @@ static inline float R_SliceChainDistSq(TBoneCache& bones, const mdxaHeader_t* gl
 {
 	const int numBones = gla->numBones < SLICE_MAX_BONES ? gla->numBones : SLICE_MAX_BONES;
 	float best = 1e30f;
-	float prev[3];
+	float prev[3] = { 0 };
 	bool havePrev = false;
 	for (int k = 0; k < SLICE_CHAIN; k++)
 	{
@@ -412,7 +418,7 @@ static inline float R_SliceChainDistSq(TBoneCache& bones, const mdxaHeader_t* gl
 		{
 			break;
 		}
-		float j[3];
+		float j[3] = { 0 };
 		R_SliceJoint(bones, gla, i, j);
 		float d[3] = { p[0] - j[0], p[1] - j[1], p[2] - j[2] };
 		if (havePrev)
@@ -463,7 +469,7 @@ template <class TBoneCache>
 static inline bool R_SliceGoesWithPiece(TBoneCache& bones, const mdxaHeader_t* gla, const sliceSkelInfo_t* info, const int slot, const int i,
 	const float* pl, const bool torso, const float chainNearSq)
 {
-	float j[3];
+	float j[3] = { 0 };
 	R_SliceJoint(bones, gla, i, j);
 	if (j[0] * pl[0] + j[1] * pl[1] + j[2] * pl[2] - pl[3] <= 0.0f)
 	{
@@ -580,7 +586,7 @@ static inline const sliceModes_t* R_SliceBuildModes(const refEntity_t& e, TBoneC
 		float chainNearSq = 0.0f;
 		if (!torso)
 		{
-			float j0[3], j1[3];
+			float j0[3] = { 0 }, j1[3] = { 0 };
 			R_SliceJoint(bones, gla, a, j0);
 			const int c1 = info->chain[b][1];
 			float len = 0.0f;
@@ -617,25 +623,25 @@ static inline const sliceModes_t* R_SliceBuildModes(const refEntity_t& e, TBoneC
 				{
 					mode[i] = SLICE_PLANE;
 				}
-				else if (parent < 0 || parent >= numBones)
+				else if (parent < 0 || parent >= numBones || parent >= SLICE_MAX_BONES)
 				{
 					mode[i] = SLICE_KEEP;
 				}
-				else if (inPlane[parent] && !torso && parent != anchorParent && R_SliceInChain(info, b, parent))
+				else if (R_SliceFlag(inPlane, parent) && !torso && parent != anchorParent && R_SliceInChain(info, b, parent))
 				{
 					// beyond the cut segment of a limb or the neck: always goes with the piece
 					mode[i] = SLICE_GONE;
 				}
-				else if (inPlane[parent])
+				else if (R_SliceFlag(inPlane, parent))
 				{
 					// goes with the side its joint is on; for a limb only when it's near the cut limb
 					// (another limb hanging off the same parent stays: flat skeletons, R2-D2's legs on a dome cut)
 					mode[i] = R_SliceGoesWithPiece(bones, gla, info, b, i, pl, torso, chainNearSq) ? SLICE_GONE : SLICE_KEEP;
 				}
-				else if (done[parent])
+				else if (R_SliceFlag(done, parent))
 				{
 					mode[i] = mode[parent];
-					if (mode[i] == SLICE_KEEP && !torso && ancestor[parent] && R_SliceGoesWithPiece(bones, gla, info, b, i, pl, false, chainNearSq))
+					if (mode[i] == SLICE_KEEP && !torso && R_SliceFlag(ancestor, parent) && R_SliceGoesWithPiece(bones, gla, info, b, i, pl, false, chainNearSq))
 					{
 						mode[i] = SLICE_GONE; // part of the cut limb hanging off the root (rancor and wampa feet and toes)
 					}
@@ -676,7 +682,7 @@ static inline void R_SliceBoltOnModes(const sliceModes_t& m, TBoneCache& mainBon
 	float best = 1e30f;
 	for (int i = 0; i < m.numBones; i++)
 	{
-		float j[3];
+		float j[3] = { 0 };
 		R_SliceJoint(mainBones, mainGla, i, j);
 		const float dx = j[0] - boltPos[0], dy = j[1] - boltPos[1], dz = j[2] - boltPos[2];
 		const float d = dx * dx + dy * dy + dz * dz;
@@ -696,6 +702,46 @@ static inline void R_SliceBoltOnModes(const sliceModes_t& m, TBoneCache& mainBon
 		}
 		out[cut] = mode;
 	}
+}
+
+/*
+R_SliceSurfaceCrossed (SJE, r_saberSliceInsideCull): can a cut show through a surface skinned to these bones
+(the surface's bone reference list)? Only if a cut plane runs through one of its bones, or a cut takes some
+of its bones away whole and leaves others (a hole between them). Bones outside the skeleton count as bone 0,
+as in the clipper.
+*/
+static inline bool R_SliceSurfaceCrossed(const sliceModes_t& m, const int* boneRefs, const int numRefs)
+{
+	for (int c = 0; c < m.numCuts; c++)
+	{
+		bool gone = false, kept = false;
+		for (int r = 0; r < numRefs; r++)
+		{
+			int b = boneRefs[r];
+			if (b < 0 || b >= m.numBones || b >= SLICE_MAX_BONES)
+			{
+				b = 0;
+			}
+			const unsigned char mode = m.mode[c][b];
+			if (mode == SLICE_PLANE)
+			{
+				return true;
+			}
+			if (mode == SLICE_GONE)
+			{
+				gone = true;
+			}
+			else
+			{
+				kept = true;
+			}
+			if (gone && kept)
+			{
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 // signed value for one vertex and one cut: > 0 means this vertex is hidden

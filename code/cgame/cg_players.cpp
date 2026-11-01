@@ -6273,7 +6273,7 @@ static void CG_SaberSliceDrawCap(gentity_t* gent, const refEntity_t* ent, const 
 	};
 
 	constexpr int CAP_VERTS = 16;
-	polyVert_t verts[CAP_VERTS];
+	polyVert_t verts[CAP_VERTS]{};
 	for (int i = 0; i < CAP_VERTS; i++)
 	{
 		const float ang = 6.2831853f * i / CAP_VERTS;
