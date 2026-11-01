@@ -7546,7 +7546,7 @@ static void PM_CheckAirDash(void)
 		pm->ps->torsoTimer = AIR_DASH_TIME;
 	}
 #ifdef _GAME
-	G_Sound(&g_entities[pm->ps->clientNum], CHAN_BODY, G_SoundIndex("sound/weapons/force/dash.mp3"));
+	G_Sound(&g_entities[pm->ps->clientNum], CHAN_BODY, G_SoundIndex("sound/weapons/force/air_dash.mp3")); // own air dash sound (DH 2026-11-01; the floor dash keeps dash.mp3)
 #endif
 }
 

@@ -1202,6 +1202,12 @@ static void DoBoltSeg(vec3_t start, vec3_t end, vec3_t right, float radius)
 	}
 #endif
 
+#ifndef REND2_SP
+	if (!(dis <= 2000.0f))	// freaky long (or NaN): SP already capped this; MP drew it in full (2026-11-01)
+	{
+		dis = 2000.0f;
+	}
+#endif
 	MakeNormalVectors(fwd, rt, up);
 
 	VectorCopy(start, old);

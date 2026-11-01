@@ -6358,12 +6358,19 @@ static qboolean G_SaberSlice(gentity_t* ent, const gentity_t* enemy)
 	return qtrue;
 }
 
+extern qboolean WP_SaberBodyNoCut(const gentity_t* body);
+
 void G_CheckForDismemberment(gentity_t* ent, const gentity_t* enemy, vec3_t point, const int damage)
 {
 	int hit_loc = -1;
 	int hit_loc_use = 0;
 	vec3_t bolt_point;
 	const int dismember = g_dismember.integer;
+
+	if (WP_SaberBodyNoCut(ent))
+	{// a thrown saber sticks (or is stuck) in this body: a normal death, no saber cut or dismemberment (DH 2026-11-01)
+		return;
+	}
 
 	if (!ent->ghoul2 || !trap->G2API_HaveWeGhoul2Models(ent->ghoul2))
 	{// no skeleton to take bolts from (an entity killed without a ghoul2 instance)

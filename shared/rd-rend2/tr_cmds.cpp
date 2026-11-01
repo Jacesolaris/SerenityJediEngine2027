@@ -632,6 +632,7 @@ void RE_BeginFrame(stereoFrame_t stereoFrame)
 #endif
 
 		backEndData->perFrameMemory->Reset();
+		backEndData->currentPass = nullptr; // its memory was just freed (2026-11-01)
 	}
 
 	tr.frameCount++;

@@ -2807,6 +2807,7 @@ static void CG_SaberBodyStickPlace(centity_t* cent)
 		return;
 	}
 	centity_t* body = &cg_entities[s1->otherentityNum2];
+	body->saberStuckNoRag = qtrue; // no ragdoll for it (CG_RagDoll), DH 2026-11-01
 	if (!body->ghoul2)
 	{
 		return;

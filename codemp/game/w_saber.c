@@ -6596,6 +6596,8 @@ qboolean WP_SaberTryStickInBody(gentity_t* owner, gentity_t* victim);
 static qboolean WP_SaberTryStickInBodyDmg(gentity_t* owner, gentity_t* victim, int damage);
 static qboolean WP_SaberThrowerIsYoda(const gentity_t* owner);
 static qboolean WP_SaberStuckInBody(const gentity_t* saberEnt);
+static qboolean WP_SaberBodyCanStick(const gentity_t* owner, const gentity_t* victim);
+static void WP_SaberBodyNoCutThisHit(const gentity_t* victim);
 
 static QINLINE qboolean CheckSaberDamage(gentity_t* self, const int rSaberNum, const int rBladeNum, vec3_t saber_start, vec3_t saber_end, const int trMask)
 {
@@ -7391,6 +7393,11 @@ static QINLINE qboolean CheckSaberDamage(gentity_t* self, const int rSaberNum, c
 		// --------------------------------------------------------
 		const qboolean vic_was_alive = victim->health > 0 ? qtrue : qfalse;
 		const int vic_health_before = victim->health;
+		if (vic_was_alive && rSaberNum == 0 && self->client->ps.saberInFlight && self->client->ps.saberEntityNum
+			&& WP_SaberBodyCanStick(self, victim))
+		{// the thrown saber sticks in the body if this hit kills: a normal death, no saber cut or ragdoll (DH 2026-11-01)
+			WP_SaberBodyNoCutThisHit(victim);
+		}
 		{
 			// the blade and its swing, so a killing hit can cut the body where the blade touched (g_combat.c G_SaberSlice)
 			const bladeInfo_t* blade = &self->client->saber[rSaberNum].blade[rBladeNum];
@@ -8267,6 +8274,10 @@ static QINLINE qboolean WP_CheckThrownSaberDamaged(gentity_t* saberent,
 
 					const qboolean vic_was_alive = ent->health > 0 ? qtrue : qfalse;
 					const int vic_health_before = ent->health;
+					if (vic_was_alive && !returning && WP_SaberBodyCanStick(saber_owner, ent))
+					{// the throw sticks in the body if this hit kills: a normal death, no saber cut or ragdoll (DH 2026-11-01)
+						WP_SaberBodyNoCutThisHit(ent);
+					}
 					G_Damage(ent, saber_owner, saber_owner, dir, tr.endpos, dmg, dflags, MOD_SABER);
 					// the throw killed (or Yoda's throw did damage): the saber sticks in the body (and doesn't go back to the owner below)
 					const qboolean stuck_in_body = vic_was_alive && !returning
@@ -9720,6 +9731,42 @@ static void WP_SaberThrowComeBack(gentity_t* saberent, gentity_t* saber_own)
 	saberent->r.contents = CONTENTS_LIGHTSABER;
 }
 
+// DH 2026-11-01 (TFU: lift an enemy with grip, throw the saber into him): while my grip / grasp holds an enemy the
+// thrown saber flies at his chest, not where the crosshair is (g_saberThrowGripAim 0 = old). dir_out = from -> chest
+static qboolean WP_SaberThrowGripAim(const gentity_t* self, const vec3_t from, vec3_t dir_out)
+{
+	const gentity_t* target = NULL;
+	vec3_t chest, dir;
+
+	if (!g_saberThrowGripAim.integer || !self->client)
+	{
+		return qfalse;
+	}
+	if (self->client->ps.fd.forcePowersActive & (1 << FP_GRIP)
+		&& self->client->ps.fd.forceGripentity_num >= 0 && self->client->ps.fd.forceGripentity_num < ENTITYNUM_WORLD)
+	{
+		target = &g_entities[self->client->ps.fd.forceGripentity_num];
+	}
+	else if (self->client->ps.fd.forcePowersActive & (1 << FP_GRASP)
+		&& self->client->graspEntityNum > 0 && self->client->graspEntityNum <= ENTITYNUM_WORLD)
+	{
+		target = &g_entities[self->client->graspEntityNum - 1];
+	}
+	if (!target || target == self || !target->inuse || !target->client || target->health <= 0)
+	{
+		return qfalse;
+	}
+	VectorCopy(target->r.currentOrigin, chest);
+	chest[2] += target->r.maxs[2] * 0.5f;
+	VectorSubtract(chest, from, dir);
+	if (VectorNormalize(dir) < 1.0f)
+	{
+		return qfalse;
+	}
+	VectorCopy(dir, dir_out);
+	return qtrue;
+}
+
 static void WP_saberFirstThrown(gentity_t* saberent)
 {
 	vec3_t v_sub;
@@ -9916,6 +9963,23 @@ static void WP_saberFirstThrown(gentity_t* saberent)
 		else
 		{
 			saberent->speed = level.time + 400;
+		}
+	}
+	// holding an enemy with grip / grasp: the thrown saber keeps flying into him while he is lifted (DH 2026-11-01)
+	if (!(saber_own->r.svFlags & SVF_BOT) && saberent->think == WP_saberFirstThrown
+		&& saberent->s.pos.trType == TR_LINEAR && !(saberent->s.eFlags & EF_MISSILE_STICK))
+	{
+		vec3_t aim;
+		if (WP_SaberThrowGripAim(saber_own, saberent->r.currentOrigin, aim))
+		{
+			float speed = VectorLength(saberent->s.pos.trDelta);
+			if (speed < 400.0f)
+			{
+				speed = 400.0f;
+			}
+			VectorCopy(saberent->r.currentOrigin, saberent->s.pos.trBase);
+			VectorScale(aim, speed, saberent->s.pos.trDelta);
+			saberent->s.pos.trTime = level.time;
 		}
 	}
 runMin:
@@ -12632,6 +12696,7 @@ nextStep:
 
 				//Projectile stuff:
 				AngleVectors(self->client->ps.viewangles, dir, NULL, NULL);
+				WP_SaberThrowGripAim(self, startorg, dir); // holding an enemy with grip / grasp: thrown into him (DH 2026-11-01)
 
 				saberent->nextthink = level.time + FRAMETIME;
 				saberent->think = WP_saberFirstThrown;
@@ -15899,6 +15964,67 @@ static qboolean WP_SaberStuckInBody(const gentity_t* saberEnt)
 	return (saberEnt->s.eFlags & EF_MISSILE_STICK) && !VectorCompare(saberEnt->s.angles2, vec3_origin) ? qtrue : qfalse;
 }
 
+static int s_saberNoCutEnt = ENTITYNUM_NONE; // this hit's victim, when the throw sticks in it if the hit kills
+static int s_saberNoCutTime = -1;
+
+static void WP_SaberBodyNoCutThisHit(const gentity_t* victim)
+{
+	s_saberNoCutEnt = victim->s.number;
+	s_saberNoCutTime = level.time;
+}
+
+// DH 2026-11-01: a body a thrown saber sticks in (or is stuck in) dies a normal death: no saber cut and no
+// dismemberment (g_combat.c G_CheckForDismemberment); the clients give it no ragdoll (cg_players.c CG_RagDoll)
+qboolean WP_SaberBodyNoCut(const gentity_t* body)
+{
+	if (!body)
+	{
+		return qfalse;
+	}
+	if (body->s.number == s_saberNoCutEnt && level.time == s_saberNoCutTime)
+	{
+		return qtrue;
+	}
+	for (int i = 0; i < MAX_CLIENTS; i++)
+	{
+		const gentity_t* owner = &g_entities[i];
+		if (!owner->inuse || !owner->client || !owner->client->ps.saberInFlight || !owner->client->ps.saberEntityNum)
+		{
+			continue;
+		}
+		const gentity_t* saberEnt = &g_entities[owner->client->ps.saberEntityNum];
+		if (WP_SaberStuckInBody(saberEnt) && saberEnt->s.otherentityNum2 == body->s.number)
+		{
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+// the player's throw would stick in victim if this hit kills it (the checks of WP_SaberTryStickInBodyDmg, before G_Damage)
+static qboolean WP_SaberBodyCanStick(const gentity_t* owner, const gentity_t* victim)
+{
+	if (!owner || !owner->client || !victim || victim == owner || !victim->client)
+	{
+		return qfalse;
+	}
+	if (owner->s.number >= MAX_CLIENTS || owner->r.svFlags & SVF_BOT)
+	{//players only
+		return qfalse;
+	}
+	if (owner->client->ps.fd.forcePowerLevel[FP_SABERTHROW] < FORCE_LEVEL_3
+		|| !owner->client->ps.saberInFlight || !owner->client->ps.saberEntityNum)
+	{
+		return qfalse;
+	}
+	const gentity_t* saberEnt = &g_entities[owner->client->ps.saberEntityNum];
+	if (saberEnt->s.pos.trType != TR_LINEAR || saberEnt->s.eFlags & EF_MISSILE_STICK)
+	{//not flying under the throw
+		return qfalse;
+	}
+	return qtrue;
+}
+
 static void WP_SaberFallFromBody(gentity_t* saberEnt, gentity_t* saber_owner)
 {
 	if (g_DebugSaberCombat.integer)
@@ -15972,6 +16098,7 @@ static qboolean WP_SaberTryStickInBodyDmg(gentity_t* owner, gentity_t* victim, c
 	s_saberBodySpawnCount[saberEnt->s.number] = victim->s.number < MAX_CLIENTS ? victim->client->ps.persistant[PERS_SPAWN_COUNT] : 0;
 	G_SetOrigin(saberEnt, victim->r.currentOrigin);
 	trap->LinkEntity((sharedEntity_t*)saberEnt);
+	G_Sound(saberEnt, CHAN_AUTO, G_SoundIndex("sound/weapons/saber/saber_impale_sizzle.mp3")); // the impale sizzle, once, as the thrown saber sticks in the body (DH 2026-11-01)
 
 	if (g_DebugSaberCombat.integer)
 	{

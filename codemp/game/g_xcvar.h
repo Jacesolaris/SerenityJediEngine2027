@@ -92,6 +92,7 @@ XCVAR_DEF(g_disableServerG2, "0", NULL, CVAR_NONE, qtrue)
 XCVAR_DEF(g_dismember, "80", NULL, CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_gundismemberment, "1", NULL, CVAR_ARCHIVE, qtrue) // every gun dismemberment (head and body shots, gun cuts); 0 = off
 XCVAR_DEF(g_saberSlice, "1", NULL, CVAR_ARCHIVE, qtrue) // saber kills cut at the blade's contact point (Jedi Survivor style); 0 = old limb dismemberment
+XCVAR_DEF(g_saberThrowGripAim, "1", NULL, CVAR_ARCHIVE, qfalse) // holding an enemy with grip / grasp: the thrown saber flies into him (DH 2026-11-01); 0 = where the crosshair is
 XCVAR_DEF(g_doWarmup, "0", NULL, CVAR_NONE, qtrue)
 XCVAR_DEF(g_corpseRemovalTime, "10", NULL, CVAR_NONE, qtrue)
 XCVAR_DEF(g_ff_objectives, "0", NULL, CVAR_CHEAT | CVAR_NORESTART, qtrue)

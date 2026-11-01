@@ -4312,6 +4312,26 @@ static qboolean G_RagDollDisallowedClass(const bclass_t botclass)
 
 //rww - cgame interface for the ragdoll stuff.
 //Returns qtrue if the entity is now in a ragdoll state, otherwise qfalse.
+// a thrown saber stuck in the body ent (server: EF_MISSILE_STICK, otherentityNum2 = the body, angles2 = the throw)
+static qboolean CG_SaberStuckInBody(const int ent)
+{
+	if (!cg.snap)
+	{
+		return qfalse;
+	}
+	for (int i = 0; i < cg.snap->numEntities; i++)
+	{
+		const entityState_t* es = &cg.snap->entities[i];
+		if (es->eType != ET_PLAYER && es->eType != ET_NPC && es->eType != ET_BODY
+			&& es->weapon == WP_SABER && es->eFlags & EF_MISSILE_STICK && es->otherentityNum2 == ent
+			&& !VectorCompare(es->angles2, vec3_origin))
+		{
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
 qboolean CG_RagDoll(centity_t* cent, vec3_t forced_angles)
 {
 	vec3_t   used_org;
@@ -4338,6 +4358,18 @@ qboolean CG_RagDoll(centity_t* cent, vec3_t forced_angles)
 	if (cent->currentState.eFlags2 & EF2_HELD_BY_MONSTER)
 	{
 		cent->isRagging = qfalse;
+		return qfalse;
+	}
+
+	// DH 2026-11-01: a thrown saber sticks in this body: a normal death, never a ragdoll (also after it falls out)
+	if (cent->saberStuckNoRag || CG_SaberStuckInBody(cent->currentState.number))
+	{
+		cent->saberStuckNoRag = qtrue;
+		if (cent->isRagging)
+		{
+			cent->isRagging = qfalse;
+			trap->G2API_SetRagDoll(cent->ghoul2, NULL); //calling with null parms resets to no ragdoll.
+		}
 		return qfalse;
 	}
 
@@ -5138,6 +5170,10 @@ static void CG_G2PlayerAngles(centity_t* cent, matrix3_t legs, vec3_t legs_angle
 {
 	clientInfo_t* ci = NULL;
 
+	if (!(cent->currentState.eFlags & EF_DEAD) && !(cent->currentState.eFlags & EF_RAG))
+	{// alive (respawned): a saber that was stuck in the last body no longer stops the ragdoll
+		cent->saberStuckNoRag = qfalse;
+	}
 	//rww - now do ragdoll stuff
 	if (cent->currentState.eFlags & EF_DEAD || cent->currentState.eFlags & EF_RAG)
 	{

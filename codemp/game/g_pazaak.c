@@ -825,7 +825,7 @@ static vmCvar_t g_shop, g_shopStartCredits, g_shopKillCredits, g_shopStreakTime,
 g_shopAmmoPrice, g_shopBactaPrice, g_npcTalk;
 static int shopTalkNPC[MAX_CLIENTS]; // entity number + 1 of the NPC of the open talk question
 static int shopIsOpen[MAX_CLIENTS];     // the shop menu is open (it closes when he is attacked)
-static int shopOpenHealth[MAX_CLIENTS];
+static int shopOpenDamage[MAX_CLIENTS]; // ps.damageEvent when the shop opened (health was used, but MP health above max ticks down every second)
 static int shopNextCheck[MAX_CLIENTS];
 // "wvlooks <client> <hex>" (2026-10-31): the gun look each human player uses per weapon (2 hex digits per weapon number),
 // as last sent to everyone; the cgame draws his holstered guns with them (cg_weapons.c CG_WeaponVariantG2)
@@ -1024,13 +1024,13 @@ void G_Shop_PlayerThink(gentity_t* ent)
 	if (shopIsOpen[ent->s.number] && level.time >= shopNextCheck[ent->s.number])
 	{
 		shopNextCheck[ent->s.number] = level.time + 500;
-		if (ent->health <= 0 || ent->health < shopOpenHealth[ent->s.number] || Pzk_EnemyNear(ent))
+		if (ent->health <= 0 || ent->client->ps.damageEvent != shopOpenDamage[ent->s.number] || Pzk_EnemyNear(ent))
 		{
 			shopIsOpen[ent->s.number] = 0;
 			trap->SendServerCommand(ent->s.number, "pzk shop close");
 			trap->SendServerCommand(ent->s.number, "cp \"The shop closed: you are under attack.\"");
 		}
-		shopOpenHealth[ent->s.number] = ent->health;
+		shopOpenDamage[ent->s.number] = ent->client->ps.damageEvent;
 	}
 }
 
@@ -1174,7 +1174,7 @@ static void Shop_Open(gentity_t* ent, const char* message)
 	}
 	Shop_Send(ent, "open", message);
 	shopIsOpen[ent->s.number] = 1;
-	shopOpenHealth[ent->s.number] = ent->health;
+	shopOpenDamage[ent->s.number] = ent->client->ps.damageEvent;
 	shopNextCheck[ent->s.number] = level.time + 500;
 }
 

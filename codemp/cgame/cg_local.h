@@ -556,6 +556,7 @@ typedef struct centity_s {
 	qboolean		saberBodyStickSet;
 	vec3_t			saberBodyStickOfs;
 	vec3_t			saberBodyStickDir;
+	qboolean		saberStuckNoRag;	// a thrown saber is (was) stuck in this body: a normal death, no ragdoll (DH 2026-11-01)
 
 	// a gun's shot (CG_MissileFromMuzzle): drawn leaving the shooter's gun muzzle, blending into its real path
 	int				muzzleOfsTrTime;	// the shot (its trajectory start) the offset was taken for
