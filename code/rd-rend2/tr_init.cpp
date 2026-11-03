@@ -175,6 +175,7 @@ cvar_t* r_forceSunLightScale;
 cvar_t* r_forceSunAmbientScale;
 cvar_t* r_sunlightMode;
 cvar_t* r_drawSunRays;
+cvar_t* r_sharpen;
 cvar_t* r_sunShadows;
 cvar_t* r_shadowFilter;
 cvar_t* r_shadowMapSize;
@@ -1677,6 +1678,7 @@ static void R_Register(void)
 	r_forceSunLightScale = ri_Cvar_Get_NoComm("r_forceSunLightScale", "1.0", CVAR_CHEAT, "");
 	r_forceSunAmbientScale = ri_Cvar_Get_NoComm("r_forceSunAmbientScale", "0.5", CVAR_CHEAT, "");
 	r_drawSunRays = ri_Cvar_Get_NoComm("r_drawSunRays", "1", CVAR_ARCHIVE | CVAR_LATCH, "");
+	r_sharpen = ri_Cvar_Get_NoComm("r_sharpen", "0.2", CVAR_ARCHIVE, "Contrast-adaptive sharpening of the 3D view, 0 = off, 0.1 .. 1 = strength (try 0.5)");
 	r_sunlightMode = ri_Cvar_Get_NoComm("r_sunlightMode", "1", CVAR_ARCHIVE | CVAR_LATCH, "");
 
 	r_volumetricFog = ri_Cvar_Get_NoComm("r_volumetricFog", "1", CVAR_ARCHIVE | CVAR_LATCH, "Disable/enable lightgrid lighting on fog volumes");

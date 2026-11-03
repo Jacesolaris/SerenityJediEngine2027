@@ -795,6 +795,33 @@ void SP_target_random(gentity_t* self)
 
 int numNewICARUSEnts = 0;
 
+extern qboolean G_MissionReplayBlocksScript(const char* script);
+extern const char* G_MissionCutsceneSeen(void);
+
+// Missions: the last script a target_scriptrunner ran on each entity (its activator), so a cutscene that script starts
+// can be told apart (g_ICARUScb.c G_MissionCutsceneMessage)
+static char missionScriptRun[MAX_GENTITIES][MAX_QPATH];
+static int missionScriptRunLevel[MAX_GENTITIES];
+
+void G_MissionNoteScript(const int entNum, const char* script)
+{
+	if (entNum < 0 || entNum >= MAX_GENTITIES || !script)
+	{
+		return;
+	}
+	Q_strncpyz(missionScriptRun[entNum], script, sizeof missionScriptRun[entNum]);
+	missionScriptRunLevel[entNum] = level.startTime;
+}
+
+const char* G_MissionScriptRunOn(const int entNum)
+{
+	if (entNum < 0 || entNum >= MAX_GENTITIES || missionScriptRunLevel[entNum] != level.startTime)
+	{
+		return "";
+	}
+	return missionScriptRun[entNum];
+}
+
 void scriptrunner_run(gentity_t* ent)
 {
 	if (ent->count != -1)
@@ -848,6 +875,12 @@ void scriptrunner_run(gentity_t* ent)
 			{
 				Com_Printf("target_scriptrunner running %s on activator %s\n", ent->behaviorSet[BSET_USE],
 					ent->activator->targetname);
+			}
+
+			G_MissionNoteScript(ent->activator->s.number, ent->behaviorSet[BSET_USE]);
+			if (G_MissionReplayBlocksScript(ent->behaviorSet[BSET_USE]))
+			{
+				return; // (Missions: a replayed map's first cutscene does not run again, g_ICARUScb.c)
 			}
 
 			//make the code handle the case of the scripts directory already being given
@@ -981,6 +1014,681 @@ void SP_target_deactivate(gentity_t* self)
 
 extern void ExitLevel(void);
 
+/*
+-------------------------
+Missions (GT_SINGLE_PLAYER): the campaign goes on from map to map (DH 2026-11-02)
+
+A target_level_change always goes to the next map (g_autoMapCycle is not looked at). A "+menu" mapname (the SP mission
+select / tier menus of Jedi Academy) is never opened: the next map comes from ext_data/mission_order.dat, a line
+"<map> <next map> [spawn target]" per map, which also overrides any other map change it lists. The spawn target (the
+entity's "target", as SP's G_ChangeMap) is kept in g_missionSpawnTarget / g_missionSpawnMap, and each player who came
+along starts the new map there (G_MissionSpawnPoint). Each player's loadout (weapons, ammo, force powers, health,
+armor, items) goes along in the cvar g_missionLoadout<client slot> and is given back on his first spawn on the new map
+(G_MissionApplyLoadout), bots too. Not on a respawn after a death.
+-------------------------
+*/
+#define MISSION_ORDER_FILE		"ext_data/mission_order.dat"
+#define MISSION_ORDER_MAXSIZE	8192
+#define MISSION_LOADOUT_CVAR	"g_missionLoadout%i"
+
+extern qboolean SPSpawnpointCheck(vec3_t spawnloc);
+qboolean CheckforGoodSpawnPoint(vec3_t location, qboolean playersolidcheck);
+
+// the next map (and spawn target) for this map in the mission order file; qfalse if the file does not list it
+static qboolean G_MissionOrderNext(const char* mapname, char* next, const int nextSize, char* spawnTarget,
+	const int targetSize)
+{
+	static char buf[MISSION_ORDER_MAXSIZE];
+	fileHandle_t f = 0;
+	const int len = trap->FS_Open(MISSION_ORDER_FILE, &f, FS_READ);
+
+	next[0] = 0;
+	spawnTarget[0] = 0;
+	if (!f)
+	{
+		return qfalse;
+	}
+	if (len <= 0 || len >= (int)sizeof buf)
+	{
+		trap->FS_Close(f);
+		Com_Printf(S_COLOR_YELLOW "Missions: %s is empty or too big\n", MISSION_ORDER_FILE);
+		return qfalse;
+	}
+	trap->FS_Read(buf, len, f);
+	buf[len] = 0;
+	trap->FS_Close(f);
+
+	const char* p = buf;
+	while (1)
+	{
+		const char* token = COM_ParseExt(&p, qtrue);
+		if (!token[0])
+		{
+			return qfalse;
+		}
+		if (Q_stricmp(token, mapname))
+		{
+			SkipRestOfLine(&p);
+			continue;
+		}
+		token = COM_ParseExt(&p, qfalse);
+		Q_strncpyz(next, token, nextSize);
+		token = COM_ParseExt(&p, qfalse);
+		Q_strncpyz(spawnTarget, token, targetSize);
+		return next[0] ? qtrue : qfalse;
+	}
+}
+
+// a player in the game (not a spectator), whose loadout goes along / is saved
+static qboolean G_MissionInGame(const gentity_t* ent)
+{
+	return ent->inuse && ent->client && ent->client->pers.connected == CON_CONNECTED
+		&& ent->client->sess.sessionTeam != TEAM_SPECTATOR ? qtrue : qfalse;
+}
+
+// a player's loadout as text: <map> weapons weapons2 forceKnown health armor items item weapon ammo... forceLevels...
+static void G_MissionLoadoutString(const gentity_t* ent, const char* map, char* buf, const int bufSize)
+{
+	const playerState_t* ps = &ent->client->ps;
+	Q_strncpyz(buf, va("%s %i %i %i %i %i %i %i %i", map, ps->stats[STAT_WEAPONS], ps->stats[STAT_WEAPONS2],
+		ps->fd.forcePowersKnown, ent->health > 0 ? ent->health : 0, ps->stats[STAT_ARMOR],
+		ps->stats[STAT_HOLDABLE_ITEMS], ps->stats[STAT_HOLDABLE_ITEM], ps->weapon), bufSize);
+	for (int a = 0; a < AMMO_MAX; a++)
+	{
+		Q_strcat(buf, bufSize, va(" %i", ps->ammo[a]));
+	}
+	for (int fp = 0; fp < NUM_FORCE_POWERS; fp++)
+	{
+		Q_strcat(buf, bufSize, va(" %i", ps->fd.forcePowerLevel[fp]));
+	}
+}
+
+// each player's loadout goes along to the next map (given back by G_MissionApplyLoadout)
+static void G_MissionSaveLoadouts(const char* nextMap)
+{
+	for (int i = 0; i < MAX_CLIENTS; i++)
+	{
+		const gentity_t* ent = &g_entities[i];
+		char buf[MAX_CVAR_VALUE_STRING];
+
+		if (!G_MissionInGame(ent))
+		{
+			trap->Cvar_Set(va(MISSION_LOADOUT_CVAR, i), "");
+			continue;
+		}
+		G_MissionLoadoutString(ent, nextMap, buf, sizeof buf);
+		trap->Cvar_Set(va(MISSION_LOADOUT_CVAR, i), buf);
+	}
+}
+
+/*
+-------------------------
+Missions checkpoints (DH 2026-11-02, Phase 3)
+
+One save per campaign in the mod's home folder: missions/<campaign>.sav (ja, jo, or the map name for other maps).
+Written at every checkpoint (target_autosave) and at every level change: the map, the checkpoint spot (none: the map
+start / the level change's spawn target), each player's loadout by client slot and the map's objectives. A checkpoint
+restarts its map fresh at that spot (doors / kills before it are not replayed), each player with the loadout he had
+there: when the mission fails (SET_MISSIONFAILED), when the whole team is down (g_missionWipeRestart 1, the default),
+or to continue a saved mission (g_missionContinue 1 / ja / jo, then start any mission map). ICARUS variables are not
+saved: the map starts fresh, its scripts set their own variables again.
+-------------------------
+*/
+#define MISSION_SAVE_MAXSIZE	16384
+
+extern int G_MissionObjectivesString(char* buf, int bufSize);
+
+// the campaign a map belongs to: its save file's name
+const char* G_MissionCampaign(const char* map)
+{
+	static const char* jaPrefix[] = { "academy", "hoth", "kor", "t1_", "t2_", "t3_", "taspir", "vjun", "yavin1", "yavin2", NULL };
+	static const char* joMaps[] = { "kejim_post", "kejim_base", "artus_mine", "artus_detention", "artus_topside", "valley",
+		"yavin_temple", "yavin_trial", "ns_streets", "ns_hideout", "ns_starpad", "bespin_undercity", "bespin_streets",
+		"bespin_platform", "cairn_bay", "cairn_assembly", "cairn_reactor", "cairn_dock1", "doom_comm", "doom_detention",
+		"doom_shields", "yavin_swamp", "yavin_canyon", "yavin_courtyard", "yavin_final", NULL };
+
+	for (int i = 0; joMaps[i]; i++)
+	{
+		if (!Q_stricmp(map, joMaps[i]))
+		{
+			return "jo";
+		}
+	}
+	for (int i = 0; jaPrefix[i]; i++)
+	{
+		if (!Q_stricmpn(map, jaPrefix[i], strlen(jaPrefix[i])))
+		{
+			return "ja";
+		}
+	}
+	return map;
+}
+
+// the text of a campaign's save; qfalse if there is none
+qboolean G_MissionSaveText(const char* campaign, char* buf, const int bufSize)
+{
+	fileHandle_t f = 0;
+	const int len = trap->FS_Open(va("missions/%s.sav", campaign), &f, FS_READ);
+
+	buf[0] = 0;
+	if (!f)
+	{
+		return qfalse;
+	}
+	if (len > 0 && len < bufSize)
+	{
+		trap->FS_Read(buf, len, f);
+		buf[len] = 0;
+	}
+	trap->FS_Close(f);
+	return buf[0] ? qtrue : qfalse;
+}
+
+// write the campaign save: the map, the checkpoint spot (hasSpot) or spawn target, the loadouts, the objectives
+static void G_MissionWriteSave(const char* map, const qboolean hasSpot, const vec3_t spot, const float yaw,
+	const char* target)
+{
+	static char buf[MISSION_SAVE_MAXSIZE];
+	char mapname[MAX_QPATH], loadout[MAX_CVAR_VALUE_STRING];
+	fileHandle_t f = 0;
+
+	if (level.gametype != GT_SINGLE_PLAYER)
+	{
+		return;
+	}
+	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+	Q_strncpyz(buf, va("map %s\n", map), sizeof buf);
+	if (hasSpot)
+	{
+		Q_strcat(buf, sizeof buf, va("spot %.1f %.1f %.1f %.1f\n", spot[0], spot[1], spot[2], yaw));
+	}
+	if (target && target[0])
+	{
+		Q_strcat(buf, sizeof buf, va("target %s\n", target));
+	}
+	for (int i = 0; i < MAX_CLIENTS; i++)
+	{
+		if (G_MissionInGame(&g_entities[i]))
+		{
+			G_MissionLoadoutString(&g_entities[i], map, loadout, sizeof loadout);
+			Q_strcat(buf, sizeof buf, va("load %i %s\n", i, loadout));
+		}
+	}
+	if (!Q_stricmp(map, mapname))
+	{
+		// (this map's first cutscene, which a restart does not play again: g_ICARUScb.c)
+		const char* seen = G_MissionCutsceneSeen();
+		if (seen[0])
+		{
+			Q_strcat(buf, sizeof buf, va("cutscene %s\n", seen));
+		}
+		// (the objectives of this map; a new map starts with none)
+		const int len = strlen(buf);
+		G_MissionObjectivesString(buf + len, sizeof buf - len);
+	}
+
+	trap->FS_Open(va("missions/%s.sav", G_MissionCampaign(map)), &f, FS_WRITE);
+	if (!f)
+	{
+		Com_Printf(S_COLOR_YELLOW "Missions: could not write missions/%s.sav\n", G_MissionCampaign(map));
+		return;
+	}
+	trap->FS_Write(buf, strlen(buf), f);
+	trap->FS_Close(f);
+	Com_Printf("Missions: checkpoint saved (missions/%s.sav, %s)\n", G_MissionCampaign(map), map);
+}
+
+// a checkpoint was reached (Use_Autosave): saved, so a restart / continue starts here
+void G_MissionCheckpointReached(const vec3_t spot, const float yaw)
+{
+	char mapname[MAX_QPATH];
+
+	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+	G_MissionWriteSave(mapname, qtrue, spot, yaw, "");
+}
+
+// load a campaign's save: set everything up for its map (loadouts, checkpoint, spawn target), then load that map
+qboolean G_MissionLoadSave(const char* campaign)
+{
+	static char buf[MISSION_SAVE_MAXSIZE];
+	char map[MAX_QPATH] = { 0 }, target[MAX_QPATH] = { 0 }, spot[128] = { 0 }, cutscene[MAX_CVAR_VALUE_STRING] = { 0 };
+
+	if (!G_MissionSaveText(campaign, buf, sizeof buf))
+	{
+		return qfalse;
+	}
+	for (int i = 0; i < MAX_CLIENTS; i++)
+	{
+		trap->Cvar_Set(va(MISSION_LOADOUT_CVAR, i), "");
+	}
+
+	const char* p = buf;
+	while (1)
+	{
+		const char* token = COM_ParseExt(&p, qtrue);
+		if (!token[0])
+		{
+			break;
+		}
+		if (!Q_stricmp(token, "map"))
+		{
+			Q_strncpyz(map, COM_ParseExt(&p, qfalse), sizeof map);
+		}
+		else if (!Q_stricmp(token, "target"))
+		{
+			Q_strncpyz(target, COM_ParseExt(&p, qfalse), sizeof target);
+		}
+		else if (!Q_stricmp(token, "cutscene"))
+		{
+			// <map> <script> <skip script>
+			while ((token = COM_ParseExt(&p, qfalse))[0])
+			{
+				Q_strcat(cutscene, sizeof cutscene, cutscene[0] ? va(" %s", token) : token);
+			}
+		}
+		else if (!Q_stricmp(token, "spot"))
+		{
+			spot[0] = 0;
+			for (int i = 0; i < 4; i++)
+			{
+				Q_strcat(spot, sizeof spot, va("%s ", COM_ParseExt(&p, qfalse)));
+			}
+		}
+		else if (!Q_stricmp(token, "load"))
+		{
+			char loadout[MAX_CVAR_VALUE_STRING] = { 0 };
+			const int slot = atoi(COM_ParseExt(&p, qfalse));
+			while ((token = COM_ParseExt(&p, qfalse))[0])
+			{
+				Q_strcat(loadout, sizeof loadout, loadout[0] ? va(" %s", token) : token);
+			}
+			if (slot >= 0 && slot < MAX_CLIENTS)
+			{
+				trap->Cvar_Set(va(MISSION_LOADOUT_CVAR, slot), loadout);
+			}
+		}
+		else
+		{
+			SkipRestOfLine(&p); // (obj lines: read by the objectives at the map start)
+		}
+	}
+	if (!map[0])
+	{
+		return qfalse;
+	}
+
+	trap->Cvar_Set("g_missionSpawnMap", map);
+	trap->Cvar_Set("g_missionSpawnTarget", target);
+	trap->Cvar_Set("g_missionCheckpoint", spot);
+	trap->Cvar_Set("g_missionCheckpointMap", spot[0] ? map : "");
+	trap->Cvar_Set("g_missionRestoreMap", map); // (the objectives come back from the save: g_ICARUScb.c)
+	if (cutscene[0])
+	{
+		trap->Cvar_Set("g_missionCutsceneSeen", cutscene); // (its first cutscene does not play again: g_ICARUScb.c)
+	}
+	trap->Cvar_Set("g_missionReplay", "1");
+	trap->SendServerCommand(-1, va("cp \"" S_COLOR_CYAN "Back to the last checkpoint (%s)...\n\"", map));
+	trap->SendConsoleCommand(EXEC_APPEND, va("map %s\n", map));
+	Com_Printf("Missions: loading missions/%s.sav (%s)\n", campaign, map);
+	return qtrue;
+}
+
+// mission failed / team down: back to the last checkpoint after delay ms (G_MissionRestartThink)
+static int missionRestartTime, missionRestartLevel;
+
+void G_MissionRestartSoon(const int delay)
+{
+	if (level.gametype != GT_SINGLE_PLAYER || missionRestartLevel == level.startTime && missionRestartTime)
+	{
+		return;
+	}
+	missionRestartTime = level.time + delay;
+	missionRestartLevel = level.startTime;
+}
+
+void G_MissionRestartThink(void)
+{
+	char mapname[MAX_QPATH];
+	static char buf[MISSION_SAVE_MAXSIZE];
+
+	if (missionRestartLevel != level.startTime || !missionRestartTime || level.time < missionRestartTime)
+	{
+		return;
+	}
+	missionRestartTime = 0;
+	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+
+	// the save of this campaign, if it is for this map; else this map from its start
+	const char* campaign = G_MissionCampaign(mapname);
+	if (G_MissionSaveText(campaign, buf, sizeof buf))
+	{
+		const char* p = buf;
+		const char* token = COM_ParseExt(&p, qtrue);
+		if (!Q_stricmp(token, "map") && !Q_stricmp(COM_ParseExt(&p, qfalse), mapname) && G_MissionLoadSave(campaign))
+		{
+			return;
+		}
+	}
+	trap->Cvar_Set("g_missionReplay", "1"); // (the map's first cutscene does not play again: g_ICARUScb.c)
+	trap->SendServerCommand(-1, "cp \"" S_COLOR_CYAN "Restarting the mission...\n\"");
+	trap->SendConsoleCommand(EXEC_APPEND, "map_restart 0\n");
+}
+
+// g_missionContinue (1 = this map's campaign, or ja / jo / a save name): at the first player of a mission map, that
+// save is loaded (its map, checkpoint and loadouts); then the cvar goes back to 0
+void G_MissionCheckContinue(void)
+{
+	static int doneLevel = -1;
+	char value[MAX_QPATH], mapname[MAX_QPATH];
+
+	if (level.gametype != GT_SINGLE_PLAYER || doneLevel == level.startTime)
+	{
+		return;
+	}
+	doneLevel = level.startTime;
+	trap->Cvar_VariableStringBuffer("g_missionContinue", value, sizeof value);
+	if (!value[0] || !Q_stricmp(value, "0"))
+	{
+		return;
+	}
+	trap->Cvar_Set("g_missionContinue", "0");
+	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+	if (!G_MissionLoadSave(!Q_stricmp(value, "1") ? G_MissionCampaign(mapname) : value))
+	{
+		Com_Printf(S_COLOR_YELLOW "Missions: no saved mission to continue (%s)\n", value);
+	}
+}
+
+// the respawn spot of the checkpoint a restart / continue brings the players back to (once per map start)
+static gentity_t* G_MissionCheckpointSpot(const vec3_t origin, const float yaw)
+{
+	static gentity_t* spotEnt = NULL;
+	static int spotLevel = -1;
+	gentity_t* other = NULL;
+
+	if (spotLevel == level.startTime && spotEnt && spotEnt->inuse)
+	{
+		return spotEnt;
+	}
+	spotLevel = level.startTime;
+	while ((other = G_Find(other, FOFS(classname), "info_player_deathmatch")) != NULL)
+	{
+		other->genericValue1++; // (as Use_Autosave: the checkpoint is the respawn spot from now on)
+	}
+	spotEnt = G_Spawn();
+	if (spotEnt)
+	{
+		spotEnt->classname = "info_player_deathmatch";
+		VectorCopy(origin, spotEnt->s.origin);
+		VectorSet(spotEnt->s.angles, 0, yaw, 0);
+		spotEnt->genericValue1 = 0;
+	}
+	return spotEnt;
+}
+
+// the loadout this player brought along to this map, or qfalse (buf gets the rest after the map name)
+static qboolean G_MissionLoadoutFor(const int clientNum, char* buf, const int bufSize)
+{
+	char mapname[MAX_QPATH];
+	const char* p = buf;
+
+	trap->Cvar_VariableStringBuffer(va(MISSION_LOADOUT_CVAR, clientNum), buf, bufSize);
+	if (!buf[0])
+	{
+		return qfalse;
+	}
+	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+	const char* token = COM_ParseExt(&p, qfalse);
+	return Q_stricmp(token, mapname) == 0 ? qtrue : qfalse;
+}
+
+// a free spot for a player at a spawn spot or around it, on the floor, that the spot can see (all the players come in
+// at the same place); qfalse if there is none
+static qboolean G_MissionFreeSpotNear(const gentity_t* ent, const vec3_t center, vec3_t out)
+{
+	static const float radii[] = { 0.0f, 48.0f, 96.0f, 144.0f, 192.0f };
+	static const vec3_t mins = { -15.0f, -15.0f, DEFAULT_MINS_2 };
+	static const vec3_t maxs = { 15.0f, 15.0f, DEFAULT_MAXS_2 };
+
+	for (int r = 0; r < 5; r++)
+	{
+		for (int k = 0; k < (r ? 8 : 1); k++)
+		{
+			const float yaw = DEG2RAD(k * 45.0f + ent->s.number * 15.0f);
+			vec3_t loc, eye;
+			trace_t tr;
+
+			VectorCopy(center, loc);
+			loc[0] += cos(yaw) * radii[r];
+			loc[1] += sin(yaw) * radii[r];
+			if (r)
+			{
+				VectorCopy(center, eye);
+				eye[2] += 16.0f;
+				loc[2] += 16.0f;
+				trap->Trace(&tr, eye, NULL, NULL, loc, ent->s.number, MASK_SOLID, qfalse, 0, 0);
+				loc[2] -= 16.0f;
+				if (tr.fraction < 1.0f)
+				{
+					continue;
+				}
+			}
+			if (!CheckforGoodSpawnPoint(loc, qtrue)) // (dropped to the floor; not over a drop)
+			{
+				continue;
+			}
+			trap->Trace(&tr, loc, mins, maxs, loc, ent->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
+			if (tr.startsolid || tr.allsolid) // (a wall or another player)
+			{
+				continue;
+			}
+			VectorCopy(loc, out);
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+// Missions: the spot a player who came along from the last map starts this map at (its spawn target), or NULL
+gentity_t* G_MissionSpawnPoint(const gentity_t* ent, vec3_t origin, vec3_t angles)
+{
+	char buf[MAX_CVAR_VALUE_STRING];
+	char mapname[MAX_QPATH], spawnMap[MAX_QPATH], target[MAX_QPATH];
+
+	if (level.gametype != GT_SINGLE_PLAYER || !G_MissionLoadoutFor(ent->s.number, buf, sizeof buf))
+	{
+		return NULL;
+	}
+	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+
+	// a restart / continue: back at the saved checkpoint
+	trap->Cvar_VariableStringBuffer("g_missionCheckpointMap", spawnMap, sizeof spawnMap);
+	if (spawnMap[0] && !Q_stricmp(spawnMap, mapname))
+	{
+		char cp[128];
+		vec3_t cpOrigin;
+		float cpYaw = 0.0f;
+		trap->Cvar_VariableStringBuffer("g_missionCheckpoint", cp, sizeof cp);
+		if (sscanf(cp, "%f %f %f %f", &cpOrigin[0], &cpOrigin[1], &cpOrigin[2], &cpYaw) == 4)
+		{
+			gentity_t* cpSpot = G_MissionCheckpointSpot(cpOrigin, cpYaw);
+			if (cpSpot && G_MissionFreeSpotNear(ent, cpOrigin, origin))
+			{
+				VectorSet(angles, 0, cpYaw, 0);
+				return cpSpot;
+			}
+		}
+	}
+
+	trap->Cvar_VariableStringBuffer("g_missionSpawnMap", spawnMap, sizeof spawnMap);
+	trap->Cvar_VariableStringBuffer("g_missionSpawnTarget", target, sizeof target);
+	if (!target[0] || Q_stricmp(spawnMap, mapname))
+	{
+		return NULL;
+	}
+
+	gentity_t* spot = G_Find(NULL, FOFS(targetname), target);
+	if (!spot)
+	{
+		Com_Printf(S_COLOR_YELLOW "Missions: no spawn target \"%s\" on %s\n", target, mapname);
+		return NULL;
+	}
+	if (!G_MissionFreeSpotNear(ent, spot->s.origin, origin))
+	{
+		return NULL;
+	}
+	VectorCopy(spot->s.angles, angles);
+	return spot;
+}
+
+// Missions: a player who would come in on top of another at the SP start gets a free spot around it (DH 2026-11-02:
+// several players join at once, the SP maps have one start), no per-map spawn files needed
+void G_MissionSpreadSpawn(const gentity_t* ent, const gentity_t* spot, vec3_t origin)
+{
+	static const vec3_t mins = { -15.0f, -15.0f, DEFAULT_MINS_2 };
+	static const vec3_t maxs = { 15.0f, 15.0f, DEFAULT_MAXS_2 };
+	trace_t tr;
+	vec3_t loc;
+
+	if (level.gametype != GT_SINGLE_PLAYER || !spot)
+	{
+		return;
+	}
+	trap->Trace(&tr, origin, mins, maxs, origin, ent->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
+	if (!tr.startsolid && !tr.allsolid)
+	{
+		return; // (free)
+	}
+	if (G_MissionFreeSpotNear(ent, spot->s.origin, loc))
+	{
+		VectorCopy(loc, origin);
+	}
+}
+
+// Missions: the most players (humans + bots) in a mission, g_missionMaxPlayers (default 4, 0 = no limit); qtrue if
+// this client may not join the game now
+qboolean G_MissionFull(const int clientNum)
+{
+	static vmCvar_t maxPlayers;
+	static qboolean registered = qfalse;
+	int inGame = 0;
+
+	if (level.gametype != GT_SINGLE_PLAYER)
+	{
+		return qfalse;
+	}
+	if (!registered)
+	{
+		trap->Cvar_Register(&maxPlayers, "g_missionMaxPlayers", "4", CVAR_ARCHIVE | CVAR_SERVERINFO);
+		registered = qtrue;
+	}
+	trap->Cvar_Update(&maxPlayers);
+	if (maxPlayers.integer <= 0)
+	{
+		return qfalse;
+	}
+	for (int i = 0; i < level.maxclients; i++)
+	{
+		const gclient_t* cl = &level.clients[i];
+		if (i != clientNum && cl->pers.connected != CON_DISCONNECTED && cl->sess.sessionTeam != TEAM_SPECTATOR)
+		{
+			inGame++;
+		}
+	}
+	return inGame >= maxPlayers.integer ? qtrue : qfalse;
+}
+
+// Missions: the loadout a player brought from the last map, given back on his first spawn on this one, then cleared
+void G_MissionApplyLoadout(gentity_t* ent)
+{
+	char buf[MAX_CVAR_VALUE_STRING];
+	int v[8] = { 0 };
+	playerState_t* ps = &ent->client->ps;
+	const char* p = buf;
+
+	if (level.gametype != GT_SINGLE_PLAYER || ent->client->sess.sessionTeam == TEAM_SPECTATOR)
+	{
+		return;
+	}
+	const qboolean found = G_MissionLoadoutFor(ent->s.number, buf, sizeof buf);
+	if (buf[0])
+	{
+		trap->Cvar_Set(va(MISSION_LOADOUT_CVAR, ent->s.number), ""); // once (a stale one from another map goes too)
+	}
+	if (!found)
+	{
+		return;
+	}
+
+	COM_ParseExt(&p, qfalse); // (the map name)
+	for (int i = 0; i < 8; i++)
+	{
+		v[i] = atoi(COM_ParseExt(&p, qfalse));
+	}
+	ps->stats[STAT_WEAPONS] |= v[0];
+	ps->stats[STAT_WEAPONS2] |= v[1];
+	ps->fd.forcePowersKnown |= v[2];
+	if (v[3] > 0)
+	{
+		ent->health = ps->stats[STAT_HEALTH] = v[3] > ps->stats[STAT_MAX_HEALTH] ? ps->stats[STAT_MAX_HEALTH] : v[3];
+	}
+	ps->stats[STAT_ARMOR] = v[4];
+	ps->stats[STAT_HOLDABLE_ITEMS] |= v[5];
+	if (v[6] && !ps->stats[STAT_HOLDABLE_ITEM])
+	{
+		ps->stats[STAT_HOLDABLE_ITEM] = v[6];
+	}
+	for (int a = 0; a < AMMO_MAX; a++)
+	{
+		const int n = atoi(COM_ParseExt(&p, qfalse));
+		if (n > ps->ammo[a])
+		{
+			ps->ammo[a] = n;
+		}
+	}
+	for (int fp = 0; fp < NUM_FORCE_POWERS; fp++)
+	{
+		const int n = atoi(COM_ParseExt(&p, qfalse));
+		if (n > ps->fd.forcePowerLevel[fp])
+		{
+			ps->fd.forcePowerLevel[fp] = n;
+		}
+	}
+	if (v[7] > WP_NONE && v[7] < WP_NUM_WEAPONS && BG_HasWeapon(ps->stats, v[7]))
+	{
+		ps->weapon = v[7];
+		ps->weaponstate = WEAPON_READY;
+	}
+}
+
+// Missions: on to the next map of the campaign (see above); qfalse if there is none to go to
+static qboolean G_MissionLevelChange(const gentity_t* self)
+{
+	char mapname[MAX_QPATH], next[MAX_QPATH], spawnTarget[MAX_QPATH];
+
+	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+	if (!G_MissionOrderNext(mapname, next, sizeof next, spawnTarget, sizeof spawnTarget))
+	{
+		if (!self->message || !self->message[0] || self->message[0] == '+')
+		{
+			Com_Printf(S_COLOR_YELLOW "Missions: no next map for %s (\"%s\") in %s\n", mapname,
+				self->message ? self->message : "", MISSION_ORDER_FILE);
+			return qfalse;
+		}
+		Q_strncpyz(next, self->message, sizeof next);
+		Q_strncpyz(spawnTarget, self->target ? self->target : "", sizeof spawnTarget);
+	}
+
+	trap->Cvar_Set("g_missionSpawnMap", next);
+	trap->Cvar_Set("g_missionSpawnTarget", spawnTarget);
+	trap->Cvar_Set("g_missionCheckpointMap", "");
+	G_MissionSaveLoadouts(next);
+	G_MissionWriteSave(next, qfalse, vec3_origin, 0.0f, spawnTarget); // (a continue starts the next map)
+	trap->Cvar_Set("nextmap", va("map %s", next));
+	ExitLevel();
+	return qtrue;
+}
+
 void target_level_change_use(gentity_t* self, gentity_t* other, gentity_t* activator)
 {
 	vmCvar_t mapname;
@@ -990,6 +1698,16 @@ void target_level_change_use(gentity_t* self, gentity_t* other, gentity_t* activ
 	trap->Cvar_Register(&mapname, "mapname", "", CVAR_SERVERINFO | CVAR_ROM);
 
 	strcpy(tiers_complete.string, va("%s|%s", tiers_complete.string, mapname.string));
+
+	if (level.gametype == GT_SINGLE_PLAYER)
+	{
+		// (never a menu in a mission: with no next map, the server's map cycle)
+		if (!G_MissionLevelChange(self))
+		{
+			ExitLevel();
+		}
+		return;
+	}
 
 	if (g_autoMapCycle.integer)
 	{
@@ -1282,6 +2000,13 @@ void Use_Autosave(gentity_t* ent, gentity_t* other, const gentity_t* activator)
 					player->s.number);
 			}
 		}
+	}
+
+	if (level.gametype == GT_SINGLE_PLAYER)
+	{
+		// Missions: the checkpoint is saved (a restart / continue starts here)
+		extern void G_MissionCheckpointReached(const vec3_t spot, float yaw);
+		G_MissionCheckpointReached(spawnloc, spawnang[YAW]);
 	}
 
 	ent->touch = 0;

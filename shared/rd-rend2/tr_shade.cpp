@@ -939,7 +939,7 @@ static void DrawTris(shaderCommands_t* input, const VertexArraysProperties* vert
 	{
 		int index = 0;
 
-		if (input->shader->numDeforms && !ShaderRequiresCPUDeforms(input->shader))
+		if (ShaderUsesGPUDeforms(input->shader))
 		{
 			index |= GENERICDEF_USE_DEFORM_VERTEXES;
 		}
@@ -1112,16 +1112,44 @@ RB_FogPass
 Blends a fog texture on top of everything else
 ===================
 */
-static void RB_FogPass(shaderCommands_t* input, const VertexArraysProperties* vertexArrays)
+// Grass cutting, plant models (tr_surface.cpp RB_GrassCutPlantParams): the cut grid and u_PlantCut for a draw with a
+// deform variant (generic / velocity / fogpass.glsl PlantCut). u_PlantCut is all 0 for anything but a plant (world or
+// md3 entity) while grass is cut, so those draws skip PlantCut.
+static void RB_GrassCutPlantUniforms(const shaderCommands_t* input, const shaderProgram_t* sp, UniformDataWriter& uniformDataWriter,
+	SamplerBindingsWriter& samplerBindingsWriter)
 {
-	cullType_t cullType = RB_GetCullType(&backEnd.viewParms, backEnd.currentEntity, input->shader->cullType);
+	if (sp->uniforms[UNIFORM_PLANTCUT] == -1)
+	{
+		return;
+	}
+	bool RB_GrassCutPlantParams(vec4_t params, image_t** image, const float** centers, int* numCenters);
+	vec4_t params = { 0.0f, 0.0f, 0.0f, 0.0f };
+	image_t* image = nullptr;
+	const float* centers = nullptr;
+	int numCenters = 0;
+	// the world's plants and plain md3 plant entities (misc_model_static / breakable), never ghoul2 models (the cgame hands
+	// every entity a ghoul2 list, so ask the model)
+	const trRefEntity_t* ent = backEnd.currentEntity;
+	if (input->shader->grassCutPlant && ent && (ent == &tr.worldEntity || (ent->e.reType == RT_MODEL && R_GetModelByHandle(ent->e.hModel)->type == MOD_MESH))
+		&& RB_GrassCutPlantParams(params, &image, &centers, &numCenters))
+	{
+		samplerBindingsWriter.AddStaticImage(image, TB_GRASSCUTMAP);
+		if (numCenters > 0)
+			uniformDataWriter.SetUniformVec4(UNIFORM_PLANTCENTERS, centers, numCenters);
+	}
+	uniformDataWriter.SetUniformVec4(UNIFORM_PLANTCUT, params);
+	uniformDataWriter.SetUniformInt(UNIFORM_PLANTCOUNT, numCenters);
+}
+
+static void RB_FogPass(shaderCommands_t* input, const VertexArraysProperties* vertexArrays)
+{	cullType_t cullType = RB_GetCullType(&backEnd.viewParms, backEnd.currentEntity, input->shader->cullType);
 
 	vertexAttribute_t attribs[ATTR_INDEX_MAX] = {};
 	GL_VertexArraysToAttribs(attribs, ARRAY_LEN(attribs), vertexArrays);
 
 	int shaderBits = 0;
 
-	if (input->shader->numDeforms && !ShaderRequiresCPUDeforms(input->shader))
+	if (ShaderUsesGPUDeforms(input->shader))
 		shaderBits |= FOGDEF_USE_DEFORM_VERTEXES;
 #ifdef REND2_SP_MD3
 	if (glState.vertexAnimation)
@@ -1194,6 +1222,7 @@ static void RB_FogPass(shaderCommands_t* input, const VertexArraysProperties* ve
 	};
 
 	SamplerBindingsWriter samplerBindingsWriter;
+	RB_GrassCutPlantUniforms(input, sp, uniformDataWriter, samplerBindingsWriter);
 	if (input->numPasses > 0)
 	{
 		if (input->xstages[0]->alphaTestType != ALPHA_TEST_NONE && tess.shader->fogPass != FP_EQUAL)
@@ -1324,7 +1353,7 @@ static shaderProgram_t* SelectShaderProgram(int stageIndex, shaderStage_t* stage
 	if (forceRefraction)
 	{
 		index = 0;
-		if (tess.shader->numDeforms && !ShaderRequiresCPUDeforms(tess.shader))
+		if (ShaderUsesGPUDeforms(tess.shader))
 		{
 			index |= REFRACTIONDEF_USE_DEFORM_VERTEXES;
 		}
@@ -1366,7 +1395,7 @@ static shaderProgram_t* SelectShaderProgram(int stageIndex, shaderStage_t* stage
 			index = 0;
 			if (glState.skeletalAnimation)
 				index |= VELOCITYDEF_USE_SKELETAL_ANIMATION;
-			if (tess.shader->numDeforms && !ShaderRequiresCPUDeforms(tess.shader))
+			if (ShaderUsesGPUDeforms(tess.shader))
 				index |= VELOCITYDEF_USE_DEFORM_VERTEXES;
 			if (stage->bundle[0].tcGen != TCGEN_TEXTURE || (stage->bundle[0].numTexMods))
 				index |= VELOCITYDEF_USE_TCGEN_AND_TCMOD;
@@ -1429,7 +1458,7 @@ static shaderProgram_t* SelectShaderProgram(int stageIndex, shaderStage_t* stage
 			{
 				index = 0;
 
-				if (tess.shader->numDeforms && !ShaderRequiresCPUDeforms(tess.shader))
+				if (ShaderUsesGPUDeforms(tess.shader))
 				{
 					index |= GENERICDEF_USE_DEFORM_VERTEXES;
 				}
@@ -1738,6 +1767,7 @@ static void RB_IterateStagesGeneric(shaderCommands_t* input, const VertexArraysP
 		assert(sp);
 
 		uniformDataWriter.Start(sp);
+		RB_GrassCutPlantUniforms(input, sp, uniformDataWriter, samplerBindingsWriter);
 
 		if (input->fogNum
 			&& pStage->glslShaderGroup != tr.lightallShader

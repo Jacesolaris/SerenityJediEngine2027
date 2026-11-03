@@ -9479,6 +9479,18 @@ static void CG_DrawGonkHint(void)
 	CG_DrawPic(50, 285, 32, 32, cgs.media.useableHint);
 }
 
+// The use icon on an NPC / bot the player can talk to now (pazaak / shop): the server decides by the pazaak rules
+// (g_pazaak.c Shop_TalkHint, FLAG_TALKHINT in ps.userInt3)
+static void CG_DrawTalkHint(void)
+{
+	if (in_camera || !cg.snap || !(cg.snap->ps.userInt3 & 1 << FLAG_TALKHINT))
+	{
+		return;
+	}
+	trap->R_SetColor(NULL);
+	CG_DrawPic(50, 285, 32, 32, cgs.media.useableHint);
+}
+
 static void CG_DrawCrosshairNames(void)
 {
 	char      sanitized[1024];
@@ -12036,6 +12048,8 @@ static void CG_Draw2D(void)
 			CG_DrawCrosshairItem();
 
 			CG_DrawGonkHint();
+
+			CG_DrawTalkHint();
 
 			CG_DynamicHudBegin(hud_alpha);
 

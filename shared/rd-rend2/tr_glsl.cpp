@@ -158,6 +158,11 @@ static uniformInfo_t uniformsInfo[] =
 	{ "u_GrassParams",		GLSL_VEC4, 1 },
 	{ "u_GrassWaves",		GLSL_VEC4, 8 },
 	{ "u_GrassWaveParams",	GLSL_VEC4, 1 },
+	{ "u_GrassCutParams",	GLSL_VEC4, 1 },
+	{ "u_GrassCutMap",		GLSL_INT, 1 },
+	{ "u_PlantCut",			GLSL_VEC4, 1 },
+	{ "u_PlantCenters",		GLSL_VEC4, 32 },
+	{ "u_PlantCount",		GLSL_INT, 1 },
 	{ "u_SliceMolten",		GLSL_INT, 1 },
 	{ "u_SliceCapsMap",		GLSL_INT, 1 },
 	{ "u_SliceBloodMap",		GLSL_INT, 1 },
@@ -1595,6 +1600,7 @@ static int GLSL_LoadGPUProgramGeneric(
 		GLSL_SetUniformInt(&tr.genericShader[i], UNIFORM_SLICECAPSMAP, TB_SLICECAPSMAP);
 		GLSL_SetUniformInt(&tr.genericShader[i], UNIFORM_SLICEBLOODMAP, TB_SLICEBLOODMAP);
 		GLSL_SetUniformInt(&tr.genericShader[i], UNIFORM_SLICEGLOWMAP, TB_SLICEGLOWMAP);
+		GLSL_SetUniformInt(&tr.genericShader[i], UNIFORM_GRASSCUTMAP, TB_GRASSCUTMAP); // grass cutting, plant models
 		qglUseProgram(0);
 
 		GLSL_FinishGPUShader(&tr.genericShader[i]);
@@ -1676,6 +1682,7 @@ static int GLSL_LoadGPUProgramFogPass(
 		//if (i & FOGDEF_USE_ALPHA_TEST)
 		GLSL_SetUniformInt(&tr.fogShader[i], UNIFORM_DIFFUSEMAP, 0);
 		GLSL_SetUniformInt(&tr.fogShader[i], UNIFORM_VOLUMETRICLIGHTMAP, 2);
+		GLSL_SetUniformInt(&tr.fogShader[i], UNIFORM_GRASSCUTMAP, TB_GRASSCUTMAP); // grass cutting, plant models
 
 		qglUseProgram(0);
 
@@ -1765,6 +1772,7 @@ static int GLSL_LoadGPUProgramVelocityPass(
 		//if (i & FOGDEF_USE_ALPHA_TEST)
 		GLSL_SetUniformInt(&tr.velocityShader[i], UNIFORM_DIFFUSEMAP, TB_DIFFUSEMAP);
 		GLSL_SetUniformInt(&tr.velocityShader[i], UNIFORM_NORMALMAP, TB_NORMALMAP);
+		GLSL_SetUniformInt(&tr.velocityShader[i], UNIFORM_GRASSCUTMAP, TB_GRASSCUTMAP); // grass cutting, plant models
 		qglUseProgram(0);
 
 		GLSL_FinishGPUShader(&tr.velocityShader[i]);
@@ -2357,6 +2365,29 @@ static int GLSL_LoadGPUProgramHighPass(
 	return 1;
 }
 
+// r_sharpen (Warzone port): contrast-adaptive sharpening of the finished 3D view
+static int GLSL_LoadGPUProgramSharpen(
+	ShaderProgramBuilder& builder,
+	Allocator& scratchAlloc)
+{
+	GLSL_LoadGPUProgramBasic(
+		builder,
+		scratchAlloc,
+		&tr.sharpenShader,
+		"sharpen",
+		fallback_sharpenProgram);
+
+	GLSL_InitUniforms(&tr.sharpenShader);
+
+	qglUseProgram(tr.sharpenShader.program);
+	GLSL_SetUniformInt(&tr.sharpenShader, UNIFORM_SCREENIMAGEMAP, TB_COLORMAP);
+	qglUseProgram(0);
+
+	GLSL_FinishGPUShader(&tr.sharpenShader);
+
+	return 1;
+}
+
 static int GLSL_LoadGPUProgramSSAO(
 	ShaderProgramBuilder& builder,
 	Allocator& scratchAlloc)
@@ -2565,6 +2596,9 @@ static int GLSL_LoadGPUProgramSurfaceSprites(
 		}
 
 		GLSL_InitUniforms(program);
+		qglUseProgram(program->program);
+		GLSL_SetUniformInt(program, UNIFORM_GRASSCUTMAP, TB_GRASSCUTMAP);
+		qglUseProgram(0);
 		GLSL_FinishGPUShader(program);
 		++numPrograms;
 	}
@@ -2824,6 +2858,7 @@ void GLSL_LoadGPUShaders()
 	numEtcShaders += GLSL_LoadGPUProgramTonemap(builder, allocator);
 	numEtcShaders += GLSL_LoadGPUProgramCalcLuminanceLevel(builder, allocator);
 	numEtcShaders += GLSL_LoadGPUProgramHighPass(builder, allocator);
+	numEtcShaders += GLSL_LoadGPUProgramSharpen(builder, allocator);
 	numEtcShaders += GLSL_LoadGPUProgramSSAO(builder, allocator);
 	if (r_cubeMapping->integer)
 		numEtcShaders += GLSL_LoadGPUProgramPrefilterEnvMap(builder, allocator);
@@ -2890,6 +2925,7 @@ void GLSL_ShutdownGPUShaders(void)
 		GLSL_DeleteGPUShader(&tr.calclevels4xShader[i]);
 
 	GLSL_DeleteGPUShader(&tr.ssaoShader);
+	GLSL_DeleteGPUShader(&tr.sharpenShader);
 
 	for (i = 0; i < 2; i++)
 		GLSL_DeleteGPUShader(&tr.depthBlurShader[i]);
@@ -3084,7 +3120,7 @@ shaderProgram_t* GLSL_GetGenericShaderProgram(int stage)
 		shaderAttribs |= GENERICDEF_USE_TCGEN_AND_TCMOD;
 	}
 
-	if (tess.shader->numDeforms && !ShaderRequiresCPUDeforms(tess.shader))
+	if (ShaderUsesGPUDeforms(tess.shader))
 	{
 		shaderAttribs |= GENERICDEF_USE_DEFORM_VERTEXES;
 	}

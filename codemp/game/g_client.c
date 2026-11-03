@@ -3790,6 +3790,12 @@ char* ClientConnect(int clientNum, const qboolean firstTime, const qboolean isBo
 	}
 	G_ReadSessionData(client);
 
+	if (firstTime)
+	{
+		// a new player in this slot does not get the loadout its last player took along (g_target.c)
+		trap->Cvar_Set(va("g_missionLoadout%i", clientNum), "");
+	}
+
 	if (level.gametype == GT_SIEGE &&
 		(firstTime || level.newSession))
 	{
@@ -3898,6 +3904,28 @@ void ClientBegin(const int clientNum, const qboolean allowTeamReset)
 	char motd[1024];
 
 	gentity_t* ent = g_entities + clientNum;
+
+	if (level.gametype == GT_SINGLE_PLAYER && ent->client && ent->client->sess.sessionTeam != TEAM_SPECTATOR)
+	{
+		// Missions: no more than g_missionMaxPlayers players (humans + bots) in the game (g_target.c G_MissionFull)
+		extern qboolean G_MissionFull(int clientNum);
+		if (G_MissionFull(clientNum))
+		{
+			ent->client->sess.sessionTeam = TEAM_SPECTATOR;
+			ent->client->sess.spectatorState = SPECTATOR_FREE;
+			trap->SendServerCommand(clientNum, "cp \"" S_COLOR_YELLOW "This mission is full.\nYou can watch until a place is free.\n\"");
+		}
+	}
+
+	if (level.gametype == GT_SINGLE_PLAYER)
+	{
+		// Missions: continue a saved mission (g_missionContinue), the objective list for this player (g_target.c,
+		// g_ICARUScb.c)
+		extern void G_MissionCheckContinue(void);
+		extern void G_MissionSendObjectives(int clientNum);
+		G_MissionCheckContinue();
+		G_MissionSendObjectives(clientNum);
+	}
 
 	if (ent->r.svFlags & SVF_BOT)
 	{
@@ -4876,7 +4904,27 @@ void ClientSpawn(gentity_t* ent)
 	// ------------------------------------------------------------
 	if (level.gametype == GT_SINGLE_PLAYER)
 	{
-		spawnPoint = SelectSPSpawnPoint(spawn_origin, spawn_angles);
+		// a player who came along from the last map starts at its spawn target (g_target.c G_MissionSpawnPoint)
+		extern gentity_t* G_MissionSpawnPoint(const gentity_t* ent, vec3_t origin, vec3_t angles);
+		spawnPoint = G_MissionSpawnPoint(ent, spawn_origin, spawn_angles);
+		if (!spawnPoint && ent->r.svFlags & SVF_BOT)
+		{
+			// a bot: a neutral bot spawn waypoint ('u', bot_wp_addflagged u) of the map's bot route, else the start
+			vec3_t wpSpawn;
+			if (BOT_FindFFAWaypointSpawnPoint(ent, wpSpawn) == qtrue)
+			{
+				VectorCopy(wpSpawn, spawn_origin);
+				BOT_WaypointSpawnAngles(client->sess.sessionTeam, spawn_origin, spawn_angles);
+				goto spawn_done;
+			}
+		}
+		if (!spawnPoint)
+		{
+			// (several players at the one SP start: a free spot around it, g_target.c G_MissionSpreadSpawn)
+			extern void G_MissionSpreadSpawn(const gentity_t* ent, const gentity_t* spot, vec3_t origin);
+			spawnPoint = SelectSPSpawnPoint(spawn_origin, spawn_angles);
+			G_MissionSpreadSpawn(ent, spawnPoint, spawn_origin);
+		}
 		goto spawn_done;
 	}
 
@@ -7415,6 +7463,13 @@ spawn_done:
 	{
 		client->playerTeam = ent->s.teamowner = NPCTEAM_PLAYER;
 		client->enemyTeam = NPCTEAM_ENEMY;
+	}
+
+	if (level.gametype == GT_SINGLE_PLAYER)
+	{
+		// Missions: the loadout he brought from the last map, on his first spawn here (g_target.c G_MissionApplyLoadout)
+		extern void G_MissionApplyLoadout(gentity_t* ent);
+		G_MissionApplyLoadout(ent);
 	}
 
 	// run a client frame to drop exactly to the floor,

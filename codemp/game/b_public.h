@@ -57,8 +57,12 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define NPCAI_JUMP				0x20000000	//Jump Now
 #define NPCAI_BOSS_CHARACTER	0x40000000	//Boss NPC flag for certain immunities/defenses
 #define NPCAI_NO_JEDI_DELAY		0x80000000	//Reborn/Jedi don't taunt enemy before attacking
-#define NPCAI_LOCKEDENEMY		0x020000000	//keep current enemy until dead
-#define NPCAI_CUSTOM_GRAVITY	0x040000000	//Don't use g_gravity, I fly!
+// (0x00080000 was the only free bit: NPCAI_LOCKEDENEMY 0x020000000 was NPCAI_JUMP and NPCAI_CUSTOM_GRAVITY 0x040000000 was
+// NPCAI_BOSS_CHARACTER, DH 2026-11-03)
+#define NPCAI_CUSTOM_GRAVITY	0x00080000	//Don't use g_gravity, I fly!
+
+// aiFlags2
+#define NPCAI2_LOCKEDENEMY	0x00000001	//keep current enemy until dead (was NPCAI_LOCKEDENEMY in aiFlags)
 
 //Script flags
 
@@ -221,6 +225,7 @@ typedef struct
 
 	int eFlags;
 	int aiFlags;
+	int aiFlags2; // NPCAI2_* (aiFlags is full)
 
 	int currentAmmo; // this sucks, need to find a better way
 	int shotTime;

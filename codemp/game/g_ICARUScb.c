@@ -1706,10 +1706,25 @@ Lerps the origin and angles of an entity to the destination values
 
 =============
 */
+// DH 2026-11-02: a script move / set origin with a non-finite vector (a NaN tag position ...) does not reach the entity:
+// it stays where it is (developer: which entity and why)
+static qboolean Q3_VecSane(const gentity_t* ent, vec3_t v, const char* what)
+{
+	for (int i = 0; i < 3; i++)
+	{
+		if (v[i] != v[i] || v[i] > 1.0e7f || v[i] < -1.0e7f)
+		{
+			G_DebugPrint(WL_WARNING, "%s: non-finite vector for %s (%s), ignored\n", what,
+				ent->targetname ? ent->targetname : "", ent->script_targetname ? ent->script_targetname : "");
+			return qfalse;
+		}
+	}
+	return qtrue;
+}
+
 void Q3_Lerp2Pos(const int taskID, const int entID, vec3_t origin, vec3_t angles, float duration)
 {
 	gentity_t* ent = &g_entities[entID];
-
 	if (!ent)
 	{
 		G_DebugPrint(WL_WARNING, "Q3_Lerp2Pos: invalid entID %d\n", entID);
@@ -1730,6 +1745,15 @@ void Q3_Lerp2Pos(const int taskID, const int entID, vec3_t origin, vec3_t angles
 	//Don't allow a zero duration
 	if (duration == 0)
 		duration = 1;
+
+	if (!Q3_VecSane(ent, origin, "Q3_Lerp2Pos"))
+	{
+		VectorCopy(ent->r.currentOrigin, origin); // (stays where it is; the move still completes)
+	}
+	if (angles != NULL && !Q3_VecSane(ent, angles, "Q3_Lerp2Pos angles"))
+	{
+		VectorCopy(ent->r.currentAngles, angles);
+	}
 
 	//
 	// Movement
@@ -3142,6 +3166,11 @@ static void Q3_SetOrigin(const int entID, vec3_t origin)
 		return;
 	}
 
+	if (!Q3_VecSane(ent, origin, "Q3_SetOrigin"))
+	{
+		return;
+	}
+
 	trap->UnlinkEntity((sharedEntity_t*)ent);
 
 	if (ent->client)
@@ -4492,6 +4521,18 @@ static void SetSpawnWeapon(const int weap)
 	UseSpawnWeapons = qtrue;
 }
 
+/*
+Missions (DH 2026-11-02): the players keep what they picked before joining, as in an RPG (three players may be
+Obi-Wan, Qui-Gon and Anakin with their own force powers). A campaign script, written for SP's one player, does not
+change a player's force power levels, the force powers he has on, his saber styles, model or skin, and never takes his
+weapons away (most will play the Jedi Outcast campaign as Jedi from the start). NPCs still get all of it.
+*/
+static qboolean G_MissionKeepsPlayer(const int entID)
+{
+	return level.gametype == GT_SINGLE_PLAYER && entID >= 0 && entID < MAX_CLIENTS && g_entities[entID].client
+		&& !g_entities[entID].NPC ? qtrue : qfalse;
+}
+
 void G_SetWeapon(gentity_t* self, const int wp)
 {
 	qboolean had_weapon = qfalse;
@@ -4608,6 +4649,11 @@ static void Q3_SetWeapon(const int entID, const char* wp_name)
 	{
 		G_DebugPrint(WL_ERROR, "Q3_SetWeapon: '%s' is not a player/NPC!\n", ent->targetname);
 		return;
+	}
+
+	if (G_MissionKeepsPlayer(entID) && (wp == WP_NONE || !Q_stricmp("drop", wp_name)))
+	{
+		return; // Missions: a script never takes a player's weapons away (G_MissionKeepsPlayer)
 	}
 
 	if (ent->NPC)
@@ -5206,6 +5252,11 @@ static void Q3_SetForcePowerLevel(const int entID, const int forcePower, const i
 	{
 		G_DebugPrint(WL_ERROR, "Q3_SetForcePowerLevel: ent %s is not a player or NPC\n", self->targetname);
 		return;
+	}
+
+	if (G_MissionKeepsPlayer(entID))
+	{
+		return; // Missions: the players keep the force powers and saber styles they picked (G_MissionKeepsPlayer)
 	}
 
 	self->client->ps.fd.forcePowerLevel[forcePower] = forceLevel;
@@ -7039,6 +7090,11 @@ static void Q3_SetLockPlayerWeapons(int entID, const qboolean locked)
 {
 	gentity_t* ent = &g_entities[0];
 
+	if (level.gametype == GT_SINGLE_PLAYER)
+	{
+		return; // Missions: the players keep their weapons in hand (G_MissionKeepsPlayer; SP's no-weapon zones, ns_streets)
+	}
+
 	ent->flags &= ~FL_LOCK_PLAYER_WEAPONS;
 
 	if (locked)
@@ -7826,6 +7882,224 @@ static void Q3_LCARSText(const char* id)
 void un_lock_doors(gentity_t* ent);
 void lock_doors(gentity_t* ent);
 void UpdatePlayerCameraOrigin(const gentity_t* ent, vec3_t newPos);
+
+/*
+-------------------------
+Missions: the mission's objectives (DH 2026-11-02, Phase 5 server side)
+
+A table per map of the objectives the scripts showed, with their state (0 hidden, 1 shown, 2 completed, 3 failed),
+kept from SET_OBJECTIVE_SHOW / HIDE / SUCCEEDED / FAILED / CLEARALL. Every change goes to the clients as the server
+command "mobj <name> <state>" (the name is the objectives.str reference, e.g. YAVIN_TRIAL_OBJ2: the client shows
+@@@OBJECTIVES_<name>); a player who comes in gets "mobjclear" and the whole table. It goes into the checkpoint save, and
+a restart / continue brings it back (a completed objective stays completed when the map's script shows it again).
+-------------------------
+*/
+#define MAX_MISSION_OBJECTIVES	48
+
+typedef struct
+{
+	char name[64];
+	int state;
+} missionObjective_t;
+
+static missionObjective_t missionObjectives[MAX_MISSION_OBJECTIVES];
+static int numMissionObjectives;
+static int missionObjectivesLevel = -1;
+
+extern qboolean G_MissionSaveText(const char* campaign, char* buf, int bufSize);
+extern const char* G_MissionCampaign(const char* map);
+
+static missionObjective_t* G_MissionObjective(const char* name, const qboolean add);
+
+// the table belongs to this map start; a restart / continue reads it back from the save
+static void G_MissionObjectivesInit(void)
+{
+	char mapname[MAX_QPATH], restoreMap[MAX_QPATH];
+	static char buf[16384];
+
+	if (missionObjectivesLevel == level.startTime)
+	{
+		return;
+	}
+	missionObjectivesLevel = level.startTime;
+	numMissionObjectives = 0;
+
+	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+	trap->Cvar_VariableStringBuffer("g_missionRestoreMap", restoreMap, sizeof restoreMap);
+	if (!restoreMap[0] || Q_stricmp(restoreMap, mapname))
+	{
+		return;
+	}
+	trap->Cvar_Set("g_missionRestoreMap", "");
+	if (!G_MissionSaveText(G_MissionCampaign(mapname), buf, sizeof buf))
+	{
+		return;
+	}
+	const char* p = buf;
+	while (1)
+	{
+		const char* token = COM_ParseExt(&p, qtrue);
+		if (!token[0])
+		{
+			break;
+		}
+		if (Q_stricmp(token, "obj"))
+		{
+			SkipRestOfLine(&p);
+			continue;
+		}
+		missionObjective_t* obj = G_MissionObjective(COM_ParseExt(&p, qfalse), qtrue);
+		const int state = atoi(COM_ParseExt(&p, qfalse));
+		if (obj)
+		{
+			obj->state = state;
+		}
+	}
+}
+
+static missionObjective_t* G_MissionObjective(const char* name, const qboolean add)
+{
+	for (int i = 0; i < numMissionObjectives; i++)
+	{
+		if (!Q_stricmp(missionObjectives[i].name, name))
+		{
+			return &missionObjectives[i];
+		}
+	}
+	if (!add || !name[0] || numMissionObjectives >= MAX_MISSION_OBJECTIVES)
+	{
+		return NULL;
+	}
+	missionObjective_t* obj = &missionObjectives[numMissionObjectives++];
+	Q_strncpyz(obj->name, name, sizeof obj->name);
+	obj->state = 0;
+	return obj;
+}
+
+// a script changed an objective (name NULL: all of them, SET_OBJECTIVE_CLEARALL)
+static void G_MissionSetObjective(const char* name, const int state)
+{
+	if (level.gametype != GT_SINGLE_PLAYER)
+	{
+		return;
+	}
+	G_MissionObjectivesInit();
+	if (!name)
+	{
+		for (int i = 0; i < numMissionObjectives; i++)
+		{
+			missionObjectives[i].state = 0;
+		}
+		trap->SendServerCommand(-1, "mobjclear");
+		return;
+	}
+	missionObjective_t* obj = G_MissionObjective(name, qtrue);
+	if (!obj || obj->state == 2 && state == 1)
+	{
+		return; // (full, or completed already: a restarted map's script shows it again)
+	}
+	obj->state = state;
+	trap->SendServerCommand(-1, va("mobj %s %i", obj->name, obj->state));
+}
+
+// a player came in: the whole table (g_client.c ClientBegin)
+void G_MissionSendObjectives(const int clientNum)
+{
+	if (level.gametype != GT_SINGLE_PLAYER)
+	{
+		return;
+	}
+	G_MissionObjectivesInit();
+	trap->SendServerCommand(clientNum, "mobjclear");
+	for (int i = 0; i < numMissionObjectives; i++)
+	{
+		if (missionObjectives[i].state)
+		{
+			trap->SendServerCommand(clientNum, va("mobj %s %i", missionObjectives[i].name, missionObjectives[i].state));
+		}
+	}
+}
+
+// the table as save lines "obj <name> <state>" (g_target.c G_MissionWriteSave)
+int G_MissionObjectivesString(char* buf, const int bufSize)
+{
+	buf[0] = 0;
+	G_MissionObjectivesInit();
+	for (int i = 0; i < numMissionObjectives; i++)
+	{
+		if (missionObjectives[i].state)
+		{
+			Q_strcat(buf, bufSize, va("obj %s %i\n", missionObjectives[i].name, missionObjectives[i].state));
+		}
+	}
+	return strlen(buf);
+}
+
+/*
+-------------------------
+Missions: the whole team down (DH 2026-11-02): when every player in the game has been dead for 2 s, the mission goes
+back to the last checkpoint (g_target.c G_MissionRestartSoon / G_MissionLoadSave). g_missionWipeRestart 0 turns it off
+(then the players respawn at the checkpoint as before). Run from each player's think (G_MissionGatherThink).
+-------------------------
+*/
+extern void G_MissionRestartSoon(int delay);
+extern void G_MissionRestartThink(void);
+
+static void G_MissionWipeCheck(void)
+{
+	static vmCvar_t wipeRestart;
+	static qboolean registered = qfalse;
+	static int wipeStart, wipeLevel = -1;
+	int inGame = 0, alive = 0;
+
+	if (!registered)
+	{
+		trap->Cvar_Register(&wipeRestart, "g_missionWipeRestart", "1", CVAR_ARCHIVE);
+		registered = qtrue;
+	}
+	trap->Cvar_Update(&wipeRestart);
+	if (wipeLevel != level.startTime)
+	{
+		wipeLevel = level.startTime;
+		wipeStart = 0;
+	}
+	if (!wipeRestart.integer)
+	{
+		return;
+	}
+	for (int i = 0; i < level.maxclients; i++)
+	{
+		const gentity_t* ent = &g_entities[i];
+		if (!ent->inuse || !ent->client || ent->client->pers.connected != CON_CONNECTED
+			|| ent->client->sess.sessionTeam == TEAM_SPECTATOR)
+		{
+			continue;
+		}
+		inGame++;
+		if (ent->health > 0 && ent->client->ps.pm_type != PM_DEAD)
+		{
+			alive++;
+		}
+	}
+	if (!inGame || alive)
+	{
+		wipeStart = 0;
+		return;
+	}
+	if (!wipeStart)
+	{
+		wipeStart = level.time;
+	}
+	else if (level.time - wipeStart > 2000 && wipeStart > 0)
+	{
+		wipeStart = -1; // (once)
+		trap->SendServerCommand(-1, "cp \"" S_COLOR_RED "The team is down.\n" S_COLOR_WHITE "Back to the last checkpoint...\n\"");
+		G_MissionRestartSoon(3000);
+	}
+}
+
+void G_MissionCutsceneMessage(int entID);
+void G_MissionCutsceneNoteFirst(int entID);
 
 //returns qtrue if it got to the end, otherwise qfalse.
 qboolean Q3_Set(const int taskID, const int entID, const char* type_name, const char* data)
@@ -8872,6 +9146,7 @@ qboolean Q3_Set(const int taskID, const int entID, const char* type_name, const 
 		// the mission's objectives: the objective's text (strings OBJECTIVES_<name>, as the SP datapad) is looked up by
 		// each client in his own language ("@@@" in a centre print, CG_CheckSVStringEdRef)
 	case SET_OBJECTIVE_SHOW:
+		G_MissionSetObjective(data, 1); // (Missions: the objective list)
 		if (data && data[0])
 		{
 			trap->SendServerCommand(-1, va("cp \"" S_COLOR_CYAN "New Mission Objective:\n" S_COLOR_WHITE
@@ -8883,9 +9158,10 @@ qboolean Q3_Set(const int taskID, const int entID, const char* type_name, const 
 		}
 		break;
 	case SET_OBJECTIVE_HIDE:
-		//G_DebugPrint(WL_WARNING, "SET_OBJECTIVE_HIDE: NOT SUPPORTED IN MP\n");
+		G_MissionSetObjective(data, 0);
 		break;
 	case SET_OBJECTIVE_SUCCEEDED:
+		G_MissionSetObjective(data, 2);
 		if (data && data[0])
 		{
 			trap->SendServerCommand(-1, va("cp \"" S_COLOR_GREEN "Objective Completed:\n" S_COLOR_WHITE
@@ -8897,6 +9173,7 @@ qboolean Q3_Set(const int taskID, const int entID, const char* type_name, const 
 		}
 		break;
 	case SET_OBJECTIVE_FAILED:
+		G_MissionSetObjective(data, 3);
 		if (data && data[0])
 		{
 			trap->SendServerCommand(-1, va("cp \"" S_COLOR_RED "Objective Failed:\n" S_COLOR_WHITE
@@ -8909,7 +9186,7 @@ qboolean Q3_Set(const int taskID, const int entID, const char* type_name, const 
 		break;
 
 	case SET_OBJECTIVE_CLEARALL:
-		//G_DebugPrint(WL_WARNING, "SET_OBJECTIVE_CLEARALL: NOT SUPPORTED IN MP\n");
+		G_MissionSetObjective(NULL, 0);
 		break;
 
 	case SET_MISSIONFAILED:
@@ -8922,6 +9199,12 @@ qboolean Q3_Set(const int taskID, const int entID, const char* type_name, const 
 		else
 		{
 			trap->SendServerCommand(-1, "cp \"^1You have failed your mission.\n\"");
+		}
+		if (level.gametype == GT_SINGLE_PLAYER)
+		{
+			// Missions (DH 2026-11-02): back to the last checkpoint, no intermission (g_target.c G_MissionRestartSoon)
+			G_MissionRestartSoon(5000);
+			break;
 		}
 		LogExit("Co-Op Mission Failed.");
 		//we want the intermission to activate a little slower than normal.
@@ -8994,15 +9277,25 @@ qboolean Q3_Set(const int taskID, const int entID, const char* type_name, const 
 		break;
 
 	case SET_FORCE_PULL:
-		Q3_SetForcePower(entID, FP_PULL, Q_stricmp("true", (char*)data) == 0);
+		if (!G_MissionKeepsPlayer(entID)) // (Missions: not on a player)
+		{
+			Q3_SetForcePower(entID, FP_PULL, Q_stricmp("true", (char*)data) == 0);
+		}
 		break;
 
 	case SET_FORCE_PROTECT:
-		Q3_SetForcePower(entID, FP_PROTECT, Q_stricmp("true", (char*)data) == 0);
+		if (!G_MissionKeepsPlayer(entID))
+		{
+			Q3_SetForcePower(entID, FP_PROTECT, Q_stricmp("true", (char*)data) == 0);
+		}
 		break;
 
 	case SET_WINTER_GEAR:
 		int_data = (qboolean)(Q_stricmp("true", (char*)data) == 0);
+		if (level.gametype == GT_SINGLE_PLAYER)
+		{
+			break; // Missions: the players keep the model and skin they picked
+		}
 		if (WinterGear != int_data)
 		{
 			////toggle the winter gear varible.
@@ -9043,7 +9336,20 @@ qboolean Q3_Set(const int taskID, const int entID, const char* type_name, const 
 		break;
 
 	case ENABLE: //camera enable
+		G_MissionCutsceneNoteFirst(entID); // (Missions: a map's first cutscene plays once per mission)
+		G_MissionCutsceneMessage(entID); // (Missions: the line everyone sees in place of the cutscene)
 		ICam_Enable();
+		break;
+
+	case MOVE:
+		// (camera move: "< x y z >, duration"; was missing, the scripts' 849 camera moves did nothing)
+		ParseTags(entID, data);
+		if (sscanf(data, "%*s %f %f %f %*s %f", &vector_data[0], &vector_data[1], &vector_data[2], &float_data) != 4)
+		{
+			G_DebugPrint(WL_WARNING, "Q3_Set: failed sscanf on MOVE (%s)\n", type_name);
+			VectorClear(vector_data);
+		}
+		ICam_Move(vector_data, float_data);
 		break;
 
 	case PAN:
@@ -9179,6 +9485,257 @@ void G_MissionCutsceneSkip(void)
 	}
 }
 
+/*
+-------------------------
+Missions: a skipped cutscene is told in one line (DH 2026-11-02)
+
+When a cutscene camera comes on in a mission (and none is on yet), every player gets a centre print and a console line
+from ext_data/mission_cutscenes.dat: one line per cutscene, <map or *> <script> "<text>". The script is the one the
+camera's entity runs: the last script a target_scriptrunner ran on it (g_target.c G_MissionScriptRunOn) or one of its
+own behaviour scripts. A cutscene not in the file shows nothing.
+-------------------------
+*/
+#define MISSION_CUTSCENES_FILE		"ext_data/mission_cutscenes.dat"
+#define MISSION_CUTSCENES_MAXSIZE	32768
+
+extern const char* G_MissionScriptRunOn(int entNum);
+
+// a script name as the file has it: no script folder, no extension, forward slashes
+static void G_MissionScriptKey(const char* script, char* key, const int keySize)
+{
+	if (!Q_stricmpn(script, Q3_SCRIPT_DIR "/", strlen(Q3_SCRIPT_DIR) + 1))
+	{
+		script += strlen(Q3_SCRIPT_DIR) + 1;
+	}
+	Q_strncpyz(key, script, keySize);
+	for (char* c = key; *c; c++)
+	{
+		if (*c == '\\')
+		{
+			*c = '/';
+		}
+	}
+	COM_StripExtension(key, key, keySize);
+}
+
+void G_MissionCutsceneMessage(const int entID)
+{
+	static char buf[MISSION_CUTSCENES_MAXSIZE];
+	char names[NUM_BSETS + 1][MAX_QPATH];
+	char mapname[MAX_QPATH];
+	int numNames = 0;
+	fileHandle_t f = 0;
+
+	if (!G_MissionSkipsCutscenes() || mission_cutscene || entID < 0 || entID >= MAX_GENTITIES)
+	{
+		return;
+	}
+
+	// the scripts this entity runs
+	const gentity_t* ent = &g_entities[entID];
+	const char* run = G_MissionScriptRunOn(entID);
+	if (run[0])
+	{
+		G_MissionScriptKey(run, names[numNames++], MAX_QPATH);
+	}
+	for (int i = 0; i < NUM_BSETS; i++)
+	{
+		if (ent->behaviorSet[i] && ent->behaviorSet[i][0])
+		{
+			G_MissionScriptKey(ent->behaviorSet[i], names[numNames++], MAX_QPATH);
+		}
+	}
+	if (!numNames)
+	{
+		return;
+	}
+
+	const int len = trap->FS_Open(MISSION_CUTSCENES_FILE, &f, FS_READ);
+	if (!f)
+	{
+		return;
+	}
+	if (len <= 0 || len >= (int)sizeof buf)
+	{
+		trap->FS_Close(f);
+		return;
+	}
+	trap->FS_Read(buf, len, f);
+	buf[len] = 0;
+	trap->FS_Close(f);
+	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+
+	const char* p = buf;
+	while (1)
+	{
+		char map[MAX_QPATH], script[MAX_QPATH];
+		const char* token = COM_ParseExt(&p, qtrue);
+		if (!token[0])
+		{
+			return;
+		}
+		Q_strncpyz(map, token, sizeof map);
+		Q_strncpyz(script, COM_ParseExt(&p, qfalse), sizeof script);
+		token = COM_ParseExt(&p, qfalse); // (the text)
+		if (Q_stricmp(map, "*") && Q_stricmp(map, mapname))
+		{
+			continue;
+		}
+		for (int i = 0; i < numNames; i++)
+		{
+			if (!Q_stricmp(script, names[i]) && token[0])
+			{
+				trap->SendServerCommand(-1, va("cp \"" S_COLOR_CYAN "%s\n\"", token));
+				trap->SendServerCommand(-1, va("print \"" S_COLOR_CYAN "%s\n\"", token));
+				return;
+			}
+		}
+	}
+}
+
+/*
+-------------------------
+Missions: a map's first cutscene plays once per mission (DH 2026-11-03)
+
+The script that started a map's first cutscene (the one its camera's entity runs: G_MissionScriptRunOn) and that
+cutscene's skip script are kept in g_missionCutsceneSeen ("<map> <script> <skip script>") and in the checkpoint save
+(g_target.c). When the mission goes back to a checkpoint or restarts the map (mission failed, team down, a saved mission
+continued: g_target.c sets g_missionReplay), that script does not run again (g_target.c scriptrunner_run, NPC_utils.c
+G_ActivateBehavior): its skip script runs in its place, on the first player in the game, so the map is set up as after
+the cutscene. Back at a checkpoint, the lead is put back on his spot if the skip script moved him. Any other map start
+forgets it.
+-------------------------
+*/
+#define MISSION_SEEN_CVAR	"g_missionCutsceneSeen"
+static int mission_first_level = -1; // the map start whose first cutscene was looked at
+static qboolean mission_replay; // this map start goes back to a checkpoint / restarts the same mission
+static char mission_replay_skip[MAX_QPATH]; // the skip script to run in place of the first cutscene
+static int mission_replay_restore; // when to look whether the skip script moved the lead off his checkpoint
+static vec3_t mission_replay_spot;
+static int mission_gather_time; // (below)
+static gentity_t* G_MissionLead(void);
+
+// at the map start (g_spawn.c): a replay keeps g_missionCutsceneSeen, any other map start forgets it
+void G_MissionCutsceneLevelStart(void)
+{
+	char mapname[MAX_QPATH], seen[MAX_CVAR_VALUE_STRING];
+
+	mission_first_level = -1;
+	mission_replay_skip[0] = 0;
+	mission_replay_restore = 0;
+	mission_replay = trap->Cvar_VariableIntegerValue("g_missionReplay") ? qtrue : qfalse;
+	trap->Cvar_Set("g_missionReplay", "0");
+
+	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+	trap->Cvar_VariableStringBuffer(MISSION_SEEN_CVAR, seen, sizeof seen);
+	const char* p = seen;
+	if (!mission_replay || Q_stricmp(COM_ParseExt(&p, qfalse), mapname))
+	{
+		mission_replay = qfalse;
+		trap->Cvar_Set(MISSION_SEEN_CVAR, "");
+	}
+}
+
+// a cutscene camera came on (Q3_Set ENABLE, before its skip runs): the map's first one is noted
+void G_MissionCutsceneNoteFirst(const int entID)
+{
+	char mapname[MAX_QPATH], seen[MAX_CVAR_VALUE_STRING], key[MAX_QPATH];
+
+	if (!G_MissionSkipsCutscenes() || mission_first_level == level.startTime || entID < 0 || entID >= MAX_GENTITIES)
+	{
+		return;
+	}
+	mission_first_level = level.startTime;
+	trap->Cvar_VariableStringBuffer(MISSION_SEEN_CVAR, seen, sizeof seen);
+	const char* run = G_MissionScriptRunOn(entID);
+	if (seen[0] || !run[0])
+	{
+		return; // (noted before, or not started by a script we can stop)
+	}
+	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+	G_MissionScriptKey(run, key, sizeof key);
+	trap->Cvar_Set(MISSION_SEEN_CVAR, va("%s %s %s", mapname, key,
+		cinematicSkipScript[0] && !strchr(cinematicSkipScript, ' ') ? cinematicSkipScript : "-"));
+	if (trap->Cvar_VariableIntegerValue("developer"))
+	{
+		Com_Printf("Missions: first cutscene of %s is %s, it won't run again in this mission\n", mapname, key);
+	}
+}
+
+// g_target.c / NPC_utils.c, before a script runs: qtrue if it is the first cutscene of a replayed map (then not run)
+qboolean G_MissionReplayBlocksScript(const char* script)
+{
+	char seen[MAX_CVAR_VALUE_STRING], key[MAX_QPATH];
+
+	if (!mission_replay || !G_MissionSkipsCutscenes() || !script || !script[0])
+	{
+		return qfalse;
+	}
+	trap->Cvar_VariableStringBuffer(MISSION_SEEN_CVAR, seen, sizeof seen);
+	const char* p = seen;
+	COM_ParseExt(&p, qfalse); // (the map: checked at the map start)
+	const char* seenKey = COM_ParseExt(&p, qfalse);
+	G_MissionScriptKey(script, key, sizeof key);
+	if (!seenKey[0] || Q_stricmp(seenKey, key))
+	{
+		return qfalse;
+	}
+	const char* skip = COM_ParseExt(&p, qfalse);
+	if (skip[0] && Q_stricmp(skip, "-"))
+	{
+		Q_strncpyz(mission_replay_skip, skip, sizeof mission_replay_skip); // (G_MissionReplayThink)
+	}
+	Com_Printf("Missions: the first cutscene (%s) already played in this mission, not again\n", key);
+	return qtrue;
+}
+
+// from G_MissionGatherThink: the skip script of a cutscene that does not run again, then the lead back on his checkpoint
+static void G_MissionReplayThink(void)
+{
+	gentity_t* lead;
+
+	if (mission_replay_skip[0])
+	{
+		gentity_t* player = G_MissionCutscenePlayer();
+		if (player)
+		{
+			char checkpointMap[MAX_QPATH], mapname[MAX_QPATH];
+			trap->Cvar_VariableStringBuffer("g_missionCheckpointMap", checkpointMap, sizeof checkpointMap);
+			trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+			lead = G_MissionLead();
+			if (lead && checkpointMap[0] && !Q_stricmp(checkpointMap, mapname))
+			{
+				VectorCopy(lead->client->ps.origin, mission_replay_spot);
+				mission_replay_restore = level.time + 1000; // (once the skip script has moved him)
+			}
+			trap->ICARUS_RunScript((sharedEntity_t*)player, mission_replay_skip);
+			mission_replay_skip[0] = 0;
+		}
+	}
+	if (mission_replay_restore && level.time >= mission_replay_restore)
+	{
+		mission_replay_restore = 0;
+		lead = G_MissionLead();
+		if (lead && Distance(lead->client->ps.origin, mission_replay_spot) > 128.0f)
+		{
+			lead->client->ps.eFlags ^= EF_TELEPORT_BIT;
+			VectorClear(lead->client->ps.velocity);
+			G_SetOrigin(lead, mission_replay_spot);
+			VectorCopy(mission_replay_spot, lead->client->ps.origin);
+			trap->LinkEntity((sharedEntity_t*)lead);
+			mission_gather_time = level.time + 300; // (the others come back to him)
+		}
+	}
+}
+
+// the first cutscene's line for the checkpoint save (g_target.c); "" if none
+const char* G_MissionCutsceneSeen(void)
+{
+	static char seen[MAX_CVAR_VALUE_STRING];
+	trap->Cvar_VariableStringBuffer(MISSION_SEEN_CVAR, seen, sizeof seen);
+	return seen;
+}
+
 //server side camera enable
 void ICam_Enable(void)
 {
@@ -9305,6 +9862,10 @@ static qboolean G_MissionPlaceBeside(const gentity_t* lead, gentity_t* ent, cons
 // run from ClientThink: brings the others to the lead when one is due
 void G_MissionGatherThink(void)
 {
+	G_MissionWipeCheck(); // (Missions: the whole team down, a mission failed: back to the last checkpoint)
+	G_MissionRestartThink();
+	G_MissionReplayThink(); // (a replayed map's first cutscene: its skip script, the lead back on his checkpoint)
+
 	if (!mission_gather_time || level.time < mission_gather_time || mission_cutscene)
 	{
 		return;

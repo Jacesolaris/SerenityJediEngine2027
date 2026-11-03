@@ -4656,6 +4656,12 @@ world_t* R_LoadBSP(const char* name, int* bspIndex)
 		&header->lumps[LUMP_SURFACES],
 		&header->lumps[LUMP_DRAWVERTS],
 		&header->lumps[LUMP_DRAWINDEXES]);
+	if (bspIndex == nullptr)
+	{	// grass cutting: the main world's plant models (tr_surface.cpp)
+		void R_GrassCutWorldPlants(const char* entities, int length, const world_t* world);
+		R_GrassCutWorldPlants(reinterpret_cast<const char*>(fileBase + header->lumps[LUMP_ENTITIES].fileofs),
+			header->lumps[LUMP_ENTITIES].filelen, worldData);
+	}
 	R_LoadMarksurfaces(worldData, &header->lumps[LUMP_LEAFSURFACES]);
 	R_LoadNodesAndLeafs(worldData, &header->lumps[LUMP_NODES], &header->lumps[LUMP_LEAFS]);
 	R_LoadSubmodels(worldData, worldIndex, &header->lumps[LUMP_MODELS]);

@@ -192,6 +192,7 @@ extern cvar_t* r_forceSunLightScale;
 extern cvar_t* r_forceSunAmbientScale;
 extern cvar_t* r_sunlightMode;
 extern cvar_t* r_drawSunRays;
+extern cvar_t* r_sharpen;		// Warzone port: contrast-adaptive sharpening, 0 = off .. 1 = strongest
 extern cvar_t* r_sunShadows;
 extern cvar_t* r_shadowFilter;
 extern cvar_t* r_shadowMapSize;
@@ -933,6 +934,8 @@ enum
 constexpr int TB_SLICECAPSMAP = 10;
 constexpr int TB_SLICEBLOODMAP = 11;
 constexpr int TB_SLICEGLOWMAP = 12;
+// grass cutting (tr_surface.cpp, tr_grasscut.h): the cut grid the surface sprite shader reads
+constexpr int TB_GRASSCUTMAP = 13;
 
 typedef enum
 {
@@ -1087,6 +1090,9 @@ typedef struct shader_s {
 	int			numUnfoggedPasses;
 	int			numSurfaceSpriteStages;
 	GLuint		spriteUbo;
+
+	// grass cutting: a yavin plant model shader with a vertex deform (rd-common tr_grasscut_plant.h, generic.glsl PlantCut)
+	qboolean	grassCutPlant;
 	int			ShaderInstanceUboOffset;
 
 	shaderStage_t* stages[MAX_SHADER_STAGES];
@@ -1132,6 +1138,13 @@ QINLINE qboolean ShaderRequiresCPUDeforms(const shader_t* shader)
 	assert(shader->numDeforms == 0);
 
 	return qfalse;
+}
+
+// Draws with the vertex deform variant of its program: a GPU deform, or a grass cutting plant shader (rd-common
+// tr_grasscut_plant.h; PlantCut lives in the deform variants, a plant without a sway deform needs it too)
+QINLINE qboolean ShaderUsesGPUDeforms(const shader_t* shader)
+{
+	return (qboolean)((shader->numDeforms && !ShaderRequiresCPUDeforms(shader)) || shader->grassCutPlant);
 }
 
 enum
@@ -1578,6 +1591,11 @@ typedef enum
 	UNIFORM_GRASSPARAMS,
 	UNIFORM_GRASSWAVES,
 	UNIFORM_GRASSWAVEPARAMS,
+	UNIFORM_GRASSCUTPARAMS,
+	UNIFORM_GRASSCUTMAP,
+	UNIFORM_PLANTCUT,
+	UNIFORM_PLANTCENTERS,
+	UNIFORM_PLANTCOUNT,
 	UNIFORM_SLICEMOLTEN,
 	UNIFORM_SLICECAPSMAP,
 	UNIFORM_SLICEBLOODMAP,
@@ -2617,6 +2635,7 @@ typedef struct trGlobals_s {
 	image_t* temporalResolveImage;
 	image_t* historyImage;
 	image_t* sunRaysImage;
+	image_t* sharpenImage;		// r_sharpen: copy of the finished 3D view
 	image_t* renderDepthImage;
 	image_t* pshadowArrayImage;
 	image_t* textureScratchImage[2];
@@ -2646,6 +2665,7 @@ typedef struct trGlobals_s {
 	FBO_t* msaaResolveFbo;
 	FBO_t* msaaResolveVelocityFbo;
 	FBO_t* sunRaysFbo;
+	FBO_t* sharpenFbo;
 	FBO_t* depthFbo;
 	FBO_t* pshadowFbos[MAX_DRAWN_PSHADOWS];
 	FBO_t* shadowCubeFbo[MAX_DLIGHTS * 6];
@@ -2716,6 +2736,7 @@ typedef struct trGlobals_s {
 	shaderProgram_t calclevels4xShader[2];
 	shaderProgram_t ssaoShader;
 	shaderProgram_t highpassShader;
+	shaderProgram_t sharpenShader;	// r_sharpen (glsl/sharpen.glsl)
 	shaderProgram_t depthBlurShader[2];
 	shaderProgram_t testcubeShader;
 	shaderProgram_t prefilterEnvMapShader;

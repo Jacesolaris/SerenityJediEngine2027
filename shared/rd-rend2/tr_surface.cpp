@@ -2572,6 +2572,109 @@ extern cvar_t* r_grassPushRadius;
 // it spring back. r_grassForceWave scales it (up to 2, 0 = off).
 extern cvar_t* r_grassForceWave;
 
+// Grass cutting (2026-11-02): a saber swing cuts the grass to stubble (tr_grasscut.h, the same grid as rd-vanilla). The
+// grid goes to the shader as an RGBA32F texture (TB_GRASSCUTMAP), only the rows that changed.
+#ifdef REND2_SP
+#define GRASSCUT_CVAR_GET(name, value) ri.Cvar_Get(name, value, CVAR_ARCHIVE)
+#define GRASSCUT_RI ri.
+#else
+#define GRASSCUT_CVAR_GET(name, value) ri.Cvar_Get(name, value, CVAR_ARCHIVE, "")
+#define GRASSCUT_RI ri.
+#endif
+#include "rd-common/tr_grasscut.h"
+
+static image_t grassCutImage;
+
+static bool RB_GrassCutUpload()
+{
+	if (!grassCutImage.texnum)
+	{
+		qglGenTextures(1, &grassCutImage.texnum);
+		if (!grassCutImage.texnum)
+			return false;
+		Q_strncpyz(grassCutImage.imgName, "*grassCut", sizeof(grassCutImage.imgName));
+		grassCutImage.width = grassCutImage.uploadWidth = GRASSCUT_SIZE;
+		grassCutImage.height = grassCutImage.uploadHeight = GRASSCUT_SIZE;
+		grassCutImage.internalFormat = GL_RGBA32F;
+		grassCutImage.type = IMGTYPE_COLORALPHA;
+		grassCutImage.flags = 0;
+		GL_BindToTMU(&grassCutImage, TB_GRASSCUTMAP);
+		qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		qglTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, GRASSCUT_SIZE, GRASSCUT_SIZE, 0, GL_RGBA, GL_FLOAT, grassCutGrid);
+		grassCutDirtyMin = GRASSCUT_SIZE;
+		grassCutDirtyMax = -1;
+		return true;
+	}
+	if (grassCutDirtyMax >= grassCutDirtyMin)
+	{
+		const int first = grassCutDirtyMin;
+		const int rows = grassCutDirtyMax - grassCutDirtyMin + 1;
+		grassCutDirtyMin = GRASSCUT_SIZE;
+		grassCutDirtyMax = -1;
+		GL_BindToTMU(&grassCutImage, TB_GRASSCUTMAP);
+		GL_SelectTexture(TB_GRASSCUTMAP); // GL_BindToTMU leaves the active unit alone when the grid is still bound there
+		qglTexSubImage2D(GL_TEXTURE_2D, 0, 0, first, GRASSCUT_SIZE, rows, GL_RGBA, GL_FLOAT, &grassCutGrid[first * GRASSCUT_SIZE]);
+	}
+	return true;
+}
+
+// Grass cutting, plant models (rd-common tr_grasscut_plant.h): the yavin plant shaders' draws (tr_shade.cpp) get the cut
+// grid on TB_GRASSCUTMAP, u_PlantCut (generic / velocity / fogpass.glsl PlantCut): x = now, y = r_grassCutRegrow,
+// z = seconds the clippings lie, w = 0 off, 1 on, 2 on with embers, and the plants near the cuts (u_PlantCenters:
+// x, y, z, radius; u_PlantCount). false (params all 0) while nothing is cut.
+static float grassCutNearPlants[GRASSCUT_MAX_NEAR][4];	// u_PlantCenters
+static int grassCutNumNearPlants = 0;
+
+// tr_bsp.cpp hands over the main world: its entity lump lists the plant models, and baked plants whose entities were
+// stripped come from its surfaces with a plant shader (tr_grasscut.h)
+void R_GrassCutWorldPlants(const char* entities, const int length, const world_t* world)
+{
+	R_GrassCutLoadPlants(entities, length);
+	for (int i = 0; i < world->numsurfaces; i++)
+	{
+		const msurface_t* surf = &world->surfaces[i];
+		if (!surf->shader || !(surf->cullinfo.type & CULLINFO_BOX))
+		{
+			continue;
+		}
+		if (surf->shader->grassCutPlant)
+		{
+			R_GrassCutAddPlantSurface(surf->cullinfo.bounds[0], surf->cullinfo.bounds[1], surf->shader->index);
+		}
+		if (surf->shader->numSurfaceSpriteStages > 0)
+		{	// surface-sprite grass: cuts over it fizz (R_GrassCutOnGrass)
+			R_GrassCutAddGrassSurface(surf->cullinfo.bounds[0], surf->cullinfo.bounds[1]);
+		}
+	}
+	R_GrassCutFinishPlantSurfaces();
+	GRASSCUT_RI Printf(PRINT_DEVELOPER, "grass cut: %d plant models, %d grass surfaces\n", grassCutNumPlants, grassCutNumGrass);
+}
+bool RB_GrassCutPlantParams(vec4_t params, image_t** image, const float** centers, int* numCenters)
+{
+	static int paramsTime = -1;
+	static bool active = false;
+	if (paramsTime != backEnd.refdef.time)
+	{
+		paramsTime = backEnd.refdef.time;
+		active = !(backEnd.refdef.rdflags & RDF_NOWORLDMODEL) && R_GrassCutFrame(static_cast<float>(backEnd.refdef.time) * 0.001f)
+			&& RB_GrassCutUpload();
+		grassCutNumNearPlants = active ? R_GrassCutNearPlants(grassCutNearPlants) : 0;
+	}
+	*centers = grassCutNearPlants[0];
+	*numCenters = grassCutNumNearPlants;
+	if (!active)
+	{
+		VectorSet4(params, 0.0f, 0.0f, 0.0f, 0.0f);
+		return false;
+	}
+	VectorSet4(params, static_cast<float>(backEnd.refdef.time) * 0.001f, R_GrassCutRegrowTime(), R_GrassCutDebrisTime(),
+		grassCutFx > 0.0f ? 2.0f : 1.0f);
+	*image = &grassCutImage;
+	return true;
+}
 static constexpr int GRASS_MAX_WAVES = 4;	// u_GrassWaves[8] in surface_sprites.glsl, two vec4 each
 static constexpr float GRASS_WAVE_SPEED = 1400.0f;	// units a second, as in the shader
 static constexpr float GRASS_WAVE_SETTLE = 1.6f;	// seconds until the grass stands still again
@@ -2593,6 +2696,11 @@ static int grassNumActiveWaves = 0;
 
 void R_GrassAddWave(const int time, const float* org, const float* dir, const int type, const float range)
 {
+	if (type == 3)
+	{	// a saber swing cutting the grass (tr_grasscut.h)
+		R_GrassCutFromCommand(time, org);
+		return;
+	}
 	int slot = grassNumWaves;
 	if (slot == GRASS_MAX_WAVES)
 	{	// replace the oldest
@@ -2747,11 +2855,9 @@ static void RB_GrassGatherPushers()
 	}
 }
 
-static void RB_SurfaceSprites(srfSprites_t * surf)
+// cutMode: 0 no cut grass, 1 cut grass (stubble), 2 the clippings of the cut grass only (surface_sprites.glsl)
+static void RB_SurfaceSpritesPass(srfSprites_t * surf, const float cutMode)
 {
-	if (!r_surfaceSprites->integer || surf->numSprites == 0)
-		return;
-
 	RB_EndSurface();
 
 	// TODO: Do we want a 2-level lod system where far away sprites are
@@ -2821,7 +2927,10 @@ static void RB_SurfaceSprites(srfSprites_t * surf)
 		float strength = r_grassForceWave ? r_grassForceWave->value : 0.0f;
 		if (strength > 2.0f)
 			strength = 2.0f;
-		uniformDataWriter.SetUniformVec4(UNIFORM_GRASSWAVEPARAMS, static_cast<float>(grassNumActiveWaves), strength, 0.0f, 0.0f);
+		uniformDataWriter.SetUniformVec4(UNIFORM_GRASSWAVEPARAMS, static_cast<float>(grassNumActiveWaves), strength, cutMode, 0.0f);
+		if (cutMode > 0.0f)
+			uniformDataWriter.SetUniformVec4(UNIFORM_GRASSCUTPARAMS, static_cast<float>(backEnd.refdef.time) * 0.001f,
+				R_GrassCutRegrowTime(), R_GrassCutDebrisTime(), grassCutFx > 0.0f ? 1.0f : 0.0f);
 		if (grassNumActiveWaves > 0)
 			uniformDataWriter.SetUniformVec4(UNIFORM_GRASSWAVES, grassWaveUniforms[0], grassNumActiveWaves * 2);
 	}
@@ -2852,6 +2961,8 @@ static void RB_SurfaceSprites(srfSprites_t * surf)
 
 	SamplerBindingsWriter samplerBindingsWriter;
 	samplerBindingsWriter.AddAnimatedImage(&firstStage->bundle[0], TB_COLORMAP);
+	if (cutMode > 0.0f)
+		samplerBindingsWriter.AddStaticImage(&grassCutImage, TB_GRASSCUTMAP);
 
 	if (surf->fogIndex != -1 && r_volumetricFog->integer)
 	{
@@ -2922,6 +3033,29 @@ static void RB_SurfaceSprites(srfSprites_t * surf)
 
 		numDrawIndicesUndrawn -= drawIndices;
 		baseVertex += ((98298 / 6) * 4);
+	}
+}
+
+// Grass cutting: while anything is cut, upright grass is drawn with the cut grid, and while clippings lie a second
+// time for them
+static void RB_SurfaceSprites(srfSprites_t * surf)
+{
+	if (!r_surfaceSprites->integer || surf->numSprites == 0)
+		return;
+
+	const surfaceSprite_t* ss = surf->sprite;
+	const float now = static_cast<float>(backEnd.refdef.time) * 0.001f;
+	float cutMode = 0.0f;
+	if ((ss->type == SURFSPRITE_VERTICAL || ss->type == SURFSPRITE_ORIENTED || ss->type == SURFSPRITE_FLATTENED)
+		&& ss->facing != SURFSPRITE_FACING_UP && !(backEnd.refdef.rdflags & RDF_NOWORLDMODEL)
+		&& R_GrassCutFrame(now) && RB_GrassCutUpload())
+	{
+		cutMode = 1.0f;
+	}
+	RB_SurfaceSpritesPass(surf, cutMode);
+	if (cutMode > 0.0f && now - grassCutLastTime < R_GrassCutDebrisTime() + GRASSCUT_FALL_TIME)
+	{
+		RB_SurfaceSpritesPass(surf, 2.0f);
 	}
 }
 

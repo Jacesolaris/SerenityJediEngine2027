@@ -519,13 +519,13 @@ static void SandCreature_Chase(void)
 		return;
 	}
 
-	if (NPCS.NPC->NPC->aiFlags & NPCAI_LOCKEDENEMY)
+	if (NPCS.NPC->NPC->aiFlags2 & NPCAI2_LOCKEDENEMY)
 	{
 		//always know where he is
 		NPCS.NPCInfo->enemyLastSeenTime = level.time;
 	}
 
-	if (!(NPCS.NPC->NPC->aiFlags & NPCAI_LOCKEDENEMY))
+	if (!(NPCS.NPC->NPC->aiFlags2 & NPCAI2_LOCKEDENEMY))
 	{
 		if (level.time - NPCS.NPCInfo->enemyLastSeenTime > 10000)
 		{
@@ -540,14 +540,14 @@ static void SandCreature_Chase(void)
 		{
 			//was picked up by another monster, forget about him
 			NPCS.NPC->enemy = NULL;
-			NPCS.NPC->NPC->aiFlags &= ~NPCAI_LOCKEDENEMY;
+			NPCS.NPC->NPC->aiFlags2 &= ~NPCAI2_LOCKEDENEMY;
 			return;
 		}
 	}
 	//chase the enemy
 	if (NPCS.NPC->enemy->client
 		&& NPCS.NPC->enemy->client->ps.groundEntityNum != ENTITYNUM_WORLD
-		&& !(NPCS.NPC->NPC->aiFlags & NPCAI_LOCKEDENEMY))
+		&& !(NPCS.NPC->NPC->aiFlags2 & NPCAI2_LOCKEDENEMY))
 	{
 		//off the ground!
 	}
@@ -555,7 +555,7 @@ static void SandCreature_Chase(void)
 	{
 		const float enemyScore = SandCreature_EntScore(NPCS.NPC->enemy);
 		if (enemyScore < MIN_SCORE
-			&& !(NPCS.NPC->NPC->aiFlags & NPCAI_LOCKEDENEMY))
+			&& !(NPCS.NPC->NPC->aiFlags2 & NPCAI2_LOCKEDENEMY))
 		{
 			//too slow or too far away
 		}
@@ -580,7 +580,7 @@ static void SandCreature_Chase(void)
 	}
 
 	if (level.time - NPCS.NPCInfo->enemyLastSeenTime > 5000
-		&& !(NPCS.NPC->NPC->aiFlags & NPCAI_LOCKEDENEMY))
+		&& !(NPCS.NPC->NPC->aiFlags2 & NPCAI2_LOCKEDENEMY))
 	{
 		//enemy hasn't moved in about 5 seconds, see if there's anything else of interest
 		SandCreature_CheckAlerts();
@@ -598,7 +598,7 @@ static void SandCreature_Chase(void)
 		}
 	}
 	else if (level.time - NPCS.NPCInfo->enemyLastSeenTime <= 5000
-		&& !(NPCS.NPC->NPC->aiFlags & NPCAI_LOCKEDENEMY))
+		&& !(NPCS.NPC->NPC->aiFlags2 & NPCAI2_LOCKEDENEMY))
 	{
 		//NOTE: this leaves a 2-second dead zone in which they'll just sit there unless their enemy moves
 		if (NPC_CheckAlertEvents(qfalse, qtrue, NPCS.NPCInfo->lastAlertID, qfalse, AEL_MINOR) >= 0)
@@ -628,7 +628,7 @@ static void SandCreature_Chase(void)
 		&& !VectorCompare(NPCS.NPC->pos1, NPCS.NPC->r.currentOrigin) //so we don't come up again in the same spot
 		&& !Q_irand(0, 10))
 	{
-		if (!(NPCS.NPC->NPC->aiFlags & NPCAI_LOCKEDENEMY))
+		if (!(NPCS.NPC->NPC->aiFlags2 & NPCAI2_LOCKEDENEMY))
 		{
 			//miss them
 			SandCreature_Attack(qtrue);

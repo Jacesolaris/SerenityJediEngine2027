@@ -143,6 +143,56 @@ static void Rancor_Patrol(void)
 Rancor_Move
 -------------------------
 */
+// SP Rancor_CheckAhead (DH 2026-11-03): can it head straight for end? (a breakable in the way counts as clear: it
+// smashes through, Rancor_AttackBBrush)
+static qboolean Rancor_CheckAhead(vec3_t end)
+{
+	trace_t trace;
+	vec3_t bottom;
+	int clipmask = NPCS.NPC->clipmask | CONTENTS_BOTCLIP;
+
+	//make sure our goal isn't underground (else the trace will fail)
+	VectorSet(bottom, end[0], end[1], end[2] + NPCS.NPC->r.mins[2]);
+	trap->Trace(&trace, end, vec3_origin, vec3_origin, bottom, NPCS.NPC->s.number, NPCS.NPC->clipmask, qfalse, 0, 0);
+	if (trace.fraction < 1.0f)
+	{
+		//in the ground, raise it up
+		end[2] -= NPCS.NPC->r.mins[2] * (1.0f - trace.fraction) - 0.125f;
+	}
+
+	trap->Trace(&trace, NPCS.NPC->r.currentOrigin, NPCS.NPC->r.mins, NPCS.NPC->r.maxs, end, NPCS.NPC->s.number, clipmask,
+		qfalse, 0, 0);
+
+	if (trace.startsolid && trace.contents & CONTENTS_BOTCLIP)
+	{
+		//started inside do not enter, so ignore them
+		clipmask &= ~CONTENTS_BOTCLIP;
+		trap->Trace(&trace, NPCS.NPC->r.currentOrigin, NPCS.NPC->r.mins, NPCS.NPC->r.maxs, end, NPCS.NPC->s.number,
+			clipmask, qfalse, 0, 0);
+	}
+	//Do a simple check
+	if (trace.allsolid == qfalse && trace.startsolid == qfalse && trace.fraction == 1.0f)
+	{
+		return qtrue;
+	}
+	if (trace.entityNum < ENTITYNUM_WORLD && G_EntIsBreakable(trace.entityNum))
+	{
+		//breakable brush in our way, break it
+		return qtrue;
+	}
+	//Aw screw it, always try to go straight at him if we can at all
+	return trace.fraction >= 0.25f ? qtrue : qfalse;
+}
+
+// SP's STEER::Seek towards dest (MP has no steering code): face it and run at it
+static void Rancor_MoveStraightAt(vec3_t dest)
+{
+	NPC_FacePosition(dest, qfalse);
+	NPCS.ucmd.buttons &= ~BUTTON_WALKING;
+	NPCS.ucmd.forwardmove = 127;
+	NPCS.ucmd.rightmove = 0;
+}
+
 void Rancor_Move()
 {
 	if (NPCS.NPCInfo->localState != LSTATE_WAITING)
@@ -156,6 +206,12 @@ void Rancor_Move()
 			NPCS.NPCInfo->consecutiveBlockedMoves++;
 			vec3_t dest;
 			VectorCopy(NPCS.NPCInfo->goalEntity->r.currentOrigin, dest);
+			if (Rancor_CheckAhead(dest))
+			{
+				//can't macro-nav, just head right for him (SP)
+				Rancor_MoveStraightAt(dest);
+				return;
+			}
 			//all else fails, look at him
 			NPCS.NPCInfo->lockedDesiredYaw = NPCS.NPCInfo->desiredYaw = sav_yaw;
 
@@ -172,8 +228,9 @@ void Rancor_Move()
 				}
 				else
 				{
-					//try to move  towards him
+					//try to move  towards him (SP)
 					horz_close = qfalse;
+					Rancor_MoveStraightAt(dest);
 				}
 				//let him know he should attack at random out of frustration?
 				if (NPCS.NPCInfo->goalEntity == NPCS.NPC->enemy)
@@ -325,6 +382,48 @@ void Rancor_DropVictim(gentity_t* self)
 	self->count = 0;
 }
 
+// SP Rancor_Swing / Rancor_Smash (DH 2026-11-03): the hand sweeping through a breakable brush damages it (from where the
+// hand was to where it is now, else on a line from the rancor to the hand); the smash also hits breakables near the hand
+static void Rancor_HitBreakables(vec3_t boltOrg, const int damage, const int* entNums, const int numEnts)
+{
+	trace_t trace;
+	vec3_t from;
+
+	if (VectorCompare(NPCS.NPC->pos3, vec3_origin))
+	{
+		VectorCopy(NPCS.NPC->r.currentOrigin, from);
+	}
+	else
+	{
+		VectorCopy(NPCS.NPC->pos3, from);
+	}
+	trap->Trace(&trace, from, vec3_origin, vec3_origin, boltOrg, NPCS.NPC->s.number, CONTENTS_SOLID | CONTENTS_BODY,
+		qfalse, 0, 0);
+	VectorCopy(boltOrg, NPCS.NPC->pos3);
+	if (trace.entityNum < ENTITYNUM_WORLD && G_EntIsBreakable(trace.entityNum))
+	{
+		G_Damage(&g_entities[trace.entityNum], NPCS.NPC, NPCS.NPC, vec3_origin, boltOrg, damage, 0, MOD_MELEE);
+	}
+	else
+	{
+		trap->Trace(&trace, NPCS.NPC->r.currentOrigin, vec3_origin, vec3_origin, boltOrg, NPCS.NPC->s.number,
+			CONTENTS_SOLID | CONTENTS_BODY, qfalse, 0, 0);
+		if (trace.entityNum < ENTITYNUM_WORLD && G_EntIsBreakable(trace.entityNum))
+		{
+			G_Damage(&g_entities[trace.entityNum], NPCS.NPC, NPCS.NPC, vec3_origin, boltOrg, 200, 0, MOD_MELEE);
+		}
+	}
+	for (int i = 0; i < numEnts; i++)
+	{
+		gentity_t* ent = &g_entities[entNums[i]];
+		if (ent->inuse && !ent->client && G_EntIsBreakable(ent->s.number) && !Q_irand(0, 1))
+		{
+			//damage breakables within range, but not as much
+			G_Damage(ent, NPCS.NPC, NPCS.NPC, vec3_origin, ent->r.currentOrigin, 100, 0, MOD_MELEE);
+		}
+	}
+}
+
 static void Rancor_Swing(const int boltIndex, const qboolean try_grab)
 {
 	int radius_ent_nums[128];
@@ -333,6 +432,7 @@ static void Rancor_Swing(const int boltIndex, const qboolean try_grab)
 	vec3_t bolt_org;
 
 	const int num_ents = NPC_GetEntsNearBolt(radius_ent_nums, radius, boltIndex, bolt_org);
+	Rancor_HitBreakables(bolt_org, 100, NULL, 0); // (SP: a breakable brush in its way)
 
 	for (int i = 0; i < num_ents; i++)
 	{
@@ -453,6 +553,7 @@ static void Rancor_Smash(void)
 	AddSoundEvent(NPCS.NPC, NPCS.NPC->r.currentOrigin, 1024, AEL_DANGER, qfalse, qtrue);
 
 	const int num_ents = NPC_GetEntsNearBolt(radius_ent_nums, radius, NPCS.NPC->client->renderInfo.handLBolt, bolt_org);
+	Rancor_HitBreakables(bolt_org, 200, radius_ent_nums, num_ents); // (SP: a breakable brush in its way)
 
 	for (int i = 0; i < num_ents; i++)
 	{
@@ -647,6 +748,7 @@ void Rancor_Attack(const float distance, const qboolean do_charge, const qboolea
 			//smash
 			NPC_SetAnim(NPCS.NPC, SETANIM_BOTH, BOTH_MELEE1, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 			TIMER_Set(NPCS.NPC, "attack_dmg", 1000);
+			VectorCopy(NPCS.NPC->r.currentOrigin, NPCS.NPC->pos3); // (SP: the hand's sweep for breakables starts here)
 		}
 		else if (distance >= NPCS.NPC->maxs[0] + MIN_DISTANCE - 64.0f)
 		{
@@ -1200,6 +1302,79 @@ static void Rancor_CheckAnimDamage()
 //	}
 //}
 
+// SP Rancor_AttackBBrush (DH 2026-11-03): a breakable brush in its way: walk up to it and smash it
+static qboolean Rancor_AttackBBrush(void)
+{
+	trace_t trace;
+	vec3_t center, dir2Brush;
+	gentity_t* brush = NPCS.NPCInfo->blockedEntity;
+	const float checkDist = 64.0f;
+
+	if (VectorCompare(brush->s.origin, vec3_origin))
+	{
+		//no origin brush, calc center
+		VectorAdd(brush->r.absmin, brush->r.absmax, center);
+		VectorScale(center, 0.5f, center);
+	}
+	else
+	{
+		VectorCopy(brush->s.origin, center);
+	}
+	center[2] = NPCS.NPC->r.currentOrigin[2]; //we can't fly, so let's ignore z diff
+	NPC_FacePosition(center, qfalse);
+	//see if we're close to it
+	VectorSubtract(center, NPCS.NPC->r.currentOrigin, dir2Brush);
+	const float brushSize = ((brush->r.absmax[0] - brush->r.absmin[0]) * 0.5f
+		+ (brush->r.absmax[1] - brush->r.absmin[1]) * 0.5f) * 0.5f;
+	const float dist2Brush = VectorNormalize(dir2Brush) - NPCS.NPC->r.maxs[0] - brushSize;
+	if (dist2Brush < MIN_DISTANCE)
+	{
+		//close enough to just hit it
+		trace.fraction = 0.0f;
+		trace.entityNum = brush->s.number;
+	}
+	else
+	{
+		vec3_t end;
+		VectorMA(NPCS.NPC->r.currentOrigin, checkDist, dir2Brush, end);
+		trap->Trace(&trace, NPCS.NPC->r.currentOrigin, NPCS.NPC->r.mins, NPCS.NPC->r.maxs, end, NPCS.NPC->s.number,
+			NPCS.NPC->clipmask, qfalse, 0, 0);
+		if (trace.allsolid || trace.startsolid)
+		{
+			//wtf?
+			NPCS.NPCInfo->blockedEntity = NULL;
+			return qfalse;
+		}
+	}
+	if (trace.fraction >= 1.0f //too far away
+		|| trace.entityNum != brush->s.number && !G_EntIsBreakable(trace.entityNum)) //OR blocked by something else
+	{
+		if (trace.fraction >= 1.0f)
+		{
+			//keep moving towards it
+			Rancor_MoveStraightAt(center);
+			return qtrue;
+		}
+		NPCS.NPCInfo->blockedEntity = NULL;
+		return qfalse;
+	}
+	if (trace.entityNum == brush->s.number)
+	{
+		//close enough, smash it!
+		Rancor_Attack(trace.fraction * checkDist, qfalse, qtrue);
+	}
+	else
+	{
+		//oh, well, smash that, then
+		NPCS.NPCInfo->blockedEntity = &g_entities[trace.entityNum];
+		Rancor_Attack(trace.fraction * checkDist, qfalse, qtrue);
+		NPCS.NPCInfo->blockedEntity = brush;
+	}
+	TIMER_Remove(NPCS.NPC, "attackDebounce"); //don't wait on these
+	NPCS.NPCInfo->enemyLastSeenTime = level.time;
+	return qtrue;
+}
+
 /*
 -------------------------
 NPC_BSRancor_Default
@@ -1335,7 +1510,7 @@ void NPC_BSRancor_Default(void)
 					if (G_EntIsBreakable(NPCS.NPCInfo->blockedEntity->s.number))
 					{
 						//breakable brush
-						//if (!Rancor_AttackBBrush())
+						if (!Rancor_AttackBBrush())
 						{
 							//didn't move inside that func, so call move here...?
 							Rancor_Move();

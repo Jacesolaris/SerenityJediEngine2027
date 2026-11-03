@@ -24,10 +24,12 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // tr_image.c
 #include "tr_local.h"
 #include "q_profile.h"
+#include "q_jobs.h"
 #include "../rd-common/tr_common.h"
 #include "rd-vanilla/glext.h"
 
 #include <map>
+#include <algorithm>
 
 static byte s_intensitytable[256];
 static unsigned char s_gammatable[256];
@@ -320,50 +322,68 @@ Scale up the pixel values in a texture to increase the
 lighting range
 ================
 */
-static void R_LightScaleTexture(unsigned* in, const int inwidth, const int inheight, const qboolean only_gamma)
+// Warzone port (2026-11-02): run fn( firstRow, endRow ) over an image's rows on the
+// render job workers (r_threads; R_RenderJobPool() is nullptr when it is 0). Each row
+// must be independent. Small images, or r_threads 0, run here exactly as before.
+template <class F>
+static void R_ImageRows(const int width, const int height, const F& fn)
 {
-	if (only_gamma)
+	qjobs::Pool* pool = R_RenderJobPool();
+	const int minRows = (std::max)(1, 32768 / (std::max)(width, 1));	// ~32k pixels per job at least
+	if (pool && height > minRows)
 	{
-		if (!glConfig.deviceSupportsGamma && !glConfigExt.doGammaCorrectionWithShaders)
-		{
-			auto p = reinterpret_cast<byte*>(in);
-
-			const int c = inwidth * inheight;
-			for (int i = 0; i < c; i++, p += 4)
-			{
-				p[0] = s_gammatable[p[0]];
-				p[1] = s_gammatable[p[1]];
-				p[2] = s_gammatable[p[2]];
-			}
-		}
+		pool->ParallelFor(height, minRows, [&fn](const int begin, const int end) { fn(begin, end); });
 	}
 	else
 	{
-		int i = 0;
-
-		auto p = reinterpret_cast<byte*>(in);
-
-		const int c = inwidth * inheight;
-
-		if (glConfig.deviceSupportsGamma || glConfigExt.doGammaCorrectionWithShaders)
-		{
-			for (i = 0; i < c; i++, p += 4)
-			{
-				p[0] = s_intensitytable[p[0]];
-				p[1] = s_intensitytable[p[1]];
-				p[2] = s_intensitytable[p[2]];
-			}
-		}
-		else
-		{
-			for (i = 0; i < c; i++, p += 4)
-			{
-				p[0] = s_gammatable[s_intensitytable[p[0]]];
-				p[1] = s_gammatable[s_intensitytable[p[1]]];
-				p[2] = s_gammatable[s_intensitytable[p[2]]];
-			}
-		}
+		fn(0, height);
 	}
+}
+
+static void R_LightScaleTexture(unsigned* in, const int inwidth, const int inheight, const qboolean only_gamma)
+{
+	const bool hwGamma = glConfig.deviceSupportsGamma || glConfigExt.doGammaCorrectionWithShaders;
+	if (only_gamma && hwGamma)
+	{
+		return;
+	}
+
+	byte* const base = reinterpret_cast<byte*>(in);
+
+	// per pixel, so a run of rows per job on the render workers (Warzone port) - same result as one pass
+	R_ImageRows(inwidth, inheight, [&](const int y0, const int y1)
+		{
+			byte* p = base + y0 * inwidth * 4;
+			const int c = (y1 - y0) * inwidth;
+
+			if (only_gamma)
+			{
+				for (int i = 0; i < c; i++, p += 4)
+				{
+					p[0] = s_gammatable[p[0]];
+					p[1] = s_gammatable[p[1]];
+					p[2] = s_gammatable[p[2]];
+				}
+			}
+			else if (hwGamma)
+			{
+				for (int i = 0; i < c; i++, p += 4)
+				{
+					p[0] = s_intensitytable[p[0]];
+					p[1] = s_intensitytable[p[1]];
+					p[2] = s_intensitytable[p[2]];
+				}
+			}
+			else
+			{
+				for (int i = 0; i < c; i++, p += 4)
+				{
+					p[0] = s_gammatable[s_intensitytable[p[0]]];
+					p[1] = s_gammatable[s_intensitytable[p[1]]];
+					p[2] = s_gammatable[s_intensitytable[p[2]]];
+				}
+			}
+		});
 }
 
 /*
@@ -383,7 +403,10 @@ static void R_MipMap2(unsigned* in, const int inWidth, const int inheight)
 	const int in_width_mask = inWidth - 1;
 	const int in_height_mask = inheight - 1;
 
-	for (int i = 0; i < out_height; i++)
+	// output rows are independent: a run of rows per job on the render workers (Warzone port)
+	R_ImageRows(out_width, out_height, [&](const int i0, const int i1)
+		{
+	for (int i = i0; i < i1; i++)
 	{
 		for (int j = 0; j < out_width; j++)
 		{
@@ -413,6 +436,7 @@ static void R_MipMap2(unsigned* in, const int inWidth, const int inheight)
 			}
 		}
 	}
+		});
 
 	memcpy(in, temp, out_width * out_height * 4);
 	Hunk_FreeTempMemory(temp);

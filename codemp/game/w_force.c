@@ -3570,8 +3570,7 @@ void ForceLightning(gentity_t* self)
 	self->client->ps.forceHandExtend = HANDEXTEND_FORCE_HOLD;
 	self->client->ps.forceHandExtendTime = level.time + 20000;
 
-	G_SoundOnEnt(self, CHAN_BODY, "sound/weapons/force/lightning2.wav");
-
+	// (the start sound played twice here - G_SoundOnEnt plus G_Sound below; DH 2026-11-03)
 	if (self->client->ps.fd.forcePowerLevel[FP_LIGHTNING] < FORCE_LEVEL_2)
 	{
 		G_Sound(self, CHAN_BODY, G_SoundIndex("sound/weapons/force/lightning3.wav"));
@@ -5930,6 +5929,80 @@ static void PushDamage(gentity_t* self, gentity_t* enemy, vec3_t location, const
 	}
 }
 
+extern qboolean Jedi_WaitingAmbush(const gentity_t* self);
+
+//how an NPC (not a player, not a bot) reacts to a force push / pull, the SP way (wp_saber.cpp ForceThrow)
+typedef enum
+{
+	NPC_THROW_DEFAULT, //not an NPC: the normal MP rules
+	NPC_THROW_IGNORE, //leave this one alone
+	NPC_THROW_RESIST, //counter it
+	NPC_THROW_KNOCKDOWN //knock it down
+} npcThrowReaction_t;
+
+static npcThrowReaction_t WP_NPCForceThrowReaction(gentity_t* target, gentity_t* self, const qboolean pull)
+{
+	if (target->s.number < MAX_CLIENTS || !target->NPC || !target->client)
+	{
+		return NPC_THROW_DEFAULT;
+	}
+
+	if (target->NPC->jumpState == JS_JUMPING)
+	{
+		//don't interrupt a scripted jump
+		return NPC_THROW_IGNORE;
+	}
+
+	if (Jedi_WaitingAmbush(target) || PM_SaberInBrokenParry(target->client->ps.saberMove))
+	{
+		return NPC_THROW_KNOCKDOWN;
+	}
+
+	//Jedi don't get pushed, they resist as long as they aren't already attacking and are on the ground
+	if (Q_irand(0, 2)
+		&& target->health > 0
+		&& target->client->ps.weapon == WP_SABER
+		&& target->client->ps.fd.forceRageRecoveryTime < level.time
+		&& (self->client->NPC_class != CLASS_DESANN && self->client->NPC_class != CLASS_SITHLORD
+			&& self->client->NPC_class != CLASS_VADER && (!self->NPC_type || Q_stricmp("Yoda", self->NPC_type))
+			|| !Q_irand(0, 2)) //only 30% chance of resisting a Desann push
+		&& target->client->ps.groundEntityNum != ENTITYNUM_NONE
+		&& InFront(self->r.currentOrigin, target->r.currentOrigin, target->client->ps.viewangles, 0.3f)
+		&& (target->client->ps.powerups[PW_FORCE_PUSH] > level.time || target->client->ps.weaponTime <= 0))
+	{
+		if (target->client->ps.saberLockTime > level.time)
+		{
+			//they're in a lock
+			if (target->client->ps.saberLockEnemy != self->s.number
+				|| pull || self->client->ps.fd.forcePowerLevel[FP_PUSH] < FORCE_LEVEL_3
+				|| target->client->ps.fd.forcePowerLevel[FP_PUSH] > FORCE_LEVEL_2)
+			{
+				//not in a lock with me, or my push is too weak
+				return NPC_THROW_IGNORE;
+			}
+		}
+
+		int resist_chance = Q_irand(0, 2);
+		if (g_npcspskill.integer == 1)
+		{
+			resist_chance = Q_irand(0, 3);
+		}
+
+		if (!pull
+			&& self->client->ps.fd.forcePowerLevel[FP_PUSH] > FORCE_LEVEL_2
+			&& !resist_chance
+			&& target->client->ps.fd.forcePowerLevel[FP_PUSH] < FORCE_LEVEL_3)
+		{
+			//a level 3 push can even knock down a jedi
+			return PM_InKnockDown(&target->client->ps) ? NPC_THROW_IGNORE : NPC_THROW_KNOCKDOWN;
+		}
+		return NPC_THROW_RESIST;
+	}
+
+	//okay, everyone else
+	return NPC_THROW_KNOCKDOWN;
+}
+
 void ForceThrow(gentity_t* self, qboolean pull)
 {
 	//shove things in front of you away
@@ -6986,10 +7059,24 @@ void ForceThrow(gentity_t* self, qboolean pull)
 
 				push_power_mod = push_power;
 
+				//NPCs react the SP way; players and bots keep the MP rules
+				npcThrowReaction_t npc_reaction = WP_NPCForceThrowReaction(push_target[x], self, pull);
+				if (npc_reaction == NPC_THROW_RESIST && was_wall_grabbing)
+				{
+					//no resistance if stuck to wall
+					npc_reaction = NPC_THROW_KNOCKDOWN;
+				}
+				if (npc_reaction == NPC_THROW_IGNORE)
+				{
+					continue;
+				}
+
 				//switched to more logical wasWallGrabbing toggle.
-				if (!was_wall_grabbing && ShouldPlayerResistForceThrow(push_target[x], self, pull) ||
-					playeris_resisting_force_throw(push_target[x], self)
-					&& push_target[x]->client->ps.saberFatigueChainCount < MISHAPLEVEL_HEAVY)
+				if (npc_reaction == NPC_THROW_RESIST
+					|| npc_reaction == NPC_THROW_DEFAULT
+					&& (!was_wall_grabbing && ShouldPlayerResistForceThrow(push_target[x], self, pull) ||
+						playeris_resisting_force_throw(push_target[x], self)
+						&& push_target[x]->client->ps.saberFatigueChainCount < MISHAPLEVEL_HEAVY))
 				{
 					//racc - player blocked the throw.
 					if (pull)
@@ -7190,13 +7277,14 @@ void ForceThrow(gentity_t* self, qboolean pull)
 
 					if (!pull)
 					{
-						if (WalkCheck(push_target[x])
-							|| push_target[x]->client->ps.fd.blockPoints >= BLOCKPOINTS_HALF && push_target[x]->client->
-							pers.cmd.buttons & BUTTON_BLOCK
-							|| push_target[x]->client->ps.BlasterAttackChainCount <= BLASTERMISHAPLEVEL_HEAVYER && !
-							BG_IsUsingHeavyWeap(&push_target[x]->client->ps)
-							&& InFront(push_target[x]->client->ps.origin, self->client->ps.origin,
-								self->client->ps.viewangles, -0.7f))
+						if (npc_reaction == NPC_THROW_DEFAULT
+							&& (WalkCheck(push_target[x])
+								|| push_target[x]->client->ps.fd.blockPoints >= BLOCKPOINTS_HALF && push_target[x]->client->
+								pers.cmd.buttons & BUTTON_BLOCK
+								|| push_target[x]->client->ps.BlasterAttackChainCount <= BLASTERMISHAPLEVEL_HEAVYER && !
+								BG_IsUsingHeavyWeap(&push_target[x]->client->ps)
+								&& InFront(push_target[x]->client->ps.origin, self->client->ps.origin,
+									self->client->ps.viewangles, -0.7f)))
 						{
 							WP_ResistForcePush(push_target[x], self, qfalse);
 							push_target[x]->client->ps.saberMove = push_target[x]->client->ps.saberBounceMove = LS_READY;
@@ -7310,13 +7398,14 @@ void ForceThrow(gentity_t* self, qboolean pull)
 					}
 					else if (pull)
 					{
-						if (WalkCheck(push_target[x])
-							|| push_target[x]->client->ps.fd.blockPoints >= BLOCKPOINTS_HALF && push_target[x]->client->
-							pers.cmd.buttons & BUTTON_BLOCK
-							|| push_target[x]->client->ps.BlasterAttackChainCount <= BLASTERMISHAPLEVEL_HEAVYER && !
-							BG_IsUsingHeavyWeap(&push_target[x]->client->ps)
-							&& InFront(push_target[x]->client->ps.origin, self->client->ps.origin,
-								self->client->ps.viewangles, -0.7f))
+						if (npc_reaction == NPC_THROW_DEFAULT
+							&& (WalkCheck(push_target[x])
+								|| push_target[x]->client->ps.fd.blockPoints >= BLOCKPOINTS_HALF && push_target[x]->client->
+								pers.cmd.buttons & BUTTON_BLOCK
+								|| push_target[x]->client->ps.BlasterAttackChainCount <= BLASTERMISHAPLEVEL_HEAVYER && !
+								BG_IsUsingHeavyWeap(&push_target[x]->client->ps)
+								&& InFront(push_target[x]->client->ps.origin, self->client->ps.origin,
+									self->client->ps.viewangles, -0.7f)))
 						{
 							WP_ResistForcePush(push_target[x], self, qfalse);
 							push_target[x]->client->ps.saberMove = push_target[x]->client->ps.saberBounceMove = LS_READY;
@@ -7432,6 +7521,13 @@ void ForceThrow(gentity_t* self, qboolean pull)
 					if (i_grip)
 					{
 						push_power_mod *= 4;
+					}
+
+					if (npc_reaction != NPC_THROW_DEFAULT
+						&& (push_target[x]->message || push_target[x]->flags & FL_NO_KNOCKBACK))
+					{
+						//an NPC who has a key goes down where he stands (SP)
+						continue;
 					}
 
 					push_target[x]->client->ps.velocity[0] = push_dir[0] * push_power_mod;
@@ -9407,6 +9503,29 @@ static void WP_UpdateMindtrickEnts(gentity_t* self)
 
 #define FORCE_DEBOUNCE_TIME 50 // sv_fps 20 = 50msec frametime, basejka balance/timing
 
+// Force lightning drain (DH 2026-11-02): held lightning used to cost forcePowerNeeded (2 / 5 / 8 points at level 1 / 2
+// / 3) every 50 ms, up to 160 points a second. g_lightningDrainRate = force points a second while lightning is held
+// (default 8, every level); 0 = the old cost.
+static void WP_LightningDrainMP(gentity_t* self, const forcePowers_t forcePower)
+{
+	static float drain_acc[MAX_GENTITIES];
+	const int num = self->s.number;
+	int drain;
+
+	if (g_lightningDrainRate.value <= 0.0f || num < 0 || num >= MAX_GENTITIES)
+	{
+		WP_ForcePowerDrain(&self->client->ps, forcePower, 0);
+		return;
+	}
+	drain_acc[num] += g_lightningDrainRate.value * (float)FORCE_DEBOUNCE_TIME / 1000.0f;
+	drain = (int)drain_acc[num];
+	if (drain > 0)
+	{
+		drain_acc[num] -= (float)drain;
+		WP_ForcePowerDrain(&self->client->ps, forcePower, drain);
+	}
+}
+
 static int FlamethrowerDebounceTime = 0;
 #define FLAMETHROWERDEBOUNCE		50
 
@@ -9624,7 +9743,7 @@ static void wp_force_power_run(gentity_t* self, const forcePowers_t forcePower, 
 			while (self->client->force.lightningDebounce < level.time)
 			{
 				force_shoot_lightning(self);
-				WP_ForcePowerDrain(&self->client->ps, forcePower, 0);
+				WP_LightningDrainMP(self, forcePower);
 
 				self->client->force.lightningDebounce += FORCE_DEBOUNCE_TIME;
 			}

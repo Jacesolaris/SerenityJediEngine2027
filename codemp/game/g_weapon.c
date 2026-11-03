@@ -5436,6 +5436,176 @@ static void calcmuzzlePoint2(const gentity_t* ent, vec3_t forward, vec3_t right,
 	SnapVector(muzzlePoint);
 }
 
+/*
+===============
+Muzzle at the gun (2026-10-31, DH: in MP the shots came from behind the player, not from the gun)
+
+SP fires the player's and the NPCs' shots from the gun's own "*flash" tag (renderInfo.muzzlePoint, from the cgame).
+MP worked the muzzle out from the eyes (calcmuzzlePoint: view height plus a small offset per weapon), so in third
+person the shots came out of the head, behind and above the gun. The server has every client's ghoul2 model and keeps
+its anims in step (WP_SaberPositionUpdate, which also sets renderInfo's hand bolts), so here the muzzle is the gun's
+"*flash" tag where the cgame draws it: the weapon's world model (bg_itemlist world_model, the model CG_InitG2Weapons
+bolts to "*r_hand", and to "*l_hand" for the second gun) on the hand bolt. Where the tag is on the gun is read once
+per weapon from its model, which is then freed again.
+The shot then aims from the gun at what the eyes look at (the crosshair), so it still goes where it did.
+Not for melee, the saber, thrown / placed explosives, the droideka (its own arm tables), emplaced guns, turrets and
+vehicles; a model without hand bolts, or a gun behind a wall from the eyes, keeps the eye muzzle.
+g_muzzleFromWeapon 0 = the old eye muzzle.
+===============
+*/
+static qboolean weaponFlashTried[WP_NUM_WEAPONS];
+static qboolean weaponFlashValid[WP_NUM_WEAPONS];
+static vec3_t weaponFlashOffset[WP_NUM_WEAPONS]; // the "*flash" tag in the weapon model's own space
+
+static qboolean G_WeaponFlashOffset(const int weapon, vec3_t offset)
+{
+	if (weapon <= WP_NONE || weapon >= WP_NUM_WEAPONS)
+	{
+		return qfalse;
+	}
+
+	if (!weaponFlashTried[weapon])
+	{
+		const gitem_t* item = BG_FindItemForWeapon((weapon_t)weapon);
+		void* g2 = NULL;
+
+		weaponFlashTried[weapon] = qtrue;
+
+		if (item && item->world_model[0] && item->world_model[0][0])
+		{
+			// the Z-6 in the hand is its model with the barrel bone (CG_InitG2Weapons)
+			const char* model = weapon == WP_Z6_ROTARY_CANNON ? "models/weapons2/z6_rotary/model.glm" : item->world_model[0];
+			trap->G2API_InitGhoul2Model(&g2, model, 0, 0, 0, 0, 0);
+		}
+		if (g2)
+		{
+			const int bolt = trap->G2API_AddBolt(g2, 0, "*flash");
+
+			if (bolt >= 0)
+			{
+				mdxaBone_t tag;
+				vec3_t default_scale = { 0.0f, 0.0f, 0.0f };
+
+				if (trap->G2API_GetBoltMatrix(g2, 0, bolt, &tag, vec3_origin, vec3_origin, level.time, NULL, default_scale))
+				{
+					weaponFlashOffset[weapon][0] = tag.matrix[0][3];
+					weaponFlashOffset[weapon][1] = tag.matrix[1][3];
+					weaponFlashOffset[weapon][2] = tag.matrix[2][3];
+					weaponFlashValid[weapon] = qtrue;
+				}
+			}
+			trap->G2API_CleanGhoul2Models(&g2);
+		}
+	}
+
+	if (!weaponFlashValid[weapon])
+	{
+		return qfalse;
+	}
+	VectorCopy(weaponFlashOffset[weapon], offset);
+	return qtrue;
+}
+
+static qboolean G_UseWeaponMuzzle(const gentity_t* ent)
+{
+	if (!g_muzzleFromWeapon.integer || !ent->client || !ent->ghoul2
+		|| ent->client->ps.emplacedIndex || ent->client->ps.m_iVehicleNum)
+	{
+		return qfalse;
+	}
+
+	switch (ent->s.weapon)
+	{
+	case WP_NONE:
+	case WP_STUN_BATON:
+	case WP_MELEE:
+	case WP_SABER:
+	case WP_THERMAL:
+	case WP_TRIP_MINE:
+	case WP_DET_PACK:
+	case WP_DROIDEKA:
+	case WP_TUSKEN_STAFF:
+	case WP_EMPLACED_GUN:
+	case WP_TURRET:
+		return qfalse;
+	default:
+		return qtrue;
+	}
+}
+
+// the gun's "*flash" tag in the right hand (left: the second gun, in the left hand); qfalse keeps the eye muzzle
+static qboolean G_WeaponMuzzle(const gentity_t* ent, const qboolean left, vec3_t muzzlePoint)
+{
+	const renderInfo_t* ri = &ent->client->renderInfo;
+	const int bolt = left ? ri->handLBolt : ri->handRBolt;
+	mdxaBone_t hand;
+	vec3_t angles, offset, point, eye;
+	trace_t tr;
+
+	if (ri->lastG2 != ent->ghoul2 || bolt < 0)
+	{
+		return qfalse; // no hand bolts (a skeleton that isn't humanoid), or not set up for this model yet
+	}
+
+	// as the server's saber and hand positions (WP_SaberPositionUpdate)
+	VectorSet(angles, 0.0f, ent->client->ps.viewangles[YAW], 0.0f);
+	if (!trap->G2API_GetBoltMatrix(ent->ghoul2, 0, bolt, &hand, angles, ent->client->ps.origin, level.time, NULL,
+		(float*)ent->modelScale))
+	{
+		return qfalse;
+	}
+
+	if (!G_WeaponFlashOffset(ent->s.weapon, offset))
+	{
+		VectorClear(offset); // no "*flash" tag on the gun: the hand
+	}
+	else if (ent->modelScale[0] > 0.0f)
+	{
+		VectorScale(offset, ent->modelScale[0], offset); // the gun is scaled with the model
+	}
+	for (int i = 0; i < 3; i++)
+	{
+		point[i] = hand.matrix[i][3] + hand.matrix[i][0] * offset[0] + hand.matrix[i][1] * offset[1]
+			+ hand.matrix[i][2] * offset[2];
+	}
+
+	// not through a wall (or someone) that is between the eyes and the gun
+	VectorCopy(ent->client->ps.origin, eye);
+	eye[2] += ent->client->ps.viewheight;
+	trap->Trace(&tr, eye, NULL, NULL, point, ent->s.number, MASK_SHOT, qfalse, 0, 0);
+	if (tr.startsolid || tr.allsolid || tr.fraction < 1.0f)
+	{
+		return qfalse;
+	}
+
+	VectorCopy(point, muzzlePoint);
+	SnapVector(muzzlePoint);
+	return qtrue;
+}
+
+// from the gun at what the eyes look at (the crosshair): forward is the eyes' aim until now
+static void G_AimFromMuzzle(const gentity_t* ent, const vec3_t muzzlePoint)
+{
+	vec3_t eye, end, dir;
+	trace_t tr;
+
+	VectorCopy(ent->client->ps.origin, eye);
+	eye[2] += ent->client->ps.viewheight;
+	VectorMA(eye, 8192.0f, forward, end);
+	trap->Trace(&tr, eye, NULL, NULL, end, ent->s.number, MASK_SHOT, qfalse, 0, 0);
+
+	VectorSubtract(tr.endpos, muzzlePoint, dir);
+	if (VectorNormalize(dir) > 32.0f && DotProduct(dir, forward) > 0.7f)
+	{
+		// (very close, or a turn of more than 45 degrees: keep the eyes' aim). right and up follow, with no roll, as
+		// from the view angles (the spread of the bowcaster, flechette and the second gun use them)
+		vec3_t aim_angles;
+
+		vectoangles(dir, aim_angles);
+		AngleVectors(aim_angles, forward, vright, up);
+	}
+}
+
 extern qboolean G_MissileImpact(gentity_t* ent, trace_t* trace);
 
 static void WP_TouchVehMissile(gentity_t* ent, const gentity_t* other, const trace_t* trace)
@@ -6978,6 +7148,16 @@ void FireWeapon(gentity_t* ent, const qboolean alt_fire)
 	if (ent->client->ps.eFlags & EF3_DUAL_WEAPONS || ent->s.weapon == WP_DROIDEKA) // the droideka fires from both arms
 	{
 		calcmuzzlePoint2(ent, forward, vright, muzzle2);
+	}
+
+	// the shot from the gun, not the eyes (G_WeaponMuzzle)
+	if (G_UseWeaponMuzzle(ent) && G_WeaponMuzzle(ent, qfalse, muzzle))
+	{
+		if (ent->client->ps.eFlags & EF3_DUAL_WEAPONS)
+		{
+			G_WeaponMuzzle(ent, qtrue, muzzle2);
+		}
+		G_AimFromMuzzle(ent, muzzle);
 	}
 
 	if (!doesnot_drain_mishap(ent) && ent->client->ps.BlasterAttackChainCount <= BLASTERMISHAPLEVEL_FULL)

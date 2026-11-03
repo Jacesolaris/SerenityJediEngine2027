@@ -743,6 +743,9 @@ extern vmCvar_t cg_holsterdebug_boneindex;
 extern vmCvar_t cg_holsterdebug_posoffset;
 extern vmCvar_t cg_blasterHipPullIn; // SS_BLASTER (2026-10-15)
 extern vmCvar_t cg_saberLightRadius; // saber-only light (DH 2026-10-27)
+extern vmCvar_t cg_lightningFxInterval; // force lightning (DH 2026-11-02)
+extern vmCvar_t cg_lightningMarks;
+extern vmCvar_t cg_lightningMarkInterval;
 extern vmCvar_t cg_saberLightIntensity;
 extern vmCvar_t cg_holsterdebug_angoffset;
 extern vmCvar_t cg_fpls;

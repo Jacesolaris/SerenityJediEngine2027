@@ -808,6 +808,14 @@ qboolean G_ActivateBehavior(gentity_t* self, const int bset)
 	}
 	else
 	{
+		extern void G_MissionNoteScript(int entNum, const char* script);
+		extern qboolean G_MissionReplayBlocksScript(const char* script);
+
+		G_MissionNoteScript(self->s.number, bs_name); // (Missions: the script a cutscene comes from, g_target.c)
+		if (G_MissionReplayBlocksScript(bs_name))
+		{
+			return qtrue; // (Missions: a replayed map's first cutscene does not run again, g_ICARUScb.c)
+		}
 		//make the code handle the case of the scripts directory already being given
 		if (!Q_strncmp(bs_name, va("%s/", Q3_SCRIPT_DIR), 8))
 		{
@@ -1246,7 +1254,7 @@ static qboolean NPC_FindEnemy(const qboolean check_alerts)
 	}
 
 	//Don't want a new enemy
-	if (ValidEnemy(NPCS.NPC->enemy) && NPCS.NPC->NPC->aiFlags & NPCAI_LOCKEDENEMY)
+	if (ValidEnemy(NPCS.NPC->enemy) && NPCS.NPC->NPC->aiFlags2 & NPCAI2_LOCKEDENEMY)
 		return qtrue;
 
 	//See if the player is closer than our current enemy
@@ -1259,7 +1267,7 @@ static qboolean NPC_FindEnemy(const qboolean check_alerts)
 		return qtrue;
 	}
 
-	NPCS.NPC->NPC->aiFlags &= ~NPCAI_LOCKEDENEMY;
+	NPCS.NPC->NPC->aiFlags2 &= ~NPCAI2_LOCKEDENEMY;
 
 	//If we've gotten here alright, then our target it still valid
 	if (NPC_ValidEnemy(NPCS.NPC->enemy))

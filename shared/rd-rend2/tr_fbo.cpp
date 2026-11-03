@@ -585,6 +585,20 @@ void FBO_Init(void)
 		R_CheckFBO(tr.historyFbo);
 	}
 
+	if (tr.sharpenImage)
+	{
+		// r_sharpen (Warzone port): the finished view is copied here, then sharpened back
+		tr.sharpenFbo = FBO_Create(
+			"_sharpen", tr.sharpenImage->width,
+			tr.sharpenImage->height);
+
+		FBO_Bind(tr.sharpenFbo);
+		FBO_AttachTextureImage(tr.sharpenImage, 0);
+		FBO_SetupDrawBuffers();
+
+		R_CheckFBO(tr.sharpenFbo);
+	}
+
 	if (r_drawSunRays->integer)
 	{
 		tr.sunRaysFbo = FBO_Create(

@@ -345,6 +345,142 @@ extern cvar_t* r_grassPushRadius;
 // r_grassForceWave scales it (up to 2, 0 = off). Same numbers as surface_sprites.glsl in rend2.
 extern cvar_t* r_grassForceWave;
 
+// Grass cutting (2026-11-02): a saber swing cuts the grass to stubble (tr_grasscut.h, the same grid as rend2)
+#define GRASSCUT_CVAR_GET(name, value) ri.Cvar_Get(name, value, CVAR_ARCHIVE_ND, "")
+#define GRASSCUT_RI ri.
+#include "rd-common/tr_grasscut.h"
+
+// Grass cutting, plant models: tr_bsp.cpp hands over the main world: its entity lump lists the plant models, and baked
+// plants whose entities were stripped come from its triangle surfaces with a plant shader (tr_grasscut.h)
+void R_GrassCutWorldPlants(const char* entities, const int length, const world_t* world)
+{
+	R_GrassCutLoadPlants(entities, length);
+	for (int i = 0; i < world->numsurfaces; i++)
+	{
+		const msurface_t* surf = &world->surfaces[i];
+		if (!surf->shader || !surf->data)
+		{
+			continue;
+		}
+		if (surf->shader->grassCutPlant && *surf->data == SF_TRIANGLES)
+		{
+			const srfTriangles_t* tri = reinterpret_cast<const srfTriangles_t*>(surf->data);
+			R_GrassCutAddPlantSurface(tri->bounds[0], tri->bounds[1], surf->shader->index);
+		}
+		bool grass = false;	// surface-sprite grass: cuts over it fizz (R_GrassCutOnGrass)
+		for (int s = 0; s < surf->shader->numUnfoggedPasses && !grass; s++)
+		{
+			grass = surf->shader->stages[s].ss != nullptr;
+		}
+		if (!grass)
+		{
+			continue;
+		}
+		if (*surf->data == SF_TRIANGLES)
+		{
+			const srfTriangles_t* tri = reinterpret_cast<const srfTriangles_t*>(surf->data);
+			R_GrassCutAddGrassSurface(tri->bounds[0], tri->bounds[1]);
+		}
+		else if (*surf->data == SF_GRID)
+		{
+			const srfGridMesh_t* grid = reinterpret_cast<const srfGridMesh_t*>(surf->data);
+			R_GrassCutAddGrassSurface(grid->meshBounds[0], grid->meshBounds[1]);
+		}
+		else if (*surf->data == SF_FACE)
+		{
+			const srfSurfaceFace_t* face = reinterpret_cast<const srfSurfaceFace_t*>(surf->data);
+			vec3_t bounds[2];
+			ClearBounds(bounds[0], bounds[1]);
+			for (int p = 0; p < face->numPoints; p++)
+			{
+				AddPointToBounds(face->points[p], bounds[0], bounds[1]);
+			}
+			R_GrassCutAddGrassSurface(bounds[0], bounds[1]);
+		}
+	}
+	R_GrassCutFinishPlantSurfaces();
+	GRASSCUT_RI Printf(PRINT_DEVELOPER, "grass cut: %d plant models, %d grass surfaces\n", grassCutNumPlants, grassCutNumGrass);
+}
+// Grass cutting, plant models (rd-common tr_grasscut_plant.h): tr_shade.cpp calls this for a plant shader before the
+// deforms. While anything is cut, the vertices of plants in cut cells move (fall, lie, stubble, regrow) and the cut parts
+// glow like embers (vertex colours): the world's plants and plain md3 plant entities (misc_model_static / breakable,
+// their vertices are in model space and go through the grid in world space), never ghoul2 models. Nothing is done while
+// nothing is cut.
+void RB_GrassCutPlants()
+{
+	const trRefEntity_t* ent = backEnd.currentEntity;
+	if (!ent || backEnd.refdef.rdflags & RDF_NOWORLDMODEL)
+	{
+		return;
+	}
+	const bool world = ent == &tr.worldEntity;
+	if (!world && (ent->e.reType != RT_MODEL || R_GetModelByHandle(ent->e.hModel)->type != MOD_MESH))
+	{	// not a plain md3 (the cgame hands every entity a ghoul2 list, so ask the model)
+		return;
+	}
+	const float now = static_cast<float>(backEnd.refdef.time) * 0.001f;
+	if (!R_GrassCutFrame(now))
+	{
+		return;
+	}
+	const float regrow = R_GrassCutRegrowTime();
+	static float nearPlants[GRASSCUT_MAX_NEAR][4];
+	static int numNearPlants = 0, nearTime = -1;
+	if (nearTime != backEnd.refdef.time)
+	{	// the plants near the cuts, once a frame
+		nearTime = backEnd.refdef.time;
+		numNearPlants = R_GrassCutNearPlants(nearPlants);
+	}
+	const float* org = backEnd.ori.origin;
+	vec3_t axis[3];
+	float axisScale[3] = { 1.0f, 1.0f, 1.0f };
+	for (int k = 0; k < 3; k++)
+	{	// the model's axes can be scaled (modelscale), they stay at right angles
+		VectorCopy(backEnd.ori.axis[k], axis[k]);
+		const float len2 = DotProduct(axis[k], axis[k]);
+		axisScale[k] = len2 > 0.0001f ? 1.0f / len2 : 0.0f;
+	}
+	for (int i = 0; i < tess.numVertexes; i++)
+	{
+		float rest[3], out[3], ember;
+		if (world)
+		{
+			VectorCopy(tess.xyz[i], rest);
+		}
+		else
+		{
+			for (int k = 0; k < 3; k++)
+			{
+				rest[k] = org[k] + tess.xyz[i][0] * axis[0][k] + tess.xyz[i][1] * axis[1][k] + tess.xyz[i][2] * axis[2][k];
+			}
+		}
+		if (!R_GrassCutPlantVertex(rest, now, regrow, nearPlants, numNearPlants, out, &ember))
+		{
+			continue;
+		}
+		if (world)
+		{
+			VectorCopy(out, tess.xyz[i]);
+		}
+		else
+		{
+			vec3_t d;
+			VectorSubtract(out, org, d);
+			for (int k = 0; k < 3; k++)
+			{
+				tess.xyz[i][k] = DotProduct(d, axis[k]) * axisScale[k];
+			}
+		}
+		if (ember > 0.0f)
+		{
+			byte* c = tess.vertexColors[i];
+			c[0] = static_cast<byte>(c[0] + (255.0f - c[0]) * ember);
+			c[1] = static_cast<byte>(c[1] + (110.0f - c[1]) * ember);
+			c[2] = static_cast<byte>(c[2] + (20.0f - c[2]) * ember);
+		}
+	}
+}
+
 constexpr int GRASS_MAX_WAVES = 4;
 constexpr float GRASS_WAVE_SPEED = 1400.0f;	// units a second
 constexpr float GRASS_WAVE_SETTLE = 1.6f;	// seconds until the grass stands still again
@@ -370,6 +506,11 @@ static int grass_num_local_waves = 0;
 
 void R_GrassAddWave(const int time, const float* org, const float* dir, const int type, const float range)
 {
+	if (type == 3)
+	{	// a saber swing cutting the grass (tr_grasscut.h)
+		R_GrassCutFromCommand(time, org);
+		return;
+	}
 	int slot = grass_num_waves;
 	if (slot == GRASS_MAX_WAVES)
 	{	// replace the oldest
@@ -765,6 +906,52 @@ static void RB_GrassBend(const vec3_t loc, vec3_t loc2, const float height, cons
 	}
 }
 
+// Grass cutting (2026-11-02, tr_grasscut.h): a cut blade is drawn as stubble up to the cut (its top glows like an ember
+// for 2 s with cg_grassCutFx 1), and its cut-off top as a clipping that falls over, lies and fades.
+static bool grass_cut_active = false;
+static float grass_cut_now = 0.0f;
+static float grass_cut_regrow = 60.0f;
+
+static void RB_GrassCutBlade(const vec3_t loc, vec3_t loc2, const float height, const vec3_t right, color4ub_t color, vec2_t fog)
+{
+	float keep, keepCut, age;
+	if (!R_GrassCutBlade(loc, height, grass_cut_now, grass_cut_regrow, &keep, &keepCut, &age))
+	{
+		return;
+	}
+
+	float clip[4][3], clipAlpha;
+	if (R_GrassCutClipping(loc, loc2, right, keepCut, age, clip, &clipAlpha))
+	{
+		float points[16];
+		for (int i = 0; i < 4; i++)
+		{
+			points[i * 4] = clip[i][0];
+			points[i * 4 + 1] = clip[i][1];
+			points[i * 4 + 2] = clip[i][2];
+			points[i * 4 + 3] = 0;
+		}
+		color4ub_t clipColor;
+		clipColor[0] = color[0];
+		clipColor[1] = color[1];
+		clipColor[2] = color[2];
+		clipColor[3] = static_cast<byte>(color[3] * clipAlpha);
+		SQuickSprite.Add(points, clipColor, fog);
+	}
+
+	for (int k = 0; k < 3; k++)
+	{
+		loc2[k] = loc[k] + (loc2[k] - loc[k]) * keep;
+	}
+	const float e = R_GrassCutEmber(age);
+	if (e > 0.0f)
+	{
+		color[0] = static_cast<byte>(color[0] + (255 - color[0]) * e);
+		color[1] = static_cast<byte>(color[1] * (1.0f - 0.55f * e));
+		color[2] = static_cast<byte>(color[2] * (1.0f - 0.9f * e));
+	}
+}
+
 /////////////////////////////////////////////
 // Vertical surface sprites
 
@@ -841,6 +1028,11 @@ static void RB_VerticalSurfaceSprite(vec3_t loc, const float width, const float 
 	color[1] = light;
 	color[2] = light;
 	color[3] = alpha;
+
+	if (grass_cut_active && !hangdown)
+	{
+		RB_GrassCutBlade(loc, loc2, height, right, color, fog);
+	}
 
 	// Bottom right
 //	VectorAdd(loc, right, point);
@@ -937,6 +1129,11 @@ static void RB_VerticalSurfaceSpriteWindPoint(vec3_t loc, const float width, con
 	color[2] = light;
 	color[3] = alpha;
 
+	if (grass_cut_active && !hangdown)
+	{
+		RB_GrassCutBlade(loc, loc2, height, right, color, fog);
+	}
+
 	// Bottom right
 //	VectorAdd(loc, right, point);
 	points[0] = loc[0] + right[0];
@@ -1012,6 +1209,10 @@ static void RB_DrawVerticalSurfaceSprites(shaderStage_t* stage, shaderCommands_t
 	}
 
 	RB_GrassLocalPushers(input);
+	grass_cut_now = static_cast<float>(backEnd.refdef.time) * 0.001f;
+	grass_cut_active = backEnd.currentEntity == &tr.worldEntity && !(backEnd.refdef.rdflags & RDF_NOWORLDMODEL)
+		&& R_GrassCutFrame(grass_cut_now);
+	grass_cut_regrow = R_GrassCutRegrowTime();
 
 	// Quickly calc all the alphas and windstuff for each vertex
 	for (curvert = 0; curvert < input->numVertexes; curvert++)

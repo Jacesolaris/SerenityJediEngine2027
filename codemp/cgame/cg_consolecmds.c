@@ -348,7 +348,10 @@ static int cmdcmp(const void* a, const void* b)
 	return Q_stricmp(a, ((consoleCommand_t*)b)->cmd);
 }
 
+extern void CG_MissionObjectives_f(void); // (cg_servercmds.c: Missions, the objective list)
+
 static consoleCommand_t commands[] = {
+	{ "missionobjectives", CG_MissionObjectives_f },
 	{ "+md_forcewheel", CG_MDWheel_ForceDown_f }, // the weapon wheel on the force ring (the "Force Wheel" bind)
 	{ "+md_wheel", CG_MDWheel_Down_f }, // the radial weapon / force wheel (cg_weapons.c)
 	{ "+scores", CG_ScoresDown_f },

@@ -1087,6 +1087,13 @@ static void G_SetClientSound(gentity_t* ent)
 		ent->client->ps.loopSound = G_SoundIndex("sound/weapons/scepter/loop.wav");
 		ent->s.loopIsSoundset = qfalse;
 	}
+	else if (ent->client && ent->client->ps.fd.forcePowersActive & 1 << FP_LIGHTNING
+		&& ent->client->ps.fd.forcePowerLevel[FP_LIGHTNING] > FORCE_LEVEL_1)
+	{
+		// held force lightning loops its sound until released (DH 2026-11-03), as in SP
+		ent->client->ps.loopSound = G_SoundIndex("sound/weapons/force/lightningloop.wav");
+		ent->s.loopIsSoundset = qfalse;
+	}
 	else if (ent->client)
 	{
 		ent->client->ps.loopSound = 0;
@@ -5017,11 +5024,12 @@ static void ClientThink_real(gentity_t* ent)
 		return;
 	}
 
-	if (!isNPC && G_Pazaak_IsPlaying(ent->s.number))
+	if (!isNPC && (G_Pazaak_IsPlaying(ent->s.number) || G_Shop_BotTalkingTo(ent->s.number) >= 0))
 	{
-		// he sits at a Pazaak board (g_pazaak.c): no moving, fighting or using anything until the match is over
+		// he sits at a Pazaak board (g_pazaak.c), or a bot talks to a player (talk question / shop): no moving, fighting
+		// or using anything until the match / talk is over; the talk balloon shows (BUTTON_TALK, 2026-11-02)
 		ucmd->forwardmove = ucmd->rightmove = ucmd->upmove = 0;
-		ucmd->buttons = 0;
+		ucmd->buttons = BUTTON_TALK;
 		ucmd->generic_cmd = 0;
 	}
 

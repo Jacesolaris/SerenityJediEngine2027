@@ -1550,6 +1550,7 @@ typedef struct siegePers_s
 #define FLAG_SLIGHTFATIGUE  22
 #define FLAG_DOUBLEJUMPFLIP 23	// the double jump's flip is playing (twice as fast: PM_SaberStartTransAnim)
 #define FLAG_DARKSTASIS		24	// frozen by Dark Stasis (with FLAG_FROZEN): drawn red
+#define FLAG_TALKHINT		25	// the NPC / bot he faces can be talked to (pazaak / shop, g_pazaak.c): the use icon
 
 #define DODGE_BOLTBLOCK			1	//standard DP cost to block a missile bolt
 #define DODGE_BOWCASTERBLOCK	2

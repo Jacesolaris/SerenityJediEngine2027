@@ -372,6 +372,114 @@ void SliceClip(vec3 wsPos)
 }
 #endif
 
+#if defined(USE_DEFORM_VERTEXES)
+// Grass cutting, plant models (2026-11-02, rd-common tr_grasscut.h R_GrassCutPlantVertex has the same numbers): the
+// plant models fall over where a saber cut them, lie, sink to stubble and grow back. u_GrassCutMap = the cut grid
+// (texel = cut height, seconds of the cut, cell x, cell y; 4-unit cells, 512 wide, it wraps). u_PlantCut: x = now
+// (seconds), y = r_grassCutRegrow, z = seconds the clippings lie (0 = stubble at once), w = 0 off (anything but a plant
+// while grass is cut), 1 on, 2 on with embers. u_PlantCenters: the plants near the cuts (x, y, z of the origin, radius),
+// u_PlantCount of them. rest and pos are in world space.
+uniform sampler2D u_GrassCutMap;
+uniform vec4 u_PlantCut;
+uniform vec4 u_PlantCenters[32];
+uniform int u_PlantCount;
+
+// the cell at p cut below height z (up to 128 units below, not below floorZ), live now: the lower cut wins
+void PlantCutSample(in vec2 p, in float z, in float floorZ, inout float cz, inout float ct)
+{
+	vec2 cell = floor(p / 4.0);
+	vec4 c = texelFetch(u_GrassCutMap, ivec2(mod(cell, 512.0)), 0);
+	float age = u_PlantCut.x - c.y;
+	if (c.y <= 0.0 || c.z != cell.x || c.w != cell.y || c.x >= cz || c.x >= z || z - c.x > 128.0 || c.x < floorZ
+		|| age < -0.25 || age >= u_PlantCut.y)
+		return;
+	cz = c.x;
+	ct = c.y;
+}
+
+vec3 PlantCut(in vec3 rest, in vec3 pos, out float ember)
+{
+	ember = 0.0;
+	if (u_PlantCut.w < 0.5)
+		return pos;
+	float cz = 1.0e9;
+	float ct = 0.0;
+	// the plant it belongs to: the nearest origin within its radius
+	int best = -1;
+	float bestDist2 = 1.0e18;
+	for (int i = 0; i < u_PlantCount; i++)
+	{
+		vec2 d = u_PlantCenters[i].xy - rest.xy;
+		float d2 = dot(d, d);
+		if (d2 <= u_PlantCenters[i].w * u_PlantCenters[i].w && d2 < bestDist2)
+		{
+			best = i;
+			bestDist2 = d2;
+		}
+	}
+	vec2 spot = rest.xy; // picks the way it falls
+	if (best >= 0)
+	{
+		vec4 plant = u_PlantCenters[best];
+		spot = plant.xy;
+		// the stem (within 16 units of the origin, up to 96 units over the foot) cut: all of the plant above that cut falls
+		float sz = 1.0e9;
+		float st = 0.0;
+		for (int i = 0; i < 17; i++)
+		{
+			float ang = float(i) * 0.7854;
+			PlantCutSample(plant.xy + vec2(cos(ang), sin(ang)) * (i == 0 ? 0.0 : i <= 8 ? 8.0 : 16.0), plant.z + 96.0, plant.z - 24.0, sz, st);
+		}
+		if (sz < 1.0e8)
+		{
+			if (rest.z <= sz)
+				return pos; // below the cut, it stays
+			cz = sz;
+			ct = st;
+		}
+		else
+		{	// else where the blade went through the line from it to the plant's origin: a leaf falls where it was cut
+			int n = clamp(int(ceil(sqrt(bestDist2) / 3.0)), 1, 32);
+			for (int k = 0; k <= n; k++)
+				PlantCutSample(mix(rest.xy, plant.xy, float(k) / float(n)), rest.z, plant.z - 24.0, cz, ct);
+		}
+	}
+	else
+	{	// a plant not in the entity lump: the vertex's cell, then 8 around at 8, 16 and 24 units
+		const vec2 dirs[8] = vec2[](vec2(1.0, 0.0), vec2(0.7071, 0.7071), vec2(0.0, 1.0), vec2(-0.7071, 0.7071),
+			vec2(-1.0, 0.0), vec2(-0.7071, -0.7071), vec2(0.0, -1.0), vec2(0.7071, -0.7071));
+		for (int i = 0; i < 25; i++)
+		{
+			float dist = i > 0 ? 8.0 * float((i - 1) / 8 + 1) : 0.0;
+			PlantCutSample(rest.xy + dirs[(i + 7) & 7] * dist, rest.z, -1.0e9, cz, ct);
+		}
+	}
+	if (cz > 1.0e8)
+		return pos;
+	float a = max(u_PlantCut.x - ct, 0.0);
+	float h = rest.z - cz;
+	// stubble 1.5 units over the cut
+	vec3 cutPos = vec3(rest.xy, cz + min(h, 1.5));
+	float debris = u_PlantCut.z;
+	if (debris > 0.0 && a < debris + 0.45)
+	{	// what stood above the cut falls over (all of a plant the same way, its origin picks it), lies, then sinks
+		float r = floor(spot.x / 32.0) * 12.9898 + floor(spot.y / 32.0) * 78.233;
+		vec2 d = vec2(cos(r), sin(r));
+		float f = a / 0.45;
+		f = f >= 1.0 ? 1.0 : f * f;
+		float ang = f * 1.45;
+		vec3 fallen = vec3(rest.xy + d * (h * sin(ang)), cz + 0.6 + h * cos(ang));
+		cutPos = mix(fallen, cutPos, clamp((a - debris * 0.5) / (debris * 0.5 + 0.45), 0.0, 1.0));
+	}
+	float g = smoothstep(0.75 * u_PlantCut.y, u_PlantCut.y, a);
+	if (u_PlantCut.w > 1.5 && a < 2.0)
+	{	// the cut glows like embers, most at the cut
+		float e = 1.0 - a / 2.0;
+		ember = e * e * (1.0 - g) * max(1.0 - h / 24.0, 0.25);
+	}
+	return pos + (cutPos - rest) * (1.0 - g);
+}
+#endif
 void main()
 {
 #if defined(USE_VERTEX_ANIMATION)
@@ -421,18 +529,27 @@ void main()
 #endif
 
 #if defined(USE_DEFORM_VERTEXES)
+	vec3 restPosition = position;
+	vec3 prevRestPosition = prevPosition;
 	position = DeformPosition(position, normal, attr_TexCoord0.st);
 	prevPosition = DeformPosition(prevPosition, prevNormal, attr_TexCoord0.st);
 #endif
 
 	vec4 wsPosition = u_ModelMatrix * vec4(position, 1.0);
+	vec4 wsPrevPosition = u_PreviousModelMatrix * vec4(prevPosition, 1.0);
+#if defined(USE_DEFORM_VERTEXES)
+	// grass cutting, in world space (world and entity plants)
+	float plantEmber;
+	wsPosition.xyz = PlantCut((u_ModelMatrix * vec4(restPosition, 1.0)).xyz, wsPosition.xyz, plantEmber);
+	wsPrevPosition.xyz = PlantCut((u_PreviousModelMatrix * vec4(prevRestPosition, 1.0)).xyz, wsPrevPosition.xyz, plantEmber);
+#endif
 #if defined(USE_SKELETAL_ANIMATION)
 	SliceClip(wsPosition.xyz);
 #endif
 	gl_Position = u_viewProjectionMatrix * wsPosition;
 
 	var_Position = gl_Position;
-	var_prevPosition = u_previousViewProjectionMatrix * u_PreviousModelMatrix * vec4(prevPosition, 1.0);
+	var_prevPosition = u_previousViewProjectionMatrix * wsPrevPosition;
 
 #if defined(USE_ALPHA_TEST)
 #if defined(USE_TCGEN)

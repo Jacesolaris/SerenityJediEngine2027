@@ -991,8 +991,43 @@ static int svcmdcmp(const void* a, const void* b)
 
 extern void G_FighterTest_f(void); // (2026-10-13) g_vehicles.c, developer test (sv_cheats 1)
 
+// "wp_autogrid <spacing> [force]": bot_wp_autogrid from the server console, for a dedicated server (ai_wpnav.c
+// G_WP_AutoGridServer; DH 2026-11-02, the bot routes of the campaign maps)
+static void Svcmd_WPAutoGrid_f(void)
+{
+	extern void G_WP_AutoGridServer(float spacing, qboolean force);
+	char arg[MAX_TOKEN_CHARS];
+
+	trap->Argv(1, arg, sizeof arg);
+	const float spacing = (float)atof(arg);
+	trap->Argv(2, arg, sizeof arg);
+	G_WP_AutoGridServer(spacing, !Q_stricmp(arg, "force") ? qtrue : qfalse);
+}
+
+// Missions (DH 2026-11-02): "mission_continue [ja | jo | <save>]" loads a saved mission (missions/<name>.sav: its map,
+// last checkpoint and loadouts; g_target.c G_MissionLoadSave). No name: this map's campaign.
+static void Svcmd_MissionContinue_f(void)
+{
+	extern qboolean G_MissionLoadSave(const char* campaign);
+	extern const char* G_MissionCampaign(const char* map);
+	char arg[MAX_QPATH], mapname[MAX_QPATH];
+
+	trap->Argv(1, arg, sizeof arg);
+	if (!arg[0])
+	{
+		trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+		Q_strncpyz(arg, G_MissionCampaign(mapname), sizeof arg);
+	}
+	trap->Cvar_Set("g_gametype", va("%i", GT_SINGLE_PLAYER)); // (a mission)
+	if (!G_MissionLoadSave(arg))
+	{
+		trap->Print("No saved mission \"%s\" (missions/%s.sav)\n", arg, arg);
+	}
+}
 svcmd_t svcmds[] = {
 	{ "addbot", Svcmd_AddBot_f, qfalse },
+	{ "mission_continue", Svcmd_MissionContinue_f, qfalse },
+	{ "wp_autogrid", Svcmd_WPAutoGrid_f, qfalse },
 	{ "fightertest", G_FighterTest_f, qfalse },
 	{ "addip", Svcmd_AddIP_f, qfalse },
 	{ "botlist", Svcmd_BotList_f, qfalse },

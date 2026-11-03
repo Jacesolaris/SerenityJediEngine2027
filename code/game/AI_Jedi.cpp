@@ -12433,8 +12433,172 @@ void NPC_CheckEvasion(void)
 	}
 }
 
+// Warzone port (2026-11-02), Jedi fall save (UQ1's idea, own code): a Jedi NPC that walks or leaps off
+// a ledge with no floor below uses the force to leap back to the last ground it stood on, or onto its
+// enemy. Only NPCs whose NPC file gives them force jump; jetpack classes keep their own method.
+// g_jediFallSave: 0 = off, 1 = not while pushed / thrown / knocked down (pit kills stay), 2 = always.
+// One save per Jedi every 10 s.
+static vec3_t s_jediLastGround[MAX_GENTITIES];
+static int s_jediLastGroundTime[MAX_GENTITIES];
+
+static int Jedi_FallSaveMode()
+{
+	static cvar_t* g_jediFallSave = nullptr;
+	if (!g_jediFallSave)
+	{
+		g_jediFallSave = gi.cvar("g_jediFallSave", "1", CVAR_ARCHIVE);
+	}
+	return g_jediFallSave ? g_jediFallSave->integer : 0;
+}
+
+static void Jedi_FallSaveTrackGround()
+{
+	const int n = NPC->s.number;
+	const int groundNum = NPC->client->ps.groundEntityNum;
+	if (groundNum == ENTITYNUM_NONE || NPC->waterlevel >= 2 || (NPC->client->ps.pm_flags & PMF_TIME_KNOCKBACK))
+	{
+		return;
+	}
+	const gentity_t* ground = &g_entities[groundNum];
+	if (groundNum != ENTITYNUM_WORLD && (ground->client || ground->s.eType == ET_MOVER))
+	{
+		//not on another character or a lift: that ground moves away
+		return;
+	}
+	VectorCopy(NPC->currentOrigin, s_jediLastGround[n]);
+	s_jediLastGroundTime[n] = level.time;
+}
+
+static qboolean Jedi_FallSaveDeadlyFall()
+{
+	//no floor within 512 below, or the floor is lava / slime / sky / a trigger_hurt
+	trace_t trace;
+	vec3_t down;
+	VectorCopy(NPC->currentOrigin, down);
+	down[2] -= 512.0f;
+	gi.trace(&trace, NPC->currentOrigin, NPC->mins, NPC->maxs, down, NPC->s.number,
+		NPC->clipmask | CONTENTS_LAVA | CONTENTS_SLIME, G2_NOCOLLIDE, 0);
+	if (trace.startsolid || trace.allsolid)
+	{
+		return qfalse;
+	}
+	if (trace.fraction >= 1.0f || (trace.contents & (CONTENTS_LAVA | CONTENTS_SLIME)) || (trace.surfaceFlags & SURF_SKY))
+	{
+		return qtrue;
+	}
+	vec3_t floor;
+	VectorCopy(trace.endpos, floor);
+	gi.trace(&trace, NPC->currentOrigin, NPC->mins, NPC->maxs, floor, NPC->s.number, CONTENTS_TRIGGER, G2_NOCOLLIDE, 0);
+	if (trace.fraction < 1.0f && trace.entityNum >= 0 && trace.entityNum < ENTITYNUM_WORLD
+		&& g_entities[trace.entityNum].classname && !Q_stricmp(g_entities[trace.entityNum].classname, "trigger_hurt"))
+	{
+		return qtrue;
+	}
+	return qfalse;
+}
+
+static qboolean Jedi_CheckFallSave()
+{
+	gclient_t* client = NPC->client;
+	Jedi_FallSaveTrackGround();
+
+	if (client->ps.groundEntityNum != ENTITYNUM_NONE || client->ps.velocity[2] > -200.0f || NPC->health <= 0)
+	{
+		//only while really falling
+		return qfalse;
+	}
+	const int mode = Jedi_FallSaveMode();
+	if (mode <= 0
+		|| !(client->ps.forcePowersKnown & (1 << FP_LEVITATION))
+		|| client->ps.forcePowerLevel[FP_LEVITATION] < FORCE_LEVEL_1
+		|| client->NPC_class == CLASS_BOBAFETT || client->NPC_class == CLASS_MANDO || client->NPC_class == CLASS_ROCKETTROOPER
+		|| in_camera || NPCInfo->behaviorState == BS_CINEMATIC || (NPCInfo->scriptFlags & SCF_NO_ACROBATICS)
+		|| NPC->waterlevel >= 2 || (client->ps.eFlags & EF_FORCE_GRIPPED)
+		|| !TIMER_Done(NPC, "jediFallSave") || !TIMER_Done(NPC, "forceJumpChasing"))
+	{
+		return qfalse;
+	}
+	if (mode == 1 && (PM_InKnockDown(&client->ps) || (client->ps.pm_flags & PMF_TIME_KNOCKBACK)))
+	{
+		//pushed or thrown off: no save, pit kills stay
+		return qfalse;
+	}
+	if (!Jedi_FallSaveDeadlyFall())
+	{
+		return qfalse;
+	}
+
+	vec3_t dest;
+	int goal = ENTITYNUM_NONE;
+	const int n = NPC->s.number;
+	const gentity_t* enemy = NPC->enemy;
+	if (enemy && enemy->client && enemy->health > 0 && enemy->client->ps.groundEntityNum != ENTITYNUM_NONE
+		&& enemy->currentOrigin[2] > NPC->currentOrigin[2] - 64.0f
+		&& DistanceSquared(enemy->currentOrigin, NPC->currentOrigin) < 1024.0f * 1024.0f)
+	{
+		//leap at the enemy
+		VectorCopy(enemy->currentOrigin, dest);
+		goal = enemy->s.number;
+	}
+	else if (s_jediLastGroundTime[n] > 0 && s_jediLastGroundTime[n] <= level.time && level.time - s_jediLastGroundTime[n] < 5000
+		&& DistanceSquared(s_jediLastGround[n], NPC->currentOrigin) < 1024.0f * 1024.0f)
+	{
+		//back to where we stood, a little away from the edge if there is floor there
+		VectorCopy(s_jediLastGround[n], dest);
+		vec3_t back;
+		VectorSet(back, -client->ps.velocity[0], -client->ps.velocity[1], 0.0f);
+		if (VectorNormalize(back) > 0.0f)
+		{
+			vec3_t inside, below;
+			trace_t trace;
+			VectorMA(dest, 48.0f, back, inside);
+			VectorCopy(inside, below);
+			below[2] -= 64.0f;
+			gi.trace(&trace, inside, NPC->mins, NPC->maxs, below, NPC->s.number, NPC->clipmask, G2_NOCOLLIDE, 0);
+			if (!trace.startsolid && !trace.allsolid && trace.fraction < 1.0f && trace.plane.normal[2] > 0.7f)
+			{
+				VectorCopy(inside, dest);
+			}
+		}
+	}
+	else
+	{
+		return qfalse;
+	}
+
+	Jedi_Jump(dest, goal);
+	if (client->ps.pm_flags & PMF_TIME_KNOCKBACK)
+	{
+		client->ps.pm_flags &= ~PMF_TIME_KNOCKBACK;
+		client->ps.pm_time = 0;
+	}
+	NPC_SetAnim(NPC, SETANIM_BOTH, BOTH_FORCEJUMP1, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+	client->ps.forceJumpZStart = NPC->currentOrigin[2];
+	client->ps.pm_flags |= PMF_JUMPING;
+	client->ps.forcePowersActive |= 1 << FP_LEVITATION;
+	G_SoundOnEnt(NPC, CHAN_BODY, "sound/weapons/force/jump.mp3");
+	TIMER_Set(NPC, "jediFallSave", 10000);
+	TIMER_Set(NPC, "jumpChaseDebounce", Q_irand(2000, 3000));
+
+	vec3_t dir;
+	VectorSubtract(dest, NPC->currentOrigin, dir);
+	NPCInfo->desiredYaw = vectoyaw(dir);
+	ucmd.forwardmove = 0;
+	ucmd.rightmove = 0;
+	ucmd.upmove = 0;
+	VectorClear(client->ps.moveDir);
+	NPC_UpdateAngles(qtrue, qtrue);
+	return qtrue;
+}
+
 void NPC_BSJedi_Default()
 {
+	if (Jedi_CheckFallSave())
+	{
+		//falling to our death: force leap to safety (Warzone port)
+		return;
+	}
+
 	if (Jedi_InSpecialMove())
 	{
 		return;

@@ -2193,11 +2193,14 @@ SP pauses the world for the talk question only: the shop needs the game to answe
 #define SHOP_OD_TAB			1		// 0..SHOP_NUM_CATS - 1
 #define SHOP_OD_ROW			2		// 0..SHOP_ROWS - 1
 #define SHOP_ROWS			9
-#define SHOP_NUM_CATS		5
+#define SHOP_NUM_CATS		6
+#define SHOP_CAT_ITEMS		5		// the holdable items (2026-11-02)
 #define SHOP_CAT_SUPPLIES	4
 #define SHOP_MAX_ITEMS		256
 #define SHOP_ITEM_AMMO_ID	1000	// = SHOP_ITEM_AMMO / SHOP_ITEM_BACTA of the game
 #define SHOP_ITEM_BACTA_ID	1001
+#define SHOP_ITEM_HOLD_ID	1100	// + index: the holdable items (= SHOP_ITEM_HOLD of the game, in its table's order)
+#define SHOP_MAX_HOLD		16
 
 typedef struct
 {
@@ -2214,6 +2217,30 @@ static shopItem_t shopItems[SHOP_MAX_ITEMS];
 static int shopNumItems = -1; // -1 = the file was not read yet
 static int shopOpen = 0, shopTalkOpen = 0;
 static int shopCat = 0, shopPage = 0, shopHover = -1, shopTabHover = -1;
+// The holdable items of the Items tab (2026-11-02), in the order of the game's shopHoldables table (g_pazaak)
+#ifdef PZK_SP
+static const char* shopHoldNames[][2] = {
+	{ "Electrobinoculars", "gfx/hud/i_icon_zoom" },
+	{ "Light amp goggles", "gfx/hud/i_icon_goggles" },
+	{ "Seeker drone", "gfx/hud/i_icon_seeker" },
+	{ "Sentry gun", "gfx/hud/i_icon_sentrygun" }
+};
+#else
+static const char* shopHoldNames[][2] = {
+	{ "Seeker drone", "gfx/hud/i_icon_seeker" },
+	{ "Portable shield", "gfx/hud/i_icon_shieldwall" },
+	{ "Big bacta", "gfx/hud/i_icon_big_bacta" },
+	{ "Binoculars", "gfx/hud/i_icon_zoom" },
+	{ "Sentry gun", "gfx/hud/i_icon_sentrygun" },
+	{ "Jetpack", "gfx/hud/i_icon_jetpack" },
+	{ "Health dispenser", "gfx/hud/i_icon_health_disp" },
+	{ "Ammo dispenser", "gfx/hud/i_icon_ammo_disp" },
+	{ "E-Web", "gfx/hud/i_icon_eweb" },
+	{ "Cloak", "gfx/hud/i_icon_cloak" }
+};
+#endif
+#define SHOP_NUM_HOLD		((int)(sizeof(shopHoldNames) / sizeof(shopHoldNames[0])))
+static int shopHoldPrice[SHOP_MAX_HOLD], shopHoldCount[SHOP_MAX_HOLD], shopHoldMax[SHOP_MAX_HOLD];
 static int shopCredits = 0, shopAmmoPrice = 0, shopBactaPrice = 0;
 static unsigned int shopOwnedBits[8], shopEquipBits[8];
 static char shopMessage[128];
@@ -2224,7 +2251,7 @@ static char shopFileBuf[262144];
 
 static void Shop_SendCmd(const char* text);
 
-static const char* shopCatNames[SHOP_NUM_CATS] = { "Pistols", "Rifles", "Heavy", "Grenades", "Supplies" };
+static const char* shopCatNames[SHOP_NUM_CATS] = { "Pistols", "Rifles", "Heavy", "Grenades", "Supplies", "Items" };
 
 // The tab of a base weapon name of the file ("WP_BLASTER"...), -1 = not sold
 static int Shop_CatOf(const char* base)
@@ -2363,7 +2390,7 @@ static void Shop_ParseFile(const char* text)
 			}
 		}
 		item.cat = Shop_CatOf(base);
-		if (item.cat < 0 || variant >= 256 || shopNumItems >= SHOP_MAX_ITEMS - 2)
+		if (item.cat < 0 || variant >= 256 || shopNumItems >= SHOP_MAX_ITEMS - 2 - SHOP_NUM_HOLD)
 		{
 			continue;
 		}
@@ -2433,7 +2460,19 @@ static void Shop_LoadItems(void)
 	Q_strncpyz(it->name, "Medpac", sizeof(it->name));
 	Q_strncpyz(it->icon, "gfx/hud/i_icon_medkit", sizeof(it->icon));
 #endif
-}
+	// the holdable items (2026-11-02)
+	{
+		int h;
+		for (h = 0; h < SHOP_NUM_HOLD; h++)
+		{
+			it = &shopItems[shopNumItems++];
+			memset(it, 0, sizeof(*it));
+			it->id = SHOP_ITEM_HOLD_ID + h;
+			it->cat = SHOP_CAT_ITEMS;
+			Q_strncpyz(it->name, shopHoldNames[h][0], sizeof(it->name));
+			Q_strncpyz(it->icon, shopHoldNames[h][1], sizeof(it->icon));
+		}
+	}}
 
 static int Shop_CatCount(const int cat)
 {
@@ -2485,7 +2524,10 @@ static int Shop_ItemPrice(const shopItem_t* it)
 	{
 		return shopAmmoPrice;
 	}
-	if (it->id == SHOP_ITEM_BACTA_ID)
+	if (it->id >= SHOP_ITEM_HOLD_ID && it->id < SHOP_ITEM_HOLD_ID + SHOP_NUM_HOLD)
+	{
+		return shopHoldPrice[it->id - SHOP_ITEM_HOLD_ID];
+	}	if (it->id == SHOP_ITEM_BACTA_ID)
 	{
 		return shopBactaPrice;
 	}
@@ -2606,6 +2648,48 @@ static void Shop_TalkOpen(const char* text)
 	shopTalkOpen = 1;
 }
 
+// "price:count:max,..." of the holdable items, in the game's table order (2026-11-02)
+static void Shop_ReadHoldables(const char* s)
+{
+	int h;
+	for (h = 0; h < SHOP_NUM_HOLD; h++)
+	{
+		shopHoldPrice[h] = shopHoldCount[h] = 0;
+		shopHoldMax[h] = 1;
+		if (!s || !*s)
+		{
+			continue;
+		}
+		shopHoldPrice[h] = atoi(s);
+		while (*s && *s != ':' && *s != ',')
+		{
+			s++;
+		}
+		if (*s == ':')
+		{
+			s++;
+			shopHoldCount[h] = atoi(s);
+			while (*s && *s != ':' && *s != ',')
+			{
+				s++;
+			}
+		}
+		if (*s == ':')
+		{
+			s++;
+			shopHoldMax[h] = atoi(s);
+			while (*s && *s != ',')
+			{
+				s++;
+			}
+		}
+		if (*s == ',')
+		{
+			s++;
+		}
+	}
+}
+
 // The game's words: argv[0] = open / state / talk / close
 static void UI_Shop_Process(const int argc, const char** argv)
 {
@@ -2635,6 +2719,7 @@ static void UI_Shop_Process(const int argc, const char** argv)
 	shopAmmoPrice = argc > 4 ? atoi(argv[4]) : 0;
 	shopBactaPrice = argc > 5 ? atoi(argv[5]) : 0;
 	Q_strncpyz(shopMessage, argc > 6 ? argv[6] : "", sizeof(shopMessage));
+	Shop_ReadHoldables(argc > 7 ? argv[7] : ""); // the Items tab (2026-11-02)
 	if (!Q_stricmp(argv[0], "open"))
 	{
 		Shop_OpenMenu();
@@ -2701,6 +2786,23 @@ static void Shop_DrawRow(const int row, const float x, const float y, const floa
 	Shop_Text(x + 12 + (h - 4) * 2.0f, y + h * 0.5f - 8, it->name, white, 0.55f, 0);
 
 	price = Shop_ItemPrice(it);
+	if (it->id >= SHOP_ITEM_HOLD_ID && it->id < SHOP_ITEM_HOLD_ID + SHOP_NUM_HOLD)
+	{
+		// a holdable item (2026-11-02): how many he carries; full = he can't buy more
+		const int hi = it->id - SHOP_ITEM_HOLD_ID;
+		if (shopHoldCount[hi] >= shopHoldMax[hi])
+		{
+			status = shopHoldMax[hi] > 1 ? va("Full (%i)", shopHoldCount[hi]) : "Owned";
+			statusColor = grey;
+		}
+		else
+		{
+			status = shopHoldCount[hi] > 0 ? va("%i cr (have %i)", price, shopHoldCount[hi]) : va("%i cr", price);
+			statusColor = shopCredits >= price ? gold : red;
+		}
+		Shop_Text(x + w - 8, y + h * 0.5f - 8, status, statusColor, 0.55f, 2);
+		return;
+	}
 	if (it->id < SHOP_ITEM_AMMO_ID && it->cat != 3 && Shop_Bit(shopEquipBits, it->id))
 	{
 		status = "In use";
@@ -2762,7 +2864,7 @@ static qboolean UI_Shop_OwnerDraw(const int ownerDraw, const float x, const floa
 		if (id >= 0 && id < SHOP_NUM_CATS)
 		{
 			Shop_Fill(x, y, w, h, id == shopCat ? tabOn : id == shopTabHover ? tabHover : tabBg);
-			Shop_Text(x + w * 0.5f, y + h * 0.5f - 8, shopCatNames[id], id == shopCat ? gold : white, 0.6f, 1);
+			Shop_Text(x + w * 0.5f, y + h * 0.5f - 8, shopCatNames[id], id == shopCat ? gold : white, SHOP_NUM_CATS > 6 ? 0.5f : 0.6f, 1);
 		}
 		break;
 	case SHOP_OD_ROW:

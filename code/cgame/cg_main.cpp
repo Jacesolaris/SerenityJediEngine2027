@@ -432,6 +432,9 @@ vmCvar_t cg_smoothCamera;
 vmCvar_t cg_speedTrail;
 vmCvar_t cg_precacheWeaponVariants;
 vmCvar_t cg_saberLightRadius; // saber-only light (DH 2026-10-27): cg_saberLightRadius / cg_saberLightIntensity scale only lightsaber light, on top of r_dlightRadius / r_dlightIntensity
+vmCvar_t cg_lightningFxInterval; // force lightning bolt copies (DH 2026-11-02)
+vmCvar_t cg_lightningMarks; // force lightning scorch marks (DH 2026-11-02)
+vmCvar_t cg_lightningMarkInterval;
 vmCvar_t cg_saberLightIntensity;
 vmCvar_t cg_wheelSlowmo; // weapon / force wheel (cg_main.cpp): 1 = the game runs at a quarter speed while it is open
 vmCvar_t cg_wheelHold; // weapon / force wheel: 0 = a press opens it and it stays open (as MD), 1 = held open (old)
@@ -676,6 +679,9 @@ static cvarTable_t cvarTable[] = {
 	{ &cg_speedTrail, "cg_speedTrail", "0", CVAR_ARCHIVE },
 	{ &cg_precacheWeaponVariants, "cg_precacheWeaponVariants", "1", CVAR_ARCHIVE },
 	{ &cg_saberLightRadius, "cg_saberLightRadius", "0.703125", CVAR_ARCHIVE }, // saber light reach (1 = as before)
+	{ &cg_lightningFxInterval, "cg_lightningFxInterval", "50", CVAR_ARCHIVE }, // ms between new copies of the force lightning bolt effect (16 = as before)
+	{ &cg_lightningMarks, "cg_lightningMarks", "1", CVAR_ARCHIVE }, // force lightning scorch / burn marks that fade (0 = off)
+	{ &cg_lightningMarkInterval, "cg_lightningMarkInterval", "150", CVAR_ARCHIVE }, // ms between lightning marks per caster
 	{ &cg_saberLightIntensity, "cg_saberLightIntensity", "1.070312", CVAR_ARCHIVE }, // saber light strength (1 = as before)
 	{ &cg_wheelSlowmo, "cg_wheelSlowmo", "1", CVAR_ARCHIVE }, // weapon / force wheel: slow the game while it is open
 	{ &cg_wheelHold, "cg_wheelHold", "0", CVAR_ARCHIVE }, // weapon / force wheel: 0 stays open after a press, 1 held open

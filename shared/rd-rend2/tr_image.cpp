@@ -1273,52 +1273,45 @@ lighting range
 */
 static void R_LightScaleTexture(byte* in, const int inwidth, const int inheight, const qboolean only_gamma)
 {
-	if (only_gamma)
+	if (only_gamma && glConfig.deviceSupportsGamma)
 	{
-		if (!glConfig.deviceSupportsGamma)
-		{
-			int		i = 0, c = 0;
-			byte* p = nullptr;
-
-			p = in;
-
-			c = inwidth * inheight;
-			for (i = 0; i < c; i++, p += 4)
-			{
-				p[0] = s_gammatable[p[0]];
-				p[1] = s_gammatable[p[1]];
-				p[2] = s_gammatable[p[2]];
-			}
-		}
+		return;
 	}
-	else
-	{
-		int		i = 0, c = 0;
-		byte* p = nullptr;
 
-		p = in;
-
-		c = inwidth * inheight;
-
-		if (glConfig.deviceSupportsGamma)
+	// per pixel, so a run of rows per job on the render workers (Warzone port) - same result as one pass
+	R_ImageRows(inwidth, inheight, [&](const int y0, const int y1)
 		{
-			for (i = 0; i < c; i++, p += 4)
+			byte* p = in + y0 * inwidth * 4;
+			const int c = (y1 - y0) * inwidth;
+
+			if (only_gamma)
 			{
-				p[0] = s_intensitytable[p[0]];
-				p[1] = s_intensitytable[p[1]];
-				p[2] = s_intensitytable[p[2]];
+				for (int i = 0; i < c; i++, p += 4)
+				{
+					p[0] = s_gammatable[p[0]];
+					p[1] = s_gammatable[p[1]];
+					p[2] = s_gammatable[p[2]];
+				}
 			}
-		}
-		else
-		{
-			for (i = 0; i < c; i++, p += 4)
+			else if (glConfig.deviceSupportsGamma)
 			{
-				p[0] = s_gammatable[s_intensitytable[p[0]]];
-				p[1] = s_gammatable[s_intensitytable[p[1]]];
-				p[2] = s_gammatable[s_intensitytable[p[2]]];
+				for (int i = 0; i < c; i++, p += 4)
+				{
+					p[0] = s_intensitytable[p[0]];
+					p[1] = s_intensitytable[p[1]];
+					p[2] = s_intensitytable[p[2]];
+				}
 			}
-		}
-	}
+			else
+			{
+				for (int i = 0; i < c; i++, p += 4)
+				{
+					p[0] = s_gammatable[s_intensitytable[p[0]]];
+					p[1] = s_gammatable[s_intensitytable[p[1]]];
+					p[2] = s_gammatable[s_intensitytable[p[2]]];
+				}
+			}
+		});
 }
 
 /*
@@ -1331,10 +1324,7 @@ Proper linear filter
 */
 static void R_MipMap2(byte* in, const int inWidth, const int inheight)
 {
-	int			i = 0, j = 0, k = 0;
-	byte* outpix = nullptr;
 	int			inWidthMask = 0, inHeightMask = 0;
-	int			total = 0;
 	int			outWidth = 0, outHeight = 0;
 	unsigned* temp = nullptr;
 
@@ -1345,11 +1335,14 @@ static void R_MipMap2(byte* in, const int inWidth, const int inheight)
 	inWidthMask = inWidth - 1;
 	inHeightMask = inheight - 1;
 
-	for (i = 0; i < outHeight; i++) {
-		for (j = 0; j < outWidth; j++) {
-			outpix = (byte*)(temp + i * outWidth + j);
-			for (k = 0; k < 4; k++) {
-				total =
+	// output rows are independent: a run of rows per job on the render workers (Warzone port)
+	R_ImageRows(outWidth, outHeight, [&](const int i0, const int i1)
+		{
+	for (int i = i0; i < i1; i++) {
+		for (int j = 0; j < outWidth; j++) {
+			byte* outpix = (byte*)(temp + i * outWidth + j);
+			for (int k = 0; k < 4; k++) {
+				const int total =
 					1 * (&in[4 * (((i * 2 - 1) & inHeightMask) * inWidth + ((j * 2 - 1) & inWidthMask))])[k] +
 					2 * (&in[4 * (((i * 2 - 1) & inHeightMask) * inWidth + ((j * 2) & inWidthMask))])[k] +
 					2 * (&in[4 * (((i * 2 - 1) & inHeightMask) * inWidth + ((j * 2 + 1) & inWidthMask))])[k] +
@@ -1373,6 +1366,7 @@ static void R_MipMap2(byte* in, const int inWidth, const int inheight)
 			}
 		}
 	}
+		});
 
 	Com_Memcpy(in, temp, outWidth * outHeight * 4);
 	Hunk_FreeTempMemory(temp);
@@ -1380,7 +1374,6 @@ static void R_MipMap2(byte* in, const int inWidth, const int inheight)
 
 static void R_MipMapsRGB(byte* in, int inWidth, int inHeight)
 {
-	int			i = 0, j = 0, k = 0;
 	int			outWidth = 0, outHeight = 0;
 	byte* temp = nullptr;
 
@@ -1388,12 +1381,15 @@ static void R_MipMapsRGB(byte* in, int inWidth, int inHeight)
 	outHeight = inHeight >> 1;
 	temp = (byte*)Hunk_AllocateTempMemory(outWidth * outHeight * 4);
 
-	for (i = 0; i < outHeight; i++) {
+	// output rows are independent: a run of rows per job on the render workers (Warzone port)
+	R_ImageRows(outWidth, outHeight, [&](const int i0, const int i1)
+		{
+	for (int i = i0; i < i1; i++) {
 		byte* outbyte = temp + (i * outWidth) * 4;
 		byte* inbyte1 = in + (i * 2 * inWidth) * 4;
 		byte* inbyte2 = in + ((i * 2 + 1) * inWidth) * 4;
-		for (j = 0; j < outWidth; j++) {
-			for (k = 0; k < 3; k++) {
+		for (int j = 0; j < outWidth; j++) {
+			for (int k = 0; k < 3; k++) {
 				float total = 0.0f, current = 0.0f;
 
 				current = ByteToFloat(inbyte1[0]); total = sRGBtoRGB((double)current);
@@ -1414,6 +1410,7 @@ static void R_MipMapsRGB(byte* in, int inWidth, int inHeight)
 			inbyte2 += 5;
 		}
 	}
+		});
 
 	Com_Memcpy(in, temp, outWidth * outHeight * 4);
 	Hunk_FreeTempMemory(temp);
@@ -3488,6 +3485,11 @@ static void R_CreateBuiltinImages(void)
 		glowImageWidth = Q_max(1, glowImageWidth >> 1);
 		glowImageHeight = Q_max(1, glowImageHeight >> 1);
 	}
+
+	// r_sharpen (Warzone port): always made so the cvar can be switched without vid_restart
+	tr.sharpenImage = R_CreateImage(
+		"*sharpen", NULL, width, height, IMGTYPE_COLORALPHA,
+		IMGFLAG_NO_COMPRESSION | IMGFLAG_CLAMPTOEDGE, GL_RGBA8);
 
 	if (r_drawSunRays->integer)
 		tr.sunRaysImage = R_CreateImage(

@@ -46,6 +46,11 @@ uniform vec4 u_GrassParams;
 // started, flat direction + type (0 push, 1 pull, 2 repulse) + range; params x = how many, y = r_grassForceWave
 uniform vec4 u_GrassWaves[8];
 uniform vec4 u_GrassWaveParams;
+// Grass cutting (2026-11-02, tr_grasscut.h): u_GrassWaveParams.z = 1: cut grass is stubble, 2: draw only the clippings
+// (the cut tops falling over and lying). Grid texel: cut height, seconds of the cut, cell x, cell y (4-unit cells,
+// 512 wide, it wraps). x = now (seconds), y = r_grassCutRegrow, z = seconds the clippings lie, w = ember glow on
+uniform sampler2D u_GrassCutMap;
+uniform vec4 u_GrassCutParams;
 
 #if defined(VELOCITY_PASS)
 layout(std140) uniform TemporalInfo
@@ -62,6 +67,7 @@ out vec4 var_prevPosition;
 out vec2 var_TexCoords;
 out float var_Alpha;
 out vec3 var_Color;
+out vec3 var_Ember;
 
 #if defined(FX_SPRITE)
 out float var_Effectpos;
@@ -71,7 +77,34 @@ out float var_Effectpos;
 out vec3 var_WSPosition;
 #endif
 
-vec3 CalculateVertexOffset( in int vertex_id, in float sprite_time, in float fadeScale)
+#if !defined(FACE_UP) && !defined(FX_SPRITE)
+// Same numbers as tr_grasscut.h R_GrassCutBlade: keep = the part of the blade that stands now, keepCut = what the cut
+// left, age = seconds since the cut. false: not cut.
+bool GrassCut(in float height, out float keep, out float keepCut, out float age)
+{
+	keep = 1.0;
+	keepCut = 1.0;
+	age = 0.0;
+	if (u_GrassWaveParams.z < 0.5 || height <= 0.0)
+		return false;
+	vec2 cell = floor(attr_Position.xy / 4.0);
+	vec4 c = texelFetch(u_GrassCutMap, ivec2(mod(cell, 512.0)), 0);
+	if (c.y <= 0.0 || c.z != cell.x || c.w != cell.y)
+		return false;
+	float a = u_GrassCutParams.x - c.y;
+	if (a < -0.25 || a >= u_GrassCutParams.y)
+		return false;
+	float k = (c.x - attr_Position.z) / height;
+	if (k >= 0.92 || k < -0.25)
+		return false;
+	keepCut = max(k, 0.12);
+	keep = mix(keepCut, 1.0, smoothstep(0.75 * u_GrassCutParams.y, u_GrassCutParams.y, a));
+	age = max(a, 0.0);
+	return true;
+}
+#endif
+
+vec3 CalculateVertexOffset( in int vertex_id, in float sprite_time, in float fadeScale, in float keep)
 {
 	float width = attr_Position2.x;
 	float height = attr_Position2.y;
@@ -126,6 +159,7 @@ vec3 CalculateVertexOffset( in int vertex_id, in float sprite_time, in float fad
 #endif
 
 #if !defined(FACE_UP) && !defined(FX_SPRITE)
+	vec2 standXY = offset.xy;
 	float isLowerVertex = float(offset.z == 0.0);
 	offset.xy += mix(skew, vec2(0.0), isLowerVertex);
 	float angle = (attr_Position.x + attr_Position.y) * 0.02 + (sprite_time * 0.0015);
@@ -209,12 +243,17 @@ vec3 CalculateVertexOffset( in int vertex_id, in float sprite_time, in float fad
 		offset.xy += bend * (height * 1.2 * u_GrassWaveParams.y);
 		offset.z = max(offset.z - down * height * 0.7 * u_GrassWaveParams.y, height * 0.1);
 	}
+
+	// cut: stubble up to the cut (the bends shrink with it)
+	offset.xy = standXY + (offset.xy - standXY) * keep;
+	offset.z *= keep;
 #endif
 	return offset;
 }
 
 void main()
 {
+	var_Ember = vec3(0.0);
 	vec3 V = u_ViewOrigin - attr_Position.xyz;
 	float distanceToCamera = length(V);
 	float fadeScale = smoothstep(u_FadeStartDistance, u_FadeEndDistance,
@@ -228,7 +267,62 @@ void main()
 
 	float sprite_time = u_frameTime * 1000.0;
 	int vertex_id = gl_VertexID % 4;
-	vec3 offset = CalculateVertexOffset(vertex_id, sprite_time, fadeScale);
+
+	float keep = 1.0, keepCut = 1.0, cutAge = 0.0;
+	bool cut = false;
+#if !defined(FACE_UP) && !defined(FX_SPRITE)
+	cut = GrassCut(attr_Position2.y, keep, keepCut, cutAge);
+#endif
+	if (u_GrassWaveParams.z > 1.5)
+	{
+		// the clippings pass: the cut top of each cut blade falls over and lies, everything else is left out
+#if !defined(FACE_UP) && !defined(FX_SPRITE)
+		float debris = u_GrassCutParams.z;
+		if (!cut || cutAge >= debris + 0.45)
+		{
+			gl_Position = vec4(0.0);
+			return;
+		}
+		int bottomId = (vertex_id == 0 || vertex_id == 1) ? 0 : 3;
+		vec3 offB = CalculateVertexOffset(bottomId, sprite_time, fadeScale, 1.0);
+		vec3 offT = CalculateVertexOffset(bottomId == 0 ? 1 : 2, sprite_time, fadeScale, 1.0);
+		vec3 cutP = mix(offB, offT, keepCut);
+		float len = length(offT - cutP);
+		float ra = attr_Position.x * 12.9898 + attr_Position.y * 78.233;
+		vec2 d = vec2(cos(ra), sin(ra));
+		float f = cutAge / 0.45;
+		f = f >= 1.0 ? 1.0 : f * f;
+		vec3 lyingSide = vec3(-d.y, d.x, 0.0) * length(offB.xy) * (bottomId == 0 ? 1.0 : -1.0);
+		vec3 lyingB = vec3(d * 2.0, 0.6) + lyingSide;
+		vec3 lyingT = lyingB + vec3(d * len, 0.0);
+		vec3 clipOffset = (vertex_id == 1 || vertex_id == 2) ? mix(offT, lyingT, f) : mix(cutP, lyingB, f);
+		vec4 clipPos = vec4(attr_Position.xyz + clipOffset, 1.0);
+		gl_Position = u_viewProjectionMatrix * clipPos;
+#if defined(USE_FOG)
+		var_WSPosition = clipPos.xyz;
+#endif
+#if defined(VELOCITY_PASS)
+		var_Position = gl_Position;
+		var_prevPosition = gl_Position;
+#endif
+		const vec2 clipTexcoords[] = vec2[](vec2(1.0, 1.0), vec2(1.0, 0.0), vec2(0.0, 0.0), vec2(0.0, 1.0));
+		var_TexCoords = clipTexcoords[vertex_id];
+		var_Color = attr_Color;
+		float fadeStart = debris * 0.5;
+		float clipAlpha = cutAge <= fadeStart ? 1.0 : 1.0 - (cutAge - fadeStart) / (debris - fadeStart + 0.45);
+		var_Alpha = (1.0 - fadeScale) * clamp(clipAlpha, 0.0, 1.0);
+#else
+		gl_Position = vec4(0.0);
+#endif
+		return;
+	}
+	if (cut && u_GrassCutParams.w > 0.5 && cutAge < 2.0 && (vertex_id == 1 || vertex_id == 2))
+	{	// the cut tips glow like embers
+		float e = 1.0 - cutAge / 2.0;
+		var_Ember = vec3(1.0, 0.35, 0.05) * (1.5 * e * e);
+	}
+
+	vec3 offset = CalculateVertexOffset(vertex_id, sprite_time, fadeScale, keep);
 
 	vec4 worldPos = vec4(attr_Position.xyz + offset, 1.0);
 	gl_Position = u_viewProjectionMatrix * worldPos;
@@ -239,7 +333,7 @@ void main()
 #if defined(VELOCITY_PASS)
 	var_Position = gl_Position;
 	sprite_time = u_previousFrameTime * 1000.0;
-	offset = CalculateVertexOffset(vertex_id, sprite_time, fadeScale);
+	offset = CalculateVertexOffset(vertex_id, sprite_time, fadeScale, keep);
 	worldPos = vec4(attr_Position.xyz + offset, 1.0);
 	var_prevPosition = u_previousViewProjectionMatrix * worldPos;
 #endif
@@ -273,6 +367,7 @@ in vec4 var_prevPosition;
 
 in vec2 var_TexCoords;
 in vec3 var_Color;
+in vec3 var_Ember;
 in float var_Alpha;
 
 #if defined(FX_SPRITE)
@@ -472,6 +567,8 @@ void main()
 	}
 #endif
 
+	out_Color.rgb += var_Ember * out_Color.a;
+
 #if defined(USE_FOG)
 	Fog fog = u_Fogs[u_FogIndex];
 	vec4 fogColorOpacity = CalcFog(u_ViewOrigin, var_WSPosition, fog);
@@ -500,7 +597,7 @@ void main()
 
 	out_Color = vec4(motionVector, 0.0, 1.0);
 #else
-	out_Glow = vec4(0.0);
+	out_Glow = vec4(var_Ember * out_Color.a, 0.0);
 #endif
 	
 }

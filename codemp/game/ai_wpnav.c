@@ -3808,6 +3808,8 @@ static int AG_SpawnFlagFor(const gentity_t* spawn)
 	return WPFLAG_SPAWN_NEUTRAL;
 }
 
+static qboolean agSeedNav = qfalse; // (G_WP_AutoGridServer: seeds from the SP nav graph and the NPC spawners too)
+
 static void AG_AutoGrid(const gentity_t* pl, const float spacingArg, const qboolean force)
 {
 	vmCvar_t mapname;
@@ -3858,6 +3860,27 @@ static void AG_AutoGrid(const gentity_t* pl, const float spacingArg, const qbool
 		if (g_entities[i].inuse && g_entities[i].s.eType == ET_ITEM)
 		{
 			AG_SeedNode(g_entities[i].r.currentOrigin, spacing);
+		}
+	}
+	if (agSeedNav)
+	{
+		// (wp_autogrid from the server console: also the SP nav graph's points and the NPC spawners, for the SP campaign maps
+		// whose start / items give no floor or sit behind doors shut at map load; DH 2026-11-02)
+		const int numNav = trap->Nav_GetNumNodes();
+		for (int i = 0; i < numNav; i++)
+		{
+			vec3_t org;
+			if (trap->Nav_GetNodePosition(i, org))
+			{
+				AG_SeedNode(org, spacing);
+			}
+		}
+		for (int i = MAX_CLIENTS; i < level.num_entities; i++)
+		{
+			if (g_entities[i].inuse && g_entities[i].classname && !Q_stricmpn(g_entities[i].classname, "NPC_", 4))
+			{
+				AG_SeedNode(g_entities[i].r.currentOrigin, spacing);
+			}
 		}
 	}
 	if (!agNumNodes)
@@ -3956,6 +3979,15 @@ static void AG_AutoGrid(const gentity_t* pl, const float spacingArg, const qbool
 		"spacing %g, %i ms - %s\n", mapname.string, agNumNodes, numOrder, gWPNum, numSpawns, spacing,
 		trap->Milliseconds() - startTime, saved ? "saved" : "NOT saved");
 	(void)pl;
+}
+
+// SJE: bot_wp_autogrid from the server console (wp_autogrid, g_svcmds.c): a dedicated server has no player to send the
+// client command, and AG_AutoGrid needs none (DH 2026-11-02: the bot routes of the campaign maps)
+void G_WP_AutoGridServer(const float spacing, const qboolean force)
+{
+	agSeedNav = qtrue;
+	AG_AutoGrid(NULL, spacing, force);
+	agSeedNav = qfalse;
 }
 
 int AcceptBotCommand(const char* cmd, const gentity_t* pl)

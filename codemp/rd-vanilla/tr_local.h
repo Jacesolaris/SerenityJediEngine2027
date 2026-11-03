@@ -482,6 +482,9 @@ using shader_t = struct shader_s {
 	// True if this shader has a stage with glow in it (just an optimization).
 	bool hasGlow;
 
+	// grass cutting: a yavin plant model shader (rd-common tr_grasscut_plant.h)
+	bool grassCutPlant;
+
 	shader_s* remappedShader;                  // current shader this one is remapped too
 	shader_s* next;
 };

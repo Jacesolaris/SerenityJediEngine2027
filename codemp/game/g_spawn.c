@@ -1921,6 +1921,101 @@ G_SpawnEntitiesFromString
 Parses textual entity definitions out of an entstring and spawns gentities.
 ==============
 */
+/*
+-------------------------
+Missions (GT_SINGLE_PLAYER), DH 2026-11-02
+
+Extra entities: ext_data/mission_ents/<map>.ent adds entities to a campaign map in a mission (the valley duel waves,
+...), written like a BSP entity string ({ "key" "value" ... }). SP never reads it (its override is maps/<map>.ent).
+
+Force puzzles: a force push / pull puzzle object (a force-activated func_door, a func_static with F_PUSH / F_PULL) can
+also be used with the Use key by any player, as if pushed or pulled (TryUse calls its use function, as the push does),
+so a group nobody picked push or pull for is not stuck.
+-------------------------
+*/
+#define MISSION_ENTS_MAXSIZE	65536
+
+static void G_MissionSpawnExtraEntities(void)
+{
+	static char buf[MISSION_ENTS_MAXSIZE];
+	char mapname[MAX_QPATH], path[MAX_QPATH];
+	fileHandle_t f = 0;
+	int count = 0;
+
+	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+	Com_sprintf(path, sizeof path, "ext_data/mission_ents/%s.ent", mapname);
+	const int len = trap->FS_Open(path, &f, FS_READ);
+	if (!f)
+	{
+		return;
+	}
+	if (len <= 0 || len >= (int)sizeof buf)
+	{
+		trap->FS_Close(f);
+		Com_Printf(S_COLOR_YELLOW "Missions: %s is empty or too big\n", path);
+		return;
+	}
+	trap->FS_Read(buf, len, f);
+	buf[len] = 0;
+	trap->FS_Close(f);
+
+	const char* p = buf;
+	while (1)
+	{
+		const char* token = COM_Parse(&p);
+		if (!token[0])
+		{
+			break;
+		}
+		if (token[0] != '{')
+		{
+			Com_Printf(S_COLOR_YELLOW "Missions: %s: { expected, found %s\n", path, token);
+			break;
+		}
+		level.numSpawnVars = 0;
+		level.numSpawnVarChars = 0;
+		while (1)
+		{
+			char key[MAX_TOKEN_CHARS];
+			token = COM_Parse(&p);
+			if (!token[0] || token[0] == '}')
+			{
+				break;
+			}
+			Q_strncpyz(key, token, sizeof key);
+			token = COM_Parse(&p);
+			if (!token[0] || level.numSpawnVars >= MAX_SPAWN_VARS)
+			{
+				Com_Printf(S_COLOR_YELLOW "Missions: %s: bad entity (key %s)\n", path, key);
+				return;
+			}
+			level.spawnVars[level.numSpawnVars][0] = G_AddSpawnVarToken(key);
+			level.spawnVars[level.numSpawnVars][1] = G_AddSpawnVarToken(token);
+			level.numSpawnVars++;
+		}
+		G_SpawnGEntityFromSpawnVars(qfalse);
+		count++;
+	}
+	Com_Printf("Missions: %i extra entities from %s\n", count, path);
+}
+
+static void G_MissionForceUsePuzzles(void)
+{
+	for (int i = MAX_CLIENTS; i < level.num_entities; i++)
+	{
+		gentity_t* ent = &g_entities[i];
+		if (!ent->inuse || !ent->classname || !ent->use)
+		{
+			continue;
+		}
+		if (!Q_stricmp(ent->classname, "func_door") && ent->spawnflags & 2 /*FORCE_ACTIVATE*/
+			|| !Q_stricmp(ent->classname, "func_static") && ent->spawnflags & (1 | 2) /*F_PUSH, F_PULL*/)
+		{
+			ent->r.svFlags |= SVF_PLAYER_USABLE;
+		}
+	}
+}
+
 void G_SpawnEntitiesFromString(const qboolean inSubBSP)
 {
 	// allow calls to G_Spawn*()
@@ -1952,6 +2047,14 @@ void G_SpawnEntitiesFromString(const qboolean inSubBSP)
 	while (G_ParseSpawnVars(inSubBSP))
 	{
 		G_SpawnGEntityFromSpawnVars(inSubBSP);
+	}
+
+	if (!inSubBSP && level.gametype == GT_SINGLE_PLAYER)
+	{
+		extern void G_MissionCutsceneLevelStart(void);
+		G_MissionCutsceneLevelStart(); // (a replay keeps the map's first cutscene from playing again: g_ICARUScb.c)
+		G_MissionSpawnExtraEntities();
+		G_MissionForceUsePuzzles();
 	}
 
 	if (g_entities[ENTITYNUM_WORLD].behaviorSet[BSET_SPAWN] && g_entities[ENTITYNUM_WORLD].behaviorSet[BSET_SPAWN][0])

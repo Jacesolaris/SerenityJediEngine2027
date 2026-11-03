@@ -325,6 +325,13 @@ void Wampa_Attack(const float distance, const qboolean do_charge)
 			NPCS.NPC->client->ps.velocity[2] = 150;
 			NPCS.NPC->client->ps.groundEntityNum = ENTITYNUM_NONE;
 		}
+		else if (distance < 100 && g_monsterGrab.integer && !NPCS.NPC->client->monsterHold)
+		{
+			//grab (SP; NPC_BSWampa_Default takes him at the end of the swipe)
+			NPC_SetAnim(NPCS.NPC, SETANIM_BOTH, BOTH_HOLD_START, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+			NPCS.NPC->client->ps.legsTimer += 200;
+			TIMER_Set(NPCS.NPC, "attack_dmg", 250);
+		}
 		else
 		{
 			//backhand
@@ -474,12 +481,264 @@ void Wampa_Combat(void)
 
 /*
 -------------------------
+The wampa NPC grabs, carries and drops (SP AI_Wampa.cpp Wampa_TryGrab / Wampa_DropVictim / Wampa_CheckDropVictim,
+DH 2026-11-03)
+
+Close to its enemy it may swipe to grab (Wampa_Attack, BOTH_HOLD_START); at the end of the swipe the enemy, if within
+64 of its right hand and grabbable (no droids, machines, vehicles, rancors), is held: MP's hold of the wampa / rancor
+players further down (EF2_HELD_BY_MONSTER + lookTarget; G_HeldByMonsterPlayer puts him in its hand, a held saber user
+can slash at it). Otherwise he is smacked away and knocked down. Holding someone it sniffs a player the first time,
+then mauls him now and then (25-40, a kill rips a limb off), sniffs a corpse for a while and drops it. Any hit makes it
+drop him, where there is room for him. g_monsterGrab 0: no grab.
+-------------------------
+*/
+static qboolean G_MonsterCanGrab(const gentity_t* self, const gentity_t* targ);
+static gentity_t* G_MonsterVictim(const gentity_t* self);
+static void G_MonsterTakeVictim(gentity_t* self, gentity_t* victim);
+static void G_MonsterBoltOrg(gentity_t* self, const char* boltName, vec3_t out);
+
+// SP Wampa_DropVictim
+static void Wampa_DropVictim(gentity_t* self)
+{
+	gentity_t* vic = G_MonsterVictim(self);
+
+	TIMER_Set(self, "attacking", -level.time);
+	G_MonsterReleaseVictim(self, qtrue); // (the drop anim, and BOTH_RELEASED on a living victim)
+	if (vic && vic->health <= 0)
+	{
+		if (self->enemy == vic)
+		{
+			self->enemy = NULL;
+		}
+		vic->clipmask &= ~CONTENTS_BODY; // (the corpse can be walked through)
+	}
+	self->client->monsterDropTime = 0;
+}
+
+// SP Wampa_CheckDropVictim: drop him only where there is room for him (else turn a bit and try again; after 2 seconds
+// he is dropped anyway, the wampa's own body is left out of the test)
+static qboolean Wampa_CheckDropVictim(gentity_t* self)
+{
+	gentity_t* vic = G_MonsterVictim(self);
+	trace_t trace;
+	vec3_t mins, maxs, start, end;
+
+	if (!vic)
+	{
+		G_MonsterReleaseVictim(self, qfalse);
+		self->client->monsterDropTime = 0;
+		return qtrue;
+	}
+	VectorSet(mins, vic->r.mins[0] - 1, vic->r.mins[1] - 1, 0);
+	VectorSet(maxs, vic->r.maxs[0] + 1, vic->r.maxs[1] + 1, 1);
+	VectorSet(start, vic->r.currentOrigin[0], vic->r.currentOrigin[1], vic->r.absmin[2]);
+	VectorSet(end, vic->r.currentOrigin[0], vic->r.currentOrigin[1], vic->r.absmax[2] - 1);
+	trap->UnlinkEntity((sharedEntity_t*)self);
+	trap->Trace(&trace, start, mins, maxs, end, vic->s.number, vic->clipmask, qfalse, 0, 0);
+	trap->LinkEntity((sharedEntity_t*)self);
+
+	if (!self->client->monsterDropTime)
+	{
+		self->client->monsterDropTime = level.time;
+	}
+	if (!trace.allsolid && !trace.startsolid && trace.fraction >= 1.0f || level.time - self->client->monsterDropTime > 2000)
+	{
+		Wampa_DropVictim(self);
+		return qtrue;
+	}
+	// victim stuck in a wall: turn
+	if (self->NPC)
+	{
+		self->NPC->desiredYaw += Q_irand(-30, 30);
+		self->NPC->lockedDesiredYaw = self->NPC->desiredYaw;
+	}
+	return qfalse;
+}
+
+// SP Wampa_TryGrab, at the end of BOTH_HOLD_START
+static qboolean Wampa_TryGrab(void)
+{
+	gentity_t* enemy = NPCS.NPC->enemy;
+	vec3_t hand;
+
+	if (!enemy || !enemy->client || enemy->health <= 0)
+	{
+		return qfalse;
+	}
+	G_MonsterBoltOrg(NPCS.NPC, "*r_hand", hand);
+	const float enemyDist = Distance(hand, enemy->r.currentOrigin);
+
+	if (enemyDist <= 64.0f && !NPCS.NPC->client->monsterHold && G_MonsterCanGrab(NPCS.NPC, enemy))
+	{
+		//grab
+		G_MonsterTakeVictim(NPCS.NPC, enemy);
+		NPCS.NPC->client->monsterDropTime = 0;
+		//wait to attack
+		TIMER_Set(NPCS.NPC, "attacking", NPCS.NPC->client->ps.legsTimer + Q_irand(500, 2500));
+		NPC_SetAnim(enemy, SETANIM_BOTH, BOTH_GRABBED, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+		NPC_SetAnim(NPCS.NPC, SETANIM_BOTH, BOTH_HOLD_END, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+		TIMER_Set(NPCS.NPC, "takingPain", -level.time);
+		return qtrue;
+	}
+	if (enemyDist < 128.0f)
+	{
+		//smack
+		vec3_t pushDir, angs;
+		G_Sound(enemy, CHAN_AUTO, G_SoundIndex("sound/chars/rancor/swipehit.wav"));
+		//actually push the enemy
+		VectorCopy(NPCS.NPC->client->ps.viewangles, angs);
+		angs[YAW] += flrand(25, 50);
+		angs[PITCH] = flrand(-25, -15);
+		AngleVectors(angs, pushDir, NULL, NULL);
+		if (enemy->client->NPC_class != CLASS_RANCOR
+			&& enemy->client->NPC_class != CLASS_ATST
+			&& !(enemy->flags & FL_NO_KNOCKBACK))
+		{
+			G_Throw(enemy, pushDir, Q_irand(30, 70));
+			if (enemy->health > 0)
+			{
+				//do pain on enemy
+				G_Knockdown(enemy, NPCS.NPC, pushDir, 300, qtrue);
+			}
+		}
+	}
+	return qfalse;
+}
+
+// SP NPC_BSWampa_Default, the grab and hold part: qtrue = it is busy grabbing / holding
+static qboolean Wampa_GrabThink(void)
+{
+	gentity_t* self = NPCS.NPC;
+	gclient_t* cl = self->client;
+
+	if (cl->ps.legsAnim == BOTH_HOLD_START)
+	{
+		NPC_FaceEnemy(qtrue);
+		if (cl->ps.legsTimer < 200)
+		{
+			//see if he's there to grab
+			if (!Wampa_TryGrab())
+			{
+				NPC_SetAnim(self, SETANIM_BOTH, BOTH_HOLD_MISS, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+			}
+		}
+		return qtrue;
+	}
+
+	if (!cl->monsterHold)
+	{
+		return qfalse;
+	}
+	gentity_t* vic = G_MonsterVictim(self);
+	if (!vic)
+	{
+		//wtf?
+		G_MonsterReleaseVictim(self, qfalse);
+		cl->monsterDropTime = 0;
+		return qfalse;
+	}
+
+	if (cl->ps.legsAnim == BOTH_HOLD_DROP)
+	{
+		if (cl->ps.legsTimer < BG_AnimLength(self->localAnimIndex, (animNumber_t)cl->ps.legsAnim) - 500)
+		{
+			//at least half a second into the anim
+			if (Wampa_CheckDropVictim(self))
+			{
+				TIMER_Set(self, "attacking", 1000 + Q_irand(500, 1000) * (3 - g_npcspskill.integer));
+			}
+		}
+	}
+	else if (!TIMER_Done(self, "takingPain"))
+	{
+		Wampa_CheckDropVictim(self);
+	}
+	else if (vic->health <= 0)
+	{
+		if (TIMER_Done(self, "sniffCorpse"))
+		{
+			Wampa_CheckDropVictim(self);
+		}
+	}
+	else if (self->useDebounceTime >= level.time)
+	{
+		//just sniffing the guy
+		if (self->useDebounceTime <= level.time + 100 && cl->ps.legsAnim != BOTH_HOLD_DROP)
+		{
+			//just about done, drop him
+			NPC_SetAnim(self, SETANIM_BOTH, BOTH_HOLD_DROP, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+			TIMER_Set(self, "attacking", cl->ps.legsTimer + 500);
+		}
+	}
+	else if (!self->useDebounceTime && vic->s.number < MAX_CLIENTS)
+	{
+		//first time I pick the player, just sniff them
+		if (TIMER_Done(self, "attacking"))
+		{
+			NPC_SetAnim(self, SETANIM_BOTH, BOTH_HOLD_SNIFF, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+			self->useDebounceTime = level.time + cl->ps.legsTimer + Q_irand(500, 2000);
+		}
+	}
+	else
+	{
+		if (TIMER_Done(self, "attacking"))
+		{
+			//ready to attack
+			NPC_SetAnim(self, SETANIM_BOTH, BOTH_HOLD_ATTACK, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+			TIMER_Set(self, "grabAttackDamage", 1400);
+			TIMER_Set(self, "attacking", cl->ps.legsTimer + Q_irand(3000, 10000));
+		}
+
+		if (cl->ps.legsAnim == BOTH_HOLD_ATTACK && cl->ps.legsTimer > 0)
+		{
+			if (TIMER_Done2(self, "grabAttackDamage", qtrue))
+			{
+				G_Sound(vic, CHAN_AUTO, G_SoundIndex("sound/chars/rancor/swipehit.wav"));
+				G_Damage(vic, self, self, vec3_origin, vic->r.currentOrigin, Q_irand(25, 40),
+					DAMAGE_NO_KNOCKBACK | DAMAGE_NO_ARMOR, MOD_MELEE);
+				if (vic->health <= 0)
+				{
+					//killed them, rip something off
+					G_Dismember(vic, self, vic->r.currentOrigin, Q_irand(G2_MODELPART_LARM, G2_MODELPART_RLEG));
+					TIMER_Set(self, "sniffCorpse", Q_irand(2000, 5000));
+				}
+				else
+				{
+					NPC_SetAnim(vic, SETANIM_BOTH, BOTH_HANG_PAIN, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+				}
+			}
+		}
+	}
+
+	if (cl->monsterHold && cl->ps.legsTimer <= 0)
+	{
+		// nothing else playing: it holds him up (SP BOTH_HOLD_IDLE)
+		NPC_SetAnim(self, SETANIM_BOTH, BOTH_HOLD_IDLE, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+		if (cl->ps.legsTimer < 200)
+		{
+			cl->ps.legsTimer = cl->ps.torsoTimer = 200;
+		}
+	}
+	NPC_UpdateAngles(qtrue, qtrue);
+	return qtrue;
+}
+
+/*
+-------------------------
 NPC_Wampa_Pain
 -------------------------
 */
 void NPC_Wampa_Pain(gentity_t* self, gentity_t* attacker, const int damage)
 {
 	qboolean hitByWampa = qfalse;
+	if (self->client->monsterHold)
+	{
+		// hit while holding someone: drop him (SP)
+		NPC_SetAnim(self, SETANIM_BOTH, BOTH_STAND2TO1, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+		TIMER_Set(self, "takingPain", self->client->ps.legsTimer);
+		TIMER_Set(self, "attacking", -level.time);
+		return;
+	}
 	if (attacker && attacker->client && attacker->client->NPC_class == CLASS_WAMPA)
 	{
 		hitByWampa = qtrue;
@@ -569,6 +828,15 @@ void NPC_BSWampa_Default(void)
 	//	walk3_drag = walk5 - walk with drag
 	//	stand2 = hold victim
 	//	stand2to1 = drop victim
+	if (Wampa_GrabThink())
+	{
+		return; // (grabbing / holding someone, above)
+	}
+	if (NPCS.NPCInfo->localState == LSTATE_WAITING && TIMER_Done2(NPCS.NPC, "takingPain", qtrue))
+	{
+		//was not doing anything because we were taking pain, but pain is done now, so clear it...
+		NPCS.NPCInfo->localState = LSTATE_CLEAR;
+	}
 	if (!TIMER_Done(NPCS.NPC, "rageTime"))
 	{
 		//do nothing but roar first time we see an enemy
@@ -743,6 +1011,17 @@ int G_MonsterPlayerClass(const gentity_t* ent)
 	return ent->client->pers.botclass;
 }
 
+// a wampa / rancor player or bot, or the wampa NPC (which grabs the same way, NPC_BSWampa_Default; DH 2026-11-03)
+static int G_MonsterClassOf(const gentity_t* ent)
+{
+	if (ent && ent->inuse && ent->s.number >= MAX_CLIENTS && ent->NPC && ent->client
+		&& ent->client->NPC_class == CLASS_WAMPA)
+	{
+		return BCLASS_WAMPA;
+	}
+	return G_MonsterPlayerClass(ent);
+}
+
 // the SP rule (Wampa_TryGrab / Rancor_Swing): no droids, machines, vehicles or other rancors
 static qboolean G_MonsterCanGrab(const gentity_t* self, const gentity_t* targ)
 {
@@ -786,7 +1065,7 @@ static qboolean G_MonsterCanGrab(const gentity_t* self, const gentity_t* targ)
 	case CLASS_VEHICLE:
 		return qfalse;
 	case CLASS_WAMPA:
-		if (G_MonsterPlayerClass(self) == BCLASS_WAMPA)
+		if (G_MonsterClassOf(self) == BCLASS_WAMPA)
 		{
 			return qfalse;	// a wampa can't hang from a wampa's hand
 		}
@@ -813,7 +1092,7 @@ static qboolean G_MonsterCanGrab(const gentity_t* self, const gentity_t* targ)
 		case BCLASS_GALAKMECH:
 			return qfalse;
 		case BCLASS_WAMPA:
-			if (G_MonsterPlayerClass(self) == BCLASS_WAMPA)
+			if (G_MonsterClassOf(self) == BCLASS_WAMPA)
 			{
 				return qfalse;
 			}
@@ -973,7 +1252,7 @@ void G_MonsterReleaseVictim(gentity_t* self, const qboolean dropAnim)
 				VectorSet(vicAngles, 0, AngleNormalize180(cl->ps.viewangles[YAW] + 180.0f), 0);
 				SetClientViewAngle(victim, vicAngles);
 			}
-			if (G_MonsterPlayerClass(self) == BCLASS_WAMPA)
+			if (G_MonsterClassOf(self) == BCLASS_WAMPA)
 			{
 				NPC_SetAnim(victim, SETANIM_BOTH, BOTH_RELEASED, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 				victim->client->ps.legsTimer += 500;
@@ -995,7 +1274,7 @@ void G_MonsterReleaseVictim(gentity_t* self, const qboolean dropAnim)
 			victim->client->ps.torsoTimer = 0;
 		}
 	}
-	if (dropAnim && self->health > 0 && G_MonsterPlayerClass(self) == BCLASS_WAMPA)
+	if (dropAnim && self->health > 0 && G_MonsterClassOf(self) == BCLASS_WAMPA)
 	{
 		NPC_SetAnim(self, SETANIM_BOTH, BOTH_STAND2TO1, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 		cl->ps.weaponTime = cl->ps.legsTimer;
@@ -1549,11 +1828,15 @@ void G_MonsterPlayerThink(gentity_t* ent, usercmd_t* ucmd)
 // monster no longer holds him (EF2_HELD_BY_MONSTER cleared). Held by a wampa he may slash at it with his saber (SP).
 qboolean G_HeldByMonsterPlayer(gentity_t* ent, gentity_t* monster, usercmd_t* ucmd)
 {
-	if (!monster || monster->s.number >= MAX_CLIENTS)
+	// (also held by the wampa NPC, which grabs the same way; DH 2026-11-03)
+	const qboolean npcWampa = monster && monster->s.number >= MAX_CLIENTS && G_MonsterClassOf(monster) == BCLASS_WAMPA
+		? qtrue : qfalse;
+
+	if (!monster || monster->s.number >= MAX_CLIENTS && !npcWampa)
 	{
 		return qfalse;
 	}
-	const int monsterClass = G_MonsterPlayerClass(monster);
+	const int monsterClass = G_MonsterClassOf(monster);
 	if (monsterClass == BCLASS_NONE || monster->health <= 0 || G_MonsterVictim(monster) != ent)
 	{
 		ent->client->ps.eFlags2 &= ~EF2_HELD_BY_MONSTER;

@@ -1284,6 +1284,12 @@ int CTaskManager::Camera(CTask* task)
 	char* sVal = nullptr;
 	int memberNum = 0;
 
+	// Missions (GT_SINGLE_PLAYER, DH 2026-11-02): camera() commands go to the game's camera code through I_Set, as the
+	// rewritten scripts' set(ENABLE / MOVE / PAN / ...) do, so the Missions cutscene skip and its message run for them
+	// too (g_ICARUScb.c ICam_Enable). Roll, track, distance and path have no game side and stay as before. In the other
+	// game modes every camera() command stays as it was (the stubs).
+	const bool toGame = Cvar_VariableIntegerValue("g_gametype") == GT_SINGLE_PLAYER;
+
 	//Get the camera function type
 	ICARUS_VALIDATE(GetFloat(m_ownerID, block, memberNum, type));
 
@@ -1299,7 +1305,15 @@ int CTaskManager::Camera(CTask* task)
 		m_owner->GetInterface()->I_DPrintf(WL_DEBUG, "%4d camera( PAN, <%f %f %f>, <%f %f %f>, %f); [%d]", m_ownerID,
 			vector[0], vector[1], vector[2], vector2[0], vector2[1], vector2[2], fVal,
 			task->GetTimeStamp());
-		ie->I_CameraPan(vector, vector2, fVal);
+		if (toGame)
+		{
+			ie->I_Set(task->GetGUID(), m_ownerID, "PAN", va("< %f %f %f >, < %f %f %f >, %f", vector[0], vector[1],
+				vector[2], vector2[0], vector2[1], vector2[2], fVal));
+		}
+		else
+		{
+			ie->I_CameraPan(vector, vector2, fVal);
+		}
 		break;
 
 	case TYPE_ZOOM:
@@ -1309,7 +1323,14 @@ int CTaskManager::Camera(CTask* task)
 
 		m_owner->GetInterface()->I_DPrintf(WL_DEBUG, "%4d camera( ZOOM, %f, %f); [%d]", m_ownerID, fVal, fVal2,
 			task->GetTimeStamp());
-		ie->I_CameraZoom(fVal, fVal2);
+		if (toGame)
+		{
+			ie->I_Set(task->GetGUID(), m_ownerID, "ZOOM", va("%f, %f", fVal, fVal2));
+		}
+		else
+		{
+			ie->I_CameraZoom(fVal, fVal2);
+		}
 		break;
 
 	case TYPE_MOVE:
@@ -1319,7 +1340,14 @@ int CTaskManager::Camera(CTask* task)
 
 		m_owner->GetInterface()->I_DPrintf(WL_DEBUG, "%4d camera( MOVE, <%f %f %f>, %f); [%d]", m_ownerID, vector[0],
 			vector[1], vector[2], fVal, task->GetTimeStamp());
-		ie->I_CameraMove(vector, fVal);
+		if (toGame)
+		{
+			ie->I_Set(task->GetGUID(), m_ownerID, "MOVE", va("< %f %f %f >, %f", vector[0], vector[1], vector[2], fVal));
+		}
+		else
+		{
+			ie->I_CameraMove(vector, fVal);
+		}
 		break;
 
 	case TYPE_ROLL:
@@ -1341,7 +1369,14 @@ int CTaskManager::Camera(CTask* task)
 
 		m_owner->GetInterface()->I_DPrintf(WL_DEBUG, "%4d camera( FOLLOW, \"%s\", %f, %f); [%d]", m_ownerID, sVal, fVal,
 			fVal2, task->GetTimeStamp());
-		ie->I_CameraFollow(static_cast<const char*>(sVal), fVal, fVal2);
+		if (toGame)
+		{
+			ie->I_Set(task->GetGUID(), m_ownerID, "FOLLOW", va("%s, %f, %f", sVal, fVal, fVal2));
+		}
+		else
+		{
+			ie->I_CameraFollow(static_cast<const char*>(sVal), fVal, fVal2);
+		}
 
 		break;
 
@@ -1379,7 +1414,15 @@ int CTaskManager::Camera(CTask* task)
 		m_owner->GetInterface()->I_DPrintf(WL_DEBUG, "%4d camera( FADE, <%f %f %f>, %f, <%f %f %f>, %f, %f); [%d]",
 			m_ownerID, vector[0], vector[1], vector[2], fVal, vector2[0], vector2[1],
 			vector2[2], fVal2, fVal3, task->GetTimeStamp());
-		ie->I_CameraFade(vector[0], vector[1], vector[2], fVal, vector2[0], vector2[1], vector2[2], fVal2, fVal3);
+		if (toGame)
+		{
+			ie->I_Set(task->GetGUID(), m_ownerID, "FADE", va("< %f %f %f >, %f, < %f %f %f >, %f, %f", vector[0],
+				vector[1], vector[2], fVal, vector2[0], vector2[1], vector2[2], fVal2, fVal3));
+		}
+		else
+		{
+			ie->I_CameraFade(vector[0], vector[1], vector[2], fVal, vector2[0], vector2[1], vector2[2], fVal2, fVal3);
+		}
 		break;
 
 	case TYPE_PATH:
@@ -1392,12 +1435,26 @@ int CTaskManager::Camera(CTask* task)
 
 	case TYPE_ENABLE:
 		m_owner->GetInterface()->I_DPrintf(WL_DEBUG, "%4d camera( ENABLE ); [%d]", m_ownerID, task->GetTimeStamp());
-		ie->I_CameraEnable();
+		if (toGame)
+		{
+			ie->I_Set(task->GetGUID(), m_ownerID, "ENABLE", "");
+		}
+		else
+		{
+			ie->I_CameraEnable();
+		}
 		break;
 
 	case TYPE_DISABLE:
 		m_owner->GetInterface()->I_DPrintf(WL_DEBUG, "%4d camera( DISABLE ); [%d]", m_ownerID, task->GetTimeStamp());
-		ie->I_CameraDisable();
+		if (toGame)
+		{
+			ie->I_Set(task->GetGUID(), m_ownerID, "DISABLE", "");
+		}
+		else
+		{
+			ie->I_CameraDisable();
+		}
 		break;
 
 	case TYPE_SHAKE:
@@ -1406,7 +1463,14 @@ int CTaskManager::Camera(CTask* task)
 
 		m_owner->GetInterface()->I_DPrintf(WL_DEBUG, "%4d camera( SHAKE, %f, %f ); [%d]", m_ownerID, fVal, fVal2,
 			task->GetTimeStamp());
-		ie->I_CameraShake(fVal, static_cast<int>(fVal2));
+		if (toGame)
+		{
+			ie->I_Set(task->GetGUID(), m_ownerID, "SHAKE", va("%f, %i", fVal, static_cast<int>(fVal2)));
+		}
+		else
+		{
+			ie->I_CameraShake(fVal, static_cast<int>(fVal2));
+		}
 		break;
 	default:;
 	}

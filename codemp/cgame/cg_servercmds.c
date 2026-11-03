@@ -1828,8 +1828,103 @@ static int svcmdcmp(const void* a, const void* b)
 	return Q_stricmp(a, ((serverCommand_t*)b)->cmd);
 }
 
+/*
+-------------------------
+Missions (DH 2026-11-02): the mission's objective list
+
+The server sends "mobj <name> <state>" (0 hidden, 1 shown, 2 completed, 3 failed; name = the objectives.str reference)
+and "mobjclear" (g_ICARUScb.c G_MissionSetObjective). The console command "missionobjectives" (bind a key) shows the list
+in ui/sjemp/missionobjectives.menu, through the cvars ui_mobj1 .. ui_mobj12 (the objective's text from OBJECTIVES_<name>):
+the open ones first, then the completed / failed ones.
+-------------------------
+*/
+#define MAX_CG_MISSION_OBJECTIVES	48
+#define CG_MISSION_OBJ_LINES		12
+
+typedef struct
+{
+	char name[64];
+	int state;
+} cgMissionObjective_t;
+
+static cgMissionObjective_t cgMissionObjectives[MAX_CG_MISSION_OBJECTIVES];
+static int cgNumMissionObjectives;
+
+static void CG_MissionObjectivesToCvars(void)
+{
+	int line = 0;
+
+	for (int pass = 0; pass < 2; pass++)
+	{
+		for (int i = 0; i < cgNumMissionObjectives && line < CG_MISSION_OBJ_LINES; i++)
+		{
+			const cgMissionObjective_t* obj = &cgMissionObjectives[i];
+			char text[512];
+
+			if (pass == 0 ? obj->state != 1 : obj->state != 2 && obj->state != 3)
+			{
+				continue;
+			}
+			if (!trap->SE_GetStringTextString(va("OBJECTIVES_%s", obj->name), text, sizeof text) || !text[0])
+			{
+				Q_strncpyz(text, obj->name, sizeof text);
+			}
+			trap->Cvar_Set(va("ui_mobj%i", ++line), va("%s%s", obj->state == 1 ? S_COLOR_WHITE "- " :
+				obj->state == 2 ? S_COLOR_GREEN "Done: " S_COLOR_WHITE : S_COLOR_RED "Failed: " S_COLOR_WHITE, text));
+		}
+	}
+	trap->Cvar_Set("ui_mobjcount", va("%i", line));
+	while (line < CG_MISSION_OBJ_LINES)
+	{
+		trap->Cvar_Set(va("ui_mobj%i", ++line), "");
+	}
+}
+
+static void CG_MissionObjective_f(void)
+{
+	const char* name = CG_Argv(1);
+	const int state = atoi(CG_Argv(2));
+	cgMissionObjective_t* obj = NULL;
+
+	for (int i = 0; i < cgNumMissionObjectives; i++)
+	{
+		if (!Q_stricmp(cgMissionObjectives[i].name, name))
+		{
+			obj = &cgMissionObjectives[i];
+			break;
+		}
+	}
+	if (!obj)
+	{
+		if (!name[0] || cgNumMissionObjectives >= MAX_CG_MISSION_OBJECTIVES)
+		{
+			return;
+		}
+		obj = &cgMissionObjectives[cgNumMissionObjectives++];
+		Q_strncpyz(obj->name, name, sizeof obj->name);
+	}
+	obj->state = state;
+	CG_MissionObjectivesToCvars();
+}
+
+static void CG_MissionObjectiveClear_f(void)
+{
+	cgNumMissionObjectives = 0;
+	CG_MissionObjectivesToCvars();
+}
+
+// the console command "missionobjectives": the objective list menu
+void CG_MissionObjectives_f(void)
+{
+	CG_MissionObjectivesToCvars();
+	trap->Cvar_Set("ui_menubrief", "sjemp/missionobjectives"); // (the MP menu folder: ui/sjemp/missionobjectives.menu)
+	trap->OpenUIMenu(UIMENU_BRIEFING); // (ui_main.c loads ui/<ui_menubrief>.menu)
+}
+
 static serverCommand_t commands[] = {
 	{ "chat", CG_Chat_f },
+	{ "mobj", CG_MissionObjective_f },
+	{ "mobjclear", CG_MissionObjectiveClear_f },
 	{ "clientLevelShot", CG_ClientLevelShot_f },
 	{ "cp", CG_CenterPrint_f },
 	{ "cps", CG_CenterPrintSE_f },

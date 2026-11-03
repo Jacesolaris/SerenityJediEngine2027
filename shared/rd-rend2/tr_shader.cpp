@@ -20,6 +20,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
 #include "tr_local.h"
+#include "rd-common/tr_grasscut_plant.h"
 #include "q_profile.h"
 
 // tr_shader.c -- this file deals with the parsing and definition of shaders
@@ -3272,8 +3273,8 @@ static qboolean CollapseStagesToGLSL(void)
 
 	ri.Printf(PRINT_DEVELOPER, "Collapsing stages for shader '%s'\n", shader.name);
 
-	// skip shaders with deforms
-	if (shader.numDeforms == 1)
+	// skip shaders with deforms (and grass cutting plants: they keep their stages for the deform variant, tr_grasscut_plant.h)
+	if (shader.numDeforms == 1 || R_GrassCutIsPlantShader(shader.name))
 	{
 		skip = qtrue;
 		ri.Printf(PRINT_DEVELOPER, "> Shader has vertex deformations. Aborting stage collapsing\n");
@@ -3611,8 +3612,8 @@ static qboolean CollapseStagesToGLSL(void)
 	}
 
 	// convert any remaining lightmap, lightingdiffuse and vert lit stages to a lighting pass
-	// always do this, so dynamic lights work properly
-	if (shader.numDeforms != 1)
+	// always do this, so dynamic lights work properly (not for grass cutting plants, they keep the generic program)
+	if (shader.numDeforms != 1 && !R_GrassCutIsPlantShader(shader.name))
 	{
 		for (i = 0; i < MAX_SHADER_STAGES; i++)
 		{
@@ -3846,6 +3847,9 @@ static shader_t* GeneratePermanentShader(void) {
 	newShader = (shader_t*)Hunk_Alloc(sizeof(shader_t), h_low);
 
 	*newShader = shader;
+	// grass cutting (tr_grasscut_plant.h): plants draw with the vertex deform variant (ShaderUsesGPUDeforms), where
+	// PlantCut is, so not with CPU deforms
+	newShader->grassCutPlant = (qboolean)(R_GrassCutIsPlantShader(newShader->name) && !ShaderRequiresCPUDeforms(newShader));
 
 	if (shader.sort <= SS_SEE_THROUGH) {
 		newShader->fogPass = FP_EQUAL;

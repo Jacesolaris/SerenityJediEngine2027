@@ -25767,6 +25767,50 @@ static void force_lightning_damage(gentity_t* self, gentity_t* traceEnt, vec3_t 
 	}
 }
 
+// Force lightning drain (DH 2026-11-02): held lightning used to cost one force point every game frame, 20 points a
+// second, so a full force bar was gone in under 4 seconds. g_lightningDrainRate = force points a second while
+// lightning is held (default 8); 0 = the old cost of one point a frame.
+static void WP_LightningDrain(const gentity_t* self, const forcePowers_t force_power, const int mult)
+{
+	static cvar_t* g_lightningDrainRate = nullptr;
+	static float drain_acc[MAX_GENTITIES];
+	static int drain_last[MAX_GENTITIES];
+
+	if (!g_lightningDrainRate)
+	{
+		g_lightningDrainRate = gi.cvar("g_lightningDrainRate", "8", CVAR_ARCHIVE);
+	}
+
+	const int num = self->s.number;
+	if (g_lightningDrainRate->value <= 0.0f || num < 0 || num >= MAX_GENTITIES)
+	{
+		for (int i = 0; i < mult; i++)
+		{
+			WP_ForcePowerDrain(self, force_power, 0);
+		}
+		return;
+	}
+
+	int dt = level.time - drain_last[num];
+	if (dt == 0)
+	{
+		return; // already paid this frame
+	}
+	if (dt < 0 || dt > 250)
+	{
+		dt = 50; // first frame of a new lightning, or after a load: one game frame
+	}
+	drain_last[num] = level.time;
+	drain_acc[num] += g_lightningDrainRate->value * static_cast<float>(mult) * static_cast<float>(dt) / 1000.0f;
+
+	const int drain = static_cast<int>(drain_acc[num]);
+	if (drain > 0)
+	{
+		drain_acc[num] -= static_cast<float>(drain);
+		WP_ForcePowerDrain(self, force_power, drain);
+	}
+}
+
 static void force_shoot_lightning(gentity_t* self)
 {
 	trace_t tr;
@@ -31486,7 +31530,13 @@ static void wp_force_power_run(gentity_t* self, forcePowers_t force_power, userc
 		else
 		{
 			force_shoot_lightning(self);
-			WP_ForcePowerDrain(self, force_power, 0);
+			WP_LightningDrain(self, force_power, 1);
+			if (self->client->ps.forcePowerLevel[FP_LIGHTNING] > FORCE_LEVEL_1)
+			{
+				// held lightning loops its sound until released (DH 2026-11-03; it only had the start sound, so a long
+				// hold went quiet). Stopped in WP_ForcePowerStop.
+				self->s.loopSound = G_SoundIndex("sound/weapons/force/lightningloop.wav");
+			}
 		}
 		break;
 		//new Jedi Academy force powers

@@ -838,7 +838,8 @@ void G_InitGame(int levelTime, int randomSeed, int restart)
 
 	if (level.sp_map == qtrue)
 	{
-		if (level.is_t2_rouge_map == qtrue && g_allowNPC.integer)
+		// (Missions: the campaign goes on to the next map, so the level change stays; DH 2026-11-02)
+		if (level.gametype == GT_SINGLE_PLAYER || (level.is_t2_rouge_map == qtrue && g_allowNPC.integer))
 		{
 		}
 		else
@@ -4550,14 +4551,14 @@ void G_RunFrame(const int levelTime)
 	extern void G_FighterRoute_Frame(void);
 	G_FighterRoute_Frame(); // AI pilots for the empty ships, ship_wp_show (ai_fighter.c)
 
-	if (level.gametype == GT_SINGLE_PLAYER && g_allowNPC.integer)
+	if (level.gametype == GT_SINGLE_PLAYER) // (DH 2026-11-02: also at g_allowNPC 0, the needed NPCs walk)
 	{
 		NAV_CheckCalcPaths();
 	}
 
 	AI_UpdateGroups();
 
-	if (level.gametype == GT_SINGLE_PLAYER && g_allowNPC.integer)
+	if (level.gametype == GT_SINGLE_PLAYER) // (DH 2026-11-02: also at g_allowNPC 0, the needed NPCs walk)
 	{
 		if (d_altRoutes.integer)
 		{
@@ -5027,7 +5028,7 @@ void G_RunFrame(const int levelTime)
 				}
 			}
 
-			if (level.gametype == GT_SINGLE_PLAYER && g_allowNPC.integer)
+			if (level.gametype == GT_SINGLE_PLAYER) // (DH 2026-11-02: also at g_allowNPC 0, the needed NPCs walk)
 			{
 				//This was originally intended to only be done for client 0.
 				//Make sure it doesn't slow things down too much with lots of clients in game.
@@ -5064,7 +5065,7 @@ void G_RunFrame(const int levelTime)
 
 		G_RunThink(ent);
 
-		if (level.gametype == GT_SINGLE_PLAYER && g_allowNPC.integer)
+		if (level.gametype == GT_SINGLE_PLAYER) // (DH 2026-11-02: also at g_allowNPC 0, the needed NPCs walk)
 		{
 			ClearNPCGlobals();
 		}

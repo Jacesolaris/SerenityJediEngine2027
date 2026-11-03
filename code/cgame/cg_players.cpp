@@ -5352,6 +5352,18 @@ static void CG_ForcePushBodyBlur(const centity_t* cent, const vec3_t origin, vec
 // ms per entity and effect: at 60 fps and below nothing changes; above, the effect looks as it does at 60 fps.
 #define CFX_INTERVAL 16
 
+// force lightning bolts (DH 2026-11-02): cg_lightningFxInterval ms between new copies of the bolt effect (default 50,
+// fewer overlapping lines); 16 or less = as before
+static int CG_ContinuousFxInterval(const int slot)
+{
+	if ((slot == CFX_LIGHTNING || slot == CFX_LIGHTNING_STRIKE || slot == CFX_VIEW_LIGHTNING || slot == CFX_VIEW_LIGHTNING_STRIKE)
+		&& cg_lightningFxInterval.integer > CFX_INTERVAL)
+	{
+		return cg_lightningFxInterval.integer > 500 ? 500 : cg_lightningFxInterval.integer;
+	}
+	return CFX_INTERVAL;
+}
+
 qboolean CG_ContinuousFxReady(const int ent_num, const int slot)
 {
 	static int next_time[MAX_GENTITIES][CFX_NUM_SLOTS];
@@ -5361,12 +5373,189 @@ qboolean CG_ContinuousFxReady(const int ent_num, const int slot)
 		return qtrue;
 	}
 	int& next = next_time[ent_num][slot];
-	if (cg.time >= next || next - cg.time > CFX_INTERVAL) // (the second test: time went back - map restart / load)
+	const int interval = CG_ContinuousFxInterval(slot);
+	if (cg.time >= next || next - cg.time > interval) // (the second test: time went back - map restart / load)
 	{
-		next = cg.time + CFX_INTERVAL;
+		next = cg.time + interval;
 		return qtrue;
 	}
 	return qfalse;
+}
+
+// Force lightning scorch marks (DH 2026-11-02): where the bolts hit walls and floors they leave the saber's scorch mark,
+// which fades the same way (10 s); on bodies a burn decal for 6-10 s. cg_lightningMarks 0 = off;
+// cg_lightningMarkInterval = ms between marks per caster (default 150). slot 0 = lightning, 1 = lightning strike.
+extern markPoly_t* CG_AllocMark();
+
+// Lightning wall mark (DH 2026-11-02): like a saber burn, a scorch mark plus a glow pass that starts bright orange and
+// darkens over ~1.5 s (its start time is moved back 8.5 s into the 10 s mark life, as the saber does), then the scorch
+// fades out after 10 s.
+static void CG_LightningWallMark(const vec3_t origin, const vec3_t dir, const float radius)
+{
+	enum { LM_MAX_FRAGMENTS = 32, LM_MAX_POINTS = 128 };
+	vec3_t axis[3];
+	vec3_t original_points[4];
+	vec3_t projection;
+	vec3_t mark_points[LM_MAX_POINTS];
+	markFragment_t mark_frags[LM_MAX_FRAGMENTS];
+	int num_frags, i, j, k;
+	const float tex_scale = 0.5f / radius;
+	byte glow[4];
+
+	if (!cg_addMarks.integer || radius <= 0.0f)
+	{
+		return;
+	}
+
+	VectorNormalize2(dir, axis[0]);
+	PerpendicularVector(axis[1], axis[0]);
+	RotatePointAroundVector(axis[2], axis[0], axis[1], Q_flrand(0.0f, 360.0f));
+	CrossProduct(axis[0], axis[2], axis[1]);
+
+	for (i = 0; i < 3; i++)
+	{
+		original_points[0][i] = origin[i] - radius * axis[1][i] - radius * axis[2][i];
+		original_points[1][i] = origin[i] + radius * axis[1][i] - radius * axis[2][i];
+		original_points[2][i] = origin[i] + radius * axis[1][i] + radius * axis[2][i];
+		original_points[3][i] = origin[i] - radius * axis[1][i] + radius * axis[2][i];
+	}
+	VectorScale(dir, -20, projection);
+	num_frags = cgi_CM_MarkFragments(4, original_points, projection, LM_MAX_POINTS, mark_points[0], LM_MAX_FRAGMENTS, mark_frags);
+	if (num_frags <= 0)
+	{
+		return;
+	}
+	if (num_frags > LM_MAX_FRAGMENTS)
+	{
+		num_frags = LM_MAX_FRAGMENTS;
+	}
+
+	// the saber's glow colour, one colour for the whole mark
+	glow[0] = static_cast<byte>(215 + Q_flrand(0.0f, 1.0f) * 40.0f);
+	glow[1] = static_cast<byte>(96 + Q_flrand(0.0f, 1.0f) * 32.0f);
+	glow[2] = glow[3] = static_cast<byte>(Q_flrand(0.0f, 1.0f) * 15.0f);
+
+	for (i = 0; i < num_frags; i++)
+	{
+		markFragment_t* mf = &mark_frags[i];
+		polyVert_t verts[MAX_VERTS_ON_POLY];
+		markPoly_t* mark;
+
+		if (mf->numPoints > MAX_VERTS_ON_POLY)
+		{
+			mf->numPoints = MAX_VERTS_ON_POLY;
+		}
+		memset(verts, 0, sizeof verts);
+		for (j = 0; j < mf->numPoints; j++)
+		{
+			vec3_t delta;
+			VectorCopy(mark_points[mf->firstPoint + j], verts[j].xyz);
+			VectorMA(verts[j].xyz, 0.125f, dir, verts[j].xyz); // off the surface a little (no z-fighting)
+			VectorSubtract(verts[j].xyz, origin, delta);
+			verts[j].st[0] = 0.5f + DotProduct(delta, axis[1]) * tex_scale;
+			verts[j].st[1] = 0.5f + DotProduct(delta, axis[2]) * tex_scale;
+			for (k = 0; k < 4; k++)
+			{
+				verts[j].modulate[k] = 255;
+			}
+		}
+
+		// the scorch
+		mark = CG_AllocMark();
+		mark->time = cg.time;
+		mark->alphaFade = qtrue;
+		mark->markShader = cgs.media.rivetMarkShader;
+		mark->poly.numVerts = mf->numPoints;
+		mark->color[0] = mark->color[1] = mark->color[2] = mark->color[3] = 255;
+		memcpy(mark->verts, verts, mf->numPoints * sizeof verts[0]);
+
+		// the glow: bright first, dark after ~1.5 s
+		mark = CG_AllocMark();
+		mark->time = cg.time - 8500;
+		mark->alphaFade = qfalse;
+		mark->markShader = cgs.media.bdecal_saberglow;
+		mark->poly.numVerts = mf->numPoints;
+		mark->color[0] = glow[0];
+		mark->color[1] = glow[1];
+		mark->color[2] = glow[2];
+		mark->color[3] = glow[3];
+		memcpy(mark->verts, verts, mf->numPoints * sizeof verts[0]);
+	}
+}
+
+static void CG_LightningScorch(const centity_t* cent, const int force_level, const int slot)
+{
+	static int next_time[MAX_GENTITIES][2];
+
+	if (!cg_lightningMarks.integer || !cent || !cent->gent || !cent->gent->client || slot < 0 || slot > 1)
+	{
+		return;
+	}
+	const int num = cent->currentState.number;
+	if (num < 0 || num >= MAX_GENTITIES)
+	{
+		return;
+	}
+	const int interval = cg_lightningMarkInterval.integer < 30 ? 30 : cg_lightningMarkInterval.integer > 2000 ? 2000 : cg_lightningMarkInterval.integer;
+	int& next = next_time[num][slot];
+	if (cg.time < next && next - cg.time <= interval)
+	{
+		return;
+	}
+	next = cg.time + interval;
+
+	vec3_t ang, fwd, start, end;
+	VectorCopy(cent->gent->client->renderInfo.handLPoint, start);
+	VectorCopy(cent->gent->client->ps.viewangles, ang);
+	float range;
+	if (force_level > FORCE_LEVEL_2)
+	{
+		// the wide arc: anywhere in the cone in front
+		ang[PITCH] += Q_flrand(-12.0f, 12.0f);
+		ang[YAW] += Q_flrand(-30.0f, 30.0f);
+		range = 512.0f;
+	}
+	else
+	{
+		ang[PITCH] += Q_flrand(-3.0f, 3.0f);
+		ang[YAW] += Q_flrand(-3.0f, 3.0f);
+		range = 2048.0f;
+	}
+	AngleVectors(ang, fwd, nullptr, nullptr);
+	VectorMA(start, range, fwd, end);
+
+	trace_t tr;
+	CG_Trace(&tr, start, vec3_origin, vec3_origin, end, num, MASK_SHOT);
+	if (tr.fraction >= 1.0f || tr.startsolid || tr.allsolid || tr.surfaceFlags & SURF_NOIMPACT)
+	{
+		return;
+	}
+	if (tr.entityNum == ENTITYNUM_WORLD
+		|| tr.entityNum < ENTITYNUM_WORLD && (cg_entities[tr.entityNum].currentState.eFlags & EF_PERMANENT
+			|| cg_entities[tr.entityNum].currentState.eType == ET_TERRAIN))
+	{
+		// architecture only, like the saber's wall marks
+		CG_LightningWallMark(tr.endpos, tr.plane.normal, Q_flrand(2.5f, 4.5f));
+	}
+	else if (tr.entityNum < ENTITYNUM_WORLD)
+	{
+		gentity_t* hit = cg_entities[tr.entityNum].gent;
+		if (hit && hit->client && hit->ghoul2.size() && cgs.media.bdecal_burnmark1)
+		{
+			const float size = Q_flrand(2.5f, 4.0f);
+			const int life = Q_irand(6000, 10000);
+			if (cg_com_rend2.integer == 0)
+			{
+				CG_AddGhoul2Mark(cgs.media.bdecal_burnmark1, size, tr.endpos, fwd, tr.entityNum, hit->client->ps.origin,
+					hit->client->renderInfo.legsYaw, hit->ghoul2, hit->s.modelScale, life, 0, nullptr);
+			}
+			else
+			{
+				CG_AddGhoul2Mark_rend2(cgs.media.bdecal_burnmark1, size, tr.endpos, fwd, tr.entityNum, hit->client->ps.origin,
+					hit->client->renderInfo.legsYaw, hit->ghoul2, hit->s.modelScale, life, 0, nullptr);
+			}
+		}
+	}
 }
 
 static void CG_ForceElectrocution(const centity_t* cent, const vec3_t origin, vec3_t temp_angles,
@@ -13071,6 +13260,108 @@ void CG_CheckSaberInWater(const centity_t* cent,
 
 constexpr auto SABER_TRAIL_TIME = 40.0f;
 
+// Grass cutting (2026-11-02): a blade that swings low through the grass (within 48 units above its owner's feet) tells
+// the renderer (grass_wave type 3, rd-common tr_grasscut.h), which cuts the grass it went through down to stubble.
+// cg_grassCutFx 1: the cut tips glow for 2 s and the cut-off tops fall and lie for cg_grassCutDebrisTime seconds.
+// r_grassCut / r_grassCutRegrow are the renderer's. One command a frame while a blade moves through the grass.
+// cg_grassCutSound 1: the grass fizzles under the blade (a random rainfizz1-3 where it cuts, over ground of grass
+// material or where the renderer saw the cut land in grass or a plant model, r_grassCutHit; at most every 150 ms per
+// cutter).
+static void CG_GrassCut(const centity_t* cent, const int saberNum, const int bladeNum, const vec3_t base, const vec3_t tip)
+{
+	static vmCvar_t cg_grassCutFx, cg_grassCutDebrisTime, cg_grassCutSound, r_grassCutHit;
+	static sfxHandle_t fizzSounds[3];
+	static int lastSound[MAX_GENTITIES];
+	static int registerTime = 0;
+	static qboolean registered = qfalse;
+	static float last[MAX_GENTITIES][MAX_SABERS][MAX_BLADES][6];
+	static int lastTime[MAX_GENTITIES][MAX_SABERS][MAX_BLADES];
+	const int num = cent->currentState.number;
+
+	if (!registered || cg.time < registerTime - 1000)
+	{	// once, and again on a new map (SP: the clock starts again)
+		fizzSounds[0] = cgi_S_RegisterSound("sound/weapons/saber/rainfizz1.wav");
+		fizzSounds[1] = cgi_S_RegisterSound("sound/weapons/saber/rainfizz2.wav");
+		fizzSounds[2] = cgi_S_RegisterSound("sound/weapons/saber/rainfizz3.wav");
+		memset(lastSound, 0, sizeof(lastSound));
+		registerTime = cg.time;
+		cgi_Cvar_Register(&cg_grassCutFx, "cg_grassCutFx", "1", CVAR_ARCHIVE);
+		cgi_Cvar_Register(&cg_grassCutDebrisTime, "cg_grassCutDebrisTime", "10", CVAR_ARCHIVE);
+		cgi_Cvar_Register(&cg_grassCutSound, "cg_grassCutSound", "1", CVAR_ARCHIVE);
+		cgi_Cvar_Register(&r_grassCutHit, "r_grassCutHit", "0", 0);
+		registered = qtrue;
+	}
+	if (cg.time > registerTime)
+	{
+		registerTime = cg.time;
+	}
+	if (num < 0 || num >= MAX_GENTITIES || saberNum < 0 || saberNum >= MAX_SABERS || bladeNum < 0 || bladeNum >= MAX_BLADES)
+	{
+		return;
+	}
+	float* p = last[num][saberNum][bladeNum];
+	int* when = &lastTime[num][saberNum][bladeNum];
+	if (*when == cg.time)
+	{
+		return; // drawn twice this frame
+	}
+	const qboolean had = *when && cg.time > *when && cg.time - *when < 150 ? qtrue : qfalse;
+	vec3_t pb, pt;
+	VectorCopy(p, pb);
+	VectorCopy(p + 3, pt);
+	VectorCopy(base, p);
+	VectorCopy(tip, p + 3);
+	*when = cg.time;
+	if (!had)
+	{
+		return;
+	}
+	// a swing: the tip moves 3+ units against the hilt (walking with the blade low cuts nothing)
+	vec3_t swing;
+	for (int k = 0; k < 3; k++)
+	{
+		swing[k] = tip[k] - pt[k] - (base[k] - pb[k]);
+	}
+	const float low = base[2] < tip[2] ? base[2] : tip[2];
+	if (low > cent->lerpOrigin[2] - 24.0f + 48.0f || VectorLengthSquared(swing) < 9.0f)
+	{
+		return; // too high for grass, or not swinging
+	}
+	cgi_Cvar_Update(&cg_grassCutFx);
+	cgi_Cvar_Update(&cg_grassCutDebrisTime);
+	cgi_Cvar_Update(&cg_grassCutSound);
+	if (cg_grassCutSound.integer && (cg.time - lastSound[num] >= 150 || cg.time < lastSound[num]))
+	{
+		vec3_t from, down;
+		trace_t tr;
+		VectorCopy(base[2] < tip[2] ? base : tip, from);
+		VectorCopy(from, down);
+		down[2] -= 40.0f;
+		CG_Trace(&tr, from, NULL, NULL, down, num, MASK_SOLID);
+		const int material = tr.surfaceFlags & MATERIAL_MASK;
+		// or the renderer saw a recent cut near the blade land in surface-sprite grass or a plant model (r_grassCutHit =
+		// "time x y", tr_grasscut.h): grass on maps whose ground has no grass material
+		cgi_Cvar_Update(&r_grassCutHit);
+		const int hitTime = atoi(r_grassCutHit.string);
+		const char* hitX = strchr(r_grassCutHit.string, ' ');
+		const char* hitY = hitX ? strchr(hitX + 1, ' ') : NULL;
+		const bool grassHit = hitY && cg.time >= hitTime && cg.time - hitTime < 300 && fabs(atof(hitX + 1) - from[0]) < 64.0f
+			&& fabs(atof(hitY + 1) - from[1]) < 64.0f ? true : false;
+		if (!tr.startsolid && (grassHit || (tr.fraction < 0.8f && (material == MATERIAL_SHORTGRASS || material == MATERIAL_LONGGRASS))))
+		{	// the blade is in the grass (32 units above grass ground)
+			const sfxHandle_t fizz = fizzSounds[rand() % 3];
+			if (fizz)
+			{
+				cgi_S_StartSound(tr.fraction < 1.0f ? tr.endpos : from, num, CHAN_AUTO, fizz);
+			}
+			lastSound[num] = cg.time;
+		}
+	}
+	cgi_SendConsoleCommand(va("grass_wave %d %.1f %.1f %.1f 0 0 3 0 %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f %d %.1f 3\n", cg.time,
+		base[0], base[1], base[2], pb[0], pb[1], pb[2], pt[0], pt[1], pt[2], tip[0], tip[1], tip[2],
+		cg_grassCutFx.integer, cg_grassCutDebrisTime.value));
+}
+
 static void CG_AddSaberBladeGo(const centity_t* cent, centity_t* scent, const int renderfx, const int modelIndex,
 	vec3_t origin, vec3_t angles, const int saberNum, const int bladeNum)
 {
@@ -13372,6 +13663,11 @@ static void CG_AddSaberBladeGo(const centity_t* cent, centity_t* scent, const in
 
 	VectorMA(org, length, axis[0], end);
 	VectorAdd(end, axis[0], end);
+
+	if (length > 0.0f && !(cent->gent->client->ps.saberInFlight && saberNum == 0))
+	{
+		CG_GrassCut(cent, saberNum, bladeNum, org, end);
+	}
 
 	// If the saber is in flight we shouldn't trace from the player to the muzzle point
 	if (cent->gent->client->ps.saberInFlight && saberNum == 0)
@@ -16705,6 +17001,16 @@ void CG_Player(centity_t* cent)
 				//being drained
 				//do red electricity lines off them and red drain shell on them
 				CG_ForceElectrocution(cent, ent.origin, tempAngles, cgs.media.drainShader, qtrue);
+			}
+
+			// scorch marks where the lightning hits (DH 2026-11-02)
+			if (cent->gent->client->ps.forcePowersActive & 1 << FP_LIGHTNING)
+			{
+				CG_LightningScorch(cent, cent->gent->client->ps.forcePowerLevel[FP_LIGHTNING], 0);
+			}
+			if (cent->gent->client->ps.forcePowersActive & 1 << FP_LIGHTNING_STRIKE)
+			{
+				CG_LightningScorch(cent, cent->gent->client->ps.forcePowerLevel[FP_LIGHTNING_STRIKE], 1);
 			}
 
 			if (cent->gent->client->ps.forcePowersActive & 1 << FP_LIGHTNING_STRIKE && CG_ContinuousFxReady(cent->currentState.number, CFX_LIGHTNING_STRIKE))

@@ -105,6 +105,7 @@ static void Pzk_RunHeldScript(int entNum, const char* script);
 static void G_Shop_Init();
 static qboolean Shop_ClientCommand(gentity_t* ent, const char* cmd);
 static qboolean Shop_AskBarChallenge(const gentity_t* npc, int wager);
+static const char* Shop_BusyReason(const gentity_t* ent);
 
 void G_Pazaak_Init()
 {
@@ -186,6 +187,8 @@ static qboolean Pzk_EnemyNear(const gentity_t* ent)
 	return qfalse;
 }
 
+static const char pzkNoGround[] = "You need solid ground to sit down."; // Pzk_BusyReason; a jump doesn't close the shop
+
 // Why the player can't start a match now (nullptr: he can)
 static const char* Pzk_BusyReason(const gentity_t* ent)
 {
@@ -211,7 +214,7 @@ static const char* Pzk_BusyReason(const gentity_t* ent)
 	}
 	if (ps->groundEntityNum == ENTITYNUM_NONE || ent->waterlevel >= 2)
 	{
-		return "You need solid ground to sit down.";
+		return pzkNoGround;
 	}
 	if (Pzk_EnemyNear(ent))
 	{
@@ -1047,6 +1050,51 @@ static int shopTalkFrom = 0;          // nobody can be talked to before this tim
 #define SHOP_MAX_CREDITS	9999999
 #define SHOP_PACK			3		// thermals in a grenade pack
 
+// ---------------------------------------------------------------------------------------------------------------
+// Holdable items in the shop (2026-11-02, DH): the "Items" tab, bought like a pickup (up to the pickup limit).
+// id = SHOP_ITEM_HOLD + index; one price cvar each. The UI gets "price:count:max,..." in this table's order
+// (ui_pazaak.cpp shopHoldNames). Bacta stays on the Supplies tab.
+// ---------------------------------------------------------------------------------------------------------------
+#define SHOP_ITEM_HOLD		1100
+
+typedef struct
+{
+	const char* cvarName;
+	const char* defPrice;
+	int inv; // INV_*
+	int max;
+	const char* name;
+	cvar_t* price;
+} shopHoldable_t;
+
+static shopHoldable_t shopHoldables[] = {
+	{ "g_shopPriceBinoculars", "100", INV_ELECTROBINOCULARS, 1, "electrobinoculars", nullptr },
+	{ "g_shopPriceGoggles", "150", INV_LIGHTAMP_GOGGLES, 1, "light amp goggles", nullptr },
+	{ "g_shopPriceSeeker", "400", INV_SEEKER, 5, "seeker drone", nullptr },
+	{ "g_shopPriceSentry", "500", INV_SENTRY, 5, "sentry gun", nullptr },
+};
+constexpr int SHOP_NUM_HOLDABLES = static_cast<int>(sizeof shopHoldables / sizeof shopHoldables[0]);
+
+static int Shop_HoldPrice(const int i)
+{
+	return shopHoldables[i].price && shopHoldables[i].price->integer > 0 ? shopHoldables[i].price->integer : 0;
+}
+
+// "price:count:max,..." for the UI's Items tab
+static const char* Shop_HoldList(const gentity_t* ent)
+{
+	static char list[256];
+	list[0] = 0;
+	for (int i = 0; i < SHOP_NUM_HOLDABLES; i++)
+	{
+		char one[32];
+		Com_sprintf(one, sizeof one, "%s%i:%i:%i", i ? "," : "", Shop_HoldPrice(i),
+			ent->client->ps.inventory[shopHoldables[i].inv], shopHoldables[i].max);
+		Q_strcat(list, sizeof list, one);
+	}
+	return list;
+}
+
 static void G_Shop_Init()
 {
 	g_shop = gi.cvar("g_shop", "1", CVAR_ARCHIVE);
@@ -1057,6 +1105,10 @@ static void G_Shop_Init()
 	g_shopDeathLoss = gi.cvar("g_shopDeathLoss", "10", CVAR_ARCHIVE);
 	g_shopAmmoPrice = gi.cvar("g_shopAmmoPrice", "150", CVAR_ARCHIVE);
 	g_shopBactaPrice = gi.cvar("g_shopBactaPrice", "200", CVAR_ARCHIVE);
+	for (auto& h : shopHoldables)
+	{
+		h.price = gi.cvar(h.cvarName, h.defPrice, CVAR_ARCHIVE);
+	}
 	g_npcTalk = gi.cvar("g_npcTalk", "1", CVAR_ARCHIVE);
 	shopTalkNPC = -1;
 	shopIsOpen = qfalse;
@@ -1277,15 +1329,22 @@ void G_Shop_PlayerThink(gentity_t* ent)
 	}
 	Shop_KeepForNextLevel(ent);
 
-	// the shop menu is open and the world runs on: it closes when he gets hurt or an enemy comes for him
+	// the shop menu is open and the world runs on: it closes when he gets hurt, or as soon as the pazaak rules would
+	// not let it open (an enemy comes for him, a fight, a cutscene...; a jump doesn't count)
 	if (shopIsOpen && level.time >= shopNextCheck)
 	{
 		shopNextCheck = level.time + 500;
-		if (ent->health <= 0 || ent->health < shopOpenHealth || Pzk_EnemyNear(ent) || Pzk_InCutscene())
+		const char* busy = Shop_BusyReason(ent);
+		if (busy == pzkNoGround)
+		{
+			busy = nullptr;
+		}
+		if (ent->health <= 0 || ent->health < shopOpenHealth || busy)
 		{
 			shopIsOpen = qfalse;
 			gi.SendConsoleCommand("uishop close\n");
-			gi.SendServerCommand(ent->s.number, "cp \"The shop closed: you are under attack.\"");
+			gi.SendServerCommand(ent->s.number, ent->health > 0 && ent->health >= shopOpenHealth && busy && busy[0]
+				? va("cp \"The shop closed.\n%s\"", busy) : "cp \"The shop closed: you are under attack.\"");
 			Shop_ReleaseBar(ent);
 		}
 		shopOpenHealth = ent->health;
@@ -1373,42 +1432,18 @@ void G_Shop_Died(gentity_t* victim, gentity_t* attacker)
 	}
 }
 
-// Why the player can't shop now (nullptr: he can)
+// Why the player can't shop now (nullptr: he can): the pazaak rules (DH 2026-11-02: the shop's are the same)
 static const char* Shop_BusyReason(const gentity_t* ent)
 {
-	const playerState_t* ps = &ent->client->ps;
-	const int flags = ps->eFlags | ent->s.eFlags;
-
 	if (!Pzk_CanPlay(ent))
 	{
 		return "";
-	}
-	if (Pzk_InCutscene())
-	{
-		return "A cutscene is playing.";
 	}
 	if (pzkRunning)
 	{
 		return "You are playing pazaak.";
 	}
-	if (ent->s.m_iVehicleNum || ps->m_iVehicleNum)
-	{
-		return "Not while riding a vehicle.";
-	}
-	if (flags & EF_LOCKED_TO_WEAPON || ps->viewEntity > 0 && ps->viewEntity < ENTITYNUM_WORLD)
-	{
-		return "Not while controlling something else.";
-	}
-	if (flags & (EF_HELD_BY_RANCOR | EF_HELD_BY_WAMPA | EF_HELD_BY_SAND_CREATURE | EF_FORCE_GRIPPED | EF_FORCE_DRAINED)
-		|| ps->saberLockTime > level.time || PM_InKnockDown(ps))
-	{
-		return "Not in the middle of a fight.";
-	}
-	if (Pzk_EnemyNear(ent))
-	{
-		return "Enemies are nearby.";
-	}
-	return nullptr;
+	return Pzk_BusyReason(ent);
 }
 
 // What the UI shows: "uishop <what> <credits> <owned bits> <equipped bits> "<message>"" (64 hex digits each)
@@ -1419,6 +1454,8 @@ static void Shop_Send(const gentity_t* ent, const char* what, const char* messag
 	char owned[SHOP_OWNED_WORDS * 8 + 1], equip[SHOP_OWNED_WORDS * 8 + 1];
 	char msg[128];
 
+	// first: the caller's message is often a va() string, and the va() calls below write over it
+	Q_strncpyz(msg, message ? message : "", sizeof msg);
 	for (int i = 0; i < SHOP_MAX_WEAPONS; i++)
 	{
 		const int v = cl->pers.shopEquip[i];
@@ -1437,7 +1474,6 @@ static void Shop_Send(const gentity_t* ent, const char* what, const char* messag
 		Q_strcat(owned, sizeof owned, va("%08x", static_cast<unsigned int>(cl->pers.shopOwned[i])));
 		Q_strcat(equip, sizeof equip, va("%08x", equipped[i]));
 	}
-	Q_strncpyz(msg, message ? message : "", sizeof msg);
 	for (char* q = msg; *q; q++)
 	{
 		if (*q == '"')
@@ -1445,8 +1481,8 @@ static void Shop_Send(const gentity_t* ent, const char* what, const char* messag
 			*q = '\'';
 		}
 	}
-	gi.SendConsoleCommand(va("uishop %s %i %s %s %i %i \"%s\"\n", what, cl->ps.persistant[PERS_CREDITS], owned, equip,
-		g_shopAmmoPrice->integer > 0 ? g_shopAmmoPrice->integer : 0, g_shopBactaPrice->integer > 0 ? g_shopBactaPrice->integer : 0, msg));
+	gi.SendConsoleCommand(va("uishop %s %i %s %s %i %i \"%s\" \"%s\"\n", what, cl->ps.persistant[PERS_CREDITS], owned, equip,
+		g_shopAmmoPrice->integer > 0 ? g_shopAmmoPrice->integer : 0, g_shopBactaPrice->integer > 0 ? g_shopBactaPrice->integer : 0, msg, Shop_HoldList(ent)));
 }
 
 static void Shop_Open(gentity_t* ent, const char* message)
@@ -1494,6 +1530,29 @@ static qboolean Shop_FillAmmo(const gentity_t* ent)
 	return filled;
 }
 
+// A holdable item from the Items tab (index into shopHoldables)
+static void Shop_BuyHoldable(gentity_t* ent, const int i)
+{
+	gclient_t* cl = ent->client;
+	const shopHoldable_t* h = &shopHoldables[i];
+	const int price = Shop_HoldPrice(i);
+
+	if (cl->ps.persistant[PERS_CREDITS] < price)
+	{
+		Shop_Send(ent, "state", va("You need %i credits for the %s.", price, h->name));
+		return;
+	}
+	if (cl->ps.inventory[h->inv] >= h->max)
+	{
+		Shop_Send(ent, "state", h->max > 1 ? va("You can't carry more than %i.", h->max) : "You already have one.");
+		return;
+	}
+	cl->ps.stats[STAT_ITEMS] |= 1 << h->inv;
+	cl->ps.inventory[h->inv]++;
+	Shop_AddCredits(ent, -price);
+	Shop_Send(ent, "state", va("Bought the %s.", h->name));
+}
+
 static void Shop_Buy(gentity_t* ent, const int item)
 {
 	gclient_t* cl = ent->client;
@@ -1501,6 +1560,11 @@ static void Shop_Buy(gentity_t* ent, const int item)
 
 	if (!g_shop->integer || Shop_BusyReason(ent))
 	{
+		return;
+	}
+	if (item >= SHOP_ITEM_HOLD && item < SHOP_ITEM_HOLD + SHOP_NUM_HOLDABLES)
+	{
+		Shop_BuyHoldable(ent, item - SHOP_ITEM_HOLD);
 		return;
 	}
 	if (item == SHOP_ITEM_AMMO)
@@ -1651,7 +1715,9 @@ static qboolean Shop_SilentClass(const int c)
 	}
 }
 
-// g_utils.cpp CanUseInfrontOf (the use icon) and TryUse: this friendly NPC can be talked to
+// g_utils.cpp CanUseInfrontOf (the use icon) and TryUse: this friendly NPC can be talked to now. The one check for both,
+// so the icon only shows when the talk would open: the NPC's own (team, alive, not fighting, not busy, the pazaak
+// challenge rules: Pzk_NPCBusy) and the player's pazaak rules (no fight, no enemy close, solid ground...: Shop_BusyReason)
 qboolean G_Shop_CanTalk(const gentity_t* player, const gentity_t* npc)
 {
 	if (!g_npcTalk || !g_npcTalk->integer || !player || player->s.number != 0 || !player->client || !npc || !npc->NPC
@@ -1666,6 +1732,10 @@ qboolean G_Shop_CanTalk(const gentity_t* player, const gentity_t* npc)
 	}
 	if (npc->NPC->scriptFlags & SCF_NO_RESPONSE || npc->svFlags & SVF_ICARUS_FREEZE
 		|| npc->enemy && npc->enemy->health > 0 || Shop_SilentClass(npc->client->NPC_class))
+	{
+		return qfalse;
+	}
+	if (Pzk_NPCBusy(npc, player) || Shop_BusyReason(player))
 	{
 		return qfalse;
 	}
@@ -1689,7 +1759,7 @@ qboolean G_Shop_TryTalk(gentity_t* player, const gentity_t* npc)
 		}
 	}
 	shopTalkNPC = npc->s.number;
-	gi.SendConsoleCommand(va("uishop talk \"You talk to %s^7. What do you want to do?\" %i\n", who,
+	gi.SendConsoleCommand(va("uishop talk \"You are talking to %s^7. What do you want to do?\" %i\n", who,
 		g_pazaakAllowed && !g_pazaakAllowed->integer ? 0 : 1));
 	return qtrue;
 }
@@ -1714,8 +1784,8 @@ static qboolean Shop_AskBarChallenge(const gentity_t* npc, const int wager)
 	shopTalkBar = qtrue;
 	shopTalkNPC = npc ? npc->s.number : ENTITYNUM_NONE;
 	const char* text = wager > 0
-		? va("You talk to %s^7. Play pazaak for %i credits, or buy items?", who, wager)
-		: va("You talk to %s^7. What do you want to do?", who);
+		? va("You are talking to %s^7. Play pazaak for %i credits, or buy items?", who, wager)
+		: va("You are talking to %s^7. What do you want to do?", who);
 	gi.SendConsoleCommand(va("uishop talk \"%s\" 1\n", text));
 	return qtrue;
 }

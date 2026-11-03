@@ -13,5 +13,6 @@ void G_Pazaak_RunFrame(void);
 void G_Pazaak_ClientDisconnect(int clientNum);
 qboolean G_Pazaak_ClientCommand(gentity_t* ent, const char* cmd);
 qboolean G_Pazaak_IsPlaying(int clientNum);
+int G_Shop_BotTalkingTo(int botNum);
 
 #endif // G_PAZAAK_H

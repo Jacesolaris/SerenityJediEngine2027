@@ -24,6 +24,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // tr_shader.c -- this file deals with the parsing and definition of shaders
 
 #include "tr_local.h"
+#include "rd-common/tr_grasscut_plant.h"
 #include "q_profile.h"
 
 static char* s_shaderText;
@@ -2639,6 +2640,7 @@ static shader_t* GeneratePermanentShader(void) {
 	const auto newShader = static_cast<shader_s*>(ri.Hunk_Alloc(sizeof(shader_t), h_low));
 
 	*newShader = shader;
+	newShader->grassCutPlant = R_GrassCutIsPlantShader(newShader->name); // grass cutting (tr_grasscut_plant.h)
 
 	if (shader.sort <= /*SS_OPAQUE*/SS_SEE_THROUGH) {
 		newShader->fogPass = FP_EQUAL;

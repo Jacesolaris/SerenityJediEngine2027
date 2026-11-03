@@ -44,6 +44,9 @@ extern void G_CheckCharmed(gentity_t* self);
 extern qboolean Jedi_CultistDestroyer(const gentity_t* self);
 extern void NPC_BSGM_Default(void);
 extern qboolean Boba_Flying(const gentity_t* self);
+extern void Boba_Update(void);
+extern qboolean Boba_Flee(void);
+extern qboolean Boba_TacticsLocked(void);
 
 //Local Variables
 npcStatic_t NPCS;
@@ -60,6 +63,8 @@ void pitch_roll_for_slope(gentity_t* forwhom, vec3_t pass_slope);
 extern void GM_Dying(gentity_t* self);
 
 extern int eventClearTime;
+
+extern void NPC_BehaviorSet_HazardTroop(int b_state);
 
 qboolean NPC_IsTrooper(const gentity_t* self)
 {
@@ -1117,6 +1122,8 @@ static void NPC_BehaviorSet_Grenadier(const int b_state)
 NPC_BehaviorSet_Tusken
 -------------------------
 */
+extern void NPC_BSTusken_Default(void);
+
 static void NPC_BehaviorSet_Tusken(const int b_state)
 {
 	switch (b_state)
@@ -1126,7 +1133,7 @@ static void NPC_BehaviorSet_Tusken(const int b_state)
 	case BS_STAND_AND_SHOOT:
 	case BS_HUNT_AND_KILL:
 	case BS_DEFAULT:
-		//NPC_BSTusken_Default();
+		NPC_BSTusken_Default(); // (NPC_AI_Tusken.c)
 		break;
 
 	default:
@@ -1598,15 +1605,22 @@ static void NPC_RunBehavior(const npcteam_t team, const int b_state)
 	}
 	else if (NPCS.NPC->client->NPC_class == CLASS_BOBAFETT)
 	{
-		//bounty hunter
-		//Boba_Update();
-		if (Boba_Flying(NPCS.NPC))
+		//bounty hunter: as SP, update / flee / tactics first (NPC_AI_BobaFett.c)
+		Boba_Update();
+		if (NPCS.NPCInfo->surrenderTime)
 		{
-			NPC_BehaviorSet_Seeker(b_state);
+			Boba_Flee();
 		}
-		else
+		else if (!Boba_TacticsLocked())
 		{
-			NPC_BehaviorSet_Jedi(b_state);
+			if (Boba_Flying(NPCS.NPC))
+			{
+				NPC_BehaviorSet_Seeker(b_state);
+			}
+			else
+			{
+				NPC_BehaviorSet_Jedi(b_state);
+			}
 		}
 		dontSetAim = qtrue;
 	}
@@ -1632,6 +1646,24 @@ static void NPC_RunBehavior(const npcteam_t team, const int b_state)
 	{
 		//being forced to march
 		NPC_BSDefault();
+	}
+	else if (NPCS.NPC->client->ps.weapon == WP_TUSKEN_RIFLE)
+	{
+		//as SP: a tusken rifle with alt fire is a sniper, else the tusken AI
+		if (NPCS.NPCInfo->scriptFlags & SCF_ALT_FIRE)
+		{
+			NPC_BehaviorSet_Sniper(b_state);
+		}
+		else
+		{
+			NPC_BehaviorSet_Tusken(b_state);
+		}
+		G_CheckCharmed(NPCS.NPC);
+	}
+	else if (NPCS.NPC->client->ps.weapon == WP_TUSKEN_STAFF)
+	{
+		NPC_BehaviorSet_Tusken(b_state);
+		G_CheckCharmed(NPCS.NPC);
 	}
 	else if (NPCS.NPC->client->NPC_class == CLASS_GONK || NPCS.NPC->client->NPC_class == CLASS_MOUSE
 		|| NPCS.NPC->client->NPC_class == CLASS_R2D2 || NPCS.NPC->client->NPC_class == CLASS_R5D2)
@@ -1736,7 +1768,7 @@ static void NPC_RunBehavior(const npcteam_t team, const int b_state)
 
 			if (NPC_IsTrooper(NPCS.NPC))
 			{
-				NPC_BehaviorSet_Trooper(b_state);
+				NPC_BehaviorSet_HazardTroop(b_state); // (SP's hazard trooper squads, NPC_AI_HazardTrooper.c)
 				return;
 			}
 

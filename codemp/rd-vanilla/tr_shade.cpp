@@ -1863,6 +1863,11 @@ void RB_StageIteratorGeneric(void)
 {
 	shaderCommands_t* input = &tess;
 
+	if (input->shader->grassCutPlant)
+	{	// grass cutting: the yavin plant models, before the sway (tr_surfacesprites.cpp)
+		void RB_GrassCutPlants();
+		RB_GrassCutPlants();
+	}
 	RB_DeformTessGeometry();
 
 	//

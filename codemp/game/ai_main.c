@@ -2550,6 +2550,218 @@ BotAI
 ==============
 */
 
+// Warzone port (2026-11-02), Jedi fall save for bots (same rules as the NPC one in NPC_AI_Jedi.c): a bot
+// whose force powers include force jump and that walks or leaps off a ledge with no floor below force-leaps
+// back at its enemy (on ground within 1024) or to the last ground it stood on. g_jediFallSave: 0 = off,
+// 1 = not while pushed / thrown / knocked down (pit kills stay), 2 = always. One save per bot every 10 s.
+static vec3_t s_botLastGround[MAX_CLIENTS];
+static int s_botLastGroundTime[MAX_CLIENTS];
+static int s_botFallSaveTime[MAX_CLIENTS];
+
+static int bot_fall_save_mode(void)
+{
+	static vmCvar_t g_jediFallSave;
+	static qboolean registered = qfalse;
+	if (!registered)
+	{
+		trap->Cvar_Register(&g_jediFallSave, "g_jediFallSave", "1", CVAR_ARCHIVE);
+		registered = qtrue;
+	}
+	else
+	{
+		trap->Cvar_Update(&g_jediFallSave);
+	}
+	return g_jediFallSave.integer;
+}
+
+static qboolean bot_fall_save_deadly(const gentity_t* ent)
+{
+	//no floor within 512 below, or the floor is lava / slime / sky / a trigger_hurt
+	trace_t trace;
+	vec3_t down, floorPos;
+	VectorCopy(ent->r.currentOrigin, down);
+	down[2] -= 512.0f;
+	trap->Trace(&trace, ent->r.currentOrigin, ent->r.mins, ent->r.maxs, down, ent->s.number,
+		MASK_PLAYERSOLID | CONTENTS_LAVA | CONTENTS_SLIME, qfalse, 0, 0);
+	if (trace.startsolid || trace.allsolid)
+	{
+		return qfalse;
+	}
+	if (trace.fraction >= 1.0f || (trace.contents & (CONTENTS_LAVA | CONTENTS_SLIME)) || (trace.surfaceFlags & SURF_SKY))
+	{
+		return qtrue;
+	}
+	VectorCopy(trace.endpos, floorPos);
+	trap->Trace(&trace, ent->r.currentOrigin, ent->r.mins, ent->r.maxs, floorPos, ent->s.number, CONTENTS_TRIGGER, qfalse, 0, 0);
+	if (trace.fraction < 1.0f && trace.entityNum >= 0 && trace.entityNum < ENTITYNUM_WORLD
+		&& g_entities[trace.entityNum].classname && !Q_stricmp(g_entities[trace.entityNum].classname, "trigger_hurt"))
+	{
+		return qtrue;
+	}
+	return qfalse;
+}
+
+static qboolean bot_fall_save_arc(const gentity_t* ent, const vec3_t dest, const int goalNum, vec3_t outVel)
+{
+	//try a few flight times; take the first arc that is clear and lands near dest
+	static const float times[] = { 0.7f, 0.9f, 1.1f, 1.35f };
+	const float gravity = (float)ent->client->ps.gravity;
+	int t;
+	for (t = 0; t < (int)ARRAY_LEN(times); t++)
+	{
+		const float ft = times[t];
+		vec3_t vel, last, pos;
+		qboolean clear = qtrue;
+		int step;
+		vel[0] = (dest[0] - ent->r.currentOrigin[0]) / ft;
+		vel[1] = (dest[1] - ent->r.currentOrigin[1]) / ft;
+		vel[2] = (dest[2] - ent->r.currentOrigin[2]) / ft + 0.5f * gravity * ft;
+		if (vel[0] * vel[0] + vel[1] * vel[1] > 1000.0f * 1000.0f || vel[2] > 1200.0f)
+		{
+			continue;
+		}
+		VectorCopy(ent->r.currentOrigin, last);
+		for (step = 1; step <= 6; step++)
+		{
+			trace_t trace;
+			const float st = ft * (float)step / 6.0f;
+			pos[0] = ent->r.currentOrigin[0] + vel[0] * st;
+			pos[1] = ent->r.currentOrigin[1] + vel[1] * st;
+			pos[2] = ent->r.currentOrigin[2] + vel[2] * st - 0.5f * gravity * st * st;
+			trap->Trace(&trace, last, ent->r.mins, ent->r.maxs, pos, ent->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
+			if (trace.startsolid || trace.allsolid)
+			{
+				clear = qfalse;
+				break;
+			}
+			if (trace.fraction < 1.0f)
+			{
+				if (trace.entityNum == goalNum
+					|| (trace.plane.normal[2] > 0.7f && DistanceSquared(trace.endpos, dest) < 96.0f * 96.0f))
+				{
+					break;	//landed on the target (or close enough)
+				}
+				clear = qfalse;
+				break;
+			}
+			VectorCopy(pos, last);
+		}
+		if (clear)
+		{
+			VectorCopy(vel, outVel);
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+static void bot_fall_save(const bot_state_t* bs)
+{
+	gentity_t* ent = &g_entities[bs->client];
+	gclient_t* client = ent->client;
+	const int n = bs->client;
+	if (!client || !ent->inuse || ent->health <= 0 || n < 0 || n >= MAX_CLIENTS)
+	{
+		return;
+	}
+	if (s_botFallSaveTime[n] > level.time + 10000 || s_botLastGroundTime[n] > level.time)
+	{
+		//new map: old times
+		s_botFallSaveTime[n] = 0;
+		s_botLastGroundTime[n] = 0;
+	}
+
+	if (client->ps.groundEntityNum != ENTITYNUM_NONE)
+	{
+		const int groundNum = client->ps.groundEntityNum;
+		const gentity_t* ground = &g_entities[groundNum];
+		if (ent->waterlevel < 2 && !(client->ps.pm_flags & PMF_TIME_KNOCKBACK)
+			&& (groundNum == ENTITYNUM_WORLD || (!ground->client && ground->s.eType != ET_MOVER)))
+		{
+			VectorCopy(ent->r.currentOrigin, s_botLastGround[n]);
+			s_botLastGroundTime[n] = level.time;
+		}
+		return;
+	}
+	if (client->ps.velocity[2] > -200.0f
+		|| !(client->ps.fd.forcePowersKnown & (1 << FP_LEVITATION))
+		|| client->ps.fd.forcePowerLevel[FP_LEVITATION] < FORCE_LEVEL_1
+		|| ent->waterlevel >= 2 || client->ps.fd.forceGripBeingGripped > level.time
+		|| client->ps.m_iVehicleNum || level.time < s_botFallSaveTime[n])
+	{
+		return;
+	}
+	{
+		const int mode = bot_fall_save_mode();
+		if (mode <= 0)
+		{
+			return;
+		}
+		if (mode == 1 && (PM_InKnockDown(&client->ps) || (client->ps.pm_flags & PMF_TIME_KNOCKBACK)
+			|| client->ps.otherKillerTime > level.time))
+		{
+			//pushed or thrown off: no save, pit kills stay
+			return;
+		}
+	}
+	if (!bot_fall_save_deadly(ent))
+	{
+		return;
+	}
+	{
+		vec3_t dest, vel;
+		int goal = ENTITYNUM_NONE;
+		const gentity_t* enemy = bs->currentEnemy;
+		qboolean haveDest = qfalse;
+		if (enemy && enemy->inuse && enemy->client && enemy->health > 0 && enemy->client->ps.groundEntityNum != ENTITYNUM_NONE
+			&& enemy->r.currentOrigin[2] > ent->r.currentOrigin[2] - 64.0f
+			&& DistanceSquared(enemy->r.currentOrigin, ent->r.currentOrigin) < 1024.0f * 1024.0f)
+		{
+			VectorCopy(enemy->r.currentOrigin, dest);
+			goal = enemy->s.number;
+			haveDest = bot_fall_save_arc(ent, dest, goal, vel);
+		}
+		if (!haveDest && s_botLastGroundTime[n] > 0 && level.time - s_botLastGroundTime[n] < 5000
+			&& DistanceSquared(s_botLastGround[n], ent->r.currentOrigin) < 1024.0f * 1024.0f)
+		{
+			vec3_t back;
+			VectorCopy(s_botLastGround[n], dest);
+			VectorSet(back, -client->ps.velocity[0], -client->ps.velocity[1], 0.0f);
+			if (VectorNormalize(back) > 0.0f)
+			{
+				//a little away from the edge if there is floor there
+				vec3_t inside, below;
+				trace_t trace;
+				VectorMA(dest, 48.0f, back, inside);
+				VectorCopy(inside, below);
+				below[2] -= 64.0f;
+				trap->Trace(&trace, inside, ent->r.mins, ent->r.maxs, below, ent->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
+				if (!trace.startsolid && !trace.allsolid && trace.fraction < 1.0f && trace.plane.normal[2] > 0.7f)
+				{
+					VectorCopy(inside, dest);
+				}
+			}
+			goal = ENTITYNUM_NONE;
+			haveDest = bot_fall_save_arc(ent, dest, goal, vel);
+		}
+		if (!haveDest)
+		{
+			return;
+		}
+		VectorCopy(vel, client->ps.velocity);
+		if (client->ps.pm_flags & PMF_TIME_KNOCKBACK)
+		{
+			client->ps.pm_flags &= ~PMF_TIME_KNOCKBACK;
+			client->ps.pm_time = 0;
+		}
+		NPC_SetAnim(ent, SETANIM_BOTH, BOTH_FORCEJUMP1, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+		client->ps.fd.forceJumpZStart = ent->r.currentOrigin[2];
+		client->ps.pm_flags |= PMF_JUMPING;
+		G_Sound(ent, CHAN_BODY, G_SoundIndex("sound/weapons/force/jump.mp3"));
+		s_botFallSaveTime[n] = level.time + 10000;
+	}
+}
+
 static int bot_ai(const int client, const float thinktime)
 {
 	bot_state_t* bs = botstates[client];
@@ -2622,6 +2834,9 @@ static int bot_ai(const int client, const float thinktime)
 	{
 		Enhanced_bot_ai(bs);
 	}
+
+	// Jedi fall save (Warzone port): force leap back from a deadly fall
+	bot_fall_save(bs);
 
 #ifdef _DEBUG
 	const int end = trap->Milliseconds();
@@ -19785,7 +20000,7 @@ int bot_ai_startframe(const int time)
 		{
 			botstates[i]->botthink_residual -= thinktime;
 
-			if (g_entities[i].client->pers.connected == CON_CONNECTED && !G_Pazaak_IsPlaying(i))
+			if (g_entities[i].client->pers.connected == CON_CONNECTED && !G_Pazaak_IsPlaying(i) && G_Shop_BotTalkingTo(i) < 0)
 			{
 				bot_ai(i, (float)thinktime / 1000);
 			}
@@ -19806,12 +20021,13 @@ int bot_ai_startframe(const int time)
 
 		bot_state_t* bs = botstates[i];
 
-		if (G_Pazaak_IsPlaying(i))
+		if (G_Pazaak_IsPlaying(i) || G_Shop_BotTalkingTo(i) >= 0)
 		{
-			// He sits in for the AI at a Pazaak match (g_pazaak.c): he sits still, facing his opponent
+			// He sits in for the AI at a Pazaak match, or a player talks to him (talk question / shop, g_pazaak.c): he
+			// stays still, facing him, with the talk balloon (2026-11-02)
 			bs->lastucmd.serverTime = time;
 			bs->lastucmd.forwardmove = bs->lastucmd.rightmove = bs->lastucmd.upmove = 0;
-			bs->lastucmd.buttons = 0;
+			bs->lastucmd.buttons = BUTTON_TALK;
 			bs->lastucmd.generic_cmd = 0;
 			trap->BotUserCommand(bs->client, &bs->lastucmd);
 			continue;

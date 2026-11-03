@@ -2435,14 +2435,185 @@ static void NPC_PrecacheType(char* NPC_type)
 extern void NPC_PrecacheByClassName(const char* type);
 extern void Precashe_Key(void);
 
+/*
+-------------------------
+Missions (GT_SINGLE_PLAYER) and g_allowNPC (DH 2026-11-02)
+
+g_allowNPC 0: only the NPCs the level needs spawn. Needed: a spawner whose killing fires something (deathtarget /
+target / target2: kill objectives, door counters, the mission waves of ext_data/mission_ents), or whose name is listed
+for the map in ext_data/mission_npcs.dat (its NPC_targetname, or "@" + its targetname when it has none: the map's scripts
+affect, kill, remove, use it or make it an enemy / leader / view target; built from the campaign scripts, DH may add
+names). The old list of NPC types stays allowed too. g_allowNPC 1: every NPC of the level, and the per-map crash bans
+below no longer remove an NPC the level needs.
+-------------------------
+*/
+#define MISSION_NPCS_FILE		"ext_data/mission_npcs.dat"
+#define MISSION_NPCS_MAXSIZE	65536
+
+static qboolean NPC_MissionNeeded(const gentity_t* self)
+{
+	static char buf[MISSION_NPCS_MAXSIZE];
+	static int loadedLevel = -1;
+	char mapname[MAX_QPATH];
+	char* s = NULL;
+
+	if (level.gametype != GT_SINGLE_PLAYER)
+	{
+		return qfalse;
+	}
+	if (G_SpawnString("deathtarget", "", &s) && s[0] || self->target && self->target[0]
+		|| self->target2 && self->target2[0])
+	{
+		return qtrue;
+	}
+
+	if (loadedLevel != level.startTime)
+	{
+		fileHandle_t f = 0;
+		const int len = trap->FS_Open(MISSION_NPCS_FILE, &f, FS_READ);
+		loadedLevel = level.startTime;
+		buf[0] = 0;
+		if (f)
+		{
+			if (len > 0 && len < (int)sizeof buf)
+			{
+				trap->FS_Read(buf, len, f);
+				buf[len] = 0;
+			}
+			trap->FS_Close(f);
+		}
+	}
+	if (!buf[0])
+	{
+		return qfalse;
+	}
+
+	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+	const char* p = buf;
+	while (1)
+	{
+		const char* token = COM_ParseExt(&p, qtrue);
+		if (!token[0])
+		{
+			return qfalse;
+		}
+		if (Q_stricmp(token, mapname))
+		{
+			SkipRestOfLine(&p);
+			continue;
+		}
+		while ((token = COM_ParseExt(&p, qfalse))[0])
+		{
+			if (token[0] == '@')
+			{
+				if (self->targetname && !Q_stricmp(token + 1, self->targetname))
+				{
+					return qtrue;
+				}
+			}
+			else if (self->NPC_targetname && !Q_stricmp(token, self->NPC_targetname))
+			{
+				return qtrue;
+			}
+		}
+		return qfalse;
+	}
+}
+
+/*
+-------------------------
+Missions: cutscene-only actors never spawn (DH 2026-11-03)
+
+A cutscene in a mission is not shown (g_ICARUScb.c), so the NPCs that only play in a map's start cutscene (Kyle and the
+masters at academy1, the fake players...) would just stand there. ext_data/mission_cutscene_actors.dat lists them per
+map: <map> NPC_targetname ... (built from the campaign scripts: named by the start cutscene's scripts only, targeted by
+no entity, their killing fires nothing; only maps whose start cutscene has a skip script). A listed spawner whose killing
+fires something is kept all the same.
+-------------------------
+*/
+#define MISSION_ACTORS_FILE		"ext_data/mission_cutscene_actors.dat"
+#define MISSION_ACTORS_MAXSIZE	16384
+
+static qboolean NPC_MissionCutsceneActor(const gentity_t* self)
+{
+	static char buf[MISSION_ACTORS_MAXSIZE];
+	static int loadedLevel = -1;
+	char mapname[MAX_QPATH];
+	char* s = NULL;
+
+	if (level.gametype != GT_SINGLE_PLAYER || !self->NPC_targetname || !self->NPC_targetname[0])
+	{
+		return qfalse;
+	}
+	if (G_SpawnString("deathtarget", "", &s) && s[0] || self->target && self->target[0]
+		|| self->target2 && self->target2[0])
+	{
+		return qfalse;
+	}
+
+	if (loadedLevel != level.startTime)
+	{
+		fileHandle_t f = 0;
+		const int len = trap->FS_Open(MISSION_ACTORS_FILE, &f, FS_READ);
+		loadedLevel = level.startTime;
+		buf[0] = 0;
+		if (f)
+		{
+			if (len > 0 && len < (int)sizeof buf)
+			{
+				trap->FS_Read(buf, len, f);
+				buf[len] = 0;
+			}
+			trap->FS_Close(f);
+		}
+	}
+	if (!buf[0])
+	{
+		return qfalse;
+	}
+
+	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+	const char* p = buf;
+	while (1)
+	{
+		const char* token = COM_ParseExt(&p, qtrue);
+		if (!token[0])
+		{
+			return qfalse;
+		}
+		if (Q_stricmp(token, mapname))
+		{
+			SkipRestOfLine(&p);
+			continue;
+		}
+		while ((token = COM_ParseExt(&p, qfalse))[0])
+		{
+			if (!Q_stricmp(token, self->NPC_targetname))
+			{
+				return qtrue;
+			}
+		}
+		return qfalse;
+	}
+}
+
 void SP_NPC_spawner(gentity_t* self)
 {
 	int t = 0;
+	const qboolean needed = NPC_MissionNeeded(self); // (Missions: the level needs this NPC, above)
+
+	if (NPC_MissionCutsceneActor(self))
+	{
+		// (Missions: an NPC only the start cutscene uses, above)
+		self->think = G_FreeEntity;
+		self->nextthink = level.time;
+		return;
+	}
 
 	if (level.gametype == GT_SINGLE_PLAYER && !g_allowNPC.integer) //singleplayer npcs turned off
 	{
 		// exceptions so scripts can run
-		if (!(Q_stricmp(self->NPC_type, "ImpOfficer") == 0
+		if (!needed && !(Q_stricmp(self->NPC_type, "ImpOfficer") == 0
 			|| Q_stricmp(self->NPC_type, "ImpOfficer2") == 0
 			|| Q_stricmp(self->NPC_type, "ImpCommander") == 0
 			|| Q_stricmp(self->NPC_type, "Imperial") == 0
@@ -2496,7 +2667,7 @@ void SP_NPC_spawner(gentity_t* self)
 			return;
 		}
 		//restrictions for stability if using devmap or allowwnpc is on
-		if (level.is_t1_fatal_map == qtrue &&
+		if (!needed && level.is_t1_fatal_map == qtrue &&
 			(Q_stricmp(self->NPC_type, "ImpWorker") == 0 ||
 				Q_stricmp(self->NPC_type, "ImpWorker2") == 0 ||
 				Q_stricmp(self->NPC_type, "ImpWorker3") == 0))
@@ -2507,7 +2678,7 @@ void SP_NPC_spawner(gentity_t* self)
 			return;
 		}
 
-		if (level.is_t3_hevil_map == qtrue &&
+		if (!needed && level.is_t3_hevil_map == qtrue &&
 			Q_stricmp(self->NPC_type, "Noghri") == 0)
 		{
 			// t3_hevil map will not load these npcs to avoid crashing clients
@@ -2516,7 +2687,7 @@ void SP_NPC_spawner(gentity_t* self)
 			return;
 		}
 
-		if (level.is_vjun3_map == qtrue &&
+		if (!needed && level.is_vjun3_map == qtrue &&
 			(Q_stricmp(self->NPC_type, "protocol_imp") == 0 ||
 				Q_stricmp(self->NPC_type, "r2d2_imp") == 0))
 		{
@@ -2526,7 +2697,7 @@ void SP_NPC_spawner(gentity_t* self)
 			return;
 		}
 
-		if (level.is_t3_rift_map == qtrue &&
+		if (!needed && level.is_t3_rift_map == qtrue &&
 			(Q_stricmp(self->NPC_type, "reborn_dual") == 0 ||
 				Q_stricmp(self->NPC_type, "reborn_dual2") == 0 ||
 				Q_stricmp(self->NPC_type, "RebornMasterDual") == 0 ||
@@ -2541,7 +2712,7 @@ void SP_NPC_spawner(gentity_t* self)
 			return;
 		}
 
-		if (level.is_t1_rail_map == qtrue &&
+		if (!needed && level.is_t1_rail_map == qtrue &&
 			(Q_stricmp(self->NPC_type, "Reborn") == 0 ||
 				Q_stricmp(self->NPC_type, "cultist_saber") == 0 ||
 				Q_stricmp(self->NPC_type, "human_merc") == 0 ||
@@ -2553,7 +2724,7 @@ void SP_NPC_spawner(gentity_t* self)
 			return;
 		}
 
-		if (level.is_t1_sour_map == qtrue &&
+		if (!needed && level.is_t1_sour_map == qtrue &&
 			Q_stricmp(self->NPC_type, "chewie") == 0)
 		{
 			// map will not load these npcs to avoid  crashing clients
@@ -2562,7 +2733,7 @@ void SP_NPC_spawner(gentity_t* self)
 			return;
 		}
 
-		if (level.is_t2_rouge_map == qtrue &&
+		if (!needed && level.is_t2_rouge_map == qtrue &&
 			(Q_stricmp(self->NPC_type, "jan") == 0 ||
 				Q_stricmp(self->NPC_type, "human_merc_bow") == 0))
 		{
@@ -2572,7 +2743,7 @@ void SP_NPC_spawner(gentity_t* self)
 			return;
 		}
 
-		if (level.is_t3_byss_map == qtrue &&
+		if (!needed && level.is_t3_byss_map == qtrue &&
 			(Q_stricmp(self->NPC_type, "mark1") == 0 ||
 				Q_stricmp(self->NPC_type, "mark2") == 0 ||
 				Q_stricmp(self->NPC_type, "sentry") == 0))

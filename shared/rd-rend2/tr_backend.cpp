@@ -3005,7 +3005,7 @@ static void ComputeDeformValues(
 
 void RB_AddShaderToShaderInstanceUBO(shader_t* shader)
 {
-	if (shader->numDeforms != 1 && !shader->portalRange && !shader->timeOffset)
+	if (shader->numDeforms != 1 && !shader->portalRange && !shader->timeOffset && !shader->grassCutPlant)
 	{
 		shader->ShaderInstanceUboOffset = -1;
 		return;
@@ -3714,6 +3714,22 @@ static const void* RB_PostProcess(const void* data)
 		}
 
 		FBO_FastBlitFromTexture(tr.glowFboScaled[0]->colorImage[0], NULL, dstBox, color, blendFunc);
+	}
+
+	// r_sharpen (Warzone port): contrast-adaptive sharpening (AMD RCAS) of the finished
+	// 3D view, after tone map, SMAA and glow; the HUD is drawn later and stays untouched
+	if (r_sharpen->value > 0.0f && tr.sharpenFbo && tr.sharpenShader.program
+		&& !(backEnd.refdef.rdflags & RDF_NOWORLDMODEL))
+	{
+		FBO_FastBlit(NULL, dstBox, tr.sharpenFbo, dstBox, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+		FBO_Bind(NULL);
+		GL_SetViewportAndScissor(dstBox[0], dstBox[1], dstBox[2], dstBox[3]);
+		GL_Cull(CT_TWO_SIDED);
+		GL_State(GLS_DEPTHTEST_DISABLE);
+		GLSL_BindProgram(&tr.sharpenShader);
+		GL_BindToTMU(tr.sharpenImage, TB_COLORMAP);
+		GLSL_SetUniformFloat(&tr.sharpenShader, UNIFORM_BLOOMSTRENGTH, Com_Clamp(0.0f, 1.0f, r_sharpen->value));
+		qglDrawArrays(GL_TRIANGLES, 0, 3);
 	}
 
 	backEnd.framePostProcessed = qtrue;

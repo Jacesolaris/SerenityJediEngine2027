@@ -429,6 +429,8 @@ gentity_t* G_CheckControlledTurretEnemy(const gentity_t* self, gentity_t* enemy,
 NPC_Pain
 ===============
 */
+extern void Boba_Pain(gentity_t* self, int mod);
+
 void NPC_Pain(gentity_t* self, gentity_t* attacker, const int damage)
 {
 	npcteam_t other_team = NPCTEAM_FREE;
@@ -442,6 +444,8 @@ void NPC_Pain(gentity_t* self, gentity_t* attacker, const int damage)
 
 	if (self->NPC == NULL)
 		return;
+
+	Boba_Pain(self, mod); // (bounty hunters: hurt by a saber, new tactics; NPC_AI_BobaFett.c)
 
 	if (other == NULL)
 		return;
@@ -809,19 +813,9 @@ void NPC_TempLookTarget(const gentity_t* self, const int lookEntNum, int minLook
 }
 
 static void NPC_Respond(gentity_t* self, const int userNum)
+// (DH 2026-11-03: SP NPC_reactions.cpp NPC_Respond - what each kind of NPC says when used / spoken to)
 {
 	int event = -1;
-	/*
-
-	if ( Q_irand( 0, 1 ) )
-	{
-		event = Q_irand(EV_RESPOND1, EV_RESPOND3);
-	}
-	else
-	{
-		event = Q_irand(EV_BUSY1, EV_BUSY3);
-	}
-	*/
 
 	if (!Q_irand(0, 1))
 	{
@@ -832,16 +826,26 @@ static void NPC_Respond(gentity_t* self, const int userNum)
 	//some last-minute hacked in responses
 	switch (self->client->NPC_class)
 	{
+	case CLASS_ALORA:
+	case CLASS_TAVION:
 	case CLASS_JAN:
 		if (self->enemy)
 		{
-			if (!Q_irand(0, 2))
+			if (Q_irand(0, 9) > 6)
 			{
 				event = Q_irand(EV_CHASE1, EV_CHASE3);
 			}
-			else if (Q_irand(0, 1))
+			else if (Q_irand(0, 6) > 4)
 			{
 				event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
+			}
+			else if (Q_irand(0, 1))
+			{
+				event = Q_irand(EV_DETECTED1, EV_DETECTED5);
+			}
+			else if (!Q_irand(0, 1))
+			{
+				event = Q_irand(EV_ANGER1, EV_ANGER3);
 			}
 			else
 			{
@@ -852,69 +856,253 @@ static void NPC_Respond(gentity_t* self, const int userNum)
 		{
 			event = EV_SUSPICIOUS4;
 		}
+		else if (!Q_irand(0, 3))
+		{
+			event = Q_irand(EV_SIGHT1, EV_SIGHT2);
+		}
 		else if (!Q_irand(0, 1))
 		{
-			event = EV_SOUND1;
+			event = Q_irand(EV_SOUND1, EV_SOUND3);
+		}
+		else if (!Q_irand(0, 2))
+		{
+			event = EV_LOST1;
+		}
+		else if (!Q_irand(0, 1))
+		{
+			event = EV_GIVEUP3;
+		}
+		else if (Q_irand(0, 1))
+		{
+			event = Q_irand(EV_JDETECTED1, EV_JDETECTED2);
+		}
+		else if (Q_irand(0, 1))
+		{
+			event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
+		}
+		else if (!Q_irand(0, 1))
+		{
+			event = EV_ESCAPING2;
+		}
+		else if (!Q_irand(0, 1))
+		{
+			event = Q_irand(EV_ANGER1, EV_ANGER3);
 		}
 		else
 		{
 			event = EV_CONFUSE1;
 		}
 		break;
+	case CLASS_REBORN:
 	case CLASS_LANDO:
 		if (self->enemy)
 		{
-			if (!Q_irand(0, 2))
+			if (Q_irand(0, 9) > 6)
 			{
 				event = Q_irand(EV_CHASE1, EV_CHASE3);
 			}
-			else if (Q_irand(0, 1))
+			else if (Q_irand(0, 6) > 4)
 			{
 				event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
+			}
+			else if (Q_irand(0, 1))
+			{
+				event = Q_irand(EV_DETECTED1, EV_DETECTED5);
+			}
+			else if (!Q_irand(0, 1))
+			{
+				event = Q_irand(EV_ANGER1, EV_ANGER3);
 			}
 			else
 			{
 				event = Q_irand(EV_COVER1, EV_COVER5);
 			}
 		}
-		else if (!Q_irand(0, 6))
+		else if (!Q_irand(0, 2))
 		{
-			event = EV_SIGHT2;
+			event = EV_SUSPICIOUS4;
 		}
-		else if (!Q_irand(0, 5))
+		else if (!Q_irand(0, 3))
 		{
-			event = EV_GIVEUP4;
+			event = Q_irand(EV_SIGHT1, EV_SIGHT2);
 		}
-		else if (Q_irand(0, 4) > 1)
+		else if (!Q_irand(0, 1))
 		{
 			event = Q_irand(EV_SOUND1, EV_SOUND3);
 		}
-		else
+		else if (!Q_irand(0, 2))
+		{
+			event = EV_LOST1;
+		}
+		else if (!Q_irand(0, 1))
+		{
+			event = EV_GIVEUP3;
+		}
+		else if (Q_irand(0, 1))
 		{
 			event = Q_irand(EV_JDETECTED1, EV_JDETECTED2);
 		}
-		break;
-	case CLASS_LUKE:
-		if (self->enemy)
+		else if (Q_irand(0, 1))
 		{
-			event = EV_COVER1;
+			event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
+		}
+		else if (!Q_irand(0, 1))
+		{
+			event = EV_ESCAPING2;
+		}
+		else if (!Q_irand(0, 1))
+		{
+			event = Q_irand(EV_ANGER1, EV_ANGER3);
 		}
 		else
 		{
-			event = Q_irand(EV_SOUND1, EV_SOUND3);
+			event = EV_CONFUSE1;
 		}
 		break;
-	case CLASS_JEDI:
-		if (!self->enemy)
+	case CLASS_DESANN:
+	case CLASS_SITHLORD:
+	case CLASS_VADER:
+	case CLASS_LUKE:
+		if (self->enemy)
 		{
-			if (!(self->NPC->scriptFlags & SCF_IGNORE_ENEMIES)
-				&& self->NPC->scriptFlags & SCF_LOOK_FOR_ENEMIES)
+			if (Q_irand(0, 9) > 6)
+			{
+				event = Q_irand(EV_CHASE1, EV_CHASE3);
+			}
+			else if (Q_irand(0, 6) > 4)
+			{
+				event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
+			}
+			else if (Q_irand(0, 1))
+			{
+				event = Q_irand(EV_DETECTED1, EV_DETECTED5);
+			}
+			else if (!Q_irand(0, 1))
 			{
 				event = Q_irand(EV_ANGER1, EV_ANGER3);
 			}
 			else
 			{
-				event = Q_irand(EV_TAUNT1, EV_TAUNT2);
+				event = Q_irand(EV_COVER1, EV_COVER5);
+			}
+		}
+		else if (!Q_irand(0, 2))
+		{
+			event = EV_SUSPICIOUS4;
+		}
+		else if (!Q_irand(0, 3))
+		{
+			event = Q_irand(EV_SIGHT1, EV_SIGHT2);
+		}
+		else if (!Q_irand(0, 1))
+		{
+			event = Q_irand(EV_SOUND1, EV_SOUND3);
+		}
+		else if (!Q_irand(0, 2))
+		{
+			event = EV_LOST1;
+		}
+		else if (!Q_irand(0, 1))
+		{
+			event = EV_GIVEUP3;
+		}
+		else if (Q_irand(0, 1))
+		{
+			event = Q_irand(EV_JDETECTED1, EV_JDETECTED2);
+		}
+		else if (Q_irand(0, 1))
+		{
+			event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
+		}
+		else if (!Q_irand(0, 1))
+		{
+			event = EV_ESCAPING2;
+		}
+		else if (!Q_irand(0, 1))
+		{
+			event = Q_irand(EV_ANGER1, EV_ANGER3);
+		}
+		else
+		{
+			event = EV_CONFUSE1;
+		}
+		break;
+	case CLASS_JEDI:
+	case CLASS_KYLE:
+	case CLASS_YODA:
+		if (!self->enemy)
+		{
+			if (!(self->r.svFlags & SVF_IGNORE_ENEMIES)
+				&& self->NPC->scriptFlags & SCF_LOOK_FOR_ENEMIES
+				&& self->client->enemyTeam == NPCTEAM_ENEMY)
+			{
+				event = Q_irand(EV_ANGER1, EV_ANGER3);
+			}
+			else
+			{
+				if (self->enemy)
+				{
+					if (Q_irand(0, 9) > 6)
+					{
+						event = Q_irand(EV_CHASE1, EV_CHASE3);
+					}
+					else if (Q_irand(0, 6) > 4)
+					{
+						event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
+					}
+					else if (Q_irand(0, 1))
+					{
+						event = Q_irand(EV_DETECTED1, EV_DETECTED5);
+					}
+					else if (!Q_irand(0, 1))
+					{
+						event = Q_irand(EV_ANGER1, EV_ANGER3);
+					}
+					else
+					{
+						event = Q_irand(EV_COVER1, EV_COVER5);
+					}
+				}
+				else if (!Q_irand(0, 2))
+				{
+					event = EV_SUSPICIOUS4;
+				}
+				else if (!Q_irand(0, 3))
+				{
+					event = Q_irand(EV_SIGHT1, EV_SIGHT2);
+				}
+				else if (!Q_irand(0, 1))
+				{
+					event = Q_irand(EV_SOUND1, EV_SOUND3);
+				}
+				else if (!Q_irand(0, 2))
+				{
+					event = EV_LOST1;
+				}
+				else if (!Q_irand(0, 1))
+				{
+					event = EV_GIVEUP3;
+				}
+				else if (Q_irand(0, 1))
+				{
+					event = Q_irand(EV_JDETECTED1, EV_JDETECTED2);
+				}
+				else if (Q_irand(0, 1))
+				{
+					event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
+				}
+				else if (!Q_irand(0, 1))
+				{
+					event = EV_ESCAPING2;
+				}
+				else if (!Q_irand(0, 1))
+				{
+					event = Q_irand(EV_ANGER1, EV_ANGER3);
+				}
+				else
+				{
+					event = Q_irand(EV_TAUNT1, EV_TAUNT3);
+				}
 			}
 		}
 		break;
@@ -942,18 +1130,66 @@ static void NPC_Respond(gentity_t* self, const int userNum)
 	case CLASS_WOOKIE:
 		if (self->enemy)
 		{
-			if (!Q_irand(0, 2))
+			if (Q_irand(0, 9) > 6)
 			{
 				event = Q_irand(EV_CHASE1, EV_CHASE3);
 			}
-			else
+			else if (Q_irand(0, 6) > 4)
+			{
+				event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
+			}
+			else if (Q_irand(0, 1))
 			{
 				event = Q_irand(EV_DETECTED1, EV_DETECTED5);
 			}
+			else if (!Q_irand(0, 1))
+			{
+				event = Q_irand(EV_ANGER1, EV_ANGER3);
+			}
+			else
+			{
+				event = Q_irand(EV_COVER1, EV_COVER5);
+			}
+		}
+		else if (!Q_irand(0, 2))
+		{
+			event = EV_SUSPICIOUS4;
+		}
+		else if (!Q_irand(0, 3))
+		{
+			event = Q_irand(EV_SIGHT1, EV_SIGHT2);
+		}
+		else if (!Q_irand(0, 1))
+		{
+			event = Q_irand(EV_SOUND1, EV_SOUND3);
+		}
+		else if (!Q_irand(0, 2))
+		{
+			event = EV_LOST1;
+		}
+		else if (!Q_irand(0, 1))
+		{
+			event = EV_GIVEUP3;
+		}
+		else if (Q_irand(0, 1))
+		{
+			event = Q_irand(EV_JDETECTED1, EV_JDETECTED2);
+		}
+		else if (Q_irand(0, 1))
+		{
+			event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
+		}
+		else if (!Q_irand(0, 1))
+		{
+			event = EV_ESCAPING2;
+		}
+		else if (!Q_irand(0, 1))
+		{
+			event = Q_irand(EV_ANGER1, EV_ANGER3);
 		}
 		else
 		{
-			event = Q_irand(EV_SOUND1, EV_SOUND3);
+			event = EV_CONFUSE1;
 		}
 		break;
 	case CLASS_BESPIN_COP:
@@ -1009,10 +1245,22 @@ static void NPC_Respond(gentity_t* self, const int userNum)
 				{
 					event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
 				}
+				else if (Q_irand(0, 1))
+				{
+					event = Q_irand(EV_DETECTED1, EV_DETECTED5);
+				}
+				else if (!Q_irand(0, 1))
+				{
+					event = Q_irand(EV_ANGER1, EV_ANGER3);
+				}
 				else
 				{
 					event = Q_irand(EV_COVER1, EV_COVER5);
 				}
+			}
+			else if (!Q_irand(0, 2))
+			{
+				event = EV_SUSPICIOUS4;
 			}
 			else if (!Q_irand(0, 3))
 			{
@@ -1029,6 +1277,22 @@ static void NPC_Respond(gentity_t* self, const int userNum)
 			else if (!Q_irand(0, 1))
 			{
 				event = EV_GIVEUP3;
+			}
+			else if (Q_irand(0, 1))
+			{
+				event = Q_irand(EV_JDETECTED1, EV_JDETECTED2);
+			}
+			else if (Q_irand(0, 1))
+			{
+				event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
+			}
+			else if (!Q_irand(0, 1))
+			{
+				event = EV_ESCAPING2;
+			}
+			else if (!Q_irand(0, 1))
+			{
+				event = Q_irand(EV_ANGER1, EV_ANGER3);
 			}
 			else
 			{
@@ -1050,49 +1314,22 @@ static void NPC_Respond(gentity_t* self, const int userNum)
 				{
 					event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
 				}
+				else if (Q_irand(0, 1))
+				{
+					event = Q_irand(EV_DETECTED1, EV_DETECTED5);
+				}
+				else if (!Q_irand(0, 1))
+				{
+					event = Q_irand(EV_ANGER1, EV_ANGER3);
+				}
 				else
 				{
 					event = Q_irand(EV_COVER1, EV_COVER5);
 				}
-			}
-			else if (!Q_irand(0, 3))
-			{
-				event = Q_irand(EV_SIGHT2, EV_SIGHT3);
-			}
-			else if (!Q_irand(0, 1))
-			{
-				event = Q_irand(EV_SOUND1, EV_SOUND3);
 			}
 			else if (!Q_irand(0, 2))
 			{
-				event = EV_LOST1;
-			}
-			else if (!Q_irand(0, 1))
-			{
-				event = EV_ESCAPING2;
-			}
-			else
-			{
-				event = EV_GIVEUP4;
-			}
-		}
-		else
-		{
-			//variant2
-			if (self->enemy)
-			{
-				if (Q_irand(0, 9) > 6)
-				{
-					event = Q_irand(EV_CHASE1, EV_CHASE3);
-				}
-				else if (Q_irand(0, 6) > 4)
-				{
-					event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
-				}
-				else
-				{
-					event = Q_irand(EV_COVER1, EV_COVER5);
-				}
+				event = EV_SUSPICIOUS4;
 			}
 			else if (!Q_irand(0, 3))
 			{
@@ -1109,6 +1346,89 @@ static void NPC_Respond(gentity_t* self, const int userNum)
 			else if (!Q_irand(0, 1))
 			{
 				event = EV_GIVEUP3;
+			}
+			else if (Q_irand(0, 1))
+			{
+				event = Q_irand(EV_JDETECTED1, EV_JDETECTED2);
+			}
+			else if (Q_irand(0, 1))
+			{
+				event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
+			}
+			else if (!Q_irand(0, 1))
+			{
+				event = EV_ESCAPING2;
+			}
+			else if (!Q_irand(0, 1))
+			{
+				event = Q_irand(EV_ANGER1, EV_ANGER3);
+			}
+			else
+			{
+				event = EV_CONFUSE1;
+			}
+		}
+		else
+		{
+			//variant2
+			if (self->enemy)
+			{
+				if (Q_irand(0, 9) > 6)
+				{
+					event = Q_irand(EV_CHASE1, EV_CHASE3);
+				}
+				else if (Q_irand(0, 6) > 4)
+				{
+					event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
+				}
+				else if (Q_irand(0, 1))
+				{
+					event = Q_irand(EV_DETECTED1, EV_DETECTED5);
+				}
+				else if (!Q_irand(0, 1))
+				{
+					event = Q_irand(EV_ANGER1, EV_ANGER3);
+				}
+				else
+				{
+					event = Q_irand(EV_COVER1, EV_COVER5);
+				}
+			}
+			else if (!Q_irand(0, 2))
+			{
+				event = EV_SUSPICIOUS4;
+			}
+			else if (!Q_irand(0, 3))
+			{
+				event = Q_irand(EV_SIGHT1, EV_SIGHT2);
+			}
+			else if (!Q_irand(0, 1))
+			{
+				event = Q_irand(EV_SOUND1, EV_SOUND3);
+			}
+			else if (!Q_irand(0, 2))
+			{
+				event = EV_LOST1;
+			}
+			else if (!Q_irand(0, 1))
+			{
+				event = EV_GIVEUP3;
+			}
+			else if (Q_irand(0, 1))
+			{
+				event = Q_irand(EV_JDETECTED1, EV_JDETECTED2);
+			}
+			else if (Q_irand(0, 1))
+			{
+				event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
+			}
+			else if (!Q_irand(0, 1))
+			{
+				event = EV_ESCAPING2;
+			}
+			else if (!Q_irand(0, 1))
+			{
+				event = Q_irand(EV_ANGER1, EV_ANGER3);
 			}
 			else
 			{
@@ -1128,17 +1448,87 @@ static void NPC_Respond(gentity_t* self, const int userNum)
 	case CLASS_GONK: // droid
 		G_Sound(self, CHAN_AUTO, G_SoundIndex(va("sound/chars/gonk/misc/gonktalk%d.wav", Q_irand(1, 2))));
 		break;
+	case CLASS_JAWA:
+		G_SoundOnEnt(self, CHAN_VOICE, va("sound/chars/jawa/misc/chatter%d.wav", Q_irand(1, 6)));
+		if (self->NPC)
+		{
+			self->NPC->blockedSpeechDebounceTime = level.time + 2000;
+		}
+		break;
 	default:
+		if (self->enemy)
+		{
+			if (Q_irand(0, 9) > 6)
+			{
+				event = Q_irand(EV_CHASE1, EV_CHASE3);
+			}
+			else if (Q_irand(0, 6) > 4)
+			{
+				event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
+			}
+			else if (Q_irand(0, 1))
+			{
+				event = Q_irand(EV_DETECTED1, EV_DETECTED5);
+			}
+			else if (!Q_irand(0, 1))
+			{
+				event = Q_irand(EV_ANGER1, EV_ANGER3);
+			}
+			else
+			{
+				event = Q_irand(EV_COVER1, EV_COVER5);
+			}
+		}
+		else if (!Q_irand(0, 2))
+		{
+			event = EV_SUSPICIOUS4;
+		}
+		else if (!Q_irand(0, 3))
+		{
+			event = Q_irand(EV_SIGHT1, EV_SIGHT2);
+		}
+		else if (!Q_irand(0, 1))
+		{
+			event = Q_irand(EV_SOUND1, EV_SOUND3);
+		}
+		else if (!Q_irand(0, 2))
+		{
+			event = EV_LOST1;
+		}
+		else if (!Q_irand(0, 1))
+		{
+			event = EV_GIVEUP3;
+		}
+		else if (Q_irand(0, 1))
+		{
+			event = Q_irand(EV_JDETECTED1, EV_JDETECTED2);
+		}
+		else if (Q_irand(0, 1))
+		{
+			event = Q_irand(EV_OUTFLANK1, EV_OUTFLANK2);
+		}
+		else if (!Q_irand(0, 1))
+		{
+			event = EV_ESCAPING2;
+		}
+		else if (!Q_irand(0, 1))
+		{
+			event = Q_irand(EV_ANGER1, EV_ANGER3);
+		}
+		else
+		{
+			event = EV_CONFUSE1;
+		}
 		break;
 	}
 
 	if (event != -1)
 	{
 		//hack here because we reuse some "combat" and "extra" sounds
-		const qboolean addFlag = self->NPC->scriptFlags & SCF_NO_COMBAT_TALK;
+		const qboolean addFlag = (self->NPC->scriptFlags & SCF_NO_COMBAT_TALK) != 0 ? qtrue : qfalse;
 		self->NPC->scriptFlags &= ~SCF_NO_COMBAT_TALK;
 
-		G_AddVoiceEvent(self, event, 3000);
+		G_AddVoiceEvent(self, event, Q_irand(10000, 13000));
 
 		if (addFlag)
 		{

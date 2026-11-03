@@ -2097,6 +2097,11 @@ void RE_LoadWorldMap_Actual(const char* name, world_t& worldData, const int inde
 	if (!index)
 	{
 		R_LoadEntities(&header->lumps[LUMP_ENTITIES], worldData);
+		{	// grass cutting: the map's plant models (tr_surfacesprites.cpp)
+			void R_GrassCutWorldPlants(const char* entities, int length, const world_t* world);
+			R_GrassCutWorldPlants(reinterpret_cast<const char*>(fileBase + header->lumps[LUMP_ENTITIES].fileofs),
+				header->lumps[LUMP_ENTITIES].filelen, &worldData);
+		}
 		R_LoadLightGrid(&header->lumps[LUMP_LIGHTGRID], worldData);
 		R_LoadLightGridArray(&header->lumps[LUMP_LIGHTARRAY], worldData);
 

@@ -552,6 +552,51 @@ G_RunMover
 
 ================
 */
+// a vector with no NaN / infinite / absurd component
+static qboolean G_VecSane(const vec3_t v)
+{
+	for (int i = 0; i < 3; i++)
+	{
+		if (v[i] != v[i] || v[i] > 1.0e7f || v[i] < -1.0e7f)
+		{
+			return qfalse;
+		}
+	}
+	return qtrue;
+}
+
+// DH 2026-11-02: a mover whose trajectory went non-finite (a bad script / ROFF move: t1_rail's transports) stops at its
+// last good spot, so it never reaches the clients ("RE_AddRefEntityToScene passed a refEntity which has an origin with
+// a NaN component")
+static void G_MoverSanityCheck(gentity_t* ent)
+{
+	if (!G_VecSane(ent->s.pos.trBase) || !G_VecSane(ent->s.pos.trDelta))
+	{
+		vec3_t good;
+		VectorCopy(G_VecSane(ent->r.currentOrigin) ? ent->r.currentOrigin : ent->s.origin, good);
+		if (!G_VecSane(good))
+		{
+			VectorClear(good);
+		}
+		if (developer.integer)
+		{
+			Com_Printf(S_COLOR_YELLOW "G_RunMover: %s (%s) had a non-finite position, stopped at %s\n",
+				ent->classname, ent->targetname ? ent->targetname : "", vtos(good));
+		}
+		ent->s.pos.trType = TR_STATIONARY;
+		VectorCopy(good, ent->s.pos.trBase);
+		VectorClear(ent->s.pos.trDelta);
+		VectorCopy(good, ent->r.currentOrigin);
+		trap->LinkEntity((sharedEntity_t*)ent);
+	}
+	if (!G_VecSane(ent->s.apos.trBase) || !G_VecSane(ent->s.apos.trDelta))
+	{
+		ent->s.apos.trType = TR_STATIONARY;
+		VectorCopy(G_VecSane(ent->r.currentAngles) ? ent->r.currentAngles : vec3_origin, ent->s.apos.trBase);
+		VectorClear(ent->s.apos.trDelta);
+	}
+}
+
 void G_RunMover(gentity_t* ent)
 {
 	// if not a team captain, don't do anything, because
@@ -560,6 +605,8 @@ void G_RunMover(gentity_t* ent)
 	{
 		return;
 	}
+
+	G_MoverSanityCheck(ent);
 
 	// if stationary at one of the positions, don't move anything
 	if (ent->s.pos.trType != TR_STATIONARY || ent->s.apos.trType != TR_STATIONARY)

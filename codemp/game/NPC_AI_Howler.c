@@ -339,12 +339,14 @@ static void Howler_Howl(void)
 					G_Damage(ent, NPCS.NPC, NPCS.NPC, vec3_origin, NPCS.NPC->r.currentOrigin, 1, DAMAGE_NO_KNOCKBACK,
 						MOD_CRUSH);
 
-					NPCS.NPC->enemy->client->poisonDamage = 18;
-					NPCS.NPC->enemy->client->poisonTime = level.time + 1000;
+					// (SP: the one hit gets the poison and the wonky vision, not the howler's enemy, who may be nobody;
+					// DH 2026-11-03)
+					ent->client->poisonDamage = 18;
+					ent->client->poisonTime = level.time + 1000;
 
-					// Drug our enemy up and do the wonky vision thing
-					gentity_t* tent = G_TempEntity(NPCS.NPC->enemy->r.currentOrigin, EV_DRUGGED);
-					tent->owner = NPCS.NPC->enemy;
+					// Drug him up and do the wonky vision thing
+					gentity_t* tent = G_TempEntity(ent->r.currentOrigin, EV_DRUGGED);
+					tent->owner = ent;
 				}
 			}
 			if (ent->health > 0

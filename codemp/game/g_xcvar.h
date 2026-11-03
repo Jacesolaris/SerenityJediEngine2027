@@ -212,6 +212,7 @@ XCVAR_DEF(g_dodgemulti, "10.0", NULL, CVAR_LATCH, qfalse)
 XCVAR_DEF(g_ffaRespawnTimer, "1", NULL, CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_deathfx, "1", NULL, CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_droidBodyVanish, "1", NULL, CVAR_ARCHIVE, qtrue)
+XCVAR_DEF(g_muzzleFromWeapon, "1", NULL, CVAR_ARCHIVE, qtrue) // shots come from the gun's "*flash" tag, not the eyes (0 = old)
 XCVAR_DEF(g_monsterGrab, "1", NULL, CVAR_ARCHIVE, qtrue) // wampa / rancor players and bots grab, hold and eat like SP (0 = off)
 XCVAR_DEF(g_rancorPit, "1", NULL, CVAR_ARCHIVE, qtrue) // a rancor always lives on g_rancorPitMap and respawns after it dies (0 = off)
 XCVAR_DEF(g_rancorPitMap, "mp/duel7", NULL, CVAR_ARCHIVE, qfalse)
@@ -292,4 +293,5 @@ XCVAR_DEF(g_aiReload, "1", NULL, CVAR_ARCHIVE, qtrue) // gunner bots and NPCs co
 XCVAR_DEF(g_aiClipScale, "1", NULL, CVAR_ARCHIVE, qtrue) // x every bot / NPC clip size (g_aiReload)
 XCVAR_DEF(g_grenadeCook, "1", NULL, CVAR_ARCHIVE, qtrue) // grenades (2026-10-31): players can cook a grenade (hold past a full throw), 0 = old
 
+XCVAR_DEF(g_lightningDrainRate, "8", NULL, CVAR_ARCHIVE, qtrue) // force points a second while force lightning is held (DH 2026-11-02); 0 = the old cost (2 / 5 / 8 points every 50 ms)
 #undef XCVAR_DEF
