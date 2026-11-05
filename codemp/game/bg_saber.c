@@ -7575,7 +7575,7 @@ void PM_SetSaberMove(saberMoveName_t new_move)
 		}
 	}
 	//different styles use different animations for the DFA move.
-	else if (new_move == LS_A_JUMP_T__B_ && (pm->ps->fd.saberAnimLevel == SS_DESANN)) 
+	else if (new_move == LS_A_JUMP_T__B_ && (pm->ps->fd.saberAnimLevel == SS_DESANN))
 	{
 		anim = Q_irand(BOTH_FJSS_TR_BL, BOTH_FJSS_TL_BR);
 	}

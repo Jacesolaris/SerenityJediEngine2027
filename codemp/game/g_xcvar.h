@@ -71,7 +71,9 @@ XCVAR_DEF(g_acidRainDamage, "1", NULL, CVAR_ARCHIVE, qtrue) // acid rain hurts p
 XCVAR_DEF(g_adaptRespawn, "1", NULL, CVAR_NONE, qtrue)
 XCVAR_DEF(g_allowDuelSuicide, "1", NULL, CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_allowHighPingDuelist, "1", NULL, CVAR_NONE, qtrue)
+XCVAR_DEF(g_AIsurrender, "0", NULL, CVAR_CHEAT, qfalse) // non-jawa / ugnaught NPCs surrender (SP)
 XCVAR_DEF(g_allowNPC, "1", NULL, CVAR_ARCHIVE, qtrue)
+XCVAR_DEF(g_missionSkipIntro, "1", NULL, CVAR_ARCHIVE, qfalse) // Missions: each map's intro is skipped from the start (ext_data/mission_intros.dat; 0 = it plays out unseen)
 XCVAR_DEF(g_allowTeamVote, "1", NULL, CVAR_ARCHIVE, qfalse)
 XCVAR_DEF(g_allowVote, "1", NULL, CVAR_ARCHIVE, qfalse)
 XCVAR_DEF(g_antiFakePlayer, "1", NULL, CVAR_ARCHIVE, qfalse)
@@ -115,6 +117,7 @@ XCVAR_DEF(g_gravity, "800", NULL, CVAR_NONE, qtrue)
 XCVAR_DEF(g_inactivity, "0", NULL, CVAR_NONE, qtrue)
 XCVAR_DEF(g_jediVmerc, "0", NULL, CVAR_SERVERINFO | CVAR_LATCH | CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_knockback, "1000", NULL, CVAR_NONE, qtrue)
+XCVAR_DEF(g_deathImpulse, "1", NULL, CVAR_ARCHIVE, qtrue) // impact-driven deaths: scale of the killing blow's throw, 0 = off (2026-11-04)
 XCVAR_DEF(g_lavaWeatherDamage, "1", NULL, CVAR_ARCHIVE, qtrue) // lava weather burns players / NPCs standing outside a little
 XCVAR_DEF(g_locationBasedDamage, "1", NULL, CVAR_NONE, qtrue)
 XCVAR_DEF(g_log, "games.log", NULL, CVAR_ARCHIVE, qfalse)
@@ -200,7 +203,7 @@ XCVAR_DEF(storyhead, "", NULL, CVAR_NONE, qfalse)
 XCVAR_DEF(tier_storyinfo, "0", NULL, CVAR_ARCHIVE, qfalse)
 XCVAR_DEF(tiers_complete, "", NULL, CVAR_ARCHIVE, qfalse)
 
-XCVAR_DEF(g_skipcutscenes, "0", NULL, CVAR_SERVERINFO | CVAR_ARCHIVE, qtrue)
+XCVAR_DEF(g_skipcutscenes, "1", NULL, CVAR_SERVERINFO | CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_spmodel, "jan", NULL, CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_spmodelrgb, "255 255 255", NULL, CVAR_ARCHIVE, qtrue)
 
@@ -293,5 +296,5 @@ XCVAR_DEF(g_aiReload, "1", NULL, CVAR_ARCHIVE, qtrue) // gunner bots and NPCs co
 XCVAR_DEF(g_aiClipScale, "1", NULL, CVAR_ARCHIVE, qtrue) // x every bot / NPC clip size (g_aiReload)
 XCVAR_DEF(g_grenadeCook, "1", NULL, CVAR_ARCHIVE, qtrue) // grenades (2026-10-31): players can cook a grenade (hold past a full throw), 0 = old
 
-XCVAR_DEF(g_lightningDrainRate, "8", NULL, CVAR_ARCHIVE, qtrue) // force points a second while force lightning is held (DH 2026-11-02); 0 = the old cost (2 / 5 / 8 points every 50 ms)
+XCVAR_DEF(g_lightningDrainRate, "25", NULL, CVAR_ARCHIVE, qtrue) // force points a second while force lightning is held (DH 2026-11-02); 0 = the old cost (2 / 5 / 8 points every 50 ms)
 #undef XCVAR_DEF

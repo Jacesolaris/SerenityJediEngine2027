@@ -326,6 +326,8 @@ void GL_State(uint32_t stateBits)
 		else
 		{
 			qglColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+			if (tr.ssrMaskImage)
+				qglColorMaski(2, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE); // r_ssr material mask (Jace 2026-11-04)
 		}
 	}
 
@@ -1155,6 +1157,16 @@ static void RB_SetRenderState(const RenderState& renderState)
 {
 	GL_Cull(renderState.cullType);
 	GL_State(renderState.stateBits);
+
+	// r_ssr material mask (Jace 2026-11-04): attachment 2 of the render FBO is written only by opaque colour draws
+	// (blended decals / effects / fog keep what the surface under them wrote)
+	if (tr.ssrMaskImage && glState.currentFBO && glState.currentFBO == tr.renderFbo)
+	{
+		const GLboolean write = !backEnd.depthFill
+			&& !(renderState.stateBits & (GLS_SRCBLEND_BITS | GLS_DSTBLEND_BITS | GLS_COLORMASK_BITS | GLS_COLORMASK_BUF1))
+			? GL_TRUE : GL_FALSE;
+		qglColorMaski(2, write, write, write, write);
+	}
 	GL_DepthRange(
 		renderState.depthRange.minDepth,
 		renderState.depthRange.maxDepth);
@@ -2540,7 +2552,21 @@ static void RB_RenderMainPass(drawSurf_t* drawSurfs, int numDrawSurfs)
 		return;
 	}
 
+	// r_ssr material mask (Jace 2026-11-04): start the view with "reflections allowed" everywhere
+	const bool ssrMask = tr.ssrMaskImage && glState.currentFBO && glState.currentFBO == tr.renderFbo;
+	if (ssrMask)
+	{
+		const GLfloat zero[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		qglColorMaski(2, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+		qglClearBufferfv(GL_COLOR, 2, zero);
+	}
+
 	RB_RenderDrawSurfList(drawSurfs, numDrawSurfs);
+
+	if (ssrMask)
+	{
+		qglColorMaski(2, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE); // sun, flares... never touch it
+	}
 
 	if (r_drawSun->integer)
 	{
@@ -3470,6 +3496,11 @@ static const void* RB_PostProcess(const void* data)
 		FBO_FastBlit(tr.renderFbo, NULL, tr.msaaResolveFbo, NULL, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 		srcFbo = tr.msaaResolveFbo;
 
+		if (r_ssr->integer > 0 && tr.ssrMaskImage)
+		{
+			FBO_FastBlitIndexed(tr.renderFbo, tr.msaaResolveFbo, 2, 2, GL_COLOR_BUFFER_BIT, GL_NEAREST); // r_ssr material mask (Jace 2026-11-04)
+		}
+
 		if (r_dynamicGlow->integer)
 		{
 			FBO_FastBlitIndexed(tr.renderFbo, tr.msaaResolveFbo, 1, 1, GL_COLOR_BUFFER_BIT, GL_NEAREST);
@@ -3714,6 +3745,89 @@ static const void* RB_PostProcess(const void* data)
 		}
 
 		FBO_FastBlitFromTexture(tr.glowFboScaled[0]->colorImage[0], NULL, dstBox, color, blendFunc);
+	}
+
+	// r_ssr: screen space reflections (ReShade style, colour + depth only) of the finished
+	// 3D view, after tone map, SMAA and glow so saber glow shows up in the reflections.
+	// The view is copied into the r_sharpen image (free until the sharpen pass below).
+	if (r_ssr->integer > 0 && tr.sharpenFbo && tr.ssrShader.program && tr.renderFbo && tr.renderDepthImage
+		&& !(backEnd.refdef.rdflags & RDF_NOWORLDMODEL) && !(backEnd.viewParms.flags & VPF_DEPTHSHADOW))
+	{
+		const float* proj = backEnd.viewParms.projectionMatrix;
+		vec4_t ssrProjection, ssrParams, ssrViewport, ssrUp;
+		VectorSet4(ssrProjection, proj[0], proj[5], proj[8], proj[9]);
+		VectorSet4(ssrParams, proj[10], proj[14],
+			Com_Clamp(0.0f, 1.0f, r_ssrStrength->value), Com_Clamp(64.0f, 8192.0f, r_ssrMaxDistance->value));
+		VectorSet4(ssrViewport, (float)dstBox[0], (float)dstBox[1], (float)dstBox[2], (float)dstBox[3]);
+		// world up (0 0 1) in view space: x = right (-left), y = up, z = forward
+		VectorSet4(ssrUp,
+			-backEnd.viewParms.ori.axis[1][2],
+			backEnd.viewParms.ori.axis[2][2],
+			backEnd.viewParms.ori.axis[0][2],
+			(float)Com_Clampi(1, 2, r_ssr->integer));
+
+		FBO_FastBlit(NULL, dstBox, tr.sharpenFbo, dstBox, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+		FBO_Bind(NULL);
+		GL_SetViewportAndScissor(dstBox[0], dstBox[1], dstBox[2], dstBox[3]);
+		GL_Cull(CT_TWO_SIDED);
+		GL_State(GLS_DEPTHTEST_DISABLE);
+		GLSL_BindProgram(&tr.ssrShader);
+		GL_BindToTMU(tr.sharpenImage, TB_COLORMAP);
+		GL_BindToTMU(tr.renderDepthImage, TB_LIGHTMAP);
+		if (tr.ssrMaskImage) GL_BindToTMU(tr.ssrMaskImage, TB_NORMALMAP); // r_ssr material mask (Jace 2026-11-04)
+		GLSL_SetUniformVec4(&tr.ssrShader, UNIFORM_SSRPROJECTION, ssrProjection);
+		GLSL_SetUniformVec4(&tr.ssrShader, UNIFORM_SSRPARAMS, ssrParams);
+		GLSL_SetUniformVec4(&tr.ssrShader, UNIFORM_SSRVIEWPORT, ssrViewport);
+		GLSL_SetUniformVec4(&tr.ssrShader, UNIFORM_SSRUP, ssrUp);
+		qglDrawArrays(GL_TRIANGLES, 0, 3);
+	}
+
+	// r_godRays: screen space light shafts. Bright sky pixels (depth 1) are blurred towards the
+	// sun's screen position at half resolution (quarterFbo[0], free at this point) and added on top.
+	if (r_godRays->integer > 0 && r_godRaysStrength->value > 0.0f && tr.sharpenFbo && tr.quarterFbo[0]
+		&& tr.godRaysShader.program && tr.renderFbo && tr.renderDepthImage
+		&& !(backEnd.refdef.rdflags & RDF_NOWORLDMODEL) && !(backEnd.viewParms.flags & VPF_DEPTHSHADOW))
+	{
+		const float* proj = backEnd.viewParms.projectionMatrix;
+		const vec3_t* axis = backEnd.viewParms.ori.axis;
+		// sun direction in view space: x = right (-left), y = up, z = forward
+		const float sx = -DotProduct(tr.sunDirection, axis[1]);
+		const float sy = DotProduct(tr.sunDirection, axis[2]);
+		const float sz = DotProduct(tr.sunDirection, axis[0]);
+		// shafts fade out as the sun moves behind the camera
+		const float facing = Com_Clamp(0.0f, 1.0f, (sz - 0.05f) / 0.35f);
+		if (facing > 0.0f)
+		{
+			const float ndcX = proj[0] * sx / sz - proj[8];
+			const float ndcY = proj[5] * sy / sz - proj[9];
+			vec4_t sun, params, color;
+			VectorSet4(sun,
+				dstBox[0] + (ndcX * 0.5f + 0.5f) * dstBox[2],
+				dstBox[1] + (ndcY * 0.5f + 0.5f) * dstBox[3],
+				(float)glConfig.vidWidth / (float)tr.quarterFbo[0]->width,
+				0.85f);
+			VectorSet4(params, 0.35f, 0.985f, 0.15f * (float)dstBox[3], 0.0f);
+			const float strength = Com_Clamp(0.0f, 2.0f, r_godRaysStrength->value) * facing;
+			VectorSet4(color, strength, strength, strength, 1.0f);
+
+			FBO_FastBlit(NULL, dstBox, tr.sharpenFbo, dstBox, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+			FBO_Bind(tr.quarterFbo[0]);
+			GL_SetViewportAndScissor(0, 0, tr.quarterFbo[0]->width, tr.quarterFbo[0]->height);
+			GL_Cull(CT_TWO_SIDED);
+			GL_State(GLS_DEPTHTEST_DISABLE);
+			GLSL_BindProgram(&tr.godRaysShader);
+			GL_BindToTMU(tr.sharpenImage, TB_COLORMAP);
+			GL_BindToTMU(tr.renderDepthImage, TB_LIGHTMAP);
+			GLSL_SetUniformVec4(&tr.godRaysShader, UNIFORM_GODRAYSUN, sun);
+			GLSL_SetUniformVec4(&tr.godRaysShader, UNIFORM_GODRAYPARAMS, params);
+			qglDrawArrays(GL_TRIANGLES, 0, 3);
+
+			// the half-res image covers the whole window
+			vec4i_t windowBox{ 0, 0, glConfig.vidWidth, glConfig.vidHeight };
+			// r_godRays 2: show only the light shafts (debug)
+			FBO_FastBlitFromTexture(tr.quarterImage[0], NULL, windowBox, color,
+				r_godRays->integer == 2 ? (GLS_SRCBLEND_ONE | GLS_DSTBLEND_ZERO) : (GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE));
+		}
 	}
 
 	// r_sharpen (Warzone port): contrast-adaptive sharpening (AMD RCAS) of the finished

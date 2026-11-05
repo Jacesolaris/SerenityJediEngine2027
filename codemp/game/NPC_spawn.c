@@ -392,6 +392,12 @@ static void NPC_SetMiscDefaultData(gentity_t* ent)
 		ent->flags |= FL_NO_KNOCKBACK;
 		ent->pain = NPC_Rancor_Pain;
 		ent->health *= 4;
+		ent->NPC->aiFlags |= NPCAI_NAV_THROUGH_BREAKABLES; // (SP)
+		if (Q_stricmp("mutant_rancor", ent->NPC_type) == 0)
+		{
+			ent->spawnflags |= 1; //just so I know it's a mutant rancor as opposed to a normal one (SP: breath attack, NPC_AI_Rancor.c)
+			ent->mass = 2000;
+		}
 	}
 	if (ent->client->NPC_class == CLASS_SAND_CREATURE)
 	{
@@ -853,6 +859,39 @@ static void NPC_SetMiscDefaultData(gentity_t* ent)
 		ent->flags |= FL_SHIELDED | FL_NO_KNOCKBACK;
 	}
 
+	// (DH 2026-11-03: SP NPC_spawn.cpp NPC_SetMiscDefaultData - the per-NPC flags MP's combat code reads)
+	if (ent->client->NPC_class == CLASS_BOBAFETT)
+	{
+		if (level.gametype == GT_SINGLE_PLAYER)
+		{
+			ent->flags |= FL_UNDYING; // Missions: he can't be killed - he flees and comes back, his scripts end the fight (SP)
+		}
+		if (!Q_stricmp("boba_fett", ent->NPC_type))
+		{
+			ent->flags |= FL_BOBAFETT; //low-level shots bounce off, no knockback
+		}
+	}
+	else if (ent->client->NPC_class == CLASS_JANGO || ent->client->NPC_class == CLASS_JANGODUAL
+		|| ent->client->NPC_class == CLASS_MANDO)
+	{
+		ent->behaviorSet[BSET_FLEE] = NULL;
+		ent->flags |= FL_SABERDAMAGE_RESIST; //Partially resistant to sabers
+	}
+	if (!Q_stricmp("Ep7_Snoke", ent->NPC_type) || !Q_stricmp("Ep8_Snoke", ent->NPC_type)
+		|| !Q_stricmp("Emperor_Palpatine", ent->NPC_type))
+	{
+		ent->NPC->scriptFlags |= SCF_DONT_FIRE | SCF_NO_FORCE;
+		ent->flags |= FL_SHIELDED;
+	}
+	if (!Q_stricmp("Captain_Phasma", ent->NPC_type))
+	{
+		ent->flags |= FL_SHIELDED;
+	}
+	if (ent->client->NPC_class == CLASS_TUSKEN && g_npcspskill.integer > 1)
+	{
+		ent->NPC->stats.runSpeed = 280;
+		ent->NPC->stats.walkSpeed = 65;
+	}
 	// Set CAN FLY Flag for Navigation On The Following Classes
 	//----------------------------------------------------------
 	if (ent->client->NPC_class == CLASS_PROBE ||
@@ -4642,7 +4681,30 @@ SHY - Spawner is shy
 */
 void SP_NPC_Monster_Rancor(gentity_t* self)
 {
-	self->NPC_type = "rancor";
+	if (self->spawnflags & 1)
+	{
+		self->NPC_type = "mutant_rancor"; // (SP: MUTANT spawnflag)
+	}
+	else
+	{
+		self->NPC_type = "rancor";
+	}
+
+	SP_NPC_spawner(self);
+}
+
+/*QUAKED NPC_Monster_Mutant_Rancor (1 0 0) (-60 -60 -24) (60 60 360) x FASTKILL x x DROPTOFLOOR CINEMATIC NOTSOLID STARTINSOLID SHY
+Bigger, meaner, nastier, Frencher.  Breath attack, pound attack. (SP, DH 2026-11-03)
+
+DROPTOFLOOR - NPC can be in air, but will spawn on the closest floor surface below it
+CINEMATIC - Will spawn with no default AI (BS_CINEMATIC)
+NOTSOLID - Starts not solid
+STARTINSOLID - Don't try to fix if spawn in solid
+SHY - Spawner is shy
+*/
+void SP_NPC_Monster_Mutant_Rancor(gentity_t* self)
+{
+	self->NPC_type = "mutant_rancor";
 
 	SP_NPC_spawner(self);
 }

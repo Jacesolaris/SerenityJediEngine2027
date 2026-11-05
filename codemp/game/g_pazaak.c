@@ -1569,7 +1569,7 @@ qboolean G_Shop_TryTalk(gentity_t* player, const gentity_t* npc)
 	char* q;
 	gentity_t* other = npc ? &g_entities[npc->s.number] : NULL;
 
-	if (!Shop_CanTalk(player, other))
+	if (!npc || !other || !Shop_CanTalk(player, other))
 	{
 		return qfalse;
 	}

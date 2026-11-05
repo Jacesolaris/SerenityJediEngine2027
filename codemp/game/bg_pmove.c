@@ -747,21 +747,33 @@ static qboolean PM_CanAimGun(void)
 // pose between shots (their torso went up / down / up all through a fight). Jace 2026-10-29
 #define BOT_GUN_AIM_HOLD	2500
 
-static qboolean PM_BotHoldsGunAim(void)
-{
-#ifdef _GAME
-	const int since = pm->cmd.serverTime - pm->ps->lastShotTime;
+// (Jace 2026-11-04) players too: after the last shot the gun stays up in the aim pose for PLAYER_GUN_AIM_HOLD msec
+// instead of dropping to the ready / idle pose between shots (it jerked up and down all through a fight).
+// lastShotTime is networked now (msg.cpp), so the client predicts the same hold as the server.
+#define PLAYER_GUN_AIM_HOLD	2000
 
-	if (pm->ps->clientNum < MAX_CLIENTS && g_entities[pm->ps->clientNum].r.svFlags & SVF_BOT
+static qboolean PM_HoldsGunAim(void)
+{
+	const int since = pm->cmd.serverTime - pm->ps->lastShotTime;
+	int hold = PLAYER_GUN_AIM_HOLD;
+
+#ifdef _GAME
+	if (pm->ps->clientNum < MAX_CLIENTS && g_entities[pm->ps->clientNum].r.svFlags & SVF_BOT)
+	{
+		hold = BOT_GUN_AIM_HOLD;
+	}
+#endif
+
+	if (pm->ps->clientNum < MAX_CLIENTS
 		&& pm->ps->stats[STAT_HEALTH] > 0 && pm->ps->pm_type == PM_NORMAL
 		&& PM_CanAimGun() && pm->ps->weapon != WP_NOGHRI_STICK && pm->ps->weapon != WP_TUSKEN_RIFLE
 		&& pm->ps->weapon != WP_BRYAR_OLD && !(pm_entSelf && pm_entSelf->s.botclass == BCLASS_SBD)
 		&& !(pm->ps->weapon == WP_DISRUPTOR && pm->ps->zoomMode == 1)
-		&& pm->ps->lastShotTime > 0 && since >= 0 && since < BOT_GUN_AIM_HOLD)
+		&& !(pm->ps->PlayerEffectFlags & (1 << PEF_SPRINTING | 1 << PEF_WEAPONSPRINTING)) // sprinting lowers the gun
+		&& pm->ps->lastShotTime > 0 && since >= 0 && since < hold)
 	{
 		return qtrue;
 	}
-#endif
 	return qfalse;
 }
 
@@ -12175,7 +12187,7 @@ static void PM_Footsteps(void)
 				{
 					if (pm->ps->eFlags & EF3_DUAL_WEAPONS)
 					{
-						if (!pm->ps->weaponTime) //not firing
+						if (!pm->ps->weaponTime && !PM_HoldsGunAim()) //not firing (nor holding the aim after a shot)
 						{
 							if (is_wanting_sprint)
 							{
@@ -12210,7 +12222,7 @@ static void PM_Footsteps(void)
 					// Skill-based dual pistols
 					else if (g_entities[pm->ps->clientNum].client->skillLevel[SK_PISTOL] >= FORCE_LEVEL_3)
 					{
-						if (!pm->ps->weaponTime) //not firing
+						if (!pm->ps->weaponTime && !PM_HoldsGunAim()) //not firing (nor holding the aim after a shot)
 						{
 							if (is_wanting_sprint)
 							{
@@ -12244,7 +12256,7 @@ static void PM_Footsteps(void)
 #endif
 					else
 					{
-						if (!pm->ps->weaponTime) //not firing
+						if (!pm->ps->weaponTime && !PM_HoldsGunAim()) //not firing (nor holding the aim after a shot)
 						{
 							if (is_wanting_sprint)
 							{
@@ -12290,7 +12302,7 @@ static void PM_Footsteps(void)
 						pm->ps->weapon == WP_ROCKET_LAUNCHER ||
 						pm->ps->weapon == WP_BLASTER))
 				{
-					if (!pm->ps->weaponTime) //not firing
+					if (!pm->ps->weaponTime && !PM_HoldsGunAim()) //not firing (nor holding the aim after a shot)
 					{
 						if (is_wanting_sprint)
 						{
@@ -12327,7 +12339,7 @@ static void PM_Footsteps(void)
 						pm->ps->weapon == WP_DET_PACK ||
 						pm->ps->weapon == WP_TRIP_MINE))
 				{
-					if (!pm->ps->weaponTime) //not firing
+					if (!pm->ps->weaponTime && !PM_HoldsGunAim()) //not firing (nor holding the aim after a shot)
 					{
 						if (is_wanting_sprint)
 						{
@@ -12391,7 +12403,7 @@ static void PM_Footsteps(void)
 				{// These cases cannot sprint — always remove sprint flags
 					PM_RemoveSprintFlag(qtrue);
 
-					if (pm->ps->weaponTime == 0) // not firing
+					if (!pm->ps->weaponTime && !PM_HoldsGunAim()) //not firing (nor holding the aim after a shot)
 					{
 						if (pm_entSelf &&
 							(pm_entSelf->s.NPC_class == CLASS_JAWA || pm_entSelf->s.botclass == BCLASS_JAWA) ||
@@ -12504,7 +12516,7 @@ static void PM_Footsteps(void)
 					else if (pm->ps &&
 						(pm->ps->weapon == WP_BRYAR_OLD || pm_entSelf->s.botclass == BCLASS_SBD))
 					{
-						if (!pm->ps->weaponTime) //not firing
+						if (!pm->ps->weaponTime && !PM_HoldsGunAim()) //not firing (nor holding the aim after a shot)
 						{
 							PM_SetAnim(SETANIM_BOTH, SBD_WALK_WEAPON, SETANIM_FLAG_NORMAL);
 						}
@@ -12516,7 +12528,7 @@ static void PM_Footsteps(void)
 					else  if (pm->ps &&
 						(pm->ps->weapon == WP_STUN_BATON))
 					{
-						if (!pm->ps->weaponTime) //not firing
+						if (!pm->ps->weaponTime && !PM_HoldsGunAim()) //not firing (nor holding the aim after a shot)
 						{
 							PM_SetAnim(SETANIM_BOTH, BOTH_WALK1, SETANIM_FLAG_OVERRIDE);
 						}
@@ -12528,7 +12540,7 @@ static void PM_Footsteps(void)
 					else if (pm->ps &&
 						(pm->ps->weapon == WP_BRYAR_PISTOL))
 					{
-						if (!pm->ps->weaponTime) //not firing
+						if (!pm->ps->weaponTime && !PM_HoldsGunAim()) //not firing (nor holding the aim after a shot)
 						{
 							if (is_walking_and_blocking == qtrue)
 							{
@@ -12605,7 +12617,7 @@ static void PM_Footsteps(void)
 							pm->ps->weapon == WP_ROCKET_LAUNCHER ||
 							pm->ps->weapon == WP_BLASTER))
 					{
-						if (!pm->ps->weaponTime)  //not firing
+						if (!pm->ps->weaponTime && !PM_HoldsGunAim()) //not firing (nor holding the aim after a shot)
 						{
 							if (is_walking_and_blocking == qtrue)
 							{
@@ -15502,9 +15514,9 @@ static void PM_Weapon(void)
 		return;
 	}
 
-	if (PM_BotHoldsGunAim())
+	if (PM_HoldsGunAim())
 	{
-		// a bot keeps his gun up after a shot: the attack anim, then the aim pose (not the ready / idle pose)
+		// a player or bot keeps his gun up after a shot: the attack anim, then the aim pose (not the ready / idle pose)
 		if (PM_CanSetWeaponAnims() && pm->ps->weaponTime <= 0 && pm->ps->torsoTimer <= 0
 			&& pm->ps->torsoAnim != PM_GetWeaponAimAnim() && PM_CanSetWeaponReadyAnim() == qtrue)
 		{
@@ -15563,7 +15575,7 @@ static void PM_Weapon(void)
 
 	if ((pm->ps->torsoAnim == TORSO_WEAPONREADY4 || pm->ps->torsoAnim == BOTH_ATTACK4) &&
 		(pm->ps->weapon != WP_DISRUPTOR || pm->ps->zoomMode != 1) &&
-		!PM_BotHoldsGunAim()) // a bot holds the aim after a shot
+		!PM_HoldsGunAim()) // the gun holds the aim after a shot
 	{
 		if (pm->ps->weapon == WP_EMPLACED_GUN)
 		{
@@ -16165,7 +16177,7 @@ static void PM_Weapon(void)
 	addTime = BG_WeaponVariantFireTime(pm->ps->weaponVariant, pm->ps->weapon, addTime,
 		(pm->cmd.buttons & BUTTON_ALT_ATTACK) ? qtrue : qfalse);
 	pm->ps->weaponTime += addTime;
-	pm->ps->lastShotTime = pm->cmd.serverTime; // when we last fired our gun (bots hold the aim after it: PM_BotHoldsGunAim)
+	pm->ps->lastShotTime = pm->cmd.serverTime; // when we last fired our gun (the gun holds the aim after it: PM_HoldsGunAim)
 
 	if ((pm->ps->weapon == WP_NOGHRI_STICK && pm->cmd.buttons & BUTTON_ALT_ATTACK
 		|| pm->ps->weapon == WP_TUSKEN_RIFLE && pm->cmd.buttons & BUTTON_ALT_ATTACK

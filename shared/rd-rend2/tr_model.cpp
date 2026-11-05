@@ -635,7 +635,12 @@ qhandle_t R_SJE_ChooseAnimGLA(const char* meshName, const mdxmHeader_t* mdxm, co
 	if (R_SJE_IsHumanoidPath(ownName))
 	{
 		// the model's dedicated humanoid set (models/players/_humanoid_yoda/...), when its folder has the animation.cfg
-		if (Q_stricmpn(ownName, "models/players/_humanoid/", (int)strlen("models/players/_humanoid/")) &&
+		// (MovieDuels: not with the Master animation style, g_animationStyleActive 1 - every humanoid on the master set)
+		if (
+#ifdef REND2_MOVIEDUELS
+			ri.Cvar_VariableIntegerValue("g_animationStyleActive") != 1 &&
+#endif
+			Q_stricmpn(ownName, "models/players/_humanoid/", (int)strlen("models/players/_humanoid/")) &&
 			R_SJE_GLAFolderHasAnimCfg(ownName))
 		{
 			animIndex = R_SJE_RegisterGLA(ownName, server);
@@ -757,6 +762,27 @@ static qboolean R_LoadMDXM_Server(model_t* mod, void* buffer, const char* mod_na
 		return qfalse;
 	}
 	Q_strncpyz(mdxm->animName, animNameToUse, sizeof mdxm->animName);
+#elif defined(REND2_MOVIEDUELS)
+	// MovieDuels: with the Master animation style (g_animationStyleActive 1) the humanoid sets use the master
+	// _humanoid set (md_animsets.h), unless the master skeleton does not fit this mesh
+	{
+		const char* anim_set = MD_AnimSetGLA(mdxm->animName, ri.Cvar_VariableIntegerValue(MD_ANIMSTYLE_ACTIVE_CVAR) == 1);
+		mdxm->animIndex = RE_RegisterServerModel(va("%s.gla", anim_set));
+		if (anim_set != mdxm->animName && mdxm->animIndex)
+		{
+			const model_t* master_model = R_GetModelByHandle(mdxm->animIndex);
+			if (master_model && master_model->data.gla
+				&& !MD_SkeletonFitsMaster(mdxm->numBones, master_model->data.gla->numBones, mdxm->animName))
+			{
+				// the master skeleton does not fit this mesh: keep its own set
+				mdxm->animIndex = RE_RegisterServerModel(va("%s.gla", mdxm->animName));
+			}
+		}
+	}
+	if (!mdxm->animIndex)
+	{
+		return qfalse;
+	}
 #else
 	mdxm->animIndex = RE_RegisterServerModel(va("%s.gla", mdxm->animName));
 	if (!mdxm->animIndex)

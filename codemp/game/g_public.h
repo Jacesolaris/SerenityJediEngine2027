@@ -57,8 +57,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define SVF_NO_EXTRA_SOUNDS		0x40000000	// No extra or jedi sounds
 #define SVF_ANIMATING			0x80000000	// an animating map entity
 #define SVF_SELF_ANIMATING   	0x100000000	// Ent will control it's animation itself in it's think func
-#define	SVF_LOCKEDENEMY			0x100000000	// keep current enemy until dead
-#define	SVF_NPC_PRECACHE		0x100000000	// Tell cgame to precache this spawner's NPC stuff
+#define	SVF_LOCKEDENEMY			0x00080000	// keep current enemy until dead (was 0x100000000, too big for svFlags: it was 0; DH 2026-11-03)
+#define	SVF_NPC_PRECACHE		0x00100000	// Tell cgame to precache this spawner's NPC stuff (MP: marks a waiting NPC spawner, so "npc kill <name> / all" removes it as SP; was 0x100000000 = 0, DH 2026-11-03)
 #define	SVF_BROKEN      		0x200000000	// A broken misc_model_breakable
 
 //rww - ghoul2 trace flags

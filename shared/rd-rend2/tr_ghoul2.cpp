@@ -139,8 +139,10 @@ void ResetGhoul2RenderableSurfaceHeap()
 
 bool HackadelicOnClient = false; // means this is a render traversal
 
+#ifndef REND2_SP // SP: ghoul2/G2.h declares them
 qboolean G2_SetupModelPointers(CGhoul2Info* ghlInfo);
 qboolean G2_SetupModelPointers(CGhoul2Info_v& ghoul2);
+#endif
 
 extern cvar_t* r_Ghoul2AnimSmooth;
 extern cvar_t* r_Ghoul2UnSqashAfterSmooth;
@@ -5368,7 +5370,25 @@ qboolean R_LoadMDXM(model_t* mod, void* buffer, const char* mod_name, qboolean& 
 		}
 	}
 #else
-	mdxm->animIndex = RE_RegisterModel(va("%s.gla", mdxm->animName));
+	const char* anim_set = mdxm->animName;
+#ifdef REND2_MOVIEDUELS
+	// MovieDuels: with the Master animation style (g_animationStyleActive 1) the humanoid sets use the master
+	// _humanoid set (md_animsets.h)
+	anim_set = MD_AnimSetGLA(mdxm->animName, ri.Cvar_VariableIntegerValue(MD_ANIMSTYLE_ACTIVE_CVAR) == 1);
+#endif
+	mdxm->animIndex = RE_RegisterModel(va("%s.gla", anim_set));
+#ifdef REND2_MOVIEDUELS
+	if (anim_set != mdxm->animName && mdxm->animIndex)
+	{
+		const model_t* master_model = R_GetModelByHandle(mdxm->animIndex);
+		if (master_model && master_model->data.gla
+			&& !MD_SkeletonFitsMaster(mdxm->numBones, master_model->data.gla->numBones, mdxm->animName))
+		{
+			anim_set = mdxm->animName; // the master skeleton does not fit this mesh: keep its own set
+			mdxm->animIndex = RE_RegisterModel(va("%s.gla", anim_set));
+		}
+	}
+#endif
 #endif
 
 #ifdef REND2_SP // per-map GLA override (sv_mapname is an SP renderer cvar)
@@ -5383,8 +5403,8 @@ qboolean R_LoadMDXM(model_t* mod, void* buffer, const char* mod_name, qboolean& 
 		{
 			mapname = strrchr(mapname, '/') + 1;
 		}
-		//stripped name of GLA for this model
-		Q_strncpyz(animGLAName, mdxm->animName, sizeof(animGLAName));
+		//stripped name of GLA for this model (the set actually loaded)
+		Q_strncpyz(animGLAName, anim_set, sizeof(animGLAName));
 		slash = strrchr(animGLAName, '/');
 		if (slash)
 		{

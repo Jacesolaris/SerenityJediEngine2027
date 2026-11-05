@@ -2609,6 +2609,91 @@ static void WP_ForceArcDamage(gentity_t* self, const int dmg, const qboolean cra
 	}
 }
 
+// Corpse grip (Jace 2026-11-04): a player's force grip that finds nobody alive picks up a body instead (a dead NPC, bot or
+// player not yet respawned). The body is carried in front of him while he holds grip; let go, it falls (ragdoll).
+extern qboolean G_CorpsePushable(const gentity_t* ent);
+
+static qboolean G_GripCorpseClassOk(const gentity_t* ent)
+{
+	switch (ent->client->NPC_class)
+	{
+	case CLASS_VEHICLE: case CLASS_ATST: case CLASS_RANCOR: case CLASS_WAMPA: case CLASS_SAND_CREATURE:
+	case CLASS_GALAKMECH:
+		return qfalse;
+	default:
+		return qtrue;
+	}
+}
+
+static qboolean ForceGripCorpse(const gentity_t* self, vec3_t from, vec3_t to)
+{
+	trace_t tr;
+	gentity_t* body;
+	int i;
+
+	if (self->s.number >= MAX_CLIENTS || self->r.svFlags & SVF_BOT || self->NPC)
+	{
+		return qfalse; // players only: bots and NPCs keep their grip for the living
+	}
+	trap->Trace(&tr, from, NULL, NULL, to, self->s.number, MASK_PLAYERSOLID | CONTENTS_CORPSE, qfalse, 0, 0);
+	if (tr.fraction >= 1.0f || tr.entityNum >= ENTITYNUM_WORLD)
+	{
+		return qfalse;
+	}
+	body = &g_entities[tr.entityNum];
+	if (!body->client || body->health > 0 || !G_CorpsePushable(body) || !G_GripCorpseClassOk(body)
+		|| body->client->ps.m_iVehicleNum)
+	{
+		return qfalse;
+	}
+	for (i = 0; i < MAX_CLIENTS; i++)
+	{// somebody else is already holding it
+		const gentity_t* other = &g_entities[i];
+		if (other != self && other->inuse && other->client && other->client->ps.fd.forcePowersActive & 1 << FP_GRIP
+			&& other->client->ps.fd.forceGripentity_num == body->s.number)
+		{
+			return qfalse;
+		}
+	}
+	self->client->ps.fd.forceGripentity_num = body->s.number;
+	body->client->ps.fd.forceGripStarted = level.time;
+	self->client->ps.fd.forceGripDamageDebounceTime = 0;
+	self->client->ps.forceHandExtend = HANDEXTEND_FORCE_HOLD;
+	self->client->ps.forceHandExtendTime = level.time + 5000;
+	return qtrue;
+}
+
+// held: the body goes to a spot in front of the gripper (further with the grip level) and floats there
+static void DoGripCorpse(gentity_t* self, gentity_t* body, const forcePowers_t forcePower)
+{
+	vec3_t eye, fwd, goal, vel;
+	const int lvl = self->client->ps.fd.forcePowerLevel[FP_GRIP];
+	const float reach = lvl >= FORCE_LEVEL_3 ? 160.0f : lvl == FORCE_LEVEL_2 ? 128.0f : 96.0f;
+	float len;
+
+	if (!G_CorpsePushable(body) || Distance(body->client->ps.origin, self->client->ps.origin) > MAX_GRIP_DISTANCE)
+	{
+		WP_ForcePowerStop(self, forcePower);
+		return;
+	}
+	VectorCopy(self->client->ps.origin, eye);
+	eye[2] += self->client->ps.viewheight;
+	AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
+	VectorMA(eye, reach, fwd, goal);
+	goal[2] -= 16.0f; // the body's origin is about its middle: it hangs at chest height
+	VectorSubtract(goal, body->client->ps.origin, vel);
+	len = VectorLength(vel);
+	VectorScale(vel, 8.0f, vel); // reach it in about 1/8 s
+	if (len * 8.0f > 500.0f)
+	{
+		VectorScale(vel, 500.0f / (len * 8.0f), vel);
+	}
+	vel[2] += 40.0f; // offsets one frame of gravity, so it does not sag
+	VectorCopy(vel, body->client->ps.velocity);
+	body->client->ps.groundEntityNum = ENTITYNUM_NONE;
+	body->client->ps.eFlags |= EF_RAG;
+}
+
 void ForceGrip(const gentity_t* self)
 {
 	trace_t tr;
@@ -2699,6 +2784,9 @@ void ForceGrip(const gentity_t* self)
 
 		self->client->ps.forceHandExtend = HANDEXTEND_FORCE_HOLD;
 		self->client->ps.forceHandExtendTime = level.time + 5000;
+	}
+	else if (ForceGripCorpse(self, tfrom, tto))
+	{// nobody alive in reach: a body (Jace 2026-11-04)
 	}
 	else
 	{
@@ -9155,6 +9243,13 @@ static void DoGripAction(gentity_t* self, const forcePowers_t forcePower)
 	self->client->invulnerableTimer = 0;
 
 	gentity_t* gripEnt = &g_entities[self->client->ps.fd.forceGripentity_num];
+
+	if (gripEnt && gripEnt->inuse && gripEnt->client && gripEnt->health <= 0 && self->s.number < MAX_CLIENTS
+		&& !(self->r.svFlags & SVF_BOT) && G_CorpsePushable(gripEnt))
+	{// a gripped body (Jace 2026-11-04)
+		DoGripCorpse(self, gripEnt, forcePower);
+		return;
+	}
 
 	if (!gripEnt || !gripEnt->client || !gripEnt->inuse || gripEnt->health < 1 || !ForcePowerUsableOn(
 		self, gripEnt, FP_GRIP))

@@ -2257,10 +2257,10 @@ static const char* shopCatNames[SHOP_NUM_CATS] = { "Pistols", "Rifles", "Heavy",
 static int Shop_CatOf(const char* base)
 {
 	static const char* cats[][2] = {
-		{ "WP_BRYAR_PISTOL", "0" }, { "WP_BLASTER_PISTOL", "0" }, { "WP_BRYAR_OLD", "0" },
-		{ "WP_BLASTER", "1" }, { "WP_DISRUPTOR", "1" }, { "WP_BOWCASTER", "1" },
-		{ "WP_REPEATER", "2" }, { "WP_DEMP2", "2" }, { "WP_FLECHETTE", "2" }, { "WP_ROCKET_LAUNCHER", "2" },
-		{ "WP_CONCUSSION", "2" }, { "WP_THERMAL", "3" }
+		{ "WP_BRYAR_PISTOL", "0" },{ "WP_BLASTER_PISTOL", "0" },{ "WP_BRYAR_OLD", "0" },
+		{ "WP_BLASTER", "1" },{ "WP_DISRUPTOR", "1" },{ "WP_BOWCASTER", "1" },
+		{ "WP_REPEATER", "2" },{ "WP_DEMP2", "2" },{ "WP_FLECHETTE", "2" },{ "WP_ROCKET_LAUNCHER", "2" },
+		{ "WP_CONCUSSION", "2" },{ "WP_THERMAL", "3" }
 	};
 	int i;
 	for (i = 0; i < (int)(sizeof(cats) / sizeof(cats[0])); i++)
@@ -2472,7 +2472,8 @@ static void Shop_LoadItems(void)
 			Q_strncpyz(it->name, shopHoldNames[h][0], sizeof(it->name));
 			Q_strncpyz(it->icon, shopHoldNames[h][1], sizeof(it->icon));
 		}
-	}}
+	}
+}
 
 static int Shop_CatCount(const int cat)
 {

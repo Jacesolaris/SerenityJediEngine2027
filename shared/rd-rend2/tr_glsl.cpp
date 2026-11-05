@@ -167,6 +167,14 @@ static uniformInfo_t uniformsInfo[] =
 	{ "u_SliceCapsMap",		GLSL_INT, 1 },
 	{ "u_SliceBloodMap",		GLSL_INT, 1 },
 	{ "u_SliceGlowMap",		GLSL_INT, 1 },
+	{ "u_SsrProjection",	GLSL_VEC4, 1 },
+	{ "u_SsrParams",		GLSL_VEC4, 1 },
+	{ "u_SsrViewport",		GLSL_VEC4, 1 },
+	{ "u_SsrUp",			GLSL_VEC4, 1 },
+	{ "u_SsrMaskMap",		GLSL_INT, 1 },	// r_ssr material mask (Jace 2026-11-04)
+	{ "u_SsrNoReflect",	GLSL_FLOAT, 1 },
+	{ "u_GodRaySun",		GLSL_VEC4, 1 },
+	{ "u_GodRayParams",	GLSL_VEC4, 1 },
 };
 
 static void GLSL_PrintProgramInfoLog(GLuint object, qboolean developerOnly)
@@ -628,6 +636,7 @@ static void GLSL_BindShaderInterface(shaderProgram_t* program)
 	static const char* shaderOutputNames[] = {
 		"out_Color",  // Color output
 		"out_Glow",  // Glow output
+		"out_SsrMask",  // r_ssr material mask (Jace 2026-11-04): 1 = no reflections on this pixel
 	};
 
 	const uint32_t attribs = program->attribs;
@@ -2388,6 +2397,55 @@ static int GLSL_LoadGPUProgramSharpen(
 	return 1;
 }
 
+// r_ssr: screen space reflections of the finished 3D view
+static int GLSL_LoadGPUProgramSSR(
+	ShaderProgramBuilder& builder,
+	Allocator& scratchAlloc)
+{
+	GLSL_LoadGPUProgramBasic(
+		builder,
+		scratchAlloc,
+		&tr.ssrShader,
+		"ssr",
+		fallback_ssrProgram);
+
+	GLSL_InitUniforms(&tr.ssrShader);
+
+	qglUseProgram(tr.ssrShader.program);
+	GLSL_SetUniformInt(&tr.ssrShader, UNIFORM_SCREENIMAGEMAP, TB_COLORMAP);
+	GLSL_SetUniformInt(&tr.ssrShader, UNIFORM_SCREENDEPTHMAP, TB_LIGHTMAP);
+	GLSL_SetUniformInt(&tr.ssrShader, UNIFORM_SSRMASKMAP, TB_NORMALMAP); // r_ssr material mask (Jace 2026-11-04)
+	qglUseProgram(0);
+
+	GLSL_FinishGPUShader(&tr.ssrShader);
+
+	return 1;
+}
+
+// r_godRays: screen space light shafts
+static int GLSL_LoadGPUProgramGodRays(
+	ShaderProgramBuilder& builder,
+	Allocator& scratchAlloc)
+{
+	GLSL_LoadGPUProgramBasic(
+		builder,
+		scratchAlloc,
+		&tr.godRaysShader,
+		"godrays",
+		fallback_godraysProgram);
+
+	GLSL_InitUniforms(&tr.godRaysShader);
+
+	qglUseProgram(tr.godRaysShader.program);
+	GLSL_SetUniformInt(&tr.godRaysShader, UNIFORM_SCREENIMAGEMAP, TB_COLORMAP);
+	GLSL_SetUniformInt(&tr.godRaysShader, UNIFORM_SCREENDEPTHMAP, TB_LIGHTMAP);
+	qglUseProgram(0);
+
+	GLSL_FinishGPUShader(&tr.godRaysShader);
+
+	return 1;
+}
+
 static int GLSL_LoadGPUProgramSSAO(
 	ShaderProgramBuilder& builder,
 	Allocator& scratchAlloc)
@@ -2859,6 +2917,8 @@ void GLSL_LoadGPUShaders()
 	numEtcShaders += GLSL_LoadGPUProgramCalcLuminanceLevel(builder, allocator);
 	numEtcShaders += GLSL_LoadGPUProgramHighPass(builder, allocator);
 	numEtcShaders += GLSL_LoadGPUProgramSharpen(builder, allocator);
+	numEtcShaders += GLSL_LoadGPUProgramSSR(builder, allocator);
+	numEtcShaders += GLSL_LoadGPUProgramGodRays(builder, allocator);
 	numEtcShaders += GLSL_LoadGPUProgramSSAO(builder, allocator);
 	if (r_cubeMapping->integer)
 		numEtcShaders += GLSL_LoadGPUProgramPrefilterEnvMap(builder, allocator);
@@ -2905,7 +2965,18 @@ void GLSL_ShutdownGPUShaders(void)
 	for (i = 0; i < REFRACTIONDEF_COUNT; i++)
 		GLSL_DeleteGPUShader(&tr.refractionShader[i]);
 
-	GLSL_DeleteGPUShader(&tr.textureColorShader[TEXCOLORDEF_SCREEN_TRIANGLE]);
+	// all of them: the vertex texture-colour, velocity, highpass and SMAA programs were never freed (from MD9 SP, SJE/MD9 shared renderer (2026-11-05))
+	for (i = 0; i < TEXCOLORDEF_COUNT; i++)
+		GLSL_DeleteGPUShader(&tr.textureColorShader[i]);
+
+	for (i = 0; i < VELOCITYDEF_COUNT; i++)
+		GLSL_DeleteGPUShader(&tr.velocityShader[i]);
+
+	GLSL_DeleteGPUShader(&tr.highpassShader);
+	GLSL_DeleteGPUShader(&tr.smaaEdgeShader);
+	GLSL_DeleteGPUShader(&tr.smaaBlendShader);
+	GLSL_DeleteGPUShader(&tr.smaaResolveShader);
+	GLSL_DeleteGPUShader(&tr.smaaTemporalResolveShader);
 
 	for (i = 0; i < FOGDEF_COUNT; i++)
 		GLSL_DeleteGPUShader(&tr.fogShader[i]);
@@ -2926,6 +2997,8 @@ void GLSL_ShutdownGPUShaders(void)
 
 	GLSL_DeleteGPUShader(&tr.ssaoShader);
 	GLSL_DeleteGPUShader(&tr.sharpenShader);
+	GLSL_DeleteGPUShader(&tr.ssrShader);
+	GLSL_DeleteGPUShader(&tr.godRaysShader);
 
 	for (i = 0; i < 2; i++)
 		GLSL_DeleteGPUShader(&tr.depthBlurShader[i]);

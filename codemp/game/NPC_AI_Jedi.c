@@ -21,6 +21,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "b_local.h"
+#include "NPC_steer.h"
 #include "g_nav.h"
 #include "anims.h"
 #include "w_saber.h"
@@ -631,6 +632,7 @@ static float Twins_DangerDist(void);
 static qboolean Jedi_InSpecialMove(void);
 void NPC_CheckEvasion(void);
 void NPC_BSJedi_Default(void);
+extern void npc_check_speak(gentity_t* speaker_npc); // NPC_AI_Stormtrooper.c (SP: idle combat chatter, g_Advancedaitalk)
 void Boba_Precache(void);
 void Boba_ChangeWeapon(const int wp);
 qboolean Boba_StopKnockdown(gentity_t* self, const gentity_t* pusher, const vec3_t push_dir, const qboolean force_knockdown);
@@ -8798,6 +8800,8 @@ jump_unsafe:
 	NPCS.ucmd.upmove = 0;
 }
 
+extern qboolean NPC_TryJump_Pos(const vec3_t pos, float max_xy_dist, float max_z_diff);
+
 void RT_CheckJump(void)
 {
 	int jump_ent_num = ENTITYNUM_NONE;
@@ -8889,6 +8893,14 @@ void RT_CheckJump(void)
 		if ((NPC_ClearLOS4(NPCS.NPC->enemy) || NPCS.NPCInfo->enemyLastSeenTime > level.time - 500)
 			&& InFOV3(jump_pos, NPCS.NPC->r.currentOrigin, NPCS.NPC->client->ps.viewangles, 20, 60))
 		{
+			if (NPC_TryJump_Pos(jump_pos, 0, 0)) // Rocket Trooper (SP, DH 2026-11-03 NPC parity batch E)
+			{
+				//just do the jetpack effect for a litte bit
+				G_PlayBoltedEffect(G_EffectIndex("rockettrooper/flameNEW"), NPCS.NPC, "*jet1");
+				G_PlayBoltedEffect(G_EffectIndex("rockettrooper/flameNEW"), NPCS.NPC, "*jet2");
+				G_SoundOnEnt(NPCS.NPC, CHAN_ITEM, "sound/chars/boba/bf_blast-off.wav");
+				return;
+			}
 		}
 
 		if (Jedi_Hunt() && !(NPCS.NPCInfo->aiFlags & NPCAI_BLOCKED))
@@ -9497,6 +9509,18 @@ qboolean Jedi_CheckAmbushPlayer(void)
 			if (!trap->InPVS(player->r.currentOrigin, NPCS.NPC->r.currentOrigin))
 			{
 				//must be in same room
+				if (jedi_engine_mode > 1 && g_npc_is_smart.integer != 0)
+				{
+					// SP smart AI (DH 2026-11-03, NPC parity batch E): a player out of sight but within range is a
+					// suspicious sight to others around
+					const float range = (float)g_npc_is_smart_range.integer;
+					if (DistanceSquared(player->r.currentOrigin, NPCS.NPC->r.currentOrigin) <= range * range)
+					{
+						vec3_t sightPos;
+						VectorCopy(NPCS.NPC->r.currentOrigin, sightPos);
+						AddSightEvent(player, sightPos, range, AEL_SUSPICIOUS, 0.0f);
+					}
+				}
 				continue;
 			}
 			if (!NPCS.NPC->client->ps.powerups[PW_CLOAKED])
@@ -9925,8 +9949,28 @@ void NPC_BSJedi_FollowLeader(void)
 	//try normal movement
 	NPC_BSFollowLeader();
 
-	if (!NPCS.NPC->enemy &&
-		NPCS.NPC->health < NPCS.NPC->client->pers.maxHealth &&
+	// SP (DH 2026-11-03, NPC parity batch E): a friendly saber follower walks when close to a player leader who walks
+	if (jedi_engine_mode > 1 && NPCS.NPC->s.weapon == WP_SABER && g_npc_is_smart.integer != 0 && NPCS.NPCInfo->goalEntity
+		&& NPCS.NPC->client->leader
+		&& NPCS.NPC->client->leader->s.number < MAX_CLIENTS
+		&& NPCS.NPC->client->leader->client
+		&& NPCS.NPC->health > 0
+		&& !NPCS.NPC->enemy
+		&& NPCS.NPC->client->enemyTeam == NPCTEAM_FREE
+		&& NPCS.NPC->client->NPC_class != CLASS_VEHICLE
+		&& NPCS.NPC->client->NPC_class != CLASS_BOBAFETT
+		&& NPCS.NPC->client->NPC_class != CLASS_ROCKETTROOPER)
+	{
+		const gentity_t* leader = NPCS.NPC->client->leader;
+		if (Distance(NPCS.NPC->r.currentOrigin, leader->r.currentOrigin) < 350.0f
+			&& leader->client->pers.cmd.buttons & BUTTON_WALKING)
+		{
+			NPCS.NPC->client->ps.speed = NPCS.NPCInfo->stats.walkSpeed;
+			NPCS.ucmd.buttons |= BUTTON_WALKING;
+		}
+	}
+
+	if (!NPCS.NPC->enemy && NPCS.NPC->health < NPCS.NPC->client->pers.maxHealth &&
 		(NPCS.NPC->client->ps.fd.forcePowersKnown & 1 << FP_HEAL) != 0 &&
 		(NPCS.NPC->client->ps.fd.forcePowersActive & 1 << FP_HEAL) == 0 &&
 		TIMER_Done(NPCS.NPC, "FollowHealDebouncer"))
@@ -11661,6 +11705,13 @@ static qboolean Rosh_TwinNearBy(const gentity_t* self)
 	return qfalse;
 }
 
+// SP plays force/kothos_recharge.efx on the model (DH 2026-11-03, NPC parity batch E)
+static void Kothos_RechargeEffect(gentity_t* ent)
+{
+	vec3_t up = { 0, 0, 1 };
+	G_PlayEffectID(G_EffectIndex("force/kothos_recharge.efx"), ent->r.currentOrigin, up);
+}
+
 qboolean Kothos_HealRosh(void)
 {
 	//this NPC attempts to heal the heal target (the rosh boss normally).
@@ -11684,7 +11735,7 @@ qboolean Kothos_HealRosh(void)
 				VectorSet(angles, 0, NPCS.NPC->r.currentAngles[YAW], 0);
 
 				trap->G2API_GetBoltMatrix(NPCS.NPC->ghoul2, 0,
-					Q_irand(0, 1),
+					Q_irand(0, 1) ? NPCS.NPC->client->renderInfo.handLBolt : NPCS.NPC->client->renderInfo.handRBolt, // (SP)
 					&boltMatrix, angles, NPCS.NPC->r.currentOrigin, level.time,
 					NULL, NPCS.NPC->modelScale);
 				BG_GiveMeVectorFromMatrix(&boltMatrix, ORIGIN, fxOrg);
@@ -11704,6 +11755,7 @@ qboolean Kothos_HealRosh(void)
 					NPC_SetAnim(NPCS.NPC->client->leader, SETANIM_BOTH, BOTH_FORCEHEAL_STOP,
 						SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 					NPCS.NPC->client->leader->flags &= ~FL_GODMODE;
+					Kothos_RechargeEffect(NPCS.NPC->client->leader); // (SP: FIXME: temp effect)
 					NPCS.NPC->client->leader->client->ps.powerups[PW_INVINCIBLE] = level.time + NPCS.NPC->client->leader
 						->client->ps.torsoTimer;
 					NPCS.NPC->client->leader->NPC->ignorePain = qfalse;
@@ -11711,8 +11763,7 @@ qboolean Kothos_HealRosh(void)
 				}
 				else
 				{
-					//start effect?
-					NPCS.NPC->client->leader->flags |= FL_GODMODE;
+					Kothos_RechargeEffect(NPCS.NPC->client->leader); // (SP)
 					NPCS.NPC->client->leader->client->ps.powerups[PW_INVINCIBLE] = level.time + 500;
 				}
 			}
@@ -11727,7 +11778,7 @@ qboolean Kothos_HealRosh(void)
 			if (g_npcspskill.integer)
 			{
 				//not on easy
-				NPCS.NPC->client->leader->flags |= FL_GODMODE;
+				Kothos_RechargeEffect(NPCS.NPC); // (SP; MP gave Rosh god mode here and never took it away)
 				NPCS.NPC->client->ps.powerups[PW_INVINCIBLE] = level.time + 500;
 			}
 			return qtrue;
@@ -11748,6 +11799,7 @@ void Kothos_PowerRosh(void)
 			NPC_FaceEntity(NPCS.NPC->client->leader, qtrue);
 			NPC_SetAnim(NPCS.NPC, SETANIM_TORSO, BOTH_FORCELIGHTNING_HOLD, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 			NPCS.NPC->client->ps.torsoTimer = 500;
+			G_PlayBoltedEffect(G_EffectIndex("force/kothos_beam.efx"), NPCS.NPC, "*l_hand"); // (SP)
 			if (NPCS.NPC->client->leader->client)
 			{
 				//hmm, give him some force?
@@ -11759,6 +11811,11 @@ void Kothos_PowerRosh(void)
 
 static qboolean Kothos_Retreat(void)
 {
+	// SP: back away from the enemy (steering, NPC_steer.c)
+	STEER_Activate(NPCS.NPC);
+	STEER_Evade(NPCS.NPC, NPCS.NPC->enemy);
+	STEER_AvoidCollisions(NPCS.NPC, NPCS.NPC->client->leader);
+	STEER_DeActivate(NPCS.NPC, &NPCS.ucmd);
 	if (NPCS.NPCInfo->aiFlags & NPCAI_BLOCKED)
 	{
 		if (level.time - NPCS.NPCInfo->blockedDebounceTime > 1000)
@@ -12668,6 +12725,8 @@ void NPC_BSJedi_Default(void)
 			Jedi_Attack();
 		}
 
+		npc_check_speak(NPCS.NPC); // (SP)
+
 		//if we have multiple-jedi combat, probably need to keep checking (at certain debounce intervals) for a better (closer, more active) enemy and switch if needbe...
 		if ((!NPCS.ucmd.buttons && !NPCS.NPC->client->ps.fd.forcePowersActive || NPCS.NPC->enemy && NPCS.NPC->enemy->
 			health <= 0) && NPCS.NPCInfo->enemyCheckDebounceTime < level.time)
@@ -13166,9 +13225,62 @@ void Boba_DoSniper(const gentity_t* self)
 	NPC_UpdateAngles(qtrue, qtrue);
 }
 
+// SP AI_BobaFett.cpp Boba_VibrobladePunch (DH 2026-11-03): the wrist vibroblade stab - melee out, grapple button in the air or
+// crouched (g_active.c); a melee hit from the right hand a moment into BOTH_PULL_IMPALE_STAB
+static void Boba_VibrobladePunch(gentity_t* self)
+{
+	const int dummyForcePower = FP_DRAIN;
+	mdxaBone_t boltMatrix;
+	vec3_t muzzlePoint, muzzleDir;
+
+	if (!self->client->ps.fd.forcePowerDuration[dummyForcePower])
+	{
+		NPC_SetAnim(self, SETANIM_TORSO, BOTH_PULL_IMPALE_STAB, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+		self->client->ps.torsoTimer = 1000;
+		self->client->ps.fd.forcePowerDuration[dummyForcePower] = 1;
+		G_SoundOnEnt(self, CHAN_WEAPON, va("sound/weapons/sword/swing%d.wav", Q_irand(1, 4)));
+	}
+
+	if (self->client->ps.torsoTimer > 900)
+	{
+		return;
+	}
+	if (self->client->ps.weaponTime > 0)
+	{
+		return;
+	}
+	if (self->client->ps.torsoTimer < 50)
+	{
+		self->client->ps.fd.forcePowerDuration[dummyForcePower] = 0;
+		self->client->ps.torsoTimer = 0;
+		return;
+	}
+
+	trap->G2API_GetBoltMatrix(self->ghoul2, 0, self->client->renderInfo.handRBolt, &boltMatrix, self->r.currentAngles,
+		self->r.currentOrigin, level.time, NULL, self->modelScale);
+	BG_GiveMeVectorFromMatrix(&boltMatrix, ORIGIN, muzzlePoint);
+	BG_GiveMeVectorFromMatrix(&boltMatrix, NEGATIVE_Y, muzzleDir);
+	VectorCopy(muzzlePoint, self->client->renderInfo.muzzlePoint);
+	VectorCopy(muzzleDir, self->client->renderInfo.muzzleDir);
+
+	const int oldWeapon = self->s.weapon;
+	self->s.weapon = WP_MELEE;
+	self->client->ps.weaponTime += self->client->ps.torsoTimer;
+	FireWeapon(self, qfalse);
+	self->s.weapon = oldWeapon;
+}
 void Boba_FireWristMissile(gentity_t* self, const int whichMissile)
 {
 	static int shotsFired = 0; //only 5 shots allowed for wristlaser; only 1 for missile launcher or dart
+
+	if (whichMissile == BOBA_MISSILE_VIBROBLADE)
+	{
+		if (self->client && self->health > 0)
+		{
+			Boba_VibrobladePunch(self); // (SP)
+		}
+		return;
+	}
 
 	if (self->s.number >= MAX_CLIENTS)
 	{
@@ -14218,4 +14330,140 @@ static qboolean wp_saber_block_check_random(gentity_t* self, vec3_t hitloc)
 
 	self->client->ps.userInt3 &= ~(1 << FLAG_PREBLOCK);
 	return qtrue;
+}
+
+/*
+-------------------------
+jedi_npc_disruptor_dodge_evasion
+
+SP's NPC version of the disruptor / concussion shot dodge (DH 2026-11-03, NPC parity batch E): an NPC on the ground
+dodges by where the shot would hit (hop for the legs, a dodge to the side / back / front elsewhere); those who can't
+flip (SP's list) jump up instead for a hit in the body; it then gets mad at the shooter. g_weapon.c calls this
+for NPCs once it has decided the shot is dodged (and drained the force power, as SP's FATIGUE_DODGEING); qfalse: no
+NPC dodge, the caller falls back to the player dodge.
+-------------------------
+*/
+qboolean jedi_npc_disruptor_dodge_evasion(gentity_t* self, gentity_t* shooter, vec3_t dmg_origin, int hit_loc)
+{
+	int dodge_anim = -1;
+
+	if (!self || !self->client || !self->NPC || self->health <= 0)
+	{
+		return qfalse;
+	}
+	if (self->client->ps.groundEntityNum == ENTITYNUM_NONE)
+	{
+		//can't dodge in mid-air
+		return qfalse;
+	}
+	if (self->client->ps.pm_time && self->client->ps.pm_flags & PMF_TIME_KNOCKBACK)
+	{
+		//in some effect that stops me from moving on my own
+		return qfalse;
+	}
+	if (self->client->ps.weapon == WP_TURRET
+		|| self->client->ps.weapon == WP_EMPLACED_GUN) // (MP has no AT-ST weapons)
+	{
+		return qfalse;
+	}
+
+	if (hit_loc == -1 || hit_loc == HL_NONE)
+	{
+		hit_loc = G_GetHitLocation(self, dmg_origin);
+	}
+
+	const qboolean cantFlip = (self->client->NPC_class == CLASS_BOBAFETT || self->client->NPC_class == CLASS_MANDO || self->client->NPC_class == CLASS_REBORN && self->s.weapon != WP_SABER || self->client->NPC_class == CLASS_SITHLORD && self->s.weapon != WP_SABER || self->client->NPC_class == CLASS_ROCKETTROOPER)
+		? qtrue
+		: qfalse;
+
+	switch (hit_loc)
+	{
+	case HL_NONE:
+		return qfalse;
+
+	case HL_FOOT_RT:
+	case HL_FOOT_LT:
+	case HL_LEG_RT:
+	case HL_LEG_LT:
+		dodge_anim = Q_irand(BOTH_HOP_L, BOTH_HOP_R);
+		break;
+	case HL_WAIST:
+	case HL_BACK:
+		if (cantFlip)
+		{
+			self->client->ps.fd.forceJumpCharge = 280;
+		}
+		else
+		{
+			dodge_anim = Q_irand(BOTH_DODGE_FL, BOTH_DODGE_FR);
+		}
+		break;
+	case HL_BACK_RT:
+		dodge_anim = BOTH_DODGE_FL;
+		break;
+	case HL_CHEST_RT:
+		dodge_anim = BOTH_DODGE_BL;
+		break;
+	case HL_BACK_LT:
+		dodge_anim = BOTH_DODGE_FR;
+		break;
+	case HL_CHEST_LT:
+		dodge_anim = BOTH_DODGE_BR;
+		break;
+	case HL_CHEST:
+		if (cantFlip)
+		{
+			self->client->ps.fd.forceJumpCharge = 280;
+		}
+		else
+		{
+			dodge_anim = Q_irand(BOTH_DODGE_BL, BOTH_DODGE_BR);
+		}
+		break;
+	case HL_ARM_RT:
+	case HL_HAND_RT:
+		dodge_anim = BOTH_DODGE_L;
+		break;
+	case HL_ARM_LT:
+	case HL_HAND_LT:
+		dodge_anim = BOTH_DODGE_R;
+		break;
+	case HL_HEAD:
+		dodge_anim = Q_irand(BOTH_DODGE_FL, BOTH_DODGE_FR);
+		break;
+	default:;
+	}
+
+	if (dodge_anim != -1)
+	{
+		int extra_hold_time = 0;
+
+		if (PM_EvasionAnim(self->client->ps.torsoAnim) && !PM_EvasionHoldAnim(self->client->ps.torsoAnim))
+		{
+			//already in a dodge: use the hold pose, don't start it all over again
+			dodge_anim = BOTH_DODGE_HOLD_FL + (dodge_anim - BOTH_DODGE_FL);
+			extra_hold_time = 200;
+		}
+
+		NPC_SetAnim(self, SETANIM_BOTH, dodge_anim, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+		G_Sound(self, CHAN_AUTO, G_SoundIndex("sound/weapons/melee/swing4.wav"));
+
+		if (extra_hold_time && self->client->ps.torsoTimer < extra_hold_time)
+		{
+			self->client->ps.torsoTimer += extra_hold_time;
+		}
+		self->client->ps.legsTimer = self->client->ps.torsoTimer;
+
+		WP_ForcePowerStop(self, FP_GRIP);
+		WP_ForcePowerStop(self, FP_GRASP);
+
+		if (!self->enemy && G_ValidEnemy(self, shooter))
+		{
+			G_SetEnemy(self, shooter);
+			Jedi_Aggression(self, 10);
+		}
+		return qtrue;
+	}
+	// (a jump up: SP counts that as dodged too only by the anim; here the caller's player dodge does the rest)
+	return qfalse;
 }

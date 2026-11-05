@@ -268,7 +268,7 @@ static void Enhanced_Gunner_Combat(void);
 static void Enhanced_Attack(void);
 static void NPC_BSST_AttackAdvanced(void);
 void NPC_BSST_Default(void);
-static void npc_check_speak(gentity_t* speaker_npc);
+void npc_check_speak(gentity_t* speaker_npc);
 
 void NPC_Saboteur_Precache(void)
 {
@@ -5815,7 +5815,7 @@ void NPC_BSST_Default(void)
 	}
 }
 
-static void npc_check_speak(gentity_t* speaker_npc)
+void npc_check_speak(gentity_t* speaker_npc) // (not static: the other AIs call it too, as SP; DH 2026-11-03)
 {
 	if (g_Advancedaitalk.integer < 1)
 	{

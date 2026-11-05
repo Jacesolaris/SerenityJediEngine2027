@@ -393,7 +393,7 @@ static void G_AttackDelay(const gentity_t* self, const gentity_t* enemy)
 			return;
 		case WP_EMPLACED_GUN:
 			return;
-		// (DH 2026-11-03: SP NPC_combat.cpp G_AttackDelay for the weapons MP had no case for)
+			// (DH 2026-11-03: SP NPC_combat.cpp G_AttackDelay for the weapons MP had no case for)
 		case WP_NOGHRI_STICK:
 			attDelay += Q_irand(0, 500);
 			break;
@@ -787,6 +787,8 @@ void G_SetEnemy(gentity_t* self, gentity_t* enemy)
 	self->enemy = enemy;
 }
 
+extern void npc_check_speak(gentity_t* speaker_npc); // NPC_AI_Stormtrooper.c (SP: idle combat chatter, g_Advancedaitalk)
+
 void ChangeWeapon(const gentity_t* ent, int new_weapon)
 {
 	if (!ent || !ent->client || !ent->NPC)
@@ -1054,7 +1056,7 @@ void ChangeWeapon(const gentity_t* ent, int new_weapon)
 		}
 		break;
 
-	// (DH 2026-11-03: SP NPC_combat.cpp ChangeWeapon for the weapons MP had no case for: their fire rate / bursts)
+		// (DH 2026-11-03: SP NPC_combat.cpp ChangeWeapon for the weapons MP had no case for: their fire rate / bursts)
 	case WP_TUSKEN_RIFLE:
 		ent->NPC->aiFlags &= ~NPCAI_BURST_WEAPON;
 		if (ent->NPC->scriptFlags & SCF_ALT_FIRE)
@@ -2407,6 +2409,9 @@ gentity_t* NPC_CheckEnemy(const qboolean find_new, const qboolean too_far_ok, co
 			}
 		}
 	}
+
+	npc_check_speak(NPCS.NPC); // (SP)
+
 	return newEnemy;
 }
 
@@ -3576,4 +3581,118 @@ void G_AimSet(const gentity_t* self, const int aim)
 		//	int debounce = 1000+(3-g_npcspskill.integer)*500;
 		//	TIMER_Set( self, "aimDebounce", Q_irand( debounce,debounce+2000 ) );
 	}
+}
+
+/*
+-------------------------
+NPC_CheckMultipleEnemies
+
+SJE SP (DH 2026-11-03, NPC parity batch C): how many valid enemies of enemyTeam this NPC can see now (for NPC_CheckSubmit)
+-------------------------
+*/
+int NPC_CheckMultipleEnemies(const gentity_t* closestTo, const int enemyTeam, const qboolean checkVis)
+{
+	int numChoices = 0;
+
+	if (!NPCS.NPC || !NPCS.NPC->client)
+	{
+		return 0;
+	}
+
+	if (enemyTeam == NPCTEAM_NEUTRAL)
+	{
+		return 0;
+	}
+
+	for (int entNum = 0; entNum < level.num_entities; entNum++)
+	{
+		gentity_t* newenemy = &g_entities[entNum];
+
+		if (newenemy != NPCS.NPC && newenemy->inuse && (newenemy->client || newenemy->r.svFlags & SVF_NONNPC_ENEMY)
+			&& !(newenemy->flags & FL_NOTARGET) && !(newenemy->s.eFlags & EF_NODRAW))
+		{
+			if (newenemy->health > 0)
+			{
+				if (newenemy->client && NPC_ValidEnemy(newenemy)
+					|| !newenemy->client && newenemy->alliedTeam == enemyTeam)
+				{
+					if (NPCS.NPC->client->playerTeam == NPCTEAM_PLAYER && enemyTeam == NPCTEAM_PLAYER)
+					{
+						//player allies turning on ourselves?  How?
+						if (newenemy->s.number >= MAX_CLIENTS)
+						{
+							//only turn on the player, not other player allies
+							continue;
+						}
+					}
+
+					if (newenemy != NPCS.NPC->lastEnemy)
+					{
+						vec3_t diff;
+						//Make sure we're not just going back and forth here
+						if (!trap->InPVS(newenemy->r.currentOrigin, NPCS.NPC->r.currentOrigin))
+						{
+							continue;
+						}
+
+						if (NPCS.NPCInfo->behaviorState == BS_INVESTIGATE || NPCS.NPCInfo->behaviorState == BS_PATROL)
+						{
+							if (!NPCS.NPC->enemy)
+							{
+								if (!InVisrange(newenemy))
+								{
+									continue;
+								}
+								if (NPC_CheckVisibility(newenemy, CHECK_360 | CHECK_FOV | CHECK_VISRANGE) != VIS_FOV)
+								{
+									continue;
+								}
+							}
+						}
+
+						VectorSubtract(closestTo->r.currentOrigin, newenemy->r.currentOrigin, diff);
+						const float relDist = VectorLengthSquared(diff);
+						if (newenemy->client && newenemy->client->hiddenDist > 0)
+						{
+							if (relDist > newenemy->client->hiddenDist * newenemy->client->hiddenDist)
+							{
+								//out of hidden range
+								if (VectorLengthSquared(newenemy->client->hiddenDir))
+								{
+									//They're only hidden from a certain direction, check
+									VectorNormalize(diff);
+									if (DotProduct(newenemy->client->hiddenDir, diff) > 0.5)
+									{
+										//I'm not looking in the right dir toward them to see them
+										continue;
+									}
+								}
+								else
+								{
+									continue;
+								}
+							}
+						}
+
+						if (!NPC_EnemyTooFar(newenemy, 0, qfalse))
+						{
+							if (checkVis)
+							{
+								if (NPC_CheckVisibility(newenemy, CHECK_360 | CHECK_VISRANGE) >= VIS_360)
+								{
+									numChoices++;
+								}
+							}
+							else
+							{
+								numChoices++;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return numChoices;
 }

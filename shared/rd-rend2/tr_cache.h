@@ -82,11 +82,12 @@ public:
 
 private:
 	AssetCache::iterator FindAsset(const char* name);
+	void		RemoveAsset(const char* path);	// its file was freed: the next lookup loads the model again
 	FileCache::iterator	FindFile(const char* name);
 
 	AssetCache assets;
 	std::unordered_multimap<uint32_t, size_t> assetIndex;	// path hash -> index in assets: GetModelHandle runs thousands of times a frame (G2_SetupModelPointers)
-	// GetModelHandle results per exact name string; cleared with the assets (assets are only ever added or all cleared)
+	// GetModelHandle results per exact name string; cleared whenever assets are removed
 	struct HandleMemo
 	{
 		char name[MAX_QPATH];

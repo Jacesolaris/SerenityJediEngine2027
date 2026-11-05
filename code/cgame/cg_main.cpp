@@ -115,6 +115,7 @@ const char* inv_names[] =
 };
 
 int force_icons[NUM_FORCE_POWERS];
+int force_icons_off[NUM_FORCE_POWERS]; // the weapon wheel's dimmed copies (CG_MDWheel_OffIcon)
 static int flame_force_icon = 0; // gfx/hud/i_icon_flame: Force Lightning slot for flamethrower users
 
 void CG_DrawDataPadHUD(const centity_t* cent);
@@ -402,6 +403,7 @@ vmCvar_t cg_g2Marks;
 vmCvar_t fx_expensivePhysics;
 vmCvar_t cg_debugHealthBars;
 vmCvar_t cg_drawblockpointbar;
+vmCvar_t cg_drawStaminaBar;
 
 vmCvar_t cg_SFXSabers;
 vmCvar_t cg_SFXSabersGlowSize;
@@ -460,6 +462,7 @@ vmCvar_t cg_drawVehLeadIndicator; // flying a fighter: where to aim at a moving 
 
 vmCvar_t cg_trueguns;
 vmCvar_t cg_holsteredweapons; // cg_holster.cpp: 0 = off, 1 = the player only, 2 = everyone
+vmCvar_t cg_holsterHide; // cg_holster.cpp: the guns the player doesn't carry on his body (hex mask of weapon numbers; weapon wheel "Holster")
 vmCvar_t cg_holsterdebug;
 vmCvar_t cg_holsterdebug_boneindex;
 vmCvar_t cg_holsterdebug_posoffset;
@@ -508,6 +511,7 @@ vmCvar_t cg_saberLockCinematicCamera;
 
 vmCvar_t cg_AimingCinematicCamera;
 vmCvar_t cg_aimShoulder;
+vmCvar_t cg_aimCamHorzOffset;
 
 vmCvar_t cg_com_rend2;
 
@@ -649,6 +653,7 @@ static cvarTable_t cvarTable[] = {
 	{ &fx_expensivePhysics, "fx_expensivePhysics", "1", CVAR_ARCHIVE },
 	{ &cg_debugHealthBars, "cg_debugHealthBars", "0", CVAR_ARCHIVE },
 	{ &cg_drawblockpointbar, "cg_drawblockpointbar", "0", CVAR_ARCHIVE },
+	{ &cg_drawStaminaBar, "cg_drawStaminaBar", "1", CVAR_ARCHIVE }, // the stamina (saber fatigue) bar with the block point bars over the heads (2026-11-03)
 
 	{ &cg_SFXSabers, "cg_SFXSabers", "3", CVAR_ARCHIVE },
 	{ &cg_SFXSabersGlowSize, "cg_SFXSabersGlowSize", "0.6f", CVAR_ARCHIVE },
@@ -681,7 +686,7 @@ static cvarTable_t cvarTable[] = {
 	{ &cg_saberLightRadius, "cg_saberLightRadius", "0.703125", CVAR_ARCHIVE }, // saber light reach (1 = as before)
 	{ &cg_lightningFxInterval, "cg_lightningFxInterval", "50", CVAR_ARCHIVE }, // ms between new copies of the force lightning bolt effect (16 = as before)
 	{ &cg_lightningMarks, "cg_lightningMarks", "1", CVAR_ARCHIVE }, // force lightning scorch / burn marks that fade (0 = off)
-	{ &cg_lightningMarkInterval, "cg_lightningMarkInterval", "150", CVAR_ARCHIVE }, // ms between lightning marks per caster
+	{ &cg_lightningMarkInterval, "cg_lightningMarkInterval", "100", CVAR_ARCHIVE }, // ms between lightning marks per caster
 	{ &cg_saberLightIntensity, "cg_saberLightIntensity", "1.070312", CVAR_ARCHIVE }, // saber light strength (1 = as before)
 	{ &cg_wheelSlowmo, "cg_wheelSlowmo", "1", CVAR_ARCHIVE }, // weapon / force wheel: slow the game while it is open
 	{ &cg_wheelHold, "cg_wheelHold", "0", CVAR_ARCHIVE }, // weapon / force wheel: 0 stays open after a press, 1 held open
@@ -700,6 +705,7 @@ static cvarTable_t cvarTable[] = {
 
 	{ &cg_trueguns, "cg_trueguns", "1", CVAR_ARCHIVE },
 	{ &cg_holsteredweapons, "cg_holsteredweapons", "2", CVAR_ARCHIVE },
+	{ &cg_holsterHide, "cg_holsterHide", "", CVAR_ARCHIVE },
 	{ &cg_holsterdebug, "cg_holsterdebug", "0", 0 },
 	{ &cg_holsterdebug_boneindex, "cg_holsterdebug_boneindex", "0", 0 },
 	{ &cg_holsterdebug_posoffset, "cg_holsterdebug_posoffset", "0.0 0.0 0.0", 0 },
@@ -753,6 +759,7 @@ static cvarTable_t cvarTable[] = {
 
 	{ &cg_AimingCinematicCamera, "g_AimingCinematicCamera", "1", CVAR_ARCHIVE },
 	{ &cg_aimShoulder, "cg_aimShoulder", "1", CVAR_ARCHIVE }, // aiming camera over the right shoulder (x model size); 0 = centred
+	{ &cg_aimCamHorzOffset, "cg_aimCamHorzOffset", "0", CVAR_ARCHIVE }, // aiming camera's side offset, used instead of cg_thirdPersonHorzOffset (same on every camera preset)
 
 	{ &cg_com_rend2, "com_rend2", "0", CVAR_ARCHIVE | CVAR_SAVEGAME },
 
@@ -1947,6 +1954,11 @@ static void CG_RegisterGraphics()
 	//gore decal shaders -rww
 	cgs.media.bdecal_bodyburn1 = cgi_R_RegisterShader("gfx/damage/bodyburnmark1");
 	cgs.media.bdecal_burnmark1 = cgi_R_RegisterShader("gfx/damage/burnmark1");
+	// force lightning burn marks (JKG burn line images, shaders/zz_lightningburn.shader; 2026-11-04)
+	cgs.media.lightningBurnShader = cgi_R_RegisterShader("gfx/burnmarks/lightningburn");
+	cgs.media.lightningBurnAshShader = cgi_R_RegisterShader("gfx/burnmarks/lightningburn_ash");
+	cgs.media.lightningBurnGlowShader = cgi_R_RegisterShader("gfx/burnmarks/lightningburn_glow");
+	cgs.media.lightningBurnBodyShader = cgi_R_RegisterShader("gfx/burnmarks/lightningburn_body");
 	cgs.media.bdecal_saberglowmark = cgi_R_RegisterShader("gfx/damage/saberglowmark");
 	cgs.media.bdecal_saberglow = cgi_R_RegisterShader("gfx/effects/saberDamageGlow");
 	cgs.media.saberSliceCapShader = cgi_R_RegisterShader("gfx/effects/saberslice_cap");
@@ -2059,6 +2071,9 @@ static void CG_RegisterGraphics()
 	cgs.media.batteryChargeShader = cgi_R_RegisterShader("gfx/2d/battery");
 	cgi_R_RegisterShader("gfx/2d/droid_view");
 	cgs.media.useableHint = cgi_R_RegisterShader("gfx/hud/useableHint");
+	cgs.media.npcBarBack = cgi_R_RegisterShaderNoMip("gfx/2d/npcbar_back");
+	cgs.media.npcBarFill = cgi_R_RegisterShaderNoMip("gfx/2d/npcbar_fill");
+	cgs.media.npcBarFrame = cgi_R_RegisterShaderNoMip("gfx/2d/npcbar_frame");
 
 	cgs.media.hackerIconShader = cgi_R_RegisterShader("gfx/mp/c_icon_tech");
 
@@ -2848,6 +2863,9 @@ void CG_Init(const int serverCommandSequence)
 		if (force_icon_files[i])
 		{
 			force_icons[i] = cgi_R_RegisterShaderNoMip(force_icon_files[i]);
+			// the weapon wheel's dimmed copy (0 when shaders/md_wheelicons.shader is not installed)
+			const char* base = strrchr(force_icon_files[i], '/');
+			force_icons_off[i] = cgi_R_RegisterShaderNoMip(va("gfx/menus/weaponwheel/off/%s", base ? base + 1 : force_icon_files[i]));
 		}
 	}
 	flame_force_icon = cgi_R_RegisterShaderNoMip("gfx/hud/i_icon_flame");
@@ -5593,7 +5611,22 @@ qboolean CG_MDWheel_BlocksButtons()
 	return mdWheel.blockButtons ? qtrue : qfalse;
 }
 
-// every frame, before the usercmd values are sent (cg_view.cpp): the mouse turn moves the pointer, attack picks
+// alt attack on a carried gun: drawn on the body (holstered) or not (cg_holsterHide), at once (as MD 9)
+static void CG_MDWheel_ToggleOnPerson(const int weapon)
+{
+	// grenades / mines / det packs are never drawn on the body
+	if (weapon <= WP_NONE || weapon >= 64 || weapon == WP_THERMAL || weapon == WP_TRIP_MINE || weapon == WP_DET_PACK)
+	{
+		return;
+	}
+	const unsigned long long mask = strtoull(cg_holsterHide.string, nullptr, 16) ^ 1ull << weapon;
+	cgi_Cvar_Set("cg_holsterHide", mask ? va("%llx", mask) : "");
+	cgi_Cvar_Update(&cg_holsterHide);
+	cgi_S_StartLocalSound(mdWheel.clickSound, CHAN_LOCAL_SOUND);
+}
+
+// every frame, before the usercmd values are sent (cg_view.cpp): the mouse turn moves the pointer, attack picks,
+// alt attack toggles the pointed gun's holster
 void CG_MDWheel_Frame()
 {
 	usercmd_t cmd;
@@ -5641,6 +5674,10 @@ void CG_MDWheel_Frame()
 	if (pressed & BUTTON_ATTACK)
 	{
 		CG_MDWheel_Close(qtrue);
+	}
+	else if (pressed & BUTTON_ALT_ATTACK && mdWheel.ring == 0 && mdWheel.hover >= 0 && mdWheel.avail[mdWheel.hover])
+	{
+		CG_MDWheel_ToggleOnPerson(mdWheel.items[mdWheel.hover]);
 	}
 }
 
@@ -5810,7 +5847,7 @@ static void CG_MDWheel_Slice(const int n, const vec3_t rgb, const float alphaIn,
 // the dividers and the slices, drawn as polygons in a small scene over the panel (square in pixels: round anywhere)
 static void CG_MDWheel_DrawSlices(const int current)
 {
-	// the panel's gold rim, #ab7e2e 
+	// the panel's gold rim, #ab7e2e
 	static constexpr vec3_t rim = { 171.0f / 255.0f, 126.0f / 255.0f, 46.0f / 255.0f };
 	static constexpr vec3_t greyRgb = { 0.62f, 0.62f, 0.62f };
 	static constexpr vec4_t divider = { 171.0f / 255.0f, 126.0f / 255.0f, 46.0f / 255.0f, 0.5f };
@@ -5886,6 +5923,16 @@ static void CG_MDWheel_DarkDisc(const float x, const float y, const float r, con
 	}
 }
 
+// a force power not known is drawn with its dimmed copy (gfx/menus/weaponwheel/off/<icon>, shaders/md_wheelicons.shader
+// in the Claude pk3: the same picture, but it takes the draw colour). Only when that shader is missing does the dark disc
+// below go over it: the disc is round and the icons' corners stuck out of it (white dots, Jace 2026-11-05)
+static bool CG_MDWheel_OffIcon(const int n)
+{
+	const int power = mdWheel.ring == 1 && n >= 0 && n < mdWheel.numItems ? showPowers[mdWheel.items[n]] : -1;
+	return power >= 0 && power < NUM_FORCE_POWERS && force_icons_off[power]
+		&& CG_ForcePowerIcon(power) == force_icons[power];
+}
+
 // the force powers not known, greyed out as the weapons not carried: their icons' shaders ignore the draw colour (they
 // stayed bright), so a dark disc goes over each, drawn after the icons (Jace 2026-10-29)
 static void CG_MDWheel_GreyUnknownForce(const float iconSize)
@@ -5898,7 +5945,7 @@ static void CG_MDWheel_GreyUnknownForce(const float iconSize)
 	cgi_R_ClearScene();
 	for (int n = 0; n < mdWheel.numItems; n++)
 	{
-		if (mdWheel.avail[n])
+		if (mdWheel.avail[n] || CG_MDWheel_OffIcon(n))
 		{
 			continue;
 		}
@@ -5929,6 +5976,8 @@ void CG_DrawMDWheel()
 	static constexpr vec4_t white = { 1.0f, 1.0f, 1.0f, 1.0f };
 	static constexpr vec4_t grey = { 0.7f, 0.7f, 0.7f, 0.9f };
 	static constexpr vec4_t greyed = { 0.5f, 0.5f, 0.5f, 0.85f };
+	static constexpr vec4_t red = { 1.0f, 0.4f, 0.4f, 1.0f };
+	const unsigned long long hidden = strtoull(cg_holsterHide.string, nullptr, 16);
 
 	if (!mdWheel.open || !cg.snap)
 	{
@@ -5976,16 +6025,29 @@ void CG_DrawMDWheel()
 			{
 				color[3] = 0.5f;
 			}
+			if (item < 64 && hidden & 1ull << item)
+			{
+				color[1] = color[2] = 0.4f; // holster disabled
+			}
 		}
 		else
 		{
 			icon = CG_ForcePowerIcon(showPowers[item]);
 			if (!mdWheel.avail[n])
 			{
-				// not known: faded as a weapon not carried. The colour is dimmed too, so an icon whose shader ignores
-				// the alpha (an additive glow) fades as well
-				color[0] = color[1] = color[2] = 0.45f;
-				color[3] = 0.4f;
+				// not known: faded as a weapon not carried, with the icon's dimmed copy (it takes the colour; the
+				// normal icon's shader ignores it)
+				if (CG_MDWheel_OffIcon(n))
+				{
+					icon = force_icons_off[showPowers[item]];
+					color[0] = color[1] = color[2] = 0.6f;
+					color[3] = 0.45f;
+				}
+				else
+				{
+					color[0] = color[1] = color[2] = 0.45f;
+					color[3] = 0.4f;
+				}
 			}
 		}
 
@@ -6022,6 +6084,11 @@ void CG_DrawMDWheel()
 					CG_MDWheel_CenterText(my - 12.0f, 0.6f, grey,
 						va("Ammo: %d", cg.snap->ps.ammo[weaponData[item].ammoIndex]), ax);
 				}
+				if (item != WP_THERMAL && item != WP_TRIP_MINE && item != WP_DET_PACK && item < 64)
+				{
+					CG_MDWheel_CenterText(my + 12.0f, 0.55f, hidden & 1ull << item ? red : grey,
+						hidden & 1ull << item ? "Holster: Disabled" : "Holster: Enabled", ax);
+				}
 			}
 		}
 		else if (mdWheel.ring == 1)
@@ -6040,6 +6107,10 @@ void CG_DrawMDWheel()
 	}
 	CG_MDWheel_CenterText(my + 44.0f, 0.45f, grey,
 		mdWheel.ring == 0 ? "Mouse wheel: force powers" : "Mouse wheel: weapons", ax);
+	if (mdWheel.ring == 0)
+	{
+		CG_MDWheel_CenterText(my + 60.0f, 0.45f, grey, "Alt attack: holster", ax);
+	}
 
 	// the pointer
 	CG_FillRect(mx + mdWheel.px * ax - 2.0f * ax, my + mdWheel.py - 2.0f, 4.0f * ax, 4.0f, white);

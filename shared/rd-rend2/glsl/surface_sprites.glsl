@@ -434,6 +434,7 @@ uniform int u_AlphaTestType;
 out vec4 out_Color;
 #if !defined(VELOCITY_PASS)
 out vec4 out_Glow;
+out vec4 out_SsrMask;	// r_ssr material mask (Jace 2026-11-04): grass / plant sprites never reflect
 #endif
 
 #if defined(USE_FOG)
@@ -598,6 +599,7 @@ void main()
 	out_Color = vec4(motionVector, 0.0, 1.0);
 #else
 	out_Glow = vec4(var_Ember * out_Color.a, 0.0);
+	out_SsrMask = vec4(1.0);
 #endif
 	
 }

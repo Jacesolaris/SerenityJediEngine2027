@@ -488,6 +488,7 @@ in vec2 var_TexCoords;
 
 out vec4 out_Color;
 out vec4 out_Glow;
+out vec4 out_SsrMask;	// r_ssr material mask (Jace 2026-11-04) (fog is blended: never written)
 
 #if defined(USE_VOLUMETRIC_FOG)
 vec3 CalcVolumetricFogColor(in vec3 startPosition, in vec3 endPosition, in Fog fog)
@@ -627,4 +628,5 @@ void main()
 	Fog fog = u_Fogs[u_FogIndex];
 	out_Color = CalcFog(u_ViewOrigin, var_WSPosition, fog);
 	out_Glow = vec4(0.0, 0.0, 0.0, out_Color.a);
+	out_SsrMask = vec4(0.0);
 }

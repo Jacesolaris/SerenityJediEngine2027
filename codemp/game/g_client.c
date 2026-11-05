@@ -3569,6 +3569,14 @@ qboolean client_userinfo_changed(const int clientNum)
 	Q_strcat(buf, sizeof buf, va("c1\\%s\\", color1));
 	Q_strcat(buf, sizeof buf, va("c2\\%s\\", color2));
 	Q_strcat(buf, sizeof buf, va("hc\\%i\\", client->pers.maxHealth));
+	// the guns he doesn't carry on his body (his cg_holsterHide, weapon wheel "Holster"): the others' cgame skip them
+	{
+		const unsigned int holsterHide = (unsigned int)strtoul(Info_ValueForKey(userinfo, "cg_holsterHide"), NULL, 16);
+		if (holsterHide)
+		{
+			Q_strcat(buf, sizeof buf, va("hh\\%x\\", holsterHide));
+		}
+	}
 	//RGBSaber STUFF
 	Q_strcat(buf, sizeof buf, va("tc1\\%s\\", rgb1));
 	Q_strcat(buf, sizeof buf, va("tc2\\%s\\", rgb2));
@@ -4905,7 +4913,7 @@ void ClientSpawn(gentity_t* ent)
 	if (level.gametype == GT_SINGLE_PLAYER)
 	{
 		// a player who came along from the last map starts at its spawn target (g_target.c G_MissionSpawnPoint)
-		extern gentity_t* G_MissionSpawnPoint(const gentity_t* ent, vec3_t origin, vec3_t angles);
+		extern gentity_t* G_MissionSpawnPoint(const gentity_t * ent, vec3_t origin, vec3_t angles);
 		spawnPoint = G_MissionSpawnPoint(ent, spawn_origin, spawn_angles);
 		if (!spawnPoint && ent->r.svFlags & SVF_BOT)
 		{
@@ -4921,7 +4929,7 @@ void ClientSpawn(gentity_t* ent)
 		if (!spawnPoint)
 		{
 			// (several players at the one SP start: a free spot around it, g_target.c G_MissionSpreadSpawn)
-			extern void G_MissionSpreadSpawn(const gentity_t* ent, const gentity_t* spot, vec3_t origin);
+			extern void G_MissionSpreadSpawn(const gentity_t * ent, const gentity_t * spot, vec3_t origin);
 			spawnPoint = SelectSPSpawnPoint(spawn_origin, spawn_angles);
 			G_MissionSpreadSpawn(ent, spawnPoint, spawn_origin);
 		}
@@ -7468,7 +7476,7 @@ spawn_done:
 	if (level.gametype == GT_SINGLE_PLAYER)
 	{
 		// Missions: the loadout he brought from the last map, on his first spawn here (g_target.c G_MissionApplyLoadout)
-		extern void G_MissionApplyLoadout(gentity_t* ent);
+		extern void G_MissionApplyLoadout(gentity_t * ent);
 		G_MissionApplyLoadout(ent);
 	}
 

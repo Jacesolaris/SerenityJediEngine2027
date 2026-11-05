@@ -206,6 +206,7 @@ void CModelCacheManager::DumpNonPure(void)
 
 			if (it->pDiskImage)
 				Z_Free(it->pDiskImage);
+			RemoveAsset(it->path);
 
 			it = files.erase(it);
 		}
@@ -216,6 +217,27 @@ void CModelCacheManager::DumpNonPure(void)
 	}
 
 	ri.Printf(PRINT_DEVELOPER, "CCacheManager::DumpNonPure(): Ok\n");
+}
+
+// The model of a freed file points into its disk image: forget the asset, so the next RE_RegisterModel of this
+// path loads it again instead of handing out the old handle (from MD9 SP, SJE/MD9 shared renderer (2026-11-05))
+void CModelCacheManager::RemoveAsset(const char* path)
+{
+	const auto it = FindAsset(path);
+	if (it == std::end(assets))
+	{
+		return;
+	}
+	assets.erase(it);
+	assetIndex.clear();
+	for (size_t i = 0; i < assets.size(); i++)
+	{
+		assetIndex.emplace(PathHash(assets[i].path), i);
+	}
+	for (auto& memo : handleMemo)
+	{
+		memo.name[0] = '\0';
+	}
 }
 
 CModelCacheManager::AssetCache::iterator CModelCacheManager::FindAsset(const char* path)
@@ -304,6 +326,7 @@ qboolean CModelCacheManager::LevelLoadEnd(qboolean deleteUnusedByLevel)
 				Z_Free(it->pDiskImage);
 				bAtLeastOneModelFreed = qtrue;	// FIXME: is this correct? shouldn't it be in the next lower scope?
 			}
+			RemoveAsset(it->path);
 
 			it = files.erase(it);
 		}

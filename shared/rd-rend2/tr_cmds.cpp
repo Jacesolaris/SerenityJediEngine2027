@@ -611,7 +611,7 @@ void RE_BeginFrame(stereoFrame_t stereoFrame)
 		for (byte i = 0; i < MAX_SCENES; i++)
 		{
 			if (backEndData->cachePreviousFrameUbos)
-				thisFrame->ubo[i] = backEndData->frameUbos[(frameNumber % (MAX_FRAMES + 1) * (MAX_FRAMES + 1)) + i];
+				thisFrame->ubo[i] = backEndData->frameUbos[(frameNumber % (MAX_FRAMES + 1)) * MAX_SCENES + i]; // SJE/MD9 shared renderer (2026-11-05): one set of MAX_SCENES per frame (the old index overlapped the sets)
 
 			qglBindBuffer(GL_UNIFORM_BUFFER, thisFrame->ubo[i]);
 			glState.currentGlobalUBO = thisFrame->ubo[i];

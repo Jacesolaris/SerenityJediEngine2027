@@ -1819,6 +1819,10 @@ void G2_SetRagDoll(CGhoul2Info_v& ghoul2_v, CRagDollParams* parms)
 	G2_Set_Bone_Angles_Rag(ghoul2, blist, "pelvis", RAG_PCJ_PELVIS | RAG_PCJ | RAG_PCJ_POST_MULT | RAG_UNSNAPPABLE, 10.0f * f_rad_scale, pcj_min, pcj_max, 100);
 
 	// new base anim, unconscious flop
+	// SJE (Jace 2026-11-04): natural joints. The elbows, hips and knees are RAG_UNSNAPPABLE now: before, the solver let
+	// them go 1.5x past these limits and, once past that, "snapped" them (a broken limb, no limits at all), so knees
+	// and elbows bent backwards. The ranges are what the solver really allowed before (1.5x these numbers; hips 1.3x),
+	// less any backward bend: knees 0 - 150, elbows 0 - 135 (the right knee could bend 20 backwards, the elbows 25 / 30).
 	int pcjflags = RAG_PCJ | RAG_PCJ_POST_MULT;//|RAG_EFFECTOR;
 
 	VectorSet(pcj_min, -15.0f, -15.0f, -15.0f);
@@ -1849,38 +1853,38 @@ void G2_SetRagDoll(CGhoul2Info_v& ghoul2_v, CRagDollParams* parms)
 	VectorScale(pcj_max, s_fact_arm, pcj_max);
 	G2_Set_Bone_Angles_Rag(ghoul2, blist, "lhumerus", pcjflags | RAG_BONE_LIGHTWEIGHT | RAG_UNSNAPPABLE, 4.0f * s_rad_arm * f_rad_scale, pcj_min, pcj_max, 500);
 
-	VectorSet(pcj_min, -25.0f, -20.0f, -20.0f);
-	VectorSet(pcj_max, 90.0f, 20.0f, -20.0f);
+	VectorSet(pcj_min, 0.0f, -30.0f, -30.0f);
+	VectorSet(pcj_max, 135.0f, 30.0f, -30.0f);
 	VectorScale(pcj_min, s_fact_arm, pcj_min);
 	VectorScale(pcj_max, s_fact_arm, pcj_max);
-	G2_Set_Bone_Angles_Rag(ghoul2, blist, "rradius", pcjflags | RAG_BONE_LIGHTWEIGHT, 3.0f * s_rad_arm * f_rad_scale, pcj_min, pcj_max, 500);
-	VectorSet(pcj_min, -90.0f, -20.0f, -20.0f);
-	VectorSet(pcj_max, 30.0f, 20.0f, -20.0f);
+	G2_Set_Bone_Angles_Rag(ghoul2, blist, "rradius", pcjflags | RAG_BONE_LIGHTWEIGHT | RAG_UNSNAPPABLE, 3.0f * s_rad_arm * f_rad_scale, pcj_min, pcj_max, 500);
+	VectorSet(pcj_min, -135.0f, -30.0f, -30.0f);
+	VectorSet(pcj_max, 0.0f, 30.0f, -30.0f);
 	VectorScale(pcj_min, s_fact_arm, pcj_min);
 	VectorScale(pcj_max, s_fact_arm, pcj_max);
-	G2_Set_Bone_Angles_Rag(ghoul2, blist, "lradius", pcjflags | RAG_BONE_LIGHTWEIGHT, 3.0f * s_rad_arm * f_rad_scale, pcj_min, pcj_max, 500);
+	G2_Set_Bone_Angles_Rag(ghoul2, blist, "lradius", pcjflags | RAG_BONE_LIGHTWEIGHT | RAG_UNSNAPPABLE, 3.0f * s_rad_arm * f_rad_scale, pcj_min, pcj_max, 500);
 
-	VectorSet(pcj_min, -80.0f, -50.0f, -20.0f);
-	VectorSet(pcj_max, 30.0f, 5.0f, 20.0f);
+	VectorSet(pcj_min, -104.0f, -65.0f, -26.0f);
+	VectorSet(pcj_max, 39.0f, 6.5f, 26.0f);
 	VectorScale(pcj_min, s_fact_leg, pcj_min);
 	VectorScale(pcj_max, s_fact_leg, pcj_max);
-	G2_Set_Bone_Angles_Rag(ghoul2, blist, "rfemurYZ", pcjflags | RAG_BONE_LIGHTWEIGHT, 6.0f * s_rad_leg * f_rad_scale, pcj_min, pcj_max, 500);
-	VectorSet(pcj_min, -60.0f, -5.0f, -20.0f);
-	VectorSet(pcj_max, 50.0f, 50.0f, 20.0f);
+	G2_Set_Bone_Angles_Rag(ghoul2, blist, "rfemurYZ", pcjflags | RAG_BONE_LIGHTWEIGHT | RAG_UNSNAPPABLE, 6.0f * s_rad_leg * f_rad_scale, pcj_min, pcj_max, 500);
+	VectorSet(pcj_min, -78.0f, -6.5f, -26.0f);
+	VectorSet(pcj_max, 65.0f, 65.0f, 26.0f);
 	VectorScale(pcj_min, s_fact_leg, pcj_min);
 	VectorScale(pcj_max, s_fact_leg, pcj_max);
-	G2_Set_Bone_Angles_Rag(ghoul2, blist, "lfemurYZ", pcjflags | RAG_BONE_LIGHTWEIGHT, 6.0f * s_rad_leg * f_rad_scale, pcj_min, pcj_max, 500);
+	G2_Set_Bone_Angles_Rag(ghoul2, blist, "lfemurYZ", pcjflags | RAG_BONE_LIGHTWEIGHT | RAG_UNSNAPPABLE, 6.0f * s_rad_leg * f_rad_scale, pcj_min, pcj_max, 500);
 
-	VectorSet(pcj_min, -20.0f, -15.0f, -15.0f);
-	VectorSet(pcj_max, 100.0f, 15.0f, 15.0f);
+	VectorSet(pcj_min, 0.0f, -15.0f, -15.0f);
+	VectorSet(pcj_max, 150.0f, 15.0f, 15.0f);
 	VectorScale(pcj_min, s_fact_leg, pcj_min);
 	VectorScale(pcj_max, s_fact_leg, pcj_max);
-	G2_Set_Bone_Angles_Rag(ghoul2, blist, "rtibia", pcjflags | RAG_EFFECTOR | RAG_BONE_LIGHTWEIGHT, 4.0f * s_rad_leg * f_rad_scale, pcj_min, pcj_max, 500);
-	VectorSet(pcj_min, 20.0f, -15.0f, -15.0f);
-	VectorSet(pcj_max, 100.0f, 15.0f, 15.0f);
+	G2_Set_Bone_Angles_Rag(ghoul2, blist, "rtibia", pcjflags | RAG_EFFECTOR | RAG_BONE_LIGHTWEIGHT | RAG_UNSNAPPABLE, 4.0f * s_rad_leg * f_rad_scale, pcj_min, pcj_max, 500);
+	VectorSet(pcj_min, 0.0f, -15.0f, -15.0f);
+	VectorSet(pcj_max, 150.0f, 15.0f, 15.0f);
 	VectorScale(pcj_min, s_fact_leg, pcj_min);
 	VectorScale(pcj_max, s_fact_leg, pcj_max);
-	G2_Set_Bone_Angles_Rag(ghoul2, blist, "ltibia", pcjflags | RAG_EFFECTOR | RAG_BONE_LIGHTWEIGHT, 4.0f * s_rad_leg * f_rad_scale, pcj_min, pcj_max, 500);
+	G2_Set_Bone_Angles_Rag(ghoul2, blist, "ltibia", pcjflags | RAG_EFFECTOR | RAG_BONE_LIGHTWEIGHT | RAG_UNSNAPPABLE, 4.0f * s_rad_leg * f_rad_scale, pcj_min, pcj_max, 500);
 
 	constexpr float s_rad_e_arm = 1.2f;
 	constexpr float s_rad_e_leg = 1.2f;

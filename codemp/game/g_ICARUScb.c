@@ -2435,7 +2435,7 @@ int Q3_GetFloat(const int entID, int type, const char* name, float* value)
 		*value = ent->NPC->ignorePain;
 		break;
 	case SET_IGNOREENEMIES: //## %t="BOOL_TYPES" # Do not acquire enemies
-		*value = ent->r.svFlags & SVF_IGNORE_ENEMIES;
+		*value = ent->NPC && ent->NPC->scriptFlags & SCF_IGNORE_ENEMIES ? 1 : 0; // (SET_IGNORE_ENEMIES sets scriptFlags in MP)
 		break;
 	case SET_IGNOREALERTS: //## Do not get enemy set by allies in area(ambush)
 		if (ent->NPC == NULL)
@@ -3592,6 +3592,121 @@ SetLowerAnim
   Argument		: int animID
 ============
 */
+/*
+-------------------------
+Script-held anims (DH 2026-11-03)
+
+SP: SET_ANIM_HOLDTIME_LOWER / UPPER / BOTH -1 keeps a script's anim (the ns_streets bar thugs' BOTH_SIT1 ...) until a
+script sets another anim or hold time, or the NPC reacts (pain, knockdown, death...). In MP something else would play
+over it and the NPC stood up. So an NPC's held anim is remembered here and, after its think (NPC.c NPC_Think), put back
+when another anim took its place while the NPC is still just being scripted. The hold ends (the NPC can stand up and
+fight, as in SP) when it gets an enemy, is hurt, knocked down, gripped or pushed, ragdolls, is held by a monster, dies,
+or its behaviour state changes. Never put back while it is in the air. developer 1 prints, once per NPC, what had
+replaced the held anim.
+-------------------------
+*/
+typedef struct
+{
+	int anim[2]; // the held legs [0] / torso [1] anim + 1, 0 = none
+	int bState; // the behaviour state when it was held
+	int freeTime; // (the entity slot's freetime: reset when the slot is reused)
+	qboolean told; // (developer print done)
+} scriptHeldAnim_t;
+
+static scriptHeldAnim_t scriptHeldAnim[MAX_GENTITIES];
+
+static scriptHeldAnim_t* G_ScriptHeldAnim(const gentity_t* ent)
+{
+	scriptHeldAnim_t* h = &scriptHeldAnim[ent->s.number];
+	if (h->freeTime != ent->freetime)
+	{
+		memset(h, 0, sizeof * h);
+		h->freeTime = ent->freetime;
+	}
+	return h;
+}
+
+// a script sets an anim / a hold time on an NPC: part 0 legs, 1 torso
+static void G_ScriptHeldAnimSet(const gentity_t* ent, const int part, const qboolean held)
+{
+	if (!ent->client || !ent->NPC)
+	{
+		return;
+	}
+	scriptHeldAnim_t* h = G_ScriptHeldAnim(ent);
+	h->anim[part] = held ? (part ? ent->client->ps.torsoAnim : ent->client->ps.legsAnim) + 1 : 0;
+	if (held)
+	{
+		h->bState = ent->NPC->behaviorState;
+	}
+}
+
+// after the NPC's think: the held anims put back, or the hold ended
+void G_ScriptHeldAnimThink(gentity_t* ent)
+{
+	if (!ent || !ent->client || !ent->NPC)
+	{
+		return;
+	}
+	scriptHeldAnim_t* h = G_ScriptHeldAnim(ent);
+	if (!h->anim[0] && !h->anim[1])
+	{
+		return;
+	}
+	playerState_t* ps = &ent->client->ps;
+
+	if (ent->health <= 0
+		|| ent->enemy
+		|| ent->painDebounceTime > level.time
+		|| PM_InKnockDown(ps)
+		|| ps->fd.forceGripBeingGripped > level.time
+		|| ps->forceHandExtend == HANDEXTEND_KNOCKDOWN
+		|| ps->eFlags & EF_RAG
+		|| ps->eFlags2 & EF2_HELD_BY_MONSTER
+		|| ent->NPC->behaviorState != h->bState)
+	{
+		h->anim[0] = h->anim[1] = 0; // (the NPC reacts now, as in SP)
+		return;
+	}
+	if (ps->groundEntityNum == ENTITYNUM_NONE)
+	{
+		return; // (not in the air)
+	}
+	for (int part = 0; part < 2; part++)
+	{
+		if (!h->anim[part])
+		{
+			continue;
+		}
+		const int held = h->anim[part] - 1;
+		const int cur = part ? ps->torsoAnim : ps->legsAnim;
+		const int timer = part ? ps->torsoTimer : ps->legsTimer;
+		if (cur == held && timer == -1)
+		{
+			continue;
+		}
+		if (developer.integer && !h->told)
+		{
+			h->told = qtrue;
+			Com_Printf("Script-held anim: %s (%d, %s) %s %s was replaced by %s (timer %d), put back\n",
+				ent->NPC_type ? ent->NPC_type : "NPC", ent->s.number, ent->targetname ? ent->targetname : "-",
+				part ? "torso" : "legs", GetStringForID(animTable, held), GetStringForID(animTable, cur), timer);
+		}
+		if (cur != held)
+		{
+			G_SetAnim(ent, NULL, part ? SETANIM_TORSO : SETANIM_LEGS, held, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
+		}
+		if (part)
+		{
+			ps->torsoTimer = -1;
+		}
+		else
+		{
+			ps->legsTimer = -1;
+		}
+	}
+}
+
 static void SetLowerAnim(const int entID, const int animID)
 {
 	gentity_t* ent = &g_entities[entID];
@@ -3609,6 +3724,7 @@ static void SetLowerAnim(const int entID, const int animID)
 	}
 
 	G_SetAnim(ent, NULL, SETANIM_LEGS, animID, SETANIM_FLAG_RESTART | SETANIM_FLAG_HOLD | SETANIM_FLAG_OVERRIDE, 0);
+	G_ScriptHeldAnimSet(ent, 0, qfalse); // (a new script anim: held again only by a hold time of -1)
 }
 
 /*
@@ -3637,6 +3753,7 @@ static void SetUpperAnim(const int entID, const int animID)
 	}
 
 	G_SetAnim(ent, NULL, SETANIM_TORSO, animID, SETANIM_FLAG_RESTART | SETANIM_FLAG_HOLD | SETANIM_FLAG_OVERRIDE, 0);
+	G_ScriptHeldAnimSet(ent, 1, qfalse);
 }
 
 /*
@@ -3715,6 +3832,7 @@ static void Q3_SetAnimHoldTime(const int entID, const int int_data, const qboole
 	{
 		ent->client->ps.torsoTimer = int_data;
 	}
+	G_ScriptHeldAnimSet(ent, lower ? 0 : 1, int_data == -1 ? qtrue : qfalse); // (-1: held until a script changes it, as SP)
 }
 
 static void Q3_SetRenderCullRadius(int entID, float float_data);
@@ -8100,6 +8218,7 @@ static void G_MissionWipeCheck(void)
 
 void G_MissionCutsceneMessage(int entID);
 void G_MissionCutsceneNoteFirst(int entID);
+void G_MissionIntroCamera(int entID);
 
 //returns qtrue if it got to the end, otherwise qfalse.
 qboolean Q3_Set(const int taskID, const int entID, const char* type_name, const char* data)
@@ -9336,6 +9455,7 @@ qboolean Q3_Set(const int taskID, const int entID, const char* type_name, const 
 		break;
 
 	case ENABLE: //camera enable
+		G_MissionIntroCamera(entID); // (Missions: an intro the intros file does not name is cut short)
 		G_MissionCutsceneNoteFirst(entID); // (Missions: a map's first cutscene plays once per mission)
 		G_MissionCutsceneMessage(entID); // (Missions: the line everyone sees in place of the cutscene)
 		ICam_Enable();
@@ -9461,6 +9581,19 @@ static gentity_t* G_MissionCutscenePlayer(void)
 	return NULL;
 }
 
+// run a skip script on ent: its name as scripts give it ("t3_stamp/intro_skip"), with the script folder in front as
+// target_scriptrunner does (ICARUS_RunScript takes the file's path as it is)
+static void G_MissionRunScript(gentity_t* ent, const char* name)
+{
+	if (!Q_stricmpn(name, Q3_SCRIPT_DIR "/", strlen(Q3_SCRIPT_DIR) + 1))
+	{
+		trap->ICARUS_RunScript((sharedEntity_t*)ent, name);
+	}
+	else
+	{
+		trap->ICARUS_RunScript((sharedEntity_t*)ent, va("%s/%s", Q3_SCRIPT_DIR, name));
+	}
+}
 // the skip of the running cutscene: run at the camera's start and every player think while it is on
 void G_MissionCutsceneSkip(void)
 {
@@ -9474,7 +9607,7 @@ void G_MissionCutsceneSkip(void)
 		gentity_t* player = G_MissionCutscenePlayer();
 		if (player)
 		{
-			trap->ICARUS_RunScript((sharedEntity_t*)player, cinematicSkipScript);
+			G_MissionRunScript(player, cinematicSkipScript);
 			cinematicSkipScript[0] = 0;
 		}
 	}
@@ -9614,6 +9747,7 @@ static int mission_replay_restore; // when to look whether the skip script moved
 static vec3_t mission_replay_spot;
 static int mission_gather_time; // (below)
 static gentity_t* G_MissionLead(void);
+static void G_MissionIntroLevelStart(void); // (below: the map's intro, g_missionSkipIntro)
 
 // at the map start (g_spawn.c): a replay keeps g_missionCutsceneSeen, any other map start forgets it
 void G_MissionCutsceneLevelStart(void)
@@ -9634,6 +9768,7 @@ void G_MissionCutsceneLevelStart(void)
 		mission_replay = qfalse;
 		trap->Cvar_Set(MISSION_SEEN_CVAR, "");
 	}
+	G_MissionIntroLevelStart();
 }
 
 // a cutscene camera came on (Q3_Set ENABLE, before its skip runs): the map's first one is noted
@@ -9662,11 +9797,262 @@ void G_MissionCutsceneNoteFirst(const int entID)
 	}
 }
 
+/*
+-------------------------
+Missions: a map's intro is skipped from the start (DH 2026-11-03, g_missionSkipIntro 1, the default)
+
+ext_data/mission_intros.dat names each campaign map's intro: <map> <script> <skip script or -> [<script for the line>].
+That script never runs in a mission (a target_scriptrunner or a behaviour script about to run it is stopped, as a
+replayed map's first cutscene is): its skip script runs in its place on the first player in the game, so the map
+starts in its after-intro state with the players at their spawn (or where the skip script puts them, the others come
+along: G_MissionGatherThink), and everyone gets the intro's line from mission_cutscenes.dat. The skip is the intro's own
+(SET_CINEMATIC_SKIPSCRIPT) or, for an intro that has none, one made for the mission from the intro's lasting effects
+(scriptsmp/<map>/*_skipmp: actors removed, doors and effects used, objectives, the player's end spot). Intros the file
+does not name (started by a later trigger) are caught when their camera comes on within MISSION_INTRO_WINDOW of the
+first player in the game: the camera's entity's script is stopped and its skip runs; one without a skip plays out
+unseen as before. Cutscenes later in a map are skipped as before (G_MissionCutsceneSkip).
+-------------------------
+*/
+#define MISSION_INTROS_FILE		"ext_data/mission_intros.dat"
+#define MISSION_INTROS_MAXSIZE	16384
+#define MISSION_INTRO_MAX		4
+#define MISSION_INTRO_WINDOW	15000
+
+static int mission_intro_count;
+static char mission_intro_script[MISSION_INTRO_MAX][MAX_QPATH]; // (as G_MissionScriptKey makes them)
+static char mission_intro_skip[MISSION_INTRO_MAX][MAX_QPATH]; // "" = none
+static char mission_intro_line[MISSION_INTRO_MAX][MAX_QPATH]; // the script whose mission_cutscenes.dat line is told
+static int mission_intro_pending[MISSION_INTRO_MAX]; // blocked intros whose skip / line are still to come
+static int mission_intro_numPending;
+static int mission_intro_firstPlayer; // level.time of the first player think, 0 = none yet
+static qboolean mission_intro_cameraChecked; // the runtime check had its one camera
+static int mission_intro_stopEnt = -1; // the entity whose intro script is stopped at the next player think
+static char mission_intro_stopSkip[MAX_QPATH]; // and the skip to run then ("" = it already ran)
+
+static qboolean G_MissionSkipIntro(void)
+{
+	return G_MissionSkipsCutscenes() && g_missionSkipIntro.integer ? qtrue : qfalse;
+}
+
+// the line of a script in mission_cutscenes.dat, to everyone
+static void G_MissionCutsceneTellScript(const char* key)
+{
+	static char buf[MISSION_CUTSCENES_MAXSIZE];
+	char mapname[MAX_QPATH];
+	fileHandle_t f = 0;
+
+	const int len = trap->FS_Open(MISSION_CUTSCENES_FILE, &f, FS_READ);
+	if (!f)
+	{
+		return;
+	}
+	if (len <= 0 || len >= (int)sizeof buf)
+	{
+		trap->FS_Close(f);
+		return;
+	}
+	trap->FS_Read(buf, len, f);
+	buf[len] = 0;
+	trap->FS_Close(f);
+	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+
+	const char* p = buf;
+	while (1)
+	{
+		char map[MAX_QPATH], script[MAX_QPATH];
+		const char* token = COM_ParseExt(&p, qtrue);
+		if (!token[0])
+		{
+			return;
+		}
+		Q_strncpyz(map, token, sizeof map);
+		Q_strncpyz(script, COM_ParseExt(&p, qfalse), sizeof script);
+		token = COM_ParseExt(&p, qfalse); // (the text)
+		if ((!Q_stricmp(map, "*") || !Q_stricmp(map, mapname)) && !Q_stricmp(script, key) && token[0])
+		{
+			trap->SendServerCommand(-1, va("cp \"" S_COLOR_CYAN "%s\n\"", token));
+			trap->SendServerCommand(-1, va("print \"" S_COLOR_CYAN "%s\n\"", token));
+			return;
+		}
+	}
+}
+
+// at the map start: this map's intros from the file
+static void G_MissionIntroLevelStart(void)
+{
+	static char buf[MISSION_INTROS_MAXSIZE];
+	char mapname[MAX_QPATH];
+	fileHandle_t f = 0;
+
+	mission_intro_count = 0;
+	mission_intro_numPending = 0;
+	mission_intro_firstPlayer = 0;
+	mission_intro_cameraChecked = qfalse;
+	mission_intro_stopEnt = -1;
+	mission_intro_stopSkip[0] = 0;
+	if (!G_MissionSkipIntro())
+	{
+		return;
+	}
+
+	const int len = trap->FS_Open(MISSION_INTROS_FILE, &f, FS_READ);
+	if (!f)
+	{
+		return;
+	}
+	if (len <= 0 || len >= (int)sizeof buf)
+	{
+		trap->FS_Close(f);
+		return;
+	}
+	trap->FS_Read(buf, len, f);
+	buf[len] = 0;
+	trap->FS_Close(f);
+	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+
+	const char* p = buf;
+	while (mission_intro_count < MISSION_INTRO_MAX)
+	{
+		char map[MAX_QPATH], script[MAX_QPATH], skip[MAX_QPATH], line[MAX_QPATH];
+		const char* token = COM_ParseExt(&p, qtrue);
+		if (!token[0])
+		{
+			break;
+		}
+		Q_strncpyz(map, token, sizeof map);
+		Q_strncpyz(script, COM_ParseExt(&p, qfalse), sizeof script);
+		Q_strncpyz(skip, COM_ParseExt(&p, qfalse), sizeof skip);
+		Q_strncpyz(line, COM_ParseExt(&p, qfalse), sizeof line);
+		if (Q_stricmp(map, mapname) || !script[0])
+		{
+			continue;
+		}
+		const int i = mission_intro_count++;
+		G_MissionScriptKey(script, mission_intro_script[i], MAX_QPATH);
+		Q_strncpyz(mission_intro_skip[i], skip[0] && Q_stricmp(skip, "-") ? skip : "", MAX_QPATH);
+		G_MissionScriptKey(line[0] ? line : script, mission_intro_line[i], MAX_QPATH);
+	}
+}
+
+// g_target.c / NPC_utils.c (G_MissionReplayBlocksScript), before a script runs: qtrue if it is one of this map's intros
+static qboolean G_MissionIntroBlocksScript(const char* script)
+{
+	char key[MAX_QPATH];
+
+	if (!G_MissionSkipIntro() || !mission_intro_count || !script || !script[0])
+	{
+		return qfalse;
+	}
+	G_MissionScriptKey(script, key, sizeof key);
+	for (int i = 0; i < mission_intro_count; i++)
+	{
+		if (Q_stricmp(key, mission_intro_script[i]))
+		{
+			continue;
+		}
+		if (mission_intro_numPending < MISSION_INTRO_MAX)
+		{
+			mission_intro_pending[mission_intro_numPending++] = i;
+		}
+		mission_first_level = level.startTime; // (no later cutscene is taken as the map's first: G_MissionCutsceneNoteFirst)
+		mission_intro_cameraChecked = qtrue;
+		Com_Printf("Missions: the intro (%s) is skipped%s%s\n", key, mission_intro_skip[i][0] ? ", skip script " : "",
+			mission_intro_skip[i]);
+		return qtrue;
+	}
+	return qfalse;
+}
+
+// a camera comes on (Q3_Set ENABLE, before G_MissionCutsceneNoteFirst / ICam_Enable): the runtime check for an intro the
+// file does not name, the first camera within MISSION_INTRO_WINDOW of the first player
+void G_MissionIntroCamera(const int entID)
+{
+	char key[MAX_QPATH];
+
+	if (!G_MissionSkipIntro() || mission_intro_cameraChecked || mission_first_level == level.startTime
+		|| entID < 0 || entID >= MAX_GENTITIES)
+	{
+		return;
+	}
+	mission_intro_cameraChecked = qtrue;
+	if (!mission_intro_firstPlayer || level.time - mission_intro_firstPlayer > MISSION_INTRO_WINDOW)
+	{
+		return; // (not an intro)
+	}
+	const char* run = G_MissionScriptRunOn(entID);
+	G_MissionScriptKey(run, key, sizeof key);
+	mission_intro_stopSkip[0] = 0;
+	for (int i = 0; i < mission_intro_count; i++)
+	{
+		if (run[0] && !Q_stricmp(key, mission_intro_script[i]) && mission_intro_skip[i][0])
+		{
+			Q_strncpyz(mission_intro_stopSkip, mission_intro_skip[i], sizeof mission_intro_stopSkip);
+		}
+	}
+	if (!mission_intro_stopSkip[0] && !cinematicSkipScript[0])
+	{
+		return; // nothing to put in its place: it plays out unseen, as any cutscene
+	}
+	// (its own skip script runs now: ICam_Enable / G_MissionCutsceneSkip)
+	mission_intro_stopEnt = entID;
+	Com_Printf("Missions: the intro (%s) is cut short\n", run[0] ? key : "camera");
+}
+
+// every player think (G_MissionGatherThink): the skips of the blocked intros, the stop of a running one
+static void G_MissionIntroThink(void)
+{
+	gentity_t* player = G_MissionCutscenePlayer();
+
+	if (!player)
+	{
+		return;
+	}
+	if (!mission_intro_firstPlayer)
+	{
+		mission_intro_firstPlayer = level.time;
+	}
+	for (int n = 0; n < mission_intro_numPending; n++)
+	{
+		const int i = mission_intro_pending[n];
+		G_MissionCutsceneTellScript(mission_intro_line[i]);
+		if (mission_intro_skip[i][0])
+		{
+			G_MissionRunScript(player, mission_intro_skip[i]);
+		}
+	}
+	mission_intro_numPending = 0;
+
+	if (mission_intro_stopEnt >= 0)
+	{
+		gentity_t* ent = &g_entities[mission_intro_stopEnt];
+		mission_intro_stopEnt = -1;
+		if (ent->inuse && trap->ICARUS_IsInitialized(ent->s.number))
+		{
+			// its script stops here (the next frame after the camera came on, not from inside its own ICARUS task)
+			trap->ICARUS_FreeEnt((sharedEntity_t*)ent);
+			trap->ICARUS_InitEnt((sharedEntity_t*)ent);
+		}
+		if (G_MissionInCutscene())
+		{
+			ICam_Disable();
+		}
+		if (mission_intro_stopSkip[0])
+		{
+			G_MissionRunScript(player, mission_intro_stopSkip);
+			mission_intro_stopSkip[0] = 0;
+		}
+	}
+}
+
 // g_target.c / NPC_utils.c, before a script runs: qtrue if it is the first cutscene of a replayed map (then not run)
 qboolean G_MissionReplayBlocksScript(const char* script)
 {
 	char seen[MAX_CVAR_VALUE_STRING], key[MAX_QPATH];
 
+	if (G_MissionIntroBlocksScript(script))
+	{
+		return qtrue; // (Missions: the map's intro, g_missionSkipIntro)
+	}
 	if (!mission_replay || !G_MissionSkipsCutscenes() || !script || !script[0])
 	{
 		return qfalse;
@@ -9694,6 +10080,8 @@ static void G_MissionReplayThink(void)
 {
 	gentity_t* lead;
 
+	G_MissionIntroThink(); // (the map's intro: g_missionSkipIntro)
+
 	if (mission_replay_skip[0])
 	{
 		gentity_t* player = G_MissionCutscenePlayer();
@@ -9708,7 +10096,7 @@ static void G_MissionReplayThink(void)
 				VectorCopy(lead->client->ps.origin, mission_replay_spot);
 				mission_replay_restore = level.time + 1000; // (once the skip script has moved him)
 			}
-			trap->ICARUS_RunScript((sharedEntity_t*)player, mission_replay_skip);
+			G_MissionRunScript(player, mission_replay_skip);
 			mission_replay_skip[0] = 0;
 		}
 	}

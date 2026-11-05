@@ -37,6 +37,9 @@ extern void G_GetBoltPosition(gentity_t* self, int boltIndex, vec3_t pos, int mo
 #define LSTATE_CLEAR		0
 #define LSTATE_WAITING		1
 
+// SP spawnflags (DH 2026-11-03, NPC parity batch C): NPC_SetMiscDefaultData sets MUTANT on a mutant_rancor
+#define SPF_RANCOR_MUTANT	1
+
 extern void TossClientItems(gentity_t* self);
 extern void G_Knockdown(gentity_t* self, gentity_t* attacker, const vec3_t push_dir, float strength, const qboolean breakSaberLock);
 extern void G_Dismember(const gentity_t* ent, const gentity_t* enemy, vec3_t point, int limb_type);
@@ -72,6 +75,13 @@ void NPC_Rancor_Precache(void)
 	}
 	G_SoundIndex("sound/chars/rancor/swipehit.wav");
 	G_SoundIndex("sound/chars/rancor/chomp.wav");
+}
+
+void NPC_MutantRancor_Precache(void)
+{
+	G_SoundIndex("sound/chars/rancor/breath_start.wav");
+	G_SoundIndex("sound/chars/rancor/breath_loop.wav");
+	G_EffectIndex("mrancor/breath");
 }
 
 /*
@@ -427,7 +437,7 @@ static void Rancor_HitBreakables(vec3_t boltOrg, const int damage, const int* en
 static void Rancor_Swing(const int boltIndex, const qboolean try_grab)
 {
 	int radius_ent_nums[128];
-	const float radius = 88;
+	const float radius = NPCS.NPC->spawnflags & SPF_RANCOR_MUTANT ? 200 : 88;
 	const float radius_squared = radius * radius;
 	vec3_t bolt_org;
 
@@ -545,7 +555,7 @@ static void Rancor_Swing(const int boltIndex, const qboolean try_grab)
 static void Rancor_Smash(void)
 {
 	int radius_ent_nums[128];
-	const float radius = 128;
+	const float radius = NPCS.NPC->spawnflags & SPF_RANCOR_MUTANT ? 256 : 128;
 	const float half_rad_squared = radius / 2 * (radius / 2);
 	const float radius_squared = radius * radius;
 	vec3_t bolt_org;
@@ -588,7 +598,15 @@ static void Rancor_Smash(void)
 			if (dist_sq < half_rad_squared)
 			{
 				//close enough to do damage, too
-				G_Damage(radius_ent, NPCS.NPC, NPCS.NPC, vec3_origin, radius_ent->r.currentOrigin, Q_irand(10, 25), DAMAGE_NO_ARMOR | DAMAGE_NO_KNOCKBACK, MOD_MELEE);
+				if (NPCS.NPC->spawnflags & SPF_RANCOR_MUTANT)
+				{
+					//more damage (SP)
+					G_Damage(radius_ent, NPCS.NPC, NPCS.NPC, vec3_origin, radius_ent->r.currentOrigin, Q_irand(40, 55), DAMAGE_NO_KNOCKBACK, MOD_MELEE);
+				}
+				else
+				{
+					G_Damage(radius_ent, NPCS.NPC, NPCS.NPC, vec3_origin, radius_ent->r.currentOrigin, Q_irand(10, 25), DAMAGE_NO_ARMOR | DAMAGE_NO_KNOCKBACK, MOD_MELEE);
+				}
 			}
 			if (radius_ent->health > 0
 				&& radius_ent->client
@@ -599,7 +617,7 @@ static void Rancor_Smash(void)
 					|| radius_ent->client->ps.groundEntityNum != ENTITYNUM_NONE)
 				{
 					//within range of my fist or withing ground-shaking range and not in the air
-					G_Knockdown(radius_ent, NPCS.NPC, vec3_origin, 100, qtrue);
+					G_Knockdown(radius_ent, NPCS.NPC, vec3_origin, NPCS.NPC->spawnflags & SPF_RANCOR_MUTANT ? 500 : 100, qtrue);
 				}
 			}
 		}
@@ -723,6 +741,56 @@ void Rancor_Attack(const float distance, const qboolean do_charge, const qboolea
 					TIMER_Set(NPCS.NPC, "attackDebounce", NPCS.NPC->client->ps.legsTimer + Q_irand(2000, 4000 + (2 - g_npcspskill.integer) * 2000));
 				}
 			}
+			else if (NPCS.NPC->spawnflags & SPF_RANCOR_MUTANT)
+			{
+				// Breath attack (SP): aimed up at a high enemy (ATTACK6 / 7); the damage is Rancor_FireBreathAttack
+				int breathAnim = BOTH_ATTACK4;
+				const gentity_t* check_ent = NULL;
+				vec3_t center;
+
+				if (NPCS.NPC->enemy && NPCS.NPC->enemy->inuse)
+				{
+					check_ent = NPCS.NPC->enemy;
+					VectorCopy(NPCS.NPC->enemy->r.currentOrigin, center);
+				}
+				else if (NPCS.NPCInfo->blockedEntity && NPCS.NPCInfo->blockedEntity->inuse)
+				{
+					check_ent = NPCS.NPCInfo->blockedEntity;
+					if (VectorCompare(NPCS.NPCInfo->blockedEntity->s.origin, vec3_origin))
+					{
+						VectorAdd(NPCS.NPCInfo->blockedEntity->r.absmin, NPCS.NPCInfo->blockedEntity->r.absmax, center);
+						VectorScale(center, 0.5f, center);
+					}
+					else
+					{
+						VectorCopy(NPCS.NPCInfo->blockedEntity->s.origin, center);
+					}
+				}
+				if (check_ent)
+				{
+					const float z_rel = center[2] - NPCS.NPC->r.currentOrigin[2];
+					if (z_rel >= 128.0f * NPCS.NPC->modelScale[2])
+					{
+						breathAnim = BOTH_ATTACK7;
+					}
+					else if (z_rel >= 64.0f * NPCS.NPC->modelScale[2])
+					{
+						breathAnim = BOTH_ATTACK6;
+					}
+				}
+
+				NPC_SetAnim(NPCS.NPC, SETANIM_BOTH, breathAnim, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+				TIMER_Set(NPCS.NPC, "breathAttack", NPCS.NPC->client->ps.legsTimer - 500);
+				TIMER_Set(NPCS.NPC, "breathFx", 0);
+				G_SoundOnEnt(NPCS.NPC, CHAN_WEAPON, "sound/chars/rancor/breath_start.wav");
+				NPCS.NPC->s.loopSound = G_SoundIndex("sound/chars/rancor/breath_loop.wav");
+
+				if (NPCS.NPC->enemy && NPCS.NPC->enemy->s.number == 0)
+				{
+					//don't attack the player again for a bit
+					TIMER_Set(NPCS.NPC, "attackDebounce", NPCS.NPC->client->ps.legsTimer + Q_irand(2000, 4000 + (2 - g_npcspskill.integer) * 2000));
+				}
+			}
 			else
 			{
 				//charge
@@ -750,7 +818,7 @@ void Rancor_Attack(const float distance, const qboolean do_charge, const qboolea
 			TIMER_Set(NPCS.NPC, "attack_dmg", 1000);
 			VectorCopy(NPCS.NPC->r.currentOrigin, NPCS.NPC->pos3); // (SP: the hand's sweep for breakables starts here)
 		}
-		else if (distance >= NPCS.NPC->maxs[0] + MIN_DISTANCE - 64.0f)
+		else if (NPCS.NPC->spawnflags & SPF_RANCOR_MUTANT || distance >= NPCS.NPC->maxs[0] + MIN_DISTANCE - 64.0f)
 		{
 			//try to grab
 			int grabAnim = BOTH_ATTACK2;
@@ -1002,11 +1070,17 @@ static void Rancor_Combat(void)
 		//have to get closer
 		vec3_t yawOnlyAngles;
 		VectorSet(yawOnlyAngles, 0, NPCS.NPC->r.currentAngles[YAW], 0);
-		if (NPCS.NPC->enemy->health > 0
+		if (NPCS.NPC->spawnflags & SPF_RANCOR_MUTANT && !NPCS.NPC->enemy->client)
+		{
+			//don't do breath attack vs. bbrushes
+		}
+		else if (NPCS.NPC->enemy->health > 0
 			&& fabs(distance - 250) <= 80
 			&& InFOV3(NPCS.NPC->enemy->r.currentOrigin, NPCS.NPC->r.currentOrigin, yawOnlyAngles, 30, 30))
 		{
-			if (!Q_irand(0, 9))
+			//higher chance of doing breath attack (SP)
+			const int chance = NPCS.NPC->spawnflags & SPF_RANCOR_MUTANT ? 5 - g_npcspskill.integer : 9;
+			if (!Q_irand(0, chance))
 			{
 				//go for the charge
 				do_charge = qtrue;
@@ -1269,39 +1343,50 @@ static void Rancor_CheckAnimDamage()
 	}
 }
 
-//void Rancor_FireBreathAttack()
-//{
-//	const int damage = Q_irand(10, 15);
-//	trace_t tr;
-//	mdxaBone_t boltMatrix;
-//	vec3_t start, end, dir;
-//	constexpr vec3_t trace_maxs = { 4, 4, 4 };
-//	constexpr vec3_t trace_mins = { -4, -4, -4 };
-//	const vec3_t ranc_angles = { 0, NPC->client->ps.viewangles[YAW], 0 };
-//
-//	gi.G2API_GetBoltMatrix(NPC->ghoul2, NPC->playerModel, NPC->gutBolt,	&boltMatrix, ranc_angles, NPC->currentOrigin, cg.time ? cg.time : level.time,	nullptr, NPC->s.modelScale);
-//
-//	gi.G2API_GiveMeVectorFromMatrix(boltMatrix, ORIGIN, start);
-//	gi.G2API_GiveMeVectorFromMatrix(boltMatrix, NEGATIVE_Z, dir);
-//	VectorMA(start, 512, dir, end);
-//
-//	gi.trace(&tr, start, trace_mins, trace_maxs, end, NPC->s.number, MASK_SHOT, static_cast<EG2_Collision>(0), 0);
-//
-//	gentity_t* traceEnt = &g_entities[tr.entityNum];
-//	if (tr.entityNum < ENTITYNUM_WORLD
-//		&& traceEnt->takedamage
-//		&& traceEnt->client)
-//	{
-//		//breath attack only does damage to living things
-//		G_Damage(traceEnt, NPC, NPC, dir, tr.endpos, damage * 2,DAMAGE_NO_ARMOR | DAMAGE_NO_KNOCKBACK | DAMAGE_NO_HIT_LOC | DAMAGE_IGNORE_TEAM, MOD_LAVA, HL_NONE);
-//	}
-//	if (tr.fraction < 1.0f)
-//	{
-//		//hit something, do radius damage
-//		G_RadiusDamage(tr.endpos, NPC, damage, 250, NPC, MOD_LAVA);
-//	}
-//}
+// SP Rancor_FireBreathAttack (DH 2026-11-03): along the mouth, 512 out: 20 - 30 to a living thing it hits, and radius
+// damage where it hits. MP plays the effect again every 280 ms while it lasts (breath.efx's repeatDelay; SP looped it)
+static void Rancor_FireBreathAttack(void)
+{
+	const int damage = Q_irand(10, 15);
+	trace_t tr;
+	mdxaBone_t boltMatrix;
+	vec3_t start, end, dir;
+	const vec3_t traceMaxs = { 4, 4, 4 };
+	const vec3_t traceMins = { -4, -4, -4 };
+	const vec3_t rancAngles = { 0, NPCS.NPC->client->ps.viewangles[YAW], 0 };
+	const int mouthBolt = trap->G2API_AddBolt(NPCS.NPC->ghoul2, 0, "*head_mouth");
 
+	if (TIMER_Done(NPCS.NPC, "breathFx"))
+	{
+		G_PlayBoltedEffect(G_EffectIndex("mrancor/breath"), NPCS.NPC, "*head_mouth");
+		TIMER_Set(NPCS.NPC, "breathFx", 280);
+	}
+	if (mouthBolt < 0
+		|| !trap->G2API_GetBoltMatrix(NPCS.NPC->ghoul2, 0, mouthBolt, &boltMatrix, rancAngles, NPCS.NPC->r.currentOrigin,
+			level.time, NULL, NPCS.NPC->modelScale))
+	{
+		return;
+	}
+	BG_GiveMeVectorFromMatrix(&boltMatrix, ORIGIN, start);
+	BG_GiveMeVectorFromMatrix(&boltMatrix, NEGATIVE_Z, dir);
+	VectorMA(start, 512, dir, end);
+
+	trap->Trace(&tr, start, traceMins, traceMaxs, end, NPCS.NPC->s.number, MASK_SHOT, qfalse, 0, 0);
+
+	if (tr.entityNum < ENTITYNUM_WORLD
+		&& g_entities[tr.entityNum].takedamage
+		&& g_entities[tr.entityNum].client)
+	{
+		//breath attack only does damage to living things
+		G_Damage(&g_entities[tr.entityNum], NPCS.NPC, NPCS.NPC, dir, tr.endpos, damage * 2,
+			DAMAGE_NO_ARMOR | DAMAGE_NO_KNOCKBACK | DAMAGE_NO_HIT_LOC | DAMAGE_IGNORE_TEAM, MOD_LAVA);
+	}
+	if (tr.fraction < 1.0f)
+	{
+		//hit something, do radius damage
+		g_radius_damage(tr.endpos, NPCS.NPC, damage, 250, NPCS.NPC, NPCS.NPC, MOD_LAVA);
+	}
+}
 // SP Rancor_AttackBBrush (DH 2026-11-03): a breakable brush in its way: walk up to it and smash it
 static qboolean Rancor_AttackBBrush(void)
 {
@@ -1423,13 +1508,19 @@ void NPC_BSRancor_Default(void)
 
 	Rancor_CheckAnimDamage();
 
-	//if (!TIMER_Done(NPCS.NPC, "breathAttack"))
-	//{
-	//	//doing breath attack, just do damage
-	//	Rancor_FireBreathAttack();
-	//	NPC_UpdateAngles(qtrue, qtrue);
-	//	return;
-	//}
+	if (!TIMER_Done(NPCS.NPC, "breathAttack"))
+	{
+		//doing breath attack, just do damage
+		Rancor_FireBreathAttack();
+		NPC_UpdateAngles(qtrue, qtrue);
+		return;
+	}
+	if (NPCS.NPC->client->ps.legsAnim == BOTH_ATTACK4
+		|| NPCS.NPC->client->ps.legsAnim == BOTH_ATTACK6
+		|| NPCS.NPC->client->ps.legsAnim == BOTH_ATTACK7)
+	{
+		NPCS.NPC->s.loopSound = 0; // (SP stopped the looping effect here too; MP's runs out by itself)
+	}
 
 	if (TIMER_Done2(NPCS.NPC, "clearGrabbed", qtrue))
 	{
@@ -1537,10 +1628,27 @@ void NPC_BSRancor_Default(void)
 				if (!NPCS.NPC->enemy->inuse || level.time - NPCS.NPC->enemy->s.time > Q_irand(10000, 15000))
 				{
 					//it's been a while since the enemy died, or enemy is completely gone, get bored with him
-					NPCS.NPC->enemy = NULL;
-					Rancor_Patrol();
-					NPC_UpdateAngles(qtrue, qtrue);
-					return;
+					gentity_t* player = NPCS.NPC->spawnflags & SPF_RANCOR_MUTANT
+						? FindClosestPlayer(NPCS.NPC->r.currentOrigin, NPCS.NPC->client->enemyTeam)
+						: NULL;
+					if (player && player->health > 0)
+					{
+						//all else failing, always go after the player
+						NPCS.NPC->lastEnemy = NPCS.NPC->enemy;
+						G_SetEnemy(NPCS.NPC, player);
+						if (NPCS.NPC->enemy != NPCS.NPC->lastEnemy)
+						{
+							//clear this so that we only sniff the player the first time we pick them up
+							NPCS.NPC->useDebounceTime = 0;
+						}
+					}
+					else
+					{
+						NPCS.NPC->enemy = NULL;
+						Rancor_Patrol();
+						NPC_UpdateAngles(qtrue, qtrue);
+						return;
+					}
 				}
 			}
 			if (TIMER_Done(NPCS.NPC, "lookForNewEnemy"))
@@ -1611,6 +1719,21 @@ void NPC_BSRancor_Default(void)
 		if (NPCS.NPCInfo->scriptFlags & SCF_LOOK_FOR_ENEMIES)
 		{
 			Rancor_Patrol();
+			if (!NPCS.NPC->enemy && NPCS.NPC->wait && NPCS.NPC->spawnflags & SPF_RANCOR_MUTANT)
+			{
+				//we've been mad before and can't find an enemy: all else failing, always go after the player
+				gentity_t* player = FindClosestPlayer(NPCS.NPC->r.currentOrigin, NPCS.NPC->client->enemyTeam);
+				if (player && player->health > 0)
+				{
+					NPCS.NPC->lastEnemy = NPCS.NPC->enemy;
+					G_SetEnemy(NPCS.NPC, player);
+					if (NPCS.NPC->enemy != NPCS.NPC->lastEnemy)
+					{
+						//clear this so that we only sniff the player the first time we pick them up
+						NPCS.NPC->useDebounceTime = 0;
+					}
+				}
+			}
 		}
 		else
 		{

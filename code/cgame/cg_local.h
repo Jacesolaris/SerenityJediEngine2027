@@ -738,6 +738,7 @@ extern vmCvar_t cg_drawVehLeadIndicator;
 
 extern vmCvar_t cg_trueguns;
 extern vmCvar_t cg_holsteredweapons;
+extern vmCvar_t cg_holsterHide;
 extern vmCvar_t cg_holsterdebug;
 extern vmCvar_t cg_holsterdebug_boneindex;
 extern vmCvar_t cg_holsterdebug_posoffset;
@@ -769,6 +770,7 @@ extern vmCvar_t cg_hudRatio;
 extern vmCvar_t cg_saberLockCinematicCamera;
 extern vmCvar_t cg_AimingCinematicCamera;
 extern vmCvar_t cg_aimShoulder;
+extern vmCvar_t cg_aimCamHorzOffset;
 
 extern vmCvar_t cg_com_rend2;
 

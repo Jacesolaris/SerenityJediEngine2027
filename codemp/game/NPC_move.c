@@ -523,7 +523,7 @@ qboolean NPC_TryJump(void)
 	return qfalse;
 }
 
-static qboolean NPC_TryJump_Pos(const vec3_t pos, const float max_xy_dist, const float max_z_diff)
+qboolean NPC_TryJump_Pos(const vec3_t pos, const float max_xy_dist, const float max_z_diff)
 {
 	if (NPC_CanTryJump())
 	{
@@ -598,13 +598,23 @@ void NPC_JumpAnimation()
 {
 	int jumpAnim = BOTH_JUMP1;
 
-	if (NPCS.NPC->client->NPC_class == CLASS_BOBAFETT
-		|| NPCS.NPC->client->NPC_class == CLASS_REBORN && NPCS.NPC->s.weapon != WP_SABER
+	// SJE SP (DH 2026-11-03, NPC parity batch D): mandos, sith lords and gun-carrying clone troopers can't flip either,
+	// and a saber-carrying one jumps with BOTH_FORCEJUMP2
+	if (NPCS.NPC->client->NPC_class == CLASS_BOBAFETT || NPCS.NPC->client->NPC_class == CLASS_MANDO
+		|| (NPCS.NPC->client->NPC_class == CLASS_REBORN || NPCS.NPC->client->NPC_class == CLASS_SITHLORD
+			|| NPCS.NPC->client->NPC_class == CLASS_CLONETROOPER && NPCS.NPC->s.weapon != WP_SABER)
 		|| NPCS.NPC->client->NPC_class == CLASS_ROCKETTROOPER
 		|| NPCS.NPCInfo->rank != RANK_CREWMAN && NPCS.NPCInfo->rank <= RANK_LT_JG)
 	{
 		//can't do acrobatics
-		jumpAnim = BOTH_FORCEJUMP1;
+		if (NPCS.NPC->s.weapon == WP_SABER) //saber out
+		{
+			jumpAnim = BOTH_FORCEJUMP2;
+		}
+		else
+		{
+			jumpAnim = BOTH_FORCEJUMP1;
+		}
 	}
 	else if (NPCS.NPC->client->NPC_class != CLASS_HOWLER)
 	{

@@ -140,7 +140,7 @@ static void R_SetupEntityLightingGrid(trRefEntity_t* ent, world_t* world)
 	vec3_t	direction;
 	float	totalFactor = 0.0f;
 	uint32_t startGridPos = 0;
-	if (r_fullbright->integer || tr.refdef.doLAGoggles)
+	if (r_fullbright->integer || r_ambientScale->integer == -1 || tr.refdef.doLAGoggles) // r_ambientScale -1: fullbright (MD9 SP, SJE/MD9 shared renderer (2026-11-05))
 	{
 		ent->ambientLight[0] = ent->ambientLight[1] = ent->ambientLight[2] = 255.0f;
 		ent->directedLight[0] = ent->directedLight[1] = ent->directedLight[2] = 255.0f;

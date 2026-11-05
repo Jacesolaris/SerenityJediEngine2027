@@ -1002,6 +1002,8 @@ static void NPC_BSSniper_Attack(void)
 	}
 }
 
+extern void npc_check_speak(gentity_t* speaker_npc); // NPC_AI_Stormtrooper.c (SP: idle combat chatter, g_Advancedaitalk)
+
 void NPC_BSSniper_Default(void)
 {
 	if (!NPCS.NPC->enemy)
@@ -1013,5 +1015,7 @@ void NPC_BSSniper_Default(void)
 	{
 		//have an enemy
 		NPC_BSSniper_Attack();
+
+		npc_check_speak(NPCS.NPC); // (SP)
 	}
 }

@@ -222,6 +222,7 @@ XCVAR_DEF(rgb_script2, ":0,255,255:500:0,255,0:500:", NULL, CVAR_USERINFO | CVAR
 XCVAR_DEF(team_sabercolours, "2", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(ui_menubrief, "0", NULL, CVAR_ROM | CVAR_INTERNAL)
 XCVAR_DEF(cg_holsteredweapons, "2", NULL, CVAR_ARCHIVE)
+XCVAR_DEF(cg_holsterHide, "", NULL, CVAR_ARCHIVE | CVAR_USERINFO)	// the guns not carried on the body (hex mask of weapon numbers; weapon wheel "Holster"), sent to the others as "hh"
 XCVAR_DEF(cg_ignitionSpeed, "1.0", NULL, CVAR_ARCHIVE) // saber ignition / retraction speed, as SP (CG_SaberIgnitionStep)
 XCVAR_DEF(cg_ignitionSpeedstaff, "1.0", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(cg_ignitionSpeedvader, "0.8", NULL, CVAR_ARCHIVE)
@@ -285,6 +286,7 @@ XCVAR_DEF(g_ledgeGrabMinAir, "16", NULL, CVAR_ARCHIVE) // a ledge is grabbed onl
 XCVAR_DEF(g_saberLockCinematicCamera, "1", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(g_AimingCinematicCamera, "1", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(cg_aimShoulder, "1", NULL, CVAR_ARCHIVE)	// aiming camera over the right shoulder (x model size); 0 = centred
+XCVAR_DEF(cg_aimCamHorzOffset, "0", NULL, CVAR_ARCHIVE)	// aiming camera's side offset, used instead of cg_thirdPersonHorzOffset (same on every camera preset)
 XCVAR_DEF(cg_oversizedview, "110", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(cg_undersizedview, "60", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(com_rend2, "0", NULL, CVAR_ARCHIVE)
@@ -294,11 +296,12 @@ XCVAR_DEF(in_joystick, "1", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(cg_scaleJoystickSensitivity, "1", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(cg_debugHealthBars, "0", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(cg_drawblockpointbar, "0", NULL, CVAR_ARCHIVE)
+XCVAR_DEF(cg_drawStaminaBar, "1", NULL, CVAR_ARCHIVE) // the stamina (saber fatigue) bar with the block point bars over the heads (2026-11-03)
 XCVAR_DEF(cg_drawAirBar, "1", NULL, CVAR_ARCHIVE) // blue breath bar above the HUD while air runs out under water (DH 2026-10-25)
 XCVAR_DEF(cg_missingSoundsSilent, "1", NULL, CVAR_ARCHIVE) // a model without a sound file of its own plays nothing, not the generic voice (DH 2026-10-26; 0 = old)
 XCVAR_DEF(cg_drawfatiguepointbar, "0", NULL, CVAR_ARCHIVE)
 
 XCVAR_DEF(cg_lightningFxInterval, "50", NULL, CVAR_ARCHIVE) // force lightning (DH 2026-11-02): ms between new copies of the bolt effect from the hands (fewer overlapping lines); 16 = as before
 XCVAR_DEF(cg_lightningMarks, "1", NULL, CVAR_ARCHIVE) // force lightning leaves fading scorch marks on walls and burn marks on bodies (DH 2026-11-02); 0 = off
-XCVAR_DEF(cg_lightningMarkInterval, "150", NULL, CVAR_ARCHIVE) // ms between lightning scorch marks per caster
+XCVAR_DEF(cg_lightningMarkInterval, "100", NULL, CVAR_ARCHIVE) // ms between lightning scorch marks per caster
 #undef XCVAR_DEF

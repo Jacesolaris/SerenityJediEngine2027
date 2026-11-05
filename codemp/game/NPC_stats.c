@@ -3616,6 +3616,7 @@ extern void NPC_MineMonster_Precache(void);
 extern void NPC_Howler_Precache(void);
 extern void NPC_Rancor_Precache(void);
 extern void NPC_MutantRancor_Precache(void);
+extern void NPC_MutantRancor_Precache(void);
 extern void NPC_Wampa_Precache(void);
 extern void NPC_ATST_Precache(void);
 extern void NPC_Sentry_Precache(void);
@@ -3737,6 +3738,7 @@ void NPC_PrecacheByClassName(const char* type)
 	else if (!Q_stricmp("mutant_rancor", type))
 	{
 		NPC_Rancor_Precache();
+		NPC_MutantRancor_Precache(); // (SP: breath attack)
 	}
 	else if (!Q_stricmp("sand_creature", type))
 	{

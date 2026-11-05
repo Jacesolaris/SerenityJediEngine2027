@@ -176,6 +176,11 @@ cvar_t* r_forceSunAmbientScale;
 cvar_t* r_sunlightMode;
 cvar_t* r_drawSunRays;
 cvar_t* r_sharpen;
+cvar_t* r_ssr;
+cvar_t* r_ssrStrength;
+cvar_t* r_ssrMaxDistance;
+cvar_t* r_godRays;
+cvar_t* r_godRaysStrength;
 cvar_t* r_sunShadows;
 cvar_t* r_shadowFilter;
 cvar_t* r_shadowMapSize;
@@ -1678,7 +1683,12 @@ static void R_Register(void)
 	r_forceSunLightScale = ri_Cvar_Get_NoComm("r_forceSunLightScale", "1.0", CVAR_CHEAT, "");
 	r_forceSunAmbientScale = ri_Cvar_Get_NoComm("r_forceSunAmbientScale", "0.5", CVAR_CHEAT, "");
 	r_drawSunRays = ri_Cvar_Get_NoComm("r_drawSunRays", "1", CVAR_ARCHIVE | CVAR_LATCH, "");
-	r_sharpen = ri_Cvar_Get_NoComm("r_sharpen", "0.2", CVAR_ARCHIVE, "Contrast-adaptive sharpening of the 3D view, 0 = off, 0.1 .. 1 = strength (try 0.5)");
+	r_sharpen = ri_Cvar_Get_NoComm("r_sharpen", "0.3", CVAR_ARCHIVE, "Contrast-adaptive sharpening of the 3D view, 0 = off, 0.1 .. 1 = strength (try 0.5)");
+	r_ssr = ri_Cvar_Get_NoComm("r_ssr", "2", CVAR_ARCHIVE, "Screen space reflections, 0 = off, 1 = floors and other surfaces facing up, 2 = all surfaces");
+	r_ssrStrength = ri_Cvar_Get_NoComm("r_ssrStrength", "0.35", CVAR_ARCHIVE, "Screen space reflection strength, 0 .. 1");
+	r_ssrMaxDistance = ri_Cvar_Get_NoComm("r_ssrMaxDistance", "1024", CVAR_ARCHIVE, "Screen space reflection max ray length in world units, 64 .. 8192");
+	r_godRays = ri_Cvar_Get_NoComm("r_godRays", "1", CVAR_ARCHIVE, "Light shafts (god rays) from bright sky towards the sun, 0 = off, 1 = on, 2 = show only the shafts (debug)");
+	r_godRaysStrength = ri_Cvar_Get_NoComm("r_godRaysStrength", "0.3", CVAR_ARCHIVE, "Light shaft brightness, 0 .. 2");
 	r_sunlightMode = ri_Cvar_Get_NoComm("r_sunlightMode", "1", CVAR_ARCHIVE | CVAR_LATCH, "");
 
 	r_volumetricFog = ri_Cvar_Get_NoComm("r_volumetricFog", "1", CVAR_ARCHIVE | CVAR_LATCH, "Disable/enable lightgrid lighting on fog volumes");

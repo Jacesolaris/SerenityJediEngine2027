@@ -859,6 +859,13 @@ static shader_t* ShaderForShaderNum(const world_t* worldData, int shaderNum, con
 		return tr.defaultShader;
 	}
 
+	// r_ssr material mask (Jace 2026-11-04): the map compiler stores the surface's material in the BSP too (also for
+	// textures without a .shader definition): matte ground never gets screen space reflections
+	if (R_MaterialIsMatteGround(LittleLong(dsh->surfaceFlags)))
+	{
+		shader->noSsr = qtrue;
+	}
+
 	return shader;
 }
 
@@ -4658,7 +4665,7 @@ world_t* R_LoadBSP(const char* name, int* bspIndex)
 		&header->lumps[LUMP_DRAWINDEXES]);
 	if (bspIndex == nullptr)
 	{	// grass cutting: the main world's plant models (tr_surface.cpp)
-		void R_GrassCutWorldPlants(const char* entities, int length, const world_t* world);
+		void R_GrassCutWorldPlants(const char* entities, int length, const world_t * world);
 		R_GrassCutWorldPlants(reinterpret_cast<const char*>(fileBase + header->lumps[LUMP_ENTITIES].fileofs),
 			header->lumps[LUMP_ENTITIES].filelen, worldData);
 	}

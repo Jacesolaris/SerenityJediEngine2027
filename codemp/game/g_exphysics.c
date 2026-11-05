@@ -58,7 +58,10 @@ void G_RunExPhys(gentity_t* ent, float gravity, float mass, float bounce, qboole
 		vec3_t ground;
 		// factor it in before we do anything.
 		VectorCopy(ent->r.currentOrigin, ground);
-		ground[2] -= 0.1f;
+		// (Jace 2026-11-04) 1 unit, not 0.1: a trace stops 0.125 short of the floor (SURFACE_CLIP_EPSILON), so an object
+		// lying on it never counted as on the ground: gravity built up, it hit the floor and bounced (bounce > 1 for
+		// limbs) up again, over and over (MP dismembered limbs hopping until they were removed)
+		ground[2] -= 1.0f;
 
 		trap->Trace(&tr, ent->r.currentOrigin, ent->r.mins, ent->r.maxs, ground, ent->s.number, ent->clipmask, qfalse,
 			0, 0);
@@ -308,6 +311,19 @@ void G_RunExPhys(gentity_t* ent, float gravity, float mass, float bounce, qboole
 		}
 
 		VectorAdd(ent->epVelocity, vNorm, ent->epVelocity); // add it into the existing velocity.
+
+		if (tr.plane.normal[2] > 0.7f)
+		{
+			// landed on a floor: rub off speed, and once slow it comes to rest instead of hopping
+			ent->epVelocity[0] *= 0.6f;
+			ent->epVelocity[1] *= 0.6f;
+			if (VectorLength(ent->epVelocity) < 40.0f)
+			{
+				VectorClear(ent->epVelocity);
+				ent->epGravFactor = 0;
+				ent->s.groundEntityNum = tr.entityNum;
+			}
+		}
 	}
 	else
 	{

@@ -2903,7 +2903,6 @@ static bool R_SliceSurfaceShowsCut(const mdxmSurface_t* surface, const CBoneCach
 	return R_SliceSurfaceCrossed(*m, refs, surface->numBoneReferences);
 }
 
-
 static void RenderSurfaces(CRenderSurface& RS) //also ended up just ripping right from SP.
 {
 #ifdef G2_PERFORMANCE_ANALYSIS
@@ -6764,4 +6763,4 @@ qboolean R_LoadMDXA(model_t* mod, void* buffer, const char* mod_name, qboolean& 
 	}
 #endif
 	return qtrue;
-}
+}

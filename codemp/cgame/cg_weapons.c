@@ -4344,7 +4344,6 @@ void CG_CheckPlayerG2Weapons(const playerState_t* ps, centity_t* cent)
 	}
 }
 
-
 /*
 ===============================================================================
 Weapon / force wheel (ported from MovieDuels 9 MP, Jace 2026-10-29)
@@ -4693,6 +4692,21 @@ static qboolean CG_MDWheel_SameKey(const int a, const int b)
 	return a == b || (a < 128 && b < 128 && tolower(a) == tolower(b)) ? qtrue : qfalse;
 }
 
+// right click on a carried gun: drawn on the body (holstered) or not (cg_holsterHide, sent to the others as "hh"),
+// at once (as MD 9)
+static void CG_MDWheel_ToggleOnPerson(const int weapon)
+{
+	// grenades / mines / det packs are never drawn on the body
+	if (weapon <= WP_NONE || weapon >= 32 || weapon == WP_THERMAL || weapon == WP_TRIP_MINE || weapon == WP_DET_PACK)
+	{
+		return;
+	}
+	const unsigned int mask = (unsigned int)strtoul(cg_holsterHide.string, NULL, 16) ^ 1u << weapon;
+	trap->Cvar_Set("cg_holsterHide", mask ? va("%x", mask) : "");
+	trap->Cvar_Update(&cg_holsterHide);
+	trap->S_StartLocalSound(mdWheel.clickSound, CHAN_LOCAL_SOUND);
+}
+
 qboolean CG_MDWheel_KeyEvent(const int key, const qboolean down)
 {
 	if (!mdWheel.open)
@@ -4727,6 +4741,12 @@ qboolean CG_MDWheel_KeyEvent(const int key, const qboolean down)
 	{
 	case A_MOUSE1:
 		CG_MDWheel_Close(qtrue);
+		break;
+	case A_MOUSE2:
+		if (mdWheel.ring == 0 && mdWheel.hover >= 0 && mdWheel.hover < mdWheel.numItems && mdWheel.avail[mdWheel.hover])
+		{
+			CG_MDWheel_ToggleOnPerson(mdWheel.items[mdWheel.hover]);
+		}
 		break;
 	case A_MOUSE3:
 	case A_MWHEELUP:
@@ -5016,6 +5036,16 @@ static void CG_MDWheel_DarkDisc(const float x, const float y, const float r, con
 	}
 }
 
+// a force power not known is drawn with its dimmed copy (gfx/menus/weaponwheel/off/<icon>, shaders/md_wheelicons.shader
+// in the Claude pk3: the same picture, but it takes the draw colour). Only when that shader is missing does the dark disc
+// below go over it: the disc is round and the icons' corners stuck out of it (white dots, Jace 2026-11-05)
+extern qhandle_t cg_forceIconsOff[NUM_FORCE_POWERS];
+static qboolean CG_MDWheel_OffIcon(const int n)
+{
+	const int power = mdWheel.ring == 1 && n >= 0 && n < mdWheel.numItems ? mdWheel.items[n] : -1;
+	return power >= 0 && power < NUM_FORCE_POWERS && cg_forceIconsOff[power] ? qtrue : qfalse;
+}
+
 // the force powers not known, greyed out as the weapons not carried: their icons' shaders ignore the draw colour (they
 // stayed bright), so a dark disc goes over each, drawn after the icons (Jace 2026-10-29)
 static void CG_MDWheel_GreyUnknownForce(const float iconSize)
@@ -5028,7 +5058,7 @@ static void CG_MDWheel_GreyUnknownForce(const float iconSize)
 	trap->R_ClearScene();
 	for (int n = 0; n < mdWheel.numItems; n++)
 	{
-		if (mdWheel.avail[n])
+		if (mdWheel.avail[n] || CG_MDWheel_OffIcon(n))
 		{
 			continue;
 		}
@@ -5060,6 +5090,8 @@ void CG_DrawMDWheel(void)
 	static vec4_t white = { 1.0f, 1.0f, 1.0f, 1.0f };
 	static vec4_t grey = { 0.7f, 0.7f, 0.7f, 0.9f };
 	static vec4_t greyed = { 0.5f, 0.5f, 0.5f, 0.85f };
+	static vec4_t red = { 1.0f, 0.4f, 0.4f, 1.0f };
+	const unsigned int hidden = (unsigned int)strtoul(cg_holsterHide.string, NULL, 16);
 
 	if (!mdWheel.open)
 	{
@@ -5112,16 +5144,29 @@ void CG_DrawMDWheel(void)
 			{
 				color[3] = 0.5f;
 			}
+			if (item < 32 && hidden & 1u << item)
+			{
+				color[1] = color[2] = 0.4f; // holster disabled
+			}
 		}
 		else
 		{
 			icon = cgs.media.forcePowerIcons[item];
 			if (!mdWheel.avail[n])
 			{
-				// not known: faded as a weapon not carried. The colour is dimmed too, so an icon whose shader ignores
-				// the alpha (an additive glow) fades as well
-				color[0] = color[1] = color[2] = 0.45f;
-				color[3] = 0.4f;
+				// not known: faded as a weapon not carried, with the icon's dimmed copy (it takes the colour; the
+				// normal icon's shader ignores it)
+				if (CG_MDWheel_OffIcon(n))
+				{
+					icon = cg_forceIconsOff[item];
+					color[0] = color[1] = color[2] = 0.6f;
+					color[3] = 0.45f;
+				}
+				else
+				{
+					color[0] = color[1] = color[2] = 0.45f;
+					color[3] = 0.4f;
+				}
 			}
 		}
 
@@ -5158,6 +5203,11 @@ void CG_DrawMDWheel(void)
 					CG_MDWheel_CenterText(my - 4.0f, 0.6f, grey,
 						va("Ammo: %d", cg.predictedPlayerState.ammo[weaponData[item].ammoIndex]), ax);
 				}
+				if (item != WP_THERMAL && item != WP_TRIP_MINE && item != WP_DET_PACK && item < 32)
+				{
+					CG_MDWheel_CenterText(my + 18.0f, 0.55f, hidden & 1u << item ? red : grey,
+						hidden & 1u << item ? "Holster: Disabled" : "Holster: Enabled", ax);
+				}
 			}
 		}
 		else
@@ -5170,6 +5220,10 @@ void CG_DrawMDWheel(void)
 		}
 	}
 	CG_MDWheel_CenterText(my + 52.0f, 0.45f, grey, mdWheel.ring == 0 ? "Mouse wheel: force powers" : "Mouse wheel: weapons", ax);
+	if (mdWheel.ring == 0)
+	{
+		CG_MDWheel_CenterText(my + 68.0f, 0.45f, grey, "Right click: holster", ax);
+	}
 
 	// the pointer
 	CG_FillRect(mx + mdWheel.px * ax - 2.0f * ax, my + mdWheel.py - 2.0f, 4.0f * ax, 4.0f, white);

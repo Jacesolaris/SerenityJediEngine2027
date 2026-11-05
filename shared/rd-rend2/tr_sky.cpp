@@ -856,4 +856,5 @@ void RB_StageIteratorSky(void) {
 
 	// note that sky was drawn so we will draw a sun later
 	backEnd.skyRenderedThisView = qtrue;
+	backEnd.skyNumber++; // each sky drawn in this view sorts after the last (upstream rend2, MD9 SP) (SJE/MD9 shared renderer (2026-11-05))
 }

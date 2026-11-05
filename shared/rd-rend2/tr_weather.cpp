@@ -436,6 +436,10 @@ namespace
 		item.numAttributes = numAttribs;
 		item.attributes = ojkAllocArray<vertexAttribute_t>(
 			*backEndData->perFrameMemory, numAttribs);
+		if (!item.attributes)
+		{
+			return; // per-frame memory full: no update for this weather type this frame (2026-11-03)
+		}
 		memcpy(
 			item.attributes,
 			ws->attribsTemplate,
@@ -1431,6 +1435,10 @@ void RB_SurfaceWeather(srfWeather_t* surf)
 		item.numAttributes = numAttribs;
 		item.attributes = ojkAllocArray<vertexAttribute_t>(
 			*backEndData->perFrameMemory, numAttribs);
+		if (!item.attributes)
+		{
+			continue; // per-frame memory full: skip this weather type (2026-11-03)
+		}
 		memcpy(
 			item.attributes,
 			weatherObject->attribsTemplate,

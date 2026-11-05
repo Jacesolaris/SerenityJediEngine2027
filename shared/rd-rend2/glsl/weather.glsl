@@ -105,6 +105,7 @@ uniform sampler2D u_DiffuseMap;
 in vec3 var_TexCoordAlpha;
 out vec4 out_Color;
 out vec4 out_Glow;
+out vec4 out_SsrMask;	// r_ssr material mask (Jace 2026-11-04)
 
 void main()
 {
@@ -113,4 +114,5 @@ void main()
 
 	out_Glow.rgb = vec3(0.0);
 	out_Glow.a = out_Color.a;
+	out_SsrMask = vec4(0.0);
 }

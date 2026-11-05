@@ -764,6 +764,8 @@ in vec3 var_WSPosition;
 
 out vec4 out_Color;
 out vec4 out_Glow;
+out vec4 out_SsrMask;	// r_ssr material mask (Jace 2026-11-04)
+uniform float u_SsrNoReflect;
 
 
 #if defined(USE_FOG)
@@ -1011,4 +1013,5 @@ void main()
 
 	out_Color = color;
 	out_Glow = mix(vec4(0.0, 0.0, 0.0, color.a), color, u_EnableTextures.x);
+	out_SsrMask = vec4(u_SsrNoReflect);
 }

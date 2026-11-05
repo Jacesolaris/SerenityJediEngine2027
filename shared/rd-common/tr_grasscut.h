@@ -7,7 +7,7 @@ R_GrassAddWave -> R_GrassCutFromCommand). The sweep is drawn into a grid of 4-un
 blade went through each cell, and when. A grass blade standing in a cut cell is drawn as stubble up to that height;
 with cg_grassCutFx 1 the cut tips glow like embers for 2 s, and the cut-off tops fall over and lie on the ground for
 cg_grassCutDebrisTime seconds before they fade. After r_grassCutRegrow seconds the grass has grown back (it grows in
-the last quarter of that time). r_grassCut 0 turns it off, 2 also reports every cut in the console.
+the last quarter of that time). r_grassCut 0 turns it off, 2 also reports every cut in the console (Debug builds only).
 
 The grid wraps (cells GRASSCUT_SIZE apart share a slot, the newer cut wins). In rend2 the grid is the RGBA32F texture
 the surface sprite shader reads (texel = cut height, time, cell x, cell y). The yavin plant models are cut on the same
@@ -117,6 +117,7 @@ static bool R_GrassCutFrame(const float now)
 		R_GrassCutClear();
 	}
 	grassCutFrameTime = now;
+#ifdef _DEBUG	// the reports print in Debug builds only (DH)
 	if (r_grassCut->integer == 2 && (now - grassCutReportTime >= 1.0f || now < grassCutReportTime))
 	{
 		if (grassCutBladesCut || grassCutPlantVerts)
@@ -128,6 +129,7 @@ static bool R_GrassCutFrame(const float now)
 		grassCutPlantVerts = 0;
 		grassCutReportTime = now;
 	}
+#endif
 	if (!r_grassCut->integer)
 	{
 		return false;
@@ -296,11 +298,15 @@ static void R_GrassCutFromCommand(const int timeMs, const float* base)
 			GRASSCUT_RI Cvar_Set("r_grassCutHit", value);
 			grassCutHitTime = t;
 		}
-	}	if (r_grassCut->integer == 2)
-	{	// r_grassCut 2: report every cut
+	}
+#ifdef _DEBUG
+	if (r_grassCut->integer == 2 && R_GrassCutOnGrass(base[2] < tip[2] ? base : tip))
+	{	// r_grassCut 2: report every cut that lands in grass or a plant (Debug builds only; a low swing over bare
+		// ground marks the grid too, but would flood the console)
 		GRASSCUT_RI Printf(PRINT_ALL, "grass cut %.2f: base %.0f %.0f %.0f tip %.0f %.0f %.0f, %d steps\n", t, base[0], base[1],
 			base[2], tip[0], tip[1], tip[2], steps);
 	}
+#endif
 }
 
 // A grass blade standing at base, height tall: is it cut? keep = the part of it that stands now (0.12 - 1, it grows
@@ -520,7 +526,10 @@ static void R_GrassCutLoadPlants(const char* text, const int length)
 			}
 			else if (!Q_stricmp(key, "origin"))
 			{
-				sscanf(token, "%f %f %f", &origin[0], &origin[1], &origin[2]);
+				if (sscanf(token, "%f %f %f", &origin[0], &origin[1], &origin[2]) != 3)
+				{
+					origin[0] = origin[1] = origin[2] = 0.0f; // a broken origin: as if it had none
+				}
 			}
 			else if (!Q_stricmp(key, "modelscale"))
 			{
@@ -529,7 +538,10 @@ static void R_GrassCutLoadPlants(const char* text, const int length)
 			else if (!Q_stricmp(key, "modelscale_vec"))
 			{
 				float v[3] = { 1.0f, 1.0f, 1.0f };
-				sscanf(token, "%f %f %f", &v[0], &v[1], &v[2]);
+				if (sscanf(token, "%f %f %f", &v[0], &v[1], &v[2]) != 3)
+				{
+					v[0] = v[1] = v[2] = 1.0f; // a broken scale: unscaled
+				}
 				scale = v[0] > v[1] ? v[0] : v[1];
 				scale = scale > v[2] ? scale : v[2];
 			}

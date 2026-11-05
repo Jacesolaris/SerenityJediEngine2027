@@ -4048,6 +4048,49 @@ Returns a freshly allocated shader with all the needed info
 from the current global working shader
 =========================
 */
+// r_ssr material mask (Jace 2026-11-04): matte ground never gets screen space reflections. By the shader's material
+// (q3map_material) or, for map shaders without one, by words in its name.
+qboolean R_MaterialIsMatteGround(const int material)
+{
+	switch (material & MATERIAL_MASK)
+	{
+	case MATERIAL_SHORTGRASS:
+	case MATERIAL_LONGGRASS:
+	case MATERIAL_DIRT:
+	case MATERIAL_SAND:
+	case MATERIAL_GRAVEL:
+	case MATERIAL_MUD:
+	case MATERIAL_SNOW:
+	case MATERIAL_DRYLEAVES:
+	case MATERIAL_GREENLEAVES:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+static qboolean R_ShaderIsMatteGround(const shader_t* sh)
+{
+	static const char* const words[] = { "grass", "sand", "mud", "dirt", "gravel", "soil", "moss", "leaves", "leaf",
+		"hay", "snow", "terrain" };
+	char name[MAX_QPATH];
+
+	if (sh->surfaceFlags & MATERIAL_MASK)
+	{
+		return R_MaterialIsMatteGround(sh->surfaceFlags); // metal, stone, glass, water, ice...: may reflect
+	}
+	Q_strncpyz(name, sh->name, sizeof name);
+	Q_strlwr(name);
+	for (const char* w : words)
+	{
+		if (strstr(name, w))
+		{
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
 static shader_t* FinishShader(void)
 {
 	int stage = 0;
@@ -4060,6 +4103,8 @@ static shader_t* FinishShader(void)
 	if (shader.isSky) {
 		shader.sort = SS_ENVIRONMENT;
 	}
+
+	shader.noSsr = R_ShaderIsMatteGround(&shader); // r_ssr material mask (Jace 2026-11-04)
 
 	//
 	// set polygon offset

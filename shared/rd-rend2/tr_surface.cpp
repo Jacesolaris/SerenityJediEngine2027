@@ -1296,6 +1296,85 @@ static void DoBoltSeg(vec3_t start, vec3_t end, vec3_t right, float radius)
 	}
 
 //------------------------------------------
+// RT_LIGHTNING: four rail cores rotated 45 degrees around the bolt (from MD9 SP, SJE/MD9 shared renderer (2026-11-05): colours are 0..1
+// in rend2, the outer edge at a quarter of the entity colour, as vanilla)
+static void DoRailCore(const vec3_t start, const vec3_t end, const vec3_t up, const float len, const float spanWidth)
+{
+	const float t = len / 256.0f;
+	byte rgbaBytes[4];
+	vec4_t edge, core;
+
+	RB_CHECKOVERFLOW(4, 6);
+
+	Com_Memcpy(rgbaBytes, backEnd.currentEntity->e.shaderRGBA, sizeof(rgbaBytes));
+	VectorSet4(core, rgbaBytes[0] / 255.0f, rgbaBytes[1] / 255.0f, rgbaBytes[2] / 255.0f, 1.0f);
+	VectorSet4(edge, core[0] * 0.25f, core[1] * 0.25f, core[2] * 0.25f, 1.0f);
+
+	const int vbase = tess.numVertexes;
+
+	VectorMA(start, spanWidth, up, tess.xyz[tess.numVertexes]);
+	tess.texCoords[tess.numVertexes][0][0] = 0;
+	tess.texCoords[tess.numVertexes][0][1] = 0;
+	VectorCopy4(edge, tess.vertexColors[tess.numVertexes]);
+	tess.numVertexes++;
+
+	VectorMA(start, -spanWidth, up, tess.xyz[tess.numVertexes]);
+	tess.texCoords[tess.numVertexes][0][0] = 0;
+	tess.texCoords[tess.numVertexes][0][1] = 1;
+	VectorCopy4(core, tess.vertexColors[tess.numVertexes]);
+	tess.numVertexes++;
+
+	VectorMA(end, spanWidth, up, tess.xyz[tess.numVertexes]);
+	tess.texCoords[tess.numVertexes][0][0] = t;
+	tess.texCoords[tess.numVertexes][0][1] = 0;
+	VectorCopy4(core, tess.vertexColors[tess.numVertexes]);
+	tess.numVertexes++;
+
+	VectorMA(end, -spanWidth, up, tess.xyz[tess.numVertexes]);
+	tess.texCoords[tess.numVertexes][0][0] = t;
+	tess.texCoords[tess.numVertexes][0][1] = 1;
+	VectorCopy4(core, tess.vertexColors[tess.numVertexes]);
+	tess.numVertexes++;
+
+	tess.indexes[tess.numIndexes++] = vbase;
+	tess.indexes[tess.numIndexes++] = vbase + 1;
+	tess.indexes[tess.numIndexes++] = vbase + 2;
+
+	tess.indexes[tess.numIndexes++] = vbase + 2;
+	tess.indexes[tess.numIndexes++] = vbase + 1;
+	tess.indexes[tess.numIndexes++] = vbase + 3;
+}
+
+static void RB_SurfaceLightningBolt()
+{
+	vec3_t right, vec, start, end, v1, v2;
+	const refEntity_t* e = &backEnd.currentEntity->e;
+
+	VectorCopy(e->oldorigin, end);
+	VectorCopy(e->origin, start);
+
+	// compute variables
+	VectorSubtract(end, start, vec);
+	const float len = VectorNormalize(vec);
+
+	// compute side vector
+	VectorSubtract(start, backEnd.viewParms.ori.origin, v1);
+	VectorNormalize(v1);
+	VectorSubtract(end, backEnd.viewParms.ori.origin, v2);
+	VectorNormalize(v2);
+	CrossProduct(v1, v2, right);
+	VectorNormalize(right);
+
+	for (int i = 0; i < 4; i++)
+	{
+		vec3_t temp;
+
+		DoRailCore(start, end, right, len, 8);
+		RotatePointAroundVector(temp, vec, right, 45);
+		VectorCopy(temp, right);
+	}
+}
+
 static void RB_SurfaceElectricity()
 //------------------------------------------
 {
@@ -2378,6 +2457,9 @@ static void RB_SurfaceEntity(surfaceType_t * surfType)
 	case RT_CYLINDER:
 		RB_SurfaceCylinder();
 		break;
+	case RT_LIGHTNING:
+		RB_SurfaceLightningBolt();
+		break;
 	case RT_ORIENTEDLINE:
 		RB_SurfaceOrientedLine();
 		break;
@@ -2630,7 +2712,7 @@ static int grassCutNumNearPlants = 0;
 
 // tr_bsp.cpp hands over the main world: its entity lump lists the plant models, and baked plants whose entities were
 // stripped come from its surfaces with a plant shader (tr_grasscut.h)
-void R_GrassCutWorldPlants(const char* entities, const int length, const world_t* world)
+void R_GrassCutWorldPlants(const char* entities, const int length, const world_t * world)
 {
 	R_GrassCutLoadPlants(entities, length);
 	for (int i = 0; i < world->numsurfaces; i++)
@@ -2650,9 +2732,11 @@ void R_GrassCutWorldPlants(const char* entities, const int length, const world_t
 		}
 	}
 	R_GrassCutFinishPlantSurfaces();
+#ifdef _DEBUG
 	GRASSCUT_RI Printf(PRINT_DEVELOPER, "grass cut: %d plant models, %d grass surfaces\n", grassCutNumPlants, grassCutNumGrass);
+#endif
 }
-bool RB_GrassCutPlantParams(vec4_t params, image_t** image, const float** centers, int* numCenters)
+bool RB_GrassCutPlantParams(vec4_t params, image_t * *image, const float** centers, int* numCenters)
 {
 	static int paramsTime = -1;
 	static bool active = false;

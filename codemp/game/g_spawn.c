@@ -426,6 +426,7 @@ void SP_NPC_Monster_Lizard(gentity_t* self);
 void SP_NPC_Monster_Fish(gentity_t* self);
 void SP_NPC_Monster_Wampa(gentity_t* self);
 void SP_NPC_Monster_Rancor(gentity_t* self);
+void SP_NPC_Monster_Mutant_Rancor(gentity_t* self);
 void SP_NPC_Monster_Sand_Creature(gentity_t* self);
 void SP_NPC_MineMonster(gentity_t* self);
 void SP_NPC_Droid_Interrogator(gentity_t* self);
@@ -690,6 +691,7 @@ spawn_t spawns[] = {
 	{ "npc_monster_howler", SP_NPC_Monster_Howler },
 	{ "npc_monster_lizard", SP_NPC_Monster_Lizard },
 	{ "npc_monster_murjj", SP_NPC_Monster_Murjj },
+	{ "npc_monster_mutant_rancor", SP_NPC_Monster_Mutant_Rancor },
 	{ "npc_monster_rancor", SP_NPC_Monster_Rancor },
 	{ "npc_Monster_Sand_Creature", SP_NPC_Monster_Sand_Creature },
 	{ "npc_monster_swamp", SP_NPC_Monster_Swamp },

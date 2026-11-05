@@ -66,6 +66,7 @@ extern int eventClearTime;
 
 extern void NPC_BehaviorSet_HazardTroop(int b_state);
 
+extern void npc_check_speak(gentity_t* speaker_npc); // NPC_AI_Stormtrooper.c (SP: idle combat chatter, g_Advancedaitalk)
 qboolean NPC_IsTrooper(const gentity_t* self)
 {
 	return self && self->NPC && self->s.weapon && !!(self->NPC->scriptFlags & SCF_NO_GROUPS);
@@ -759,6 +760,8 @@ static void NPC_HandleAIFlags(void)
 			//We can't nav to our enemy
 			//Drop enemy and see if we should search for him
 			NPC_LostEnemyDecideChase();
+
+			npc_check_speak(NPCS.NPC); // (SP)
 		}
 	}
 
@@ -1477,6 +1480,8 @@ NPC_BehaviorSet_Droid
 -------------------------
 */
 // Added 01/21/03 by AReis.
+extern void NPC_BSAnimal_Default(void);
+
 static void NPC_BehaviorSet_Animal(const int b_state)
 {
 	switch (b_state)
@@ -1484,8 +1489,7 @@ static void NPC_BehaviorSet_Animal(const int b_state)
 	case BS_DEFAULT:
 	case BS_STAND_GUARD:
 	case BS_PATROL:
-		//NPC_BSAnimal_Default(); //RAFIXME - Impliment.
-		NPC_BSDroid_Default();
+		NPC_BSAnimal_Default(); // (SP: packs, follow the leader, wander, flee; NPC_AI_Animal.c)
 		break;
 	default:
 		NPC_BehaviorSet_Default(b_state);
@@ -2122,6 +2126,8 @@ Main NPC AI - called once per frame
 #if	AI_TIMERS
 extern int AITime;
 #endif//	AI_TIMERS
+extern void G_ScriptHeldAnimThink(gentity_t* ent);
+
 void NPC_Think(gentity_t* self)
 {
 	vec3_t oldMoveDir;
@@ -2315,6 +2321,7 @@ void NPC_Think(gentity_t* self)
 		}
 		VectorCopy(self->s.origin, self->s.origin2);
 	}
+	G_ScriptHeldAnimThink(self); // (a script's held anim stays, as in SP: g_ICARUScb.c)
 	//must update icarus *every* frame because of certain animation completions in the pmove stuff that can leave a 50ms gap between ICARUS animation commands
 	trap->ICARUS_MaintainTaskManager(self->s.number);
 }

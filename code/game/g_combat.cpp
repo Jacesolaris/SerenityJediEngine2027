@@ -3749,7 +3749,7 @@ static qboolean G_DoGunDismemberment(gentity_t* self, vec3_t point, const int mo
 				limb_roll_base = 0;
 				limb_pitch_base = 0;
 				break;
-			// a gun hit on the chest or back takes nothing, only arm and hand hits take arms
+				// a gun hit on the chest or back takes nothing, only arm and hand hits take arms
 			case HL_ARM_RT:
 				do_dismemberment = qtrue;
 				limb_bone = "rhumerus";
@@ -5377,10 +5377,10 @@ void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 			}
 			else if (g_gundismemberment->integer > 0
 				&& (means_of_death == MOD_BLASTER
-				|| means_of_death == MOD_BLASTER_ALT
-				|| means_of_death == MOD_BOWCASTER
-				|| means_of_death == MOD_BOWCASTER_ALT
-				|| means_of_death == MOD_FLECHETTE)
+					|| means_of_death == MOD_BLASTER_ALT
+					|| means_of_death == MOD_BOWCASTER
+					|| means_of_death == MOD_BOWCASTER_ALT
+					|| means_of_death == MOD_FLECHETTE)
 				&& (!inflictor || !G_IsPistolWeapon(inflictor->s.weapon)) // pistols never cut a body that is already dead
 				&& !NPC_IsNotDismemberable(self))
 			{
@@ -7971,6 +7971,93 @@ dflags		these flags are used to control how T_Damage works
 */
 extern void G_SetOnFire(gentity_t* self, gentity_t* attacker); // wp_saber.cpp (burning)
 
+// Impact-driven deaths (Jace 2026-11-04): the killing blow throws the body along the hit, as hard as the weapon hits.
+// Explosions throw it high and far, heavy shots and kicks knock it back; plain blaster bolts and the saber don't
+// (their death anims play: saber kills never throw, Jace). Strong enough to start the ragdoll in the air. g_deathImpulse scales it
+// (1 = default, 0 = off). Big creatures, vehicles and droids keep their death anims.
+extern int g_deathImpulseRagTime[MAX_GENTITIES]; // g_main.cpp (Jace 2026-11-04)
+static void G_DeathImpulse(gentity_t* targ, const gentity_t* inflictor, const vec3_t dir, const int damage,
+	const int dflags, const int mod)
+{
+	static cvar_t* g_deathImpulse = nullptr;
+	float speed = 0.0f, lift = 0.0f;
+	vec3_t d, push;
+
+	if (!g_deathImpulse)
+	{
+		g_deathImpulse = gi.cvar("g_deathImpulse", "1", CVAR_ARCHIVE);
+	}
+	if (!targ || !targ->client || g_deathImpulse->value <= 0.0f || G_IsRidingVehicle(targ)
+		|| G_RagDollDisallowedClass(targ->client->NPC_class))
+	{
+		return;
+	}
+	switch (targ->client->NPC_class)
+	{
+	case CLASS_VEHICLE: case CLASS_RANCOR: case CLASS_WAMPA: case CLASS_SAND_CREATURE: case CLASS_REMOTE:
+	case CLASS_GALAKMECH:
+		return;
+	default:
+		break;
+	}
+	switch (mod)
+	{
+	case MOD_ROCKET: case MOD_ROCKET_ALT: case MOD_THERMAL: case MOD_THERMAL_ALT: case MOD_DETPACK:
+	case MOD_LASERTRIP: case MOD_LASERTRIP_ALT: case MOD_CONC: case MOD_REPEATER_ALT: case MOD_FLECHETTE_ALT:
+	case MOD_EXPLOSIVE: case MOD_EXPLOSIVE_SPLASH: case MOD_ENERGY_SPLASH:
+		speed = 240.0f + 1.5f * damage; // explosions (softer, Jace 2026-11-04)
+		if (speed > 380.0f) speed = 380.0f;
+		lift = 170.0f;
+		break;
+	case MOD_SNIPER: case MOD_CONC_ALT: case MOD_BOWCASTER: case MOD_BOWCASTER_ALT: case MOD_FLECHETTE:
+		speed = 260.0f; // heavy shots
+		lift = 100.0f;
+		break;
+	case MOD_MELEE:
+		if (damage >= 15) { speed = 240.0f; lift = 90.0f; } // kicks, not punches
+		break;
+	default:
+		break;
+	}
+	if (dflags & DAMAGE_EXTRA_KNOCKBACK && speed < 280.0f)
+	{
+		speed = 280.0f;
+		lift = lift < 110.0f ? 110.0f : lift;
+	}
+	if (speed <= 0.0f)
+	{
+		return;
+	}
+	if (dir && VectorLengthSquared(dir) > 0.0f)
+	{
+		VectorCopy(dir, d);
+	}
+	else if (inflictor && inflictor != targ)
+	{
+		VectorSubtract(targ->currentOrigin, inflictor->currentOrigin, d);
+	}
+	else
+	{
+		return;
+	}
+	d[2] = 0.0f;
+	if (VectorNormalize(d) <= 0.0f)
+	{
+		VectorClear(d); // straight below / above: lift only
+	}
+	VectorScale(d, speed * g_deathImpulse->value, push);
+	push[2] = lift * g_deathImpulse->value;
+	// Jace 2026-11-04: the throw replaces the knockback G_Damage already gave the body (it was added on top of it)
+	targ->client->ps.velocity[0] = push[0];
+	targ->client->ps.velocity[1] = push[1];
+	if (targ->client->ps.velocity[2] < push[2])
+	{
+		targ->client->ps.velocity[2] = push[2];
+	}
+	targ->client->ps.groundEntityNum = ENTITYNUM_NONE;
+	g_deathImpulseRagTime[targ->s.number] = level.time + 500; // G_RagDoll starts the ragdoll (it is slower than 400 now)
+}
+
 void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const vec3_t dir, const vec3_t point, int damage, int dflags, int mod, int hit_loc)
 {
 	gclient_t* client = nullptr;
@@ -8071,7 +8158,12 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const 
 			gentity_t* tent = G_TempEntity(targ->currentOrigin, EV_STUNNED);
 			tent->owner = targ;
 		}
-		return;
+		// (Jace 2026-11-04) the stun hit still does its damage (the 5 - 25 above): it returned here, so the DEMP2 (and
+		// every DEMP2-based SJE gun: the ion / pulse guns), the charged pistol and the seeker did no damage at all
+		if (damage <= 0)
+		{
+			return;
+		}
 	}
 
 	if (targ->health <= 0 && !targ->client)
@@ -9601,6 +9693,10 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const 
 			s_die_gun_shot = gun_shot;
 			GEntity_DieFunc(targ, inflictor, attacker, take, mod, dflags, hit_loc);
 			s_die_gun_shot = GUN_SHOT_NONE;
+			if (!already_dead)
+			{
+				G_DeathImpulse(targ, inflictor, dir, take, dflags, mod); // impact-driven death (2026-11-04)
+			}
 		}
 		else
 		{

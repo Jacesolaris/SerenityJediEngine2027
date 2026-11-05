@@ -1598,8 +1598,8 @@ void UI_LoadMenus(const char* menuFile, const qboolean reset)
 	Com_Printf("--------------------- Client Initialization ---------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("---------- genuine SerenityJediEngine-(Solaris Edition)MP--------\n");
-	Com_Printf("---------------------Build date 03/11/2026-----------------------\n"); // build date
-	Com_Printf("---------------------------Build 03------------------------------\n");
+	Com_Printf("---------------------Build date 05/11/2026-----------------------\n"); // build date
+	Com_Printf("---------------------------Build 05------------------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("------------------------LightSaber-------------------------------\n");
 	Com_Printf("-----------An elegant weapon for a more civilized age------------\n");
@@ -7255,6 +7255,22 @@ static void UI_RunMenuScript(char** args)
 			uiInfo.serverStatusInfo.numLines = 0;
 			Menu_SetFeederSelection(NULL, FEEDER_FINDPLAYER, 0, NULL);
 		}
+		else if (Q_stricmp(name, "missionSaves") == 0)
+		{
+			// Missions (DH 2026-11-03): the host game menu's Continue buttons are active only when there is a saved mission
+			// (missions/ja.sav, missions/jo.sav: written by the game at each checkpoint, g_target.c)
+			static const char* campaigns[2][2] = { { "ja", "ui_missionSaveJA" },{ "jo", "ui_missionSaveJO" } };
+			for (int c = 0; c < 2; c++)
+			{
+				fileHandle_t f = 0;
+				const int len = trap->FS_Open(va("missions/%s.sav", campaigns[c][0]), &f, FS_READ);
+				if (f)
+				{
+					trap->FS_Close(f);
+				}
+				trap->Cvar_Set(campaigns[c][1], f && len > 0 ? "1" : "0");
+			}
+		}
 		else if (Q_stricmp(name, "checkservername") == 0)
 		{
 			UI_CheckServerName();
@@ -11771,6 +11787,27 @@ static void UI_Init(qboolean inGameLoad)
 	uiInfo.holocronNames[9] = "Sight";
 }
 
+// Missions (DH 2026-11-03): the host game menu's Continue JA / JO buttons (createserver.menu) test one cvar each:
+// ui_missionContinueJA / JO = 0 hidden (the game type is not Missions), 1 shown greyed out (Missions, no save yet),
+// 2 shown and usable (Missions and missions/<campaign>.sav exists: ui_missionSaveJA / JO, uiScript missionSaves).
+// Set every frame the value changes, so it follows the game type selector.
+static void UI_MissionContinueCvars(void)
+{
+	static const char* campaigns[2][2] = { { "ui_missionSaveJA", "ui_missionContinueJA" },{ "ui_missionSaveJO", "ui_missionContinueJO" } };
+	static int last[2] = { -1, -1 };
+	const qboolean missions = ui_netGametype.integer >= 0 && ui_netGametype.integer < uiInfo.numGameTypes
+		&& uiInfo.gameTypes[ui_netGametype.integer].gtEnum == GT_SINGLE_PLAYER ? qtrue : qfalse;
+
+	for (int c = 0; c < 2; c++)
+	{
+		const int value = !missions ? 0 : trap->Cvar_VariableValue(campaigns[c][0]) ? 2 : 1;
+		if (value != last[c])
+		{
+			last[c] = value;
+			trap->Cvar_Set(campaigns[c][1], va("%i", value));
+		}
+	}
+}
 #define	UI_FPS_FRAMES	4
 
 static void UI_Refresh(int realtime)
@@ -11781,6 +11818,8 @@ static void UI_Refresh(int realtime)
 	trap->G2API_SetTime(realtime, 0);
 	trap->G2API_SetTime(realtime, 1);
 	//ghoul2 timer must be explicitly updated during ui rendering.
+
+	UI_MissionContinueCvars(); // (Missions: the Continue buttons)
 
 	uiInfo.uiDC.frameTime = realtime - uiInfo.uiDC.realTime;
 	uiInfo.uiDC.realTime = realtime;

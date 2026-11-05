@@ -517,7 +517,6 @@ typedef enum
 	GK_NUM_KINDS
 } grenadeKind_t;
 
-
 extern weaponVariant_t bgWeaponVariants[MAX_WEAPON_VARIANTS];
 extern int bgNumWeaponVariants; // the number of slots in use, slot 0 included (1 = no variants loaded)
 

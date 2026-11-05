@@ -675,12 +675,22 @@ void RB_FillDrawCommand(
 
 			drawCmd.params.multiIndexed.firstIndices =
 				ojkAllocArray<glIndex_t*>(*backEndData->perFrameMemory, input->multiDrawPrimitives);
+			drawCmd.params.multiIndexed.numIndices = drawCmd.params.multiIndexed.firstIndices
+				? ojkAllocArray<GLsizei>(*backEndData->perFrameMemory, input->multiDrawPrimitives) : nullptr;
+			if (!drawCmd.params.multiIndexed.firstIndices || !drawCmd.params.multiIndexed.numIndices)
+			{	// per-frame memory full: draw nothing for this item instead of copying to a null pointer (2026-11-03,
+				// MD 9 SP crash with a view of the whole map from outside the world)
+				drawCmd.type = DRAW_COMMAND_INDEXED;
+				drawCmd.params.indexed.indexType = GL_INDEX_TYPE;
+				drawCmd.params.indexed.firstIndex = 0;
+				drawCmd.params.indexed.numIndices = 0;
+				drawCmd.params.indexed.baseVertex = 0;
+				return;
+			}
 			memcpy(drawCmd.params.multiIndexed.firstIndices,
 				input->multiDrawFirstIndex,
 				sizeof(glIndex_t*) * input->multiDrawPrimitives);
 
-			drawCmd.params.multiIndexed.numIndices =
-				ojkAllocArray<GLsizei>(*backEndData->perFrameMemory, input->multiDrawPrimitives);
 			memcpy(drawCmd.params.multiIndexed.numIndices,
 				input->multiDrawNumIndexes,
 				sizeof(GLsizei) * input->multiDrawPrimitives); // was sizeof(GLsizei*): copied twice the array size (2026-11-01)
@@ -1087,6 +1097,10 @@ static void ProjectPshadowVBOGLSL(const shaderCommands_t* input, const VertexArr
 		item.numAttributes = vertexArrays->numVertexArrays;
 		item.attributes = ojkAllocArray<vertexAttribute_t>(
 			*backEndData->perFrameMemory, vertexArrays->numVertexArrays);
+		if (!item.attributes)
+		{
+			continue; // per-frame memory full: skip this shadow (2026-11-03)
+		}
 		memcpy(item.attributes, attribs, sizeof(*item.attributes) * vertexArrays->numVertexArrays);
 
 		item.uniformData = uniformDataWriter.Finish(*backEndData->perFrameMemory);
@@ -1122,7 +1136,7 @@ static void RB_GrassCutPlantUniforms(const shaderCommands_t* input, const shader
 	{
 		return;
 	}
-	bool RB_GrassCutPlantParams(vec4_t params, image_t** image, const float** centers, int* numCenters);
+	bool RB_GrassCutPlantParams(vec4_t params, image_t * *image, const float** centers, int* numCenters);
 	vec4_t params = { 0.0f, 0.0f, 0.0f, 0.0f };
 	image_t* image = nullptr;
 	const float* centers = nullptr;
@@ -1142,7 +1156,8 @@ static void RB_GrassCutPlantUniforms(const shaderCommands_t* input, const shader
 }
 
 static void RB_FogPass(shaderCommands_t* input, const VertexArraysProperties* vertexArrays)
-{	cullType_t cullType = RB_GetCullType(&backEnd.viewParms, backEnd.currentEntity, input->shader->cullType);
+{
+	cullType_t cullType = RB_GetCullType(&backEnd.viewParms, backEnd.currentEntity, input->shader->cullType);
 
 	vertexAttribute_t attribs[ATTR_INDEX_MAX] = {};
 	GL_VertexArraysToAttribs(attribs, ARRAY_LEN(attribs), vertexArrays);
@@ -1768,6 +1783,8 @@ static void RB_IterateStagesGeneric(shaderCommands_t* input, const VertexArraysP
 
 		uniformDataWriter.Start(sp);
 		RB_GrassCutPlantUniforms(input, sp, uniformDataWriter, samplerBindingsWriter);
+		// r_ssr material mask (Jace 2026-11-04): grass, sand, mud... mark their pixels so r_ssr leaves them alone
+		uniformDataWriter.SetUniformFloat(UNIFORM_SSRNOREFLECT, input->shader->noSsr ? 1.0f : 0.0f);
 
 		if (input->fogNum
 			&& pStage->glslShaderGroup != tr.lightallShader
@@ -1997,8 +2014,9 @@ static void RB_IterateStagesGeneric(shaderCommands_t* input, const VertexArraysP
 				r_sunlightMode->integer)
 			{
 				samplerBindingsWriter.AddStaticImage(tr.sunShadowArrayImage, TB_SHADOWMAP);
-				if (backEnd.viewParms.flags & VPF_USESUNLIGHT)
-				{
+				if (backEnd.viewParms.flags & VPF_USESUNLIGHT && !backEnd.projection2D)
+				{// 2D pics keep the last 3D view's flags; sunlight there has no ambient and draws them black
+				 // (the light amp goggles and binoculars window) - from MD9 (SJE/MD9 shared renderer (2026-11-05))
 					enableTextures[2] = 1.0f;
 				}
 			}

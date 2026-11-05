@@ -206,6 +206,21 @@ static void R_AddMarkFragments(int numClipPoints, vec3_t clipPoints[2][MAX_VERTS
 	int pingPong = 0, i = 0;
 	markFragment_t* mf = nullptr;
 
+	// Skip polygons that are nowhere near the mark before chopping them by all planes:
+	// big triangle meshes / grids would otherwise chop every triangle for every mark
+	// (e.g. the blob shadow of every NPC, every frame). 32 = the near clip plane margin.
+	// (from MD9 SP, SJE/MD9 shared renderer (2026-11-05))
+	for (int axis = 0; axis < 3; axis++) {
+		float lo = clipPoints[0][0][axis], hi = lo;
+		for (int j = 1; j < numClipPoints; j++) {
+			lo = Q_min(lo, clipPoints[0][j][axis]);
+			hi = Q_max(hi, clipPoints[0][j][axis]);
+		}
+		if (hi < mins[axis] - 32 || lo > maxs[axis] + 32) {
+			return;
+		}
+	}
+
 	// chop the surface by all the bounding planes of the to be projected polygon
 	pingPong = 0;
 
@@ -243,6 +258,23 @@ R_MarkFragments
 
 =================
 */
+static bool R_MarkBoundsOutside(const vec3_t bmins, const vec3_t bmaxs, const vec3_t mins, const vec3_t maxs)
+{
+	return bmaxs[0] < mins[0] || bmins[0] > maxs[0]
+		|| bmaxs[1] < mins[1] || bmins[1] > maxs[1]
+		|| bmaxs[2] < mins[2] || bmins[2] > maxs[2];
+}
+
+static bool R_MarkTriangleOutside(const vec3_t a, const vec3_t b, const vec3_t c, const vec3_t mins, const vec3_t maxs)
+{
+	for (int axis = 0; axis < 3; axis++) {
+		if (Q_max(a[axis], Q_max(b[axis], c[axis])) < mins[axis] || Q_min(a[axis], Q_min(b[axis], c[axis])) > maxs[axis]) {
+			return true;
+		}
+	}
+	return false;
+}
+
 int R_MarkFragments(int numPoints, const vec3_t* points, const vec3_t projection, const int maxPoints, vec3_t pointBuffer, const int maxFragments, markFragment_t* fragmentBuffer)
 {
 	int				numsurfaces = 0, numPlanes = 0;
@@ -308,12 +340,23 @@ int R_MarkFragments(int numPoints, const vec3_t* points, const vec3_t projection
 	//assert(numsurfaces <= 64);
 	//assert(numsurfaces != 64);
 
+	// R_AddMarkFragments drops every polygon outside these bounds; test them here already so
+	// whole grids and grid triangles far from the mark cost nothing (same result)
+	vec3_t markMins, markMaxs;
+	for (i = 0; i < 3; i++) {
+		markMins[i] = mins[i] - 32;
+		markMaxs[i] = maxs[i] + 32;
+	}
+
 	returnedPoints = 0;
 	returnedFragments = 0;
 
 	for (i = 0; i < numsurfaces; i++) {
 		if (*surfaces[i] == SF_GRID) {
 			cv = (srfBspSurface_t*)surfaces[i];
+			if (R_MarkBoundsOutside(cv->cullBounds[0], cv->cullBounds[1], markMins, markMaxs)) {
+				continue;
+			}
 			for (m = 0; m < cv->height - 1; m++) {
 				for (n = 0; n < cv->width - 1; n++) {
 					// We triangulate the grid and chop all triangles within
@@ -340,6 +383,12 @@ int R_MarkFragments(int numPoints, const vec3_t* points, const vec3_t projection
 					numClipPoints = 3;
 
 					dv = cv->verts + m * cv->width + n;
+
+					// both triangles of this cell far from the mark -> nothing to add (MARKER_OFFSET is 0)
+					if (R_MarkTriangleOutside(dv[0].xyz, dv[cv->width].xyz, dv[1].xyz, markMins, markMaxs)
+						&& R_MarkTriangleOutside(dv[1].xyz, dv[cv->width].xyz, dv[cv->width + 1].xyz, markMins, markMaxs)) {
+						continue;
+					}
 
 					VectorCopy(dv[0].xyz, clipPoints[0][0]);
 					VectorMA(clipPoints[0][0], MARKER_OFFSET, dv[0].normal, clipPoints[0][0]);

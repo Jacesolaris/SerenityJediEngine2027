@@ -1705,6 +1705,8 @@ extern qboolean G_RagDollDisallowedClass(const class_t npc_class);
 //(ported from MP's CG version)
 
 // A corpse held up by force grip (EF_FORCE_GRIPPED, or the player's grip on it)
+int g_deathImpulseRagTime[MAX_GENTITIES]; // until when a thrown body starts its ragdoll (G_DeathImpulse, Jace 2026-11-04)
+
 static qboolean G_RagGripped(const gentity_t* ent)
 {
 	if (ent->client->ps.eFlags & EF_FORCE_GRIPPED)
@@ -1842,6 +1844,10 @@ qboolean G_RagDoll(gentity_t* ent, vec3_t forcedAngles)
 		}
 		else if (G_RagGripped(ent))
 		{// held up by force grip: hang by the head (G_RagGripHang)
+			inSomething = qtrue;
+		}
+		else if (g_deathImpulseRagTime[ent->s.number] > level.time)
+		{// thrown by an impact death or pushed by walking into it (Jace 2026-11-04)
 			inSomething = qtrue;
 		}
 		else if (ent->client->ps.groundEntityNum == ENTITYNUM_NONE)
@@ -2254,6 +2260,53 @@ constexpr auto ENHANCED_REFUEL_RATE = 75; //seems fair;
 constexpr auto BARRIER_DEFUEL_RATE = 100; //approx. 50 seconds of idle use from a fully charged fuel amt;
 constexpr auto BARRIER_REFUEL_RATE = 200; //seems fair;
 
+// Corpse interaction (Jace 2026-11-04, as SJE MP): walking or running into a dead body pushes it along (at most once per
+// 100 ms). A body thrown by an impact death starts its ragdoll even when slower than the 400 the air check wants.
+static int s_corpseTouchTime[MAX_GENTITIES];
+
+static void G_CorpseTouchPush(gentity_t* corpse)
+{
+	static gentity_t* touch[MAX_GENTITIES]; // static: too big for the stack
+	vec3_t mins, maxs;
+
+	if (!corpse->client || corpse->health > 0 || s_corpseTouchTime[corpse->s.number] > level.time
+		|| corpse->client->NPC_class == CLASS_VEHICLE || G_RagDollDisallowedClass(corpse->client->NPC_class))
+	{
+		return;
+	}
+	VectorSet(mins, corpse->absmin[0] - 8, corpse->absmin[1] - 8, corpse->absmin[2]);
+	VectorSet(maxs, corpse->absmax[0] + 8, corpse->absmax[1] + 8, corpse->absmax[2] + 8);
+	const int num = gi.EntitiesInBox(mins, maxs, touch, MAX_GENTITIES);
+	for (int i = 0; i < num; i++)
+	{
+		const gentity_t* other = touch[i];
+		vec3_t move;
+
+		if (!other || other == corpse || !other->client || other->health <= 0)
+		{
+			continue;
+		}
+		VectorSet(move, other->client->ps.velocity[0], other->client->ps.velocity[1], 0.0f);
+		const float speed = VectorLength(move);
+		if (speed < 60.0f)
+		{
+			continue;
+		}
+		const float* cur = corpse->client->ps.velocity;
+		if ((cur[0] * move[0] + cur[1] * move[1]) / speed >= speed * 0.6f)
+		{
+			continue; // already going along with him
+		}
+		corpse->client->ps.velocity[0] += move[0] * 0.6f;
+		corpse->client->ps.velocity[1] += move[1] * 0.6f;
+		corpse->client->ps.velocity[2] += 60.0f;
+		corpse->client->ps.groundEntityNum = ENTITYNUM_NONE;
+		g_deathImpulseRagTime[corpse->s.number] = level.time + 300;
+		s_corpseTouchTime[corpse->s.number] = level.time + 100;
+		return;
+	}
+}
+
 void G_RunFrame(const int levelTime)
 {
 	PROFILE_ZONE("G_RunFrame");
@@ -2324,6 +2377,11 @@ void G_RunFrame(const int levelTime)
 		G_CheckTasksCompleted(ent);
 
 		G_Roff(ent);
+
+		if (ent->client && ent->health <= 0)
+		{// walking into a body pushes it (Jace 2026-11-04)
+			G_CorpseTouchPush(ent);
+		}
 
 		if (!ent->client)
 		{

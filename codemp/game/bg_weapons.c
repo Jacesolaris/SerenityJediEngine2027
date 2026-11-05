@@ -1019,6 +1019,5 @@ void BG_LoadWeaponVariants(void)
 }
 #else
 void BG_LoadWeaponVariants(void)
-{
-}
+{}
 #endif

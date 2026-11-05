@@ -43,6 +43,7 @@ static struct ImagesPool
 } *imagesPool;
 
 static image_t* hashTable[FILE_HASH_SIZE];
+static bool imagePoolInitialized = false; // R_InitImagesPool ran (cleared by R_DeleteTextures)
 
 /*
 Extends the size of the images pool allocator
@@ -1338,34 +1339,34 @@ static void R_MipMap2(byte* in, const int inWidth, const int inheight)
 	// output rows are independent: a run of rows per job on the render workers (Warzone port)
 	R_ImageRows(outWidth, outHeight, [&](const int i0, const int i1)
 		{
-	for (int i = i0; i < i1; i++) {
-		for (int j = 0; j < outWidth; j++) {
-			byte* outpix = (byte*)(temp + i * outWidth + j);
-			for (int k = 0; k < 4; k++) {
-				const int total =
-					1 * (&in[4 * (((i * 2 - 1) & inHeightMask) * inWidth + ((j * 2 - 1) & inWidthMask))])[k] +
-					2 * (&in[4 * (((i * 2 - 1) & inHeightMask) * inWidth + ((j * 2) & inWidthMask))])[k] +
-					2 * (&in[4 * (((i * 2 - 1) & inHeightMask) * inWidth + ((j * 2 + 1) & inWidthMask))])[k] +
-					1 * (&in[4 * (((i * 2 - 1) & inHeightMask) * inWidth + ((j * 2 + 2) & inWidthMask))])[k] +
+			for (int i = i0; i < i1; i++) {
+				for (int j = 0; j < outWidth; j++) {
+					byte* outpix = (byte*)(temp + i * outWidth + j);
+					for (int k = 0; k < 4; k++) {
+						const int total =
+							1 * (&in[4 * (((i * 2 - 1) & inHeightMask) * inWidth + ((j * 2 - 1) & inWidthMask))])[k] +
+							2 * (&in[4 * (((i * 2 - 1) & inHeightMask) * inWidth + ((j * 2) & inWidthMask))])[k] +
+							2 * (&in[4 * (((i * 2 - 1) & inHeightMask) * inWidth + ((j * 2 + 1) & inWidthMask))])[k] +
+							1 * (&in[4 * (((i * 2 - 1) & inHeightMask) * inWidth + ((j * 2 + 2) & inWidthMask))])[k] +
 
-					2 * (&in[4 * (((i * 2) & inHeightMask) * inWidth + ((j * 2 - 1) & inWidthMask))])[k] +
-					4 * (&in[4 * (((i * 2) & inHeightMask) * inWidth + ((j * 2) & inWidthMask))])[k] +
-					4 * (&in[4 * (((i * 2) & inHeightMask) * inWidth + ((j * 2 + 1) & inWidthMask))])[k] +
-					2 * (&in[4 * (((i * 2) & inHeightMask) * inWidth + ((j * 2 + 2) & inWidthMask))])[k] +
+							2 * (&in[4 * (((i * 2) & inHeightMask) * inWidth + ((j * 2 - 1) & inWidthMask))])[k] +
+							4 * (&in[4 * (((i * 2) & inHeightMask) * inWidth + ((j * 2) & inWidthMask))])[k] +
+							4 * (&in[4 * (((i * 2) & inHeightMask) * inWidth + ((j * 2 + 1) & inWidthMask))])[k] +
+							2 * (&in[4 * (((i * 2) & inHeightMask) * inWidth + ((j * 2 + 2) & inWidthMask))])[k] +
 
-					2 * (&in[4 * (((i * 2 + 1) & inHeightMask) * inWidth + ((j * 2 - 1) & inWidthMask))])[k] +
-					4 * (&in[4 * (((i * 2 + 1) & inHeightMask) * inWidth + ((j * 2) & inWidthMask))])[k] +
-					4 * (&in[4 * (((i * 2 + 1) & inHeightMask) * inWidth + ((j * 2 + 1) & inWidthMask))])[k] +
-					2 * (&in[4 * (((i * 2 + 1) & inHeightMask) * inWidth + ((j * 2 + 2) & inWidthMask))])[k] +
+							2 * (&in[4 * (((i * 2 + 1) & inHeightMask) * inWidth + ((j * 2 - 1) & inWidthMask))])[k] +
+							4 * (&in[4 * (((i * 2 + 1) & inHeightMask) * inWidth + ((j * 2) & inWidthMask))])[k] +
+							4 * (&in[4 * (((i * 2 + 1) & inHeightMask) * inWidth + ((j * 2 + 1) & inWidthMask))])[k] +
+							2 * (&in[4 * (((i * 2 + 1) & inHeightMask) * inWidth + ((j * 2 + 2) & inWidthMask))])[k] +
 
-					1 * (&in[4 * (((i * 2 + 2) & inHeightMask) * inWidth + ((j * 2 - 1) & inWidthMask))])[k] +
-					2 * (&in[4 * (((i * 2 + 2) & inHeightMask) * inWidth + ((j * 2) & inWidthMask))])[k] +
-					2 * (&in[4 * (((i * 2 + 2) & inHeightMask) * inWidth + ((j * 2 + 1) & inWidthMask))])[k] +
-					1 * (&in[4 * (((i * 2 + 2) & inHeightMask) * inWidth + ((j * 2 + 2) & inWidthMask))])[k];
-				outpix[k] = total / 36;
+							1 * (&in[4 * (((i * 2 + 2) & inHeightMask) * inWidth + ((j * 2 - 1) & inWidthMask))])[k] +
+							2 * (&in[4 * (((i * 2 + 2) & inHeightMask) * inWidth + ((j * 2) & inWidthMask))])[k] +
+							2 * (&in[4 * (((i * 2 + 2) & inHeightMask) * inWidth + ((j * 2 + 1) & inWidthMask))])[k] +
+							1 * (&in[4 * (((i * 2 + 2) & inHeightMask) * inWidth + ((j * 2 + 2) & inWidthMask))])[k];
+						outpix[k] = total / 36;
+					}
+				}
 			}
-		}
-	}
 		});
 
 	Com_Memcpy(in, temp, outWidth * outHeight * 4);
@@ -1384,32 +1385,32 @@ static void R_MipMapsRGB(byte* in, int inWidth, int inHeight)
 	// output rows are independent: a run of rows per job on the render workers (Warzone port)
 	R_ImageRows(outWidth, outHeight, [&](const int i0, const int i1)
 		{
-	for (int i = i0; i < i1; i++) {
-		byte* outbyte = temp + (i * outWidth) * 4;
-		byte* inbyte1 = in + (i * 2 * inWidth) * 4;
-		byte* inbyte2 = in + ((i * 2 + 1) * inWidth) * 4;
-		for (int j = 0; j < outWidth; j++) {
-			for (int k = 0; k < 3; k++) {
-				float total = 0.0f, current = 0.0f;
+			for (int i = i0; i < i1; i++) {
+				byte* outbyte = temp + (i * outWidth) * 4;
+				byte* inbyte1 = in + (i * 2 * inWidth) * 4;
+				byte* inbyte2 = in + ((i * 2 + 1) * inWidth) * 4;
+				for (int j = 0; j < outWidth; j++) {
+					for (int k = 0; k < 3; k++) {
+						float total = 0.0f, current = 0.0f;
 
-				current = ByteToFloat(inbyte1[0]); total = sRGBtoRGB((double)current);
-				current = ByteToFloat(inbyte1[4]); total += sRGBtoRGB((double)current);
-				current = ByteToFloat(inbyte2[0]); total += sRGBtoRGB((double)current);
-				current = ByteToFloat(inbyte2[4]); total += sRGBtoRGB((double)current);
+						current = ByteToFloat(inbyte1[0]); total = sRGBtoRGB((double)current);
+						current = ByteToFloat(inbyte1[4]); total += sRGBtoRGB((double)current);
+						current = ByteToFloat(inbyte2[0]); total += sRGBtoRGB((double)current);
+						current = ByteToFloat(inbyte2[4]); total += sRGBtoRGB((double)current);
 
-				total *= 0.25f;
+						total *= 0.25f;
 
-				inbyte1++;
-				inbyte2++;
+						inbyte1++;
+						inbyte2++;
 
-				current = RGBtosRGB(total);
-				*outbyte++ = FloatToByte(current);
+						current = RGBtosRGB(total);
+						*outbyte++ = FloatToByte(current);
+					}
+					*outbyte++ = (inbyte1[0] + inbyte1[4] + inbyte2[0] + inbyte2[4]) >> 2;
+					inbyte1 += 5;
+					inbyte2 += 5;
+				}
 			}
-			*outbyte++ = (inbyte1[0] + inbyte1[4] + inbyte2[0] + inbyte2[4]) >> 2;
-			inbyte1 += 5;
-			inbyte2 += 5;
-		}
-	}
 		});
 
 	Com_Memcpy(in, temp, outWidth * outHeight * 4);
@@ -3473,6 +3474,11 @@ static void R_CreateBuiltinImages(void)
 		"*glow", NULL, width, height, IMGTYPE_COLORALPHA,
 		IMGFLAG_NO_COMPRESSION | IMGFLAG_CLAMPTOEDGE, hdrFormat);
 
+	// r_ssr material mask (Jace 2026-11-04): third output of the render FBO, written by opaque world surfaces
+	tr.ssrMaskImage = R_CreateImage(
+		"*ssrMask", NULL, width, height, IMGTYPE_COLORALPHA,
+		IMGFLAG_NO_COMPRESSION | IMGFLAG_CLAMPTOEDGE, hdrFormat);
+
 	int glowImageWidth = width;
 	int glowImageHeight = height;
 	for (int i = 0; i < ARRAY_LEN(tr.glowImageScaled); i++)
@@ -3724,11 +3730,16 @@ Initialise the images pool allocator
 */
 void R_InitImagesPool()
 {
+	if (imagePoolInitialized)
+	{// already set up (SP inits it twice): keep the images and their hash (SJE/MD9 shared renderer (2026-11-05), from MD9 SP)
+		return;
+	}
 	Com_Memset(hashTable, 0, sizeof(hashTable));
 
 	imagesPool = NULL;
 	tr.imagesFreeList = NULL;
 	R_ExtendImagesPool();
+	imagePoolInitialized = true;
 }
 
 /*
@@ -3772,6 +3783,7 @@ void R_DeleteTextures(void) {
 		imagesPool = pNext;
 	}
 
+	imagePoolInitialized = false;
 	Com_Memset(glState.currenttextures, 0, sizeof(glState.currenttextures));
 	GL_SelectTexture(1);
 	qglBindTexture(GL_TEXTURE_2D, 0);

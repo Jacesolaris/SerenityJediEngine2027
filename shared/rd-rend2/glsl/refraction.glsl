@@ -462,6 +462,7 @@ in vec4 var_RefractPosG;
 in vec4 var_RefractPosB;
 
 out vec4 out_Color;
+out vec4 out_SsrMask;	// r_ssr material mask (Jace 2026-11-04): refracting surfaces (water, glass) may reflect
 
 vec3 LinearTosRGB( in vec3 color )
 {
@@ -545,4 +546,5 @@ void main()
 #endif
 
 	out_Color = clamp(color, 0.0, 1.0);
+	out_SsrMask = vec4(0.0);
 }

@@ -40,6 +40,15 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <unordered_map>
 #include <string>
 
+// One renderer for SerenityJediEngine and MovieDuels (shared/rd-rend2 is the same in both, 2026-11-05). MovieDuels' CMake
+// sets MD_SP_BUILD / MD_MP_BUILD: REND2_MOVIEDUELS marks the few MovieDuels-only parts (its animation styles).
+#if defined(MD_SP_BUILD) || defined(MD_MP_BUILD)
+#define REND2_MOVIEDUELS
+#ifdef REND2_SP
+#include "qcommon/md_animsets.h"	// MD_AnimSetGLA / MD_SkeletonFitsMaster (code/qcommon)
+#endif
+#endif
+
 #ifdef REND2_SP
 typedef enum {
 	h_high,
@@ -193,6 +202,11 @@ extern cvar_t* r_forceSunAmbientScale;
 extern cvar_t* r_sunlightMode;
 extern cvar_t* r_drawSunRays;
 extern cvar_t* r_sharpen;		// Warzone port: contrast-adaptive sharpening, 0 = off .. 1 = strongest
+extern cvar_t* r_ssr;			// screen space reflections: 0 = off, 1 = floors, 2 = all surfaces
+extern cvar_t* r_ssrStrength;	// r_ssr blend strength 0..1
+extern cvar_t* r_ssrMaxDistance;	// r_ssr max ray length in world units
+extern cvar_t* r_godRays;			// screen space light shafts from bright sky towards the sun: 0 = off, 1 = on
+extern cvar_t* r_godRaysStrength;	// r_godRays brightness
 extern cvar_t* r_sunShadows;
 extern cvar_t* r_shadowFilter;
 extern cvar_t* r_shadowMapSize;
@@ -1064,6 +1078,7 @@ typedef struct shader_s {
 
 	int			surfaceFlags;			// if explicitlyDefined, this will have SURF_* flags
 	int			contentFlags;
+	qboolean	noSsr;					// r_ssr material mask (Jace 2026-11-04): matte ground (grass, sand, mud...), never gets r_ssr reflections
 
 	qboolean	entityMergable;			// merge across entites optimizable (smoke, blood)
 
@@ -1600,6 +1615,14 @@ typedef enum
 	UNIFORM_SLICECAPSMAP,
 	UNIFORM_SLICEBLOODMAP,
 	UNIFORM_SLICEGLOWMAP,
+	UNIFORM_SSRPROJECTION,
+	UNIFORM_SSRPARAMS,
+	UNIFORM_SSRVIEWPORT,
+	UNIFORM_SSRUP,
+	UNIFORM_SSRMASKMAP,		// r_ssr material mask (Jace 2026-11-04)
+	UNIFORM_SSRNOREFLECT,
+	UNIFORM_GODRAYSUN,
+	UNIFORM_GODRAYPARAMS,
 
 	UNIFORM_COUNT
 } uniform_t;
@@ -2630,6 +2653,7 @@ typedef struct trGlobals_s {
 
 	image_t* renderImage;
 	image_t* glowImage;
+	image_t* ssrMaskImage;			// r_ssr material mask (Jace 2026-11-04): 1 = no screen space reflections here (grass, sand, mud...)
 	image_t* glowImageScaled[6];
 	image_t* velocityImage;
 	image_t* temporalResolveImage;
@@ -2737,6 +2761,8 @@ typedef struct trGlobals_s {
 	shaderProgram_t ssaoShader;
 	shaderProgram_t highpassShader;
 	shaderProgram_t sharpenShader;	// r_sharpen (glsl/sharpen.glsl)
+	shaderProgram_t ssrShader;		// r_ssr (glsl/ssr.glsl)
+	shaderProgram_t godRaysShader;	// r_godRays (glsl/godrays.glsl)
 	shaderProgram_t depthBlurShader[2];
 	shaderProgram_t testcubeShader;
 	shaderProgram_t prefilterEnvMapShader;
@@ -3223,6 +3249,7 @@ extern const int lightmapsFullBright[MAXLIGHTMAPS];
 extern const byte stylesDefault[MAXLIGHTMAPS];
 
 shader_t* R_FindShader(const char* name, const int* lightmapIndexes, const byte* styles, const qboolean mipRawImage);
+qboolean R_MaterialIsMatteGround(const int material); // r_ssr material mask (Jace 2026-11-04)
 shader_t* R_GetShaderByHandle(const qhandle_t hShader);
 shader_t* R_FindShaderByName(const char* name);
 void R_InitShaders(const qboolean server);
@@ -3966,7 +3993,7 @@ struct gpuFrame_t
 
 // all of the information needed by the back end must be
 // contained in a backEndData_t.
-#define PER_FRAME_MEMORY_BYTES (32 * 1024 * 1024)
+#define PER_FRAME_MEMORY_BYTES (64 * 1024 * 1024) // was 32 MB: a view of the whole map (no vis, e.g. from outside the world) ran out (2026-11-03)
 class Allocator;
 struct Pass;
 typedef struct backEndData_s {

@@ -462,8 +462,8 @@ static int Hls_Look(const centity_t* cent, const int weapon)
 // Applies a rotation (degrees) about one axis (PITCH, YAW or ROLL) to the axis (multiplayer's ApplyAxisRotation)
 static void Hls_RotateAxis(vec3_t axis[3], const int rotType, const float value)
 {
-	vec3_t result[3]= {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
-	vec3_t rotation[3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
+	vec3_t result[3] = { { 0, 0, 0 },{ 0, 0, 0 },{ 0, 0, 0 } };
+	vec3_t rotation[3] = { { 0, 0, 0 },{ 0, 0, 0 },{ 0, 0, 0 } };
 
 	if (value == 0)
 	{
@@ -550,7 +550,7 @@ static void Hls_Render(centity_t* cent, const holsterModel_t* model, const int h
 	}
 
 	mdxaBone_t boltMatrix;
-	vec3_t angles, org, axis[3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
+	vec3_t angles, org, axis[3] = { { 0, 0, 0 },{ 0, 0, 0 },{ 0, 0, 0 } };
 	VectorCopy(g2Angles, angles);
 	VectorCopy(origin, org);
 	gi.G2API_GetBoltMatrix(gent->ghoul2, gent->playerModel, bolt, &boltMatrix, angles, org, cg.time,
@@ -662,9 +662,21 @@ void CG_HolsteredWeapons(centity_t* cent, const vec3_t g2Angles, const vec3_t or
 	}
 
 	const int inHand = client->ps.weapon;
+	// the guns the player set to "Holster: Disabled" in the weapon wheel (cg_holsterHide): carried, but not drawn
+	static int hideModCount = -1;
+	static unsigned long long hideMask = 0;
+	if (hideModCount != cg_holsterHide.modificationCount)
+	{
+		hideModCount = cg_holsterHide.modificationCount;
+		hideMask = strtoull(cg_holsterHide.string, nullptr, 16);
+	}
+	auto hidden = [&](const int weapon)
+		{
+			return isPlayer && weapon > WP_NONE && weapon < 64 && hideMask & 1ull << weapon ? true : false;
+		};
 	auto carries = [&](const int weapon)
 		{
-			return weapon != inHand && BG_HasWeapon(&client->ps, weapon) ? true : false;
+			return weapon != inHand && BG_HasWeapon(&client->ps, weapon) && !hidden(weapon) ? true : false;
 		};
 
 	// A jetpack (the classes that can fly with one) or a saber holstered on the back (the singleplayer saber
@@ -694,9 +706,12 @@ void CG_HolsteredWeapons(centity_t* cent, const vec3_t g2Angles, const vec3_t or
 	for (int p = 0; p < HLP_NUM; p++)
 	{
 		const hlsGun_t* gun = places[p] ? Hls_Gun(places[p]) : nullptr;
-		if (places[p] && (!BG_HasWeapon(&client->ps, places[p]) || !gun || !enabled(Hls_PlaceType(gun, p))))
+		if (places[p] && (!BG_HasWeapon(&client->ps, places[p]) || !gun || !enabled(Hls_PlaceType(gun, p))
+			|| hidden(places[p])))
 		{
-			places[p] = WP_NONE; // he no longer has it (or his model has no such place)
+			// he no longer has it (or his model has no such place, or the player just set it to "Holster: Disabled" in
+			// the weapon wheel: it goes at once, no map restart needed)
+			places[p] = WP_NONE;
 		}
 		if (places[p])
 		{

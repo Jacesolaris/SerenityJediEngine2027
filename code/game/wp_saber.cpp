@@ -22017,7 +22017,7 @@ static void WP_ForceArcHold(gentity_t* self, const forcePowers_t power)
 		}
 		// still within reach and in sight of the hand
 		if (DistanceSquared(self->client->renderInfo.handLPoint, ent->client->renderInfo.headPoint)
-			> FORCE_GRIP_DIST * FORCE_GRIP_DIST * 1.5f)
+		> FORCE_GRIP_DIST * FORCE_GRIP_DIST * 1.5f)
 		{
 			WP_ForceArcLetGo(self, k);
 			continue;
@@ -25778,7 +25778,7 @@ static void WP_LightningDrain(const gentity_t* self, const forcePowers_t force_p
 
 	if (!g_lightningDrainRate)
 	{
-		g_lightningDrainRate = gi.cvar("g_lightningDrainRate", "8", CVAR_ARCHIVE);
+		g_lightningDrainRate = gi.cvar("g_lightningDrainRate", "25", CVAR_ARCHIVE);
 	}
 
 	const int num = self->s.number;

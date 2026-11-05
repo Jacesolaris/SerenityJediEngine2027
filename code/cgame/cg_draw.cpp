@@ -33,6 +33,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 extern vmCvar_t cg_debugHealthBars;
 extern vmCvar_t cg_drawblockpointbar;
+extern vmCvar_t cg_drawStaminaBar;
 
 extern vmCvar_t cg_newgameplusJKA;
 extern vmCvar_t cg_newgameplusJKO;
@@ -4914,69 +4915,6 @@ static void CG_DrawCredits()
 }
 
 extern qboolean G_ControlledByPlayer(const gentity_t* self);
-//draw the health bar based on current "health" and maxhealth
-static void CG_DrawHealthBar(const centity_t* cent, const float chX, const float chY, const float ch_w, const float ch_h)
-{
-	vec4_t aColor{};
-	vec4_t cColor{};
-	const float x = chX - ch_w / 2;
-	const float y = chY - ch_h;
-
-	if (!cent || !cent->gent)
-	{
-		return;
-	}
-
-	if (cent->gent->health < 1)
-	{
-		return;
-	}
-
-	if (cent->gent->s.number == 0 || G_ControlledByPlayer(cent->gent))
-	{
-		return;
-	}
-
-	if (PM_DeathCinAnim(cent->gent->client->ps.legsAnim))
-	{
-		return;
-	}
-
-	if (cent->gent->client->NPC_class == CLASS_OBJECT)
-	{
-		return;
-	}
-
-	const float percent = static_cast<float>(cent->gent->health) / static_cast<float>(cent->gent->max_health);
-
-	if (percent <= 0)
-	{
-		return;
-	}
-
-	//color of the bar
-	//hostile
-	aColor[0] = 1.0f;
-	aColor[1] = 0.0f;
-	aColor[2] = 0.0f;
-	aColor[3] = 0.4f;
-
-	//color of greyed out "missing health"
-	cColor[0] = 0.5f;
-	cColor[1] = 0.5f;
-	cColor[2] = 0.5f;
-	cColor[3] = 0.4f;
-
-	//draw the background (black)
-	CG_DrawRect(x, y, ch_w, ch_h, 1.0f, colorTable[CT_BLACK]);
-
-	//now draw the part to show how much health there is in the color specified
-	CG_FillRect(x + 1.0f, y + 1.0f, percent * ch_w - 1.0f, ch_h - 1.0f, aColor);
-
-	//then draw the other part greyed out
-	CG_FillRect(x + percent * ch_w, y + 1.0f, ch_w - percent * ch_w - 1.0f, ch_h - 1.0f, cColor);
-}
-
 constexpr auto HACK_WIDTH = 33.5f;
 constexpr auto HACK_HEIGHT = 3.5f;
 //same routine (at least for now), draw progress of a "hack" or whatever
@@ -5179,159 +5117,211 @@ static void CG_DrawDashTimerBar(void)
 		cColor);
 }
 
-static void CG_DrawBlockPointBar(const centity_t* cent, const float chX, const float chY, const float ch_w, const float ch_h)
+// NPC overhead bars (2026-11-03, as MovieDuels): the health, stamina (saber fatigue) and block point bars over a
+// character's head, and the crosshair name above them, all hang from one anchor point above the head
+// (CG_OverheadAnchor) and share one distance scale and fade, so they keep their spacing and size together as you move.
+// Only the bars that are on are stacked, tightly, from the bottom up: block points, stamina (with the block point bars,
+// cg_drawStaminaBar), health, then the name. Each bar is the black back, the fill (a white copy of the back tinted with
+// the bar colour and clipped by texture coordinates, so its rounded left end stays) and the gold frame on top
+// (gfx/2d/npcbar_*).
+constexpr float OVERHEAD_BAR_WIDTH = 60.0f;	// virtual 640x480 units at scale 1
+constexpr float OVERHEAD_BAR_T0 = 12.0f / 128.0f;	// rows of the bar images that hold the frame
+constexpr float OVERHEAD_BAR_T1 = 116.0f / 128.0f;
+constexpr float OVERHEAD_BAR_S0 = 20.0f / 1024.0f;	// columns of the back (the fill runs from S0 to S1)
+constexpr float OVERHEAD_BAR_S1 = 1004.0f / 1024.0f;
+constexpr float OVERHEAD_BAR_HEIGHT = OVERHEAD_BAR_WIDTH * (OVERHEAD_BAR_T1 - OVERHEAD_BAR_T0) * 128.0f / 1024.0f;
+constexpr float OVERHEAD_HEAD_GAP = 6.0f;	// world units from the top of the bounding box to the anchor
+constexpr float OVERHEAD_NAME_SCALE = 0.4f;
+constexpr auto BLOCKPOINT_BAR_RANGE = 200;
+constexpr auto HEALTHBARRANGE = 200;
+
+// the anchor above cent's head on screen, and the scale for that distance: 1 up close, easing down to 0.75 by 256
+// units from the view (a gentle shrink, the bars keep about the same size on screen)
+static qboolean CG_OverheadAnchor(const centity_t* cent, float* x, float* y, float* scale)
 {
-	vec4_t aColor{};
-	vec4_t cColor{};
-	const float x = chX - ch_w / 2;
-	const float y = chY - ch_h;
-
-	if (!cent || !cent->gent)
+	vec3_t pos;
+	VectorCopy(cent->lerpOrigin, pos);
+	pos[2] += cent->gent->maxs[2] + OVERHEAD_HEAD_GAP;
+	if (!CG_WorldCoordToScreenCoordFloat(pos, x, y))
 	{
-		return;
+		return qfalse;
 	}
-
-	if (cent->gent->health < 1)
-	{
-		return;
-	}
-
-	if (cent->gent->s.number == 0 || G_ControlledByPlayer(cent->gent))
-	{
-		return;
-	}
-
-	if (cent->currentState.weapon != WP_SABER)
-	{
-		return;
-	}
-
-	if (PM_DeathCinAnim(cent->gent->client->ps.legsAnim))
-	{
-		return;
-	}
-
-	const float block_percent = static_cast<float>(cent->gent->client->ps.blockPoints) / static_cast<float>(
-		BLOCK_POINTS_MAX);
-
-	if (block_percent <= 0)
-	{
-		return;
-	}
-
-	//color of the bar
-	//hostile
-	aColor[0] = 1.0f;
-	aColor[1] = 0.0f;
-	aColor[2] = 1.0f;
-	aColor[3] = 0.4f;
-
-	//color of greyed out "missing health"
-	cColor[0] = 0.5f;
-	cColor[1] = 0.5f;
-	cColor[2] = 0.5f;
-	cColor[3] = 0.4f;
-
-	//draw the background (black)
-	CG_DrawRect(x, y, ch_w, ch_h, 1.0f, colorTable[CT_BLACK]);
-
-	//now draw the part to show how much health there is in the color specified
-	CG_FillRect(x + 1.0f, y + 1.0f, block_percent * ch_w - 1.0f, ch_h - 1.0f, aColor);
-
-	//then draw the other part greyed out
-	CG_FillRect(x + block_percent * ch_w, y + 1.0f, ch_w - block_percent * ch_w - 1.0f, ch_h - 1.0f, cColor);
+	float t = (Distance(cent->lerpOrigin, cg.refdef.vieworg) - 64.0f) / (256.0f - 64.0f);
+	t = t < 0.0f ? 0.0f : t > 1.0f ? 1.0f : t;
+	*scale = 1.0f - 0.25f * t * t * (3.0f - 2.0f * t);
+	return qtrue;
 }
 
-static void CG_DrawFatiguePointBar(const centity_t* cent, const float chX, const float chY, const float ch_w,
-	const float ch_h)
+// 1, fading to 0 over the last fifth of range
+static float CG_OverheadFade(const float dist, const float range)
 {
-	vec4_t aColor{};
-	vec4_t cColor{};
-	const float x = chX - ch_w / 2;
-	const float y = chY - ch_h;
+	const float a = (range - dist) / (range * 0.2f);
+	return a < 0.0f ? 0.0f : a > 1.0f ? 1.0f : a;
+}
 
-	if (!cent || !cent->gent)
+// where the name goes for each character this frame: just above its top bar (CG_DrawOverheadBars)
+static float cg_overheadTop[MAX_GENTITIES];
+static float cg_overheadAlpha[MAX_GENTITIES];
+static int cg_overheadTime[MAX_GENTITIES];
+
+static void CG_DrawOverheadBar(const float cx, const float y, const float w, const float h, const float frac,
+	const vec4_t color, const float alpha)
+{
+	const float x = cx - w / 2.0f;
+	const vec4_t white = { 1.0f, 1.0f, 1.0f, alpha };
+	cgi_R_SetColor(white);
+	cgi_R_DrawStretchPic(x, y, w, h, 0.0f, OVERHEAD_BAR_T0, 1.0f, OVERHEAD_BAR_T1, cgs.media.npcBarBack);
+	if (frac > 0.0f)
 	{
-		return;
+		const float s = OVERHEAD_BAR_S0 + (frac > 1.0f ? 1.0f : frac) * (OVERHEAD_BAR_S1 - OVERHEAD_BAR_S0);
+		const vec4_t fill = { color[0], color[1], color[2], color[3] * alpha };
+		cgi_R_SetColor(fill);
+		cgi_R_DrawStretchPic(x, y, w * s, h, 0.0f, OVERHEAD_BAR_T0, s, OVERHEAD_BAR_T1, cgs.media.npcBarFill);
 	}
+	cgi_R_SetColor(white);
+	cgi_R_DrawStretchPic(x, y, w, h, 0.0f, OVERHEAD_BAR_T0, 1.0f, OVERHEAD_BAR_T1, cgs.media.npcBarFrame);
+	cgi_R_SetColor(nullptr);
+}
 
-	if (cent->gent->health < 1)
+// the checks every bar shares: a living character that isn't the player or an object
+static qboolean CG_OverheadBarAllowed(const centity_t* cent)
+{
+	if (!cent || !cent->gent || !cent->gent->client || cent->gent->health < 1)
 	{
-		return;
+		return qfalse;
 	}
-
 	if (cent->gent->s.number == 0 || G_ControlledByPlayer(cent->gent))
 	{
-		return;
+		return qfalse;
 	}
-
-	if (cent->currentState.weapon != WP_SABER)
-	{
-		return;
-	}
-
 	if (PM_DeathCinAnim(cent->gent->client->ps.legsAnim))
 	{
-		return;
+		return qfalse;
 	}
-
 	if (cent->gent->client->NPC_class == CLASS_OBJECT)
 	{
-		return;
+		return qfalse;
 	}
-
-	const float fatigue_percent = static_cast<float>(cent->gent->client->ps.saberFatigueChainCount) / MISHAPLEVEL_MAX;
-
-	//color of the bar
-	//hostile
-	aColor[0] = 0.8f;
-	aColor[1] = 0.8f;
-	aColor[2] = 0.8f;
-	aColor[3] = 0.8f;
-
-	//color of greyed out "missing health"
-	cColor[0] = 0.5f;
-	cColor[1] = 0.5f;
-	cColor[2] = 0.5f;
-	cColor[3] = 0.4f;
-
-	//draw the background (black)
-	CG_DrawRect(x, y - 8.0f, ch_w, ch_h, 1.0f, colorTable[CT_BLACK]);
-
-	//now draw the part to show how much health there is in the color specified
-	CG_FillRect(x + 1.0f, y + 1.0f - 8.0f, fatigue_percent * ch_w - 1.0f, ch_h - 1.0f, cColor);
-
-	//then draw the other part greyed out
-	CG_FillRect(x + fatigue_percent * ch_w, y + 1.0f - 8.0f, ch_w - fatigue_percent * ch_w - 1.0f, ch_h - 1.0f,
-		aColor);
+	return qtrue;
 }
 
 constexpr auto MAX_BLOCKPOINT_BAR_ENTS = 32;
 int cg_numBlockPointBarEnts = 0;
 int cg_BlockPointBarEnts[MAX_BLOCKPOINT_BAR_ENTS];
-constexpr auto BLOCKPOINT_BAR_WIDTH = 50;
-constexpr auto BLOCKPOINT_BAR_HEIGHT = 5;
-constexpr auto BLOCKPOINT_BAR_RANGE = 200;
 
-static void CG_DrawBlockPointBars()
+constexpr auto MAX_HEALTH_BAR_ENTS = 32;
+int cg_numHealthBarEnts = 0;
+int cg_healthBarEnts[MAX_HEALTH_BAR_ENTS];
+
+static qboolean CG_InBarList(const int* list, const int count, const int entNum)
 {
-	float chX = 0, chY = 0;
-	vec3_t pos;
-	for (int i = 0; i < cg_numBlockPointBarEnts; i++)
+	for (int i = 0; i < count; i++)
 	{
-		const centity_t* cent = &cg_entities[cg_BlockPointBarEnts[i]];
-		if (cent && cent->gent)
+		if (list[i] == entNum)
 		{
-			VectorCopy(cent->lerpOrigin, pos);
-			pos[2] += cent->gent->maxs[2] + BLOCKPOINT_BAR_HEIGHT + 12;
-			if (CG_WorldCoordToScreenCoordFloat(pos, &chX, &chY))
-			{
-				//on screen
-				CG_DrawBlockPointBar(cent, chX, chY, BLOCKPOINT_BAR_WIDTH, BLOCKPOINT_BAR_HEIGHT);
-				CG_DrawFatiguePointBar(cent, chX, chY, -BLOCKPOINT_BAR_WIDTH, BLOCKPOINT_BAR_HEIGHT);
-			}
+			return qtrue;
 		}
 	}
+	return qfalse;
+}
+
+// all the overhead bars that are on, for each character in the bar lists
+static void CG_DrawOverheadBars(const qboolean drawHealth, const qboolean drawBlock, const qboolean drawFatigue)
+{
+	static const vec4_t healthColor = { 1.0f, 0.0f, 0.0f, 0.9f };
+	static const vec4_t blockColor = { 1.0f, 0.0f, 1.0f, 0.9f };
+	static const vec4_t fatigueColor = { 0.8f, 0.8f, 0.8f, 0.9f };
+	const int healthCount = drawHealth ? cg_numHealthBarEnts : 0;
+	const int blockCount = drawBlock || drawFatigue ? cg_numBlockPointBarEnts : 0;
+
+	for (int l = 0; l < 2; l++)
+	{
+		const int* list = l ? cg_BlockPointBarEnts : cg_healthBarEnts;
+		const int count = l ? blockCount : healthCount;
+		for (int i = 0; i < count; i++)
+		{
+			const int num = list[i];
+			const centity_t* cent = &cg_entities[num];
+			// once per character: skip it if an earlier list has it
+			if (CG_InBarList(list, i, num) || l && CG_InBarList(cg_healthBarEnts, healthCount, num)
+				|| !CG_OverheadBarAllowed(cent))
+			{
+				continue;
+			}
+
+			float frac[3] = { 0.0f, 0.0f, 0.0f };
+			const float* colors[3] = { nullptr, nullptr, nullptr };
+			int bars = 0;
+			if (CG_InBarList(cg_BlockPointBarEnts, blockCount, num) && cent->currentState.weapon == WP_SABER)
+			{
+				if (drawBlock && cent->gent->client->ps.blockPoints > 0)
+				{
+					frac[bars] = static_cast<float>(cent->gent->client->ps.blockPoints) / static_cast<float>(BLOCK_POINTS_MAX);
+					colors[bars++] = blockColor;
+				}
+				if (drawFatigue)
+				{	// stamina left: the fatigue chain count against the most it gets
+					frac[bars] = 1.0f - static_cast<float>(cent->gent->client->ps.saberFatigueChainCount) / MISHAPLEVEL_MAX;
+					colors[bars++] = fatigueColor;
+				}
+			}
+			if (CG_InBarList(cg_healthBarEnts, healthCount, num) && cent->gent->max_health > 0)
+			{
+				frac[bars] = static_cast<float>(cent->gent->health) / static_cast<float>(cent->gent->max_health);
+				colors[bars++] = healthColor;
+			}
+
+			float x, y, scale;
+			if (!bars || !CG_OverheadAnchor(cent, &x, &y, &scale))
+			{
+				continue;
+			}
+			const float alpha = CG_OverheadFade(Distance(cent->lerpOrigin, g_entities[0].client->renderInfo.eyePoint),
+				HEALTHBARRANGE);
+			if (alpha <= 0.0f)
+			{
+				continue;
+			}
+			const float w = OVERHEAD_BAR_WIDTH * scale;
+			const float h = OVERHEAD_BAR_HEIGHT * scale;
+			for (int b = 0; b < bars; b++)
+			{	// bottom up, frame to frame
+				y -= h;
+				CG_DrawOverheadBar(x, y, w, h, frac[b] < 0.0f ? 0.0f : frac[b], colors[b], alpha);
+			}
+			cg_overheadTop[num] = y;
+			cg_overheadAlpha[num] = alpha;
+			cg_overheadTime[num] = cg.time;
+		}
+	}
+}
+
+// the crosshair name over cent's head, with the bars' anchor, scale and fade, just above its top bar this frame
+static void CG_DrawOverheadName(const centity_t* cent, const char* name, const vec4_t color)
+{
+	float x, y, scale;
+	if (!cent || !cent->gent || !name || !name[0] || !CG_OverheadAnchor(cent, &x, &y, &scale))
+	{
+		return;
+	}
+	const int num = cent->currentState.number;
+	float alpha = CG_OverheadFade(Distance(cent->lerpOrigin, cg.refdef.vieworg), 256.0f);
+	if (cg_overheadTime[num] == cg.time)
+	{
+		y = cg_overheadTop[num];
+		alpha = cg_overheadAlpha[num];
+	}
+	if (alpha <= 0.0f)
+	{
+		return;
+	}
+	const float fontScale = OVERHEAD_NAME_SCALE * scale;
+	const float w = static_cast<float>(cgi_R_Font_StrLenPixels(name, cgs.media.qhFontMedium, fontScale));
+	const float h = static_cast<float>(cgi_R_Font_HeightPixels(cgs.media.qhFontMedium, fontScale));
+	const vec4_t c = { color[0], color[1], color[2], color[3] * alpha };
+	// the font takes whole virtual units: round, don't truncate
+	cgi_R_Font_DrawString(static_cast<int>(floorf(x - w / 2.0f + 0.5f)), static_cast<int>(floorf(y - h - scale + 0.5f)),
+		name, c, cgs.media.qhFontMedium, -1, fontScale);
 }
 
 void CG_AddBlockPointBarEnt(const int entNum)
@@ -5356,34 +5346,6 @@ void CG_ClearBlockPointBarEnts()
 		memset(&cg_BlockPointBarEnts, 0, MAX_BLOCKPOINT_BAR_ENTS);
 	}
 }
-
-constexpr auto MAX_HEALTH_BAR_ENTS = 32;
-int cg_numHealthBarEnts = 0;
-int cg_healthBarEnts[MAX_HEALTH_BAR_ENTS];
-constexpr auto HEALTH_BAR_WIDTH = 50;
-constexpr auto HEALTH_BAR_HEIGHT = 5;
-
-static void CG_DrawHealthBars()
-{
-	float chX = 0, chY = 0;
-	vec3_t pos;
-	for (int i = 0; i < cg_numHealthBarEnts; i++)
-	{
-		const centity_t* cent = &cg_entities[cg_healthBarEnts[i]];
-		if (cent && cent->gent)
-		{
-			VectorCopy(cent->lerpOrigin, pos);
-			pos[2] += cent->gent->maxs[2] + HEALTH_BAR_HEIGHT + 8;
-			if (CG_WorldCoordToScreenCoordFloat(pos, &chX, &chY))
-			{
-				//on screen
-				CG_DrawHealthBar(cent, chX, chY, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT);
-			}
-		}
-	}
-}
-
-constexpr auto HEALTHBARRANGE = 200;
 
 void CG_AddHealthBarEnt(const int entNum)
 {
@@ -6412,22 +6374,7 @@ static void CG_DrawCrosshairBackupNames()
 
 	centity_t* cent = &cg_entities[g_crosshairEntNum];
 
-	vec3_t headPos;
-	VectorCopy(cent->lerpOrigin, headPos);
-	headPos[2] += cent->gent->maxs[2] + 20;
-
-	float sx = 0.0f, sy = 0.0f;
-
-	if (CG_WorldCoordToScreenCoordFloat(headPos, &sx, &sy) == qfalse)
-	{
-		return;
-	}
-
-	const float scale = 0.4f;
-	float textWidth = cgi_R_Font_StrLenPixels(va("Civilian"), cgs.media.qhFontMedium, scale);
-
-	int drawX = (int)(sx - (textWidth / 2));
-	int drawY = (int)(sy - 25);
+	// drawn over the head with the overhead bars' anchor, scale and fade (CG_DrawOverheadName)
 
 	vec4_t color = { 1.0f, 1.0f, 1.0f, 1.0f };
 
@@ -6444,161 +6391,161 @@ static void CG_DrawCrosshairBackupNames()
 				case CLASS_REBEL:
 					if (Q_stricmp("rosh_penin_noforce", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Rosh Penin"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Rosh Penin"), color);
 					}
 					else if (Q_stricmp("rosh_penin", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Jedi Rosh"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Jedi Rosh"), color);
 					}
 					else if (Q_stricmp("rosh_dark", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Dark Rosh"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Dark Rosh"), color);
 					}
 					else if (Q_stricmp("chewie", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Chewbacca"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Chewbacca"), color);
 					}
 					else if (Q_stricmp("chewie_cin", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Chewbacca"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Chewbacca"), color);
 					}
 					else
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Rebel"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Rebel"), color);
 					}
 					break;
 				case CLASS_JEDI:
 					if (Q_stricmp("rosh_penin_noforce", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Rosh Penin"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Rosh Penin"), color);
 					}
 					else if (Q_stricmp("rosh_penin", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Jedi Rosh"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Jedi Rosh"), color);
 					}
 					else if (Q_stricmp("rosh_dark", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Dark Rosh"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Dark Rosh"), color);
 					}
 					else
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Jedi Knight"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Jedi Knight"), color);
 					}
 					break;
 				case CLASS_KYLE:
 					if (Q_stricmp("kyle", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("kyle Katarn"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("kyle Katarn"), color);
 					}
 					else if (Q_stricmp("kyle2", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("kyle Katarn"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("kyle Katarn"), color);
 					}
 					else if (Q_stricmp("Kyle_boss", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("kyle Katarn"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("kyle Katarn"), color);
 					}
 					else if (Q_stricmp("KyleJK2", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("kyle Katarn"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("kyle Katarn"), color);
 					}
 					else if (Q_stricmp("Kyle_JKA", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("kyle Katarn"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("kyle Katarn"), color);
 					}
 					else if (Q_stricmp("Kyle_MOD", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("kyle Katarn"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("kyle Katarn"), color);
 					}
 					else if (Q_stricmp("jedi_kyle", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Master Katarn"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Master Katarn"), color);
 					}
 					else
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Jedi Master"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Jedi Master"), color);
 					}
 					break;
 				case CLASS_WOOKIE:
-					cgi_R_Font_DrawString(drawX, drawY, va("Chewie"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Chewie"), color);
 					break;
 				case CLASS_YODA:
-					cgi_R_Font_DrawString(drawX, drawY, va("Master Yoda"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Master Yoda"), color);
 					break;
 				case CLASS_LUKE:
 					if (Q_stricmp("luke", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Luke Skywalker"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Luke Skywalker"), color);
 					}
 					else if (Q_stricmp("luke2", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Luke Skywalker"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Luke Skywalker"), color);
 					}
 					else if (Q_stricmp("Luke_JKA1", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Luke Skywalker"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Luke Skywalker"), color);
 					}
 					else if (Q_stricmp("Luke_JKA2", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Luke Skywalker"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Luke Skywalker"), color);
 					}
 					else if (Q_stricmp("LukeJK2", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Luke Skywalker"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Luke Skywalker"), color);
 					}
 					else if (Q_stricmp("Luke_MOD1", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Luke Skywalker"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Luke Skywalker"), color);
 					}
 					else if (Q_stricmp("Luke_MOD2", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Luke Skywalker"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Luke Skywalker"), color);
 					}
 					else if (Q_stricmp("Luke_EOC1", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Luke Skywalker"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Luke Skywalker"), color);
 					}
 					else if (Q_stricmp("Luke_EOC2", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Luke Skywalker"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Luke Skywalker"), color);
 					}
 					else if (Q_stricmp("jedi_luke", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Master Skywalker"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Master Skywalker"), color);
 					}
 					else
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Jedi GrandMaster"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Jedi GrandMaster"), color);
 					}
 					break;
 				case CLASS_JAN:
-					cgi_R_Font_DrawString(drawX, drawY, va("Jan Ors"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Jan Ors"), color);
 					break;
 				case CLASS_MONMOTHA:
-					cgi_R_Font_DrawString(drawX, drawY, va("Monmothma"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Monmothma"), color);
 					break;
 				case CLASS_MORGANKATARN:
-					cgi_R_Font_DrawString(drawX, drawY, va("Morgan Katarn"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Morgan Katarn"), color);
 					break;
 				case CLASS_GONK:
 					if (Q_stricmp("gonk", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("gonk"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("gonk"), color);
 					}
 					else if (Q_stricmp("gonk2", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("gonk"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("gonk"), color);
 					}
 					else
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("gonk"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("gonk"), color);
 					}
 					break;
 				case CLASS_CLONETROOPER:
-					cgi_R_Font_DrawString(drawX, drawY, va("CloneTrooper"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("CloneTrooper"), color);
 					break;
 				case CLASS_STORMCOMMANDO:
-					cgi_R_Font_DrawString(drawX, drawY, va("StormCommando"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("StormCommando"), color);
 					break;
 				case CLASS_OBJECT:
 					//
@@ -6615,124 +6562,124 @@ static void CG_DrawCrosshairBackupNames()
 						|| Q_stricmp("human_merc_flc2", CrosshairEnt->NPC_type) == 0
 						|| Q_stricmp("human_merc_key", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Mercenary"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Mercenary"), color);
 					}
 					else if (Q_stricmp("lannik_racto", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("lannik racto"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("lannik racto"), color);
 					}
 					else if (Q_stricmp("STCommander", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Storm Commander"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Storm Commander"), color);
 					}
 					else if (Q_stricmp("STOfficer", CrosshairEnt->NPC_type) == 0
 						|| Q_stricmp("STOfficer2", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Storm Officer"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Storm Officer"), color);
 					}
 					else if (Q_stricmp("StormPilot", CrosshairEnt->NPC_type) == 0
 						|| Q_stricmp("StormPilot2", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Storm Pilot"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Storm Pilot"), color);
 					}
 					else
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Stormtrooper"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Stormtrooper"), color);
 					}
 					break;
 				case CLASS_SWAMPTROOPER:
-					cgi_R_Font_DrawString(drawX, drawY, va("Swamptrooper"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Swamptrooper"), color);
 					break;
 				case CLASS_IMPWORKER:
-					cgi_R_Font_DrawString(drawX, drawY, va("ImpWorker"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("ImpWorker"), color);
 					break;
 				case CLASS_IMPERIAL:
 					if (Q_stricmp("Galak", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Galak"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Galak"), color);
 					}
 					else
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Imperial"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Imperial"), color);
 					}
 					break;
 				case CLASS_GALAKMECH:
-					cgi_R_Font_DrawString(drawX, drawY, va("GalakMech"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("GalakMech"), color);
 					break;
 				case CLASS_SHADOWTROOPER:
-					cgi_R_Font_DrawString(drawX, drawY, va("Shadowtrooper"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Shadowtrooper"), color);
 					break;
 				case CLASS_COMMANDO:
-					cgi_R_Font_DrawString(drawX, drawY, va("Commando"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Commando"), color);
 					break;
 				case CLASS_TAVION:
 					if (Q_stricmp("Tavion", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Master Tavion"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Master Tavion"), color);
 					}
 					else if (Q_stricmp("Tavion2", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Darth Tavion"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Darth Tavion"), color);
 					}
 					else if (Q_stricmp("Sith6", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Tavion"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Tavion"), color);
 					}
 					else
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Sith Boss"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Sith Boss"), color);
 					}
 					break;
 				case CLASS_ALORA:
 					if (Q_stricmp("alora", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Master alora"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Master alora"), color);
 					}
 					else if (Q_stricmp("Sith5", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Alora"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Alora"), color);
 					}
 					else
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Sith Warrior"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Sith Warrior"), color);
 					}
 					break;
 				case CLASS_DESANN:
 					if (Q_stricmp("Desann", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Lord Desann"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Lord Desann"), color);
 					}
 					else if (Q_stricmp("Sith7", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Desann"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Desann"), color);
 					}
 					else if (Q_stricmp("Darth_Vader", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Darth Vader"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Darth Vader"), color);
 					}
 					else
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Sith Master"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Sith Master"), color);
 					}
 					break;
 				case CLASS_VADER:
 					if (Q_stricmp("Darth Vader", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Lord Vader"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Lord Vader"), color);
 					}
 					else if (Q_stricmp("Darth_Vader", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Darth Vader"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Darth Vader"), color);
 					}
 					else
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Darth Vader"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Darth Vader"), color);
 					}
 					break;
 				case CLASS_REBORN:
 					if (Q_stricmp("human_merc", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("scout"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("scout"), color);
 					}
 					else if (Q_stricmp("cultist_saber2", CrosshairEnt->NPC_type) == 0
 						|| Q_stricmp("cultist_saber_throw2", CrosshairEnt->NPC_type) == 0
@@ -6745,7 +6692,7 @@ static void CG_DrawCrosshairBackupNames()
 						|| Q_stricmp("Sith2", CrosshairEnt->NPC_type) == 0
 						|| Q_stricmp("cultist_saber_all_throw2", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Dark cultist"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Dark cultist"), color);
 					}
 					else if (Q_stricmp("cultist_saber", CrosshairEnt->NPC_type) == 0
 						|| Q_stricmp("cultist_saber_throw", CrosshairEnt->NPC_type) == 0
@@ -6756,283 +6703,283 @@ static void CG_DrawCrosshairBackupNames()
 						|| Q_stricmp("cultist_saber_all", CrosshairEnt->NPC_type) == 0
 						|| Q_stricmp("cultist_saber_all_throw", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Dark Cultist"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Dark Cultist"), color);
 					}
 					else if (Q_stricmp("Sith3", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("RebornChiss"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("RebornChiss"), color);
 					}
 					else if (Q_stricmp("cultist", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Cultist Commando"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Cultist Commando"), color);
 					}
 					else if (Q_stricmp("RebornBoss", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Reborn Boss"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Reborn Boss"), color);
 					}
 					else if (Q_stricmp("Sith8", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Reborn Boss"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Reborn Boss"), color);
 					}
 					else if (Q_stricmp("Sith9", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Reborn Rodian"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Reborn Rodian"), color);
 					}
 					else if (Q_stricmp("RebornRodian", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Reborn"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Reborn"), color);
 					}
 					else if (Q_stricmp("Sith10", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Reborn Trandoshan"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Reborn Trandoshan"), color);
 					}
 					else if (Q_stricmp("RebornTrandoshan", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Reborn"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Reborn"), color);
 					}
 					else if (Q_stricmp("Sith11", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Reborn Acrobat"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Reborn Acrobat"), color);
 					}
 					else if (Q_stricmp("RebornAcrobat", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Reborn Acrobat"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Reborn Acrobat"), color);
 					}
 					else if (Q_stricmp("Sith12", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Reborn Fencer"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Reborn Fencer"), color);
 					}
 					else if (Q_stricmp("RebornFencer", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Reborn Fencer"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Reborn Fencer"), color);
 					}
 					else if (Q_stricmp("rosh_penin_noforce", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Rosh Penin"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Rosh Penin"), color);
 					}
 					else if (Q_stricmp("rosh_penin", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Jedi Rosh"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Jedi Rosh"), color);
 					}
 					else if (Q_stricmp("Sith4", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Dark Rosh"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Dark Rosh"), color);
 					}
 					else if (Q_stricmp("rosh_dark", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Dark Rosh"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Dark Rosh"), color);
 					}
 					else if (Q_stricmp("RebornForceUser", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Reborn ForceUser"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Reborn ForceUser"), color);
 					}
 					else if (Q_stricmp("RebornWeequay", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Reborn"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Reborn"), color);
 					}
 					else if (Q_stricmp("Reborn", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Reborn"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Reborn"), color);
 					}
 					else if (Q_stricmp("reborn_dual", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Reborn"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Reborn"), color);
 					}
 					else if (Q_stricmp("reborn_dual2", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Reborn"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Reborn"), color);
 					}
 					else if (Q_stricmp("reborn_new", CrosshairEnt->NPC_type) == 0
 						|| Q_stricmp("reborn_new2", CrosshairEnt->NPC_type) == 0
 						|| Q_stricmp("reborn_staff", CrosshairEnt->NPC_type) == 0
 						|| Q_stricmp("reborn_staff2", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Reborn"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Reborn"), color);
 					}
 					else if (Q_stricmp("DKothos", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("DKothos"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("DKothos"), color);
 					}
 					else if (Q_stricmp("VKothos", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("VKothos"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("VKothos"), color);
 					}
 					else if (Q_stricmp("RebornMaster", CrosshairEnt->NPC_type) == 0
 						|| Q_stricmp("RebornMasterDual", CrosshairEnt->NPC_type) == 0
 						|| Q_stricmp("RebornMasterStaff", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Reborn Master"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Reborn Master"), color);
 					}
 					else
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Sith"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Sith"), color);
 					}
 					break;
 				case CLASS_BOBAFETT:
-					cgi_R_Font_DrawString(drawX, drawY, va("Bobafett"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Bobafett"), color);
 					break;
 				case CLASS_MANDO:
 					if (Q_stricmp("human_merc2", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Mandolorian"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Mandolorian"), color);
 					}
 					else if (Q_stricmp("human_merc_bow2", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Mandolorian"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Mandolorian"), color);
 					}
 					else if (Q_stricmp("human_merc_rep2", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Mandolorian"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Mandolorian"), color);
 					}
 					else if (Q_stricmp("human_merc_flc2", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Mandolorian"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Mandolorian"), color);
 					}
 					else
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Mandolorian"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Mandolorian"), color);
 					}
 					break;
 				case CLASS_ATST:
-					cgi_R_Font_DrawString(drawX, drawY, va("Vehicle"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Vehicle"), color);
 					break;
 				case CLASS_CLAW:
-					cgi_R_Font_DrawString(drawX, drawY, va("Animal"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Animal"), color);
 					break;
 				case CLASS_FISH:
-					cgi_R_Font_DrawString(drawX, drawY, va("Animal"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Animal"), color);
 					break;
 				case CLASS_FLIER2:
-					cgi_R_Font_DrawString(drawX, drawY, va("Animal"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Animal"), color);
 					break;
 				case CLASS_GLIDER:
-					cgi_R_Font_DrawString(drawX, drawY, va("Animal"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Animal"), color);
 					break;
 				case CLASS_HOWLER:
-					cgi_R_Font_DrawString(drawX, drawY, va("Howler"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Howler"), color);
 					break;
 				case CLASS_MINEMONSTER:
-					cgi_R_Font_DrawString(drawX, drawY, va("MineMonster"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("MineMonster"), color);
 					break;
 				case CLASS_LIZARD:
-					cgi_R_Font_DrawString(drawX, drawY, va("Animal"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Animal"), color);
 					break;
 				case CLASS_SWAMP:
-					cgi_R_Font_DrawString(drawX, drawY, va("Animal"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Animal"), color);
 					break;
 				case CLASS_RANCOR:
-					cgi_R_Font_DrawString(drawX, drawY, va("Rancor"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Rancor"), color);
 					break;
 				case CLASS_WAMPA:
-					cgi_R_Font_DrawString(drawX, drawY, va("Wampa"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Wampa"), color);
 					break;
 				case CLASS_VEHICLE:
-					cgi_R_Font_DrawString(drawX, drawY, va("Vehicle"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Vehicle"), color);
 					break;
 				case CLASS_BESPIN_COP:
-					cgi_R_Font_DrawString(drawX, drawY, va("Bespin Cop"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Bespin Cop"), color);
 					break;
 				case CLASS_LANDO:
-					cgi_R_Font_DrawString(drawX, drawY, va("Lando"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Lando"), color);
 					break;
 				case CLASS_PRISONER:
-					cgi_R_Font_DrawString(drawX, drawY, va("Prisoner"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Prisoner"), color);
 					break;
 				case CLASS_GALAK:
-					cgi_R_Font_DrawString(drawX, drawY, va("Galak"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Galak"), color);
 					break;
 				case CLASS_GRAN:
-					cgi_R_Font_DrawString(drawX, drawY, va("Gran"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Gran"), color);
 					break;
 				case CLASS_REELO:
-					cgi_R_Font_DrawString(drawX, drawY, va("Reelo"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Reelo"), color);
 					break;
 				case CLASS_MURJJ:
-					cgi_R_Font_DrawString(drawX, drawY, va("Murjj"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Murjj"), color);
 					break;
 				case CLASS_RODIAN:
-					cgi_R_Font_DrawString(drawX, drawY, va("Rodian"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Rodian"), color);
 					break;
 				case CLASS_TRANDOSHAN:
-					cgi_R_Font_DrawString(drawX, drawY, va("Trandoshan"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Trandoshan"), color);
 					break;
 				case CLASS_UGNAUGHT:
-					cgi_R_Font_DrawString(drawX, drawY, va("Ugnaught"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Ugnaught"), color);
 					break;
 				case CLASS_WEEQUAY:
-					cgi_R_Font_DrawString(drawX, drawY, va("Weequay"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Weequay"), color);
 					break;
 				case CLASS_BARTENDER:
-					cgi_R_Font_DrawString(drawX, drawY, va("Bartender"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Bartender"), color);
 					break;
 				case CLASS_JAWA:
-					cgi_R_Font_DrawString(drawX, drawY, va("Jawa"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Jawa"), color);
 					break;
 				case CLASS_REMOTE:
-					cgi_R_Font_DrawString(drawX, drawY, va("Remote Droid"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Remote Droid"), color);
 					break;
 				case CLASS_SEEKER:
-					cgi_R_Font_DrawString(drawX, drawY, va("Seeker Droid"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Seeker Droid"), color);
 					break;
 				case CLASS_PROTOCOL:
-					cgi_R_Font_DrawString(drawX, drawY, va("Protocol Droid"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Protocol Droid"), color);
 					break;
 				case CLASS_R2D2:
-					cgi_R_Font_DrawString(drawX, drawY, va("R2 Astromech Droid"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("R2 Astromech Droid"), color);
 					break;
 				case CLASS_PROBE:
-					cgi_R_Font_DrawString(drawX, drawY, va("Probe Droid"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Probe Droid"), color);
 					break;
 				case CLASS_R5D2:
-					cgi_R_Font_DrawString(drawX, drawY, va("R5 Astromech Droid"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("R5 Astromech Droid"), color);
 					break;
 				case CLASS_ASSASSIN_DROID:
-					cgi_R_Font_DrawString(drawX, drawY, va("Assassin droid"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Assassin droid"), color);
 					break;
 				case CLASS_SABER_DROID:
-					cgi_R_Font_DrawString(drawX, drawY, va("Saber Droid"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Saber Droid"), color);
 					break;
 				case CLASS_TUSKEN:
-					cgi_R_Font_DrawString(drawX, drawY, va("Tusken"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Tusken"), color);
 					break;
 				case CLASS_MARK1:
-					cgi_R_Font_DrawString(drawX, drawY, va("Droid"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Droid"), color);
 					break;
 				case CLASS_MARK2:
-					cgi_R_Font_DrawString(drawX, drawY, va("Droid"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Droid"), color);
 					break;
 				case CLASS_DROIDEKA:
 					if (Q_stricmp("Droideka_trooper", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Droideka"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Droideka"), color);
 					}
 					else
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Droideka"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Droideka"), color);
 					}
 					break;
 				case CLASS_BATTLEDROID:
 					if (Q_stricmp("Battle_Trooper", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Battle Droid"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Battle Droid"), color);
 					}
 					else
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Battle Droid"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Battle Droid"), color);
 					}
 					break;
 				case CLASS_SBD:
 					if (Q_stricmp("SBD_Trooper", CrosshairEnt->NPC_type) == 0)
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Super Battle Droid"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Super Battle Droid"), color);
 					}
 					else
 					{
-						cgi_R_Font_DrawString(drawX, drawY, va("Super Battle Droid"), color, cgs.media.qhFontMedium, -1, scale);
+						CG_DrawOverheadName(cent, va("Super Battle Droid"), color);
 					}
 					break;
 				default:
-					cgi_R_Font_DrawString(drawX, drawY, va("Unknown"), color, cgs.media.qhFontMedium, -1, scale);
+					CG_DrawOverheadName(cent, va("Unknown"), color);
 					break;
 				}
 				VectorCopy4(colorTable[CT_WHITE], color);
@@ -7101,22 +7048,7 @@ static void CG_DrawCrosshairNames(void)
 
 	centity_t* cent = &cg_entities[g_crosshairEntNum];
 
-	vec3_t headPos;
-	VectorCopy(cent->lerpOrigin, headPos);
-	headPos[2] += cent->gent->maxs[2] + 20;
-
-	float sx = 0.0f, sy = 0.0f;
-
-	if (CG_WorldCoordToScreenCoordFloat(headPos, &sx, &sy) == qfalse)
-	{
-		return;
-	}
-
-	const float scale = 0.4f;
-	float textWidth = cgi_R_Font_StrLenPixels(name, cgs.media.qhFontMedium, scale);
-
-	int drawX = (int)(sx - (textWidth / 2));
-	int drawY = (int)(sy - 25);
+	// drawn over the head with the overhead bars' anchor, scale and fade (CG_DrawOverheadName)
 
 	vec4_t color = { 1.0f, 1.0f, 1.0f, 1.0f };
 
@@ -7158,7 +7090,7 @@ static void CG_DrawCrosshairNames(void)
 		}
 	}
 
-	cgi_R_Font_DrawString(drawX, drawY, name, color, cgs.media.qhFontMedium, -1, scale);
+	CG_DrawOverheadName(cent, name, color);
 }
 
 //--------------------------------------------------------------
@@ -8806,8 +8738,6 @@ static void CG_Draw2D()
 		//force sight is on
 		//indicate this with sight cone thingy
 		CG_DrawPic(0, 0, 640, 480, cgi_R_RegisterShader("gfx/2d/jsense"));
-		CG_DrawHealthBars();
-		CG_DrawBlockPointBars();
 	}
 
 	//if (cg.predictedPlayerState.hackingTime)
@@ -8831,14 +8761,13 @@ static void CG_Draw2D()
 		//CG_DrawPic(0, 0, 640, 480, cgi_R_RegisterShader("gfx/2d/droid_view"));
 	//}
 
-	if (cg_debugHealthBars.integer)
+	// the overhead bars, stacked (CG_DrawOverheadBars): health with cg_debugHealthBars, block points with
+	// cg_drawblockpointbar and the stamina with them (cg_drawStaminaBar); all of them while force sight is on
 	{
-		CG_DrawHealthBars();
-	}
-
-	if (cg_drawblockpointbar.integer)
-	{
-		CG_DrawBlockPointBars();
+		const qboolean sight = cg.snap->ps.forcePowersActive & 1 << FP_SEE ? qtrue : qfalse;
+		const qboolean drawBlock = cg_drawblockpointbar.integer || sight ? qtrue : qfalse;
+		CG_DrawOverheadBars(cg_debugHealthBars.integer || sight ? qtrue : qfalse, drawBlock,
+			drawBlock && cg_drawStaminaBar.integer ? qtrue : qfalse);
 	}
 
 	// don't draw any status if dead
@@ -9226,4 +9155,4 @@ void CG_DrawActive(const stereoFrame_t stereo_view)
 
 	// draw status bar and other floating elements
 	CG_Draw2D();
-}
+}

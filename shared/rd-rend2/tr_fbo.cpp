@@ -164,6 +164,7 @@ static void FBO_CreateBuffer(FBO_t* fbo, int format, int index, int multisample)
 	case GL_RGBA:
 	case GL_RGB8:
 	case GL_RGBA8:
+	case GL_RG16F: // SJE/MD9 shared renderer (2026-11-05) (MD9 SP)
 	case GL_RGB16F:
 	case GL_RGBA16F:
 	case GL_RGB32F:
@@ -444,6 +445,8 @@ void FBO_Init(void)
 		FBO_Bind(tr.renderFbo);
 		FBO_CreateBuffer(tr.renderFbo, hdrFormat, 0, multisample);
 		FBO_CreateBuffer(tr.renderFbo, hdrFormat, 1, multisample);
+		if (tr.ssrMaskImage)
+			FBO_CreateBuffer(tr.renderFbo, hdrFormat, 2, multisample); // r_ssr material mask (Jace 2026-11-04)
 		FBO_CreateBuffer(tr.renderFbo, GL_DEPTH24_STENCIL8, 0, multisample);
 		FBO_SetupDrawBuffers();
 
@@ -456,6 +459,8 @@ void FBO_Init(void)
 		FBO_Bind(tr.msaaResolveFbo);
 		FBO_AttachTextureImage(tr.renderImage, 0);
 		FBO_AttachTextureImage(tr.glowImage, 1);
+		if (tr.ssrMaskImage)
+			FBO_AttachTextureImage(tr.ssrMaskImage, 2); // r_ssr material mask (Jace 2026-11-04)
 		R_AttachFBOTexturePackedDepthStencil(tr.renderDepthImage->texnum);
 		FBO_SetupDrawBuffers();
 
@@ -470,6 +475,8 @@ void FBO_Init(void)
 		FBO_Bind(tr.renderFbo);
 		FBO_AttachTextureImage(tr.renderImage, 0);
 		FBO_AttachTextureImage(tr.glowImage, 1);
+		if (tr.ssrMaskImage)
+			FBO_AttachTextureImage(tr.ssrMaskImage, 2); // r_ssr material mask (Jace 2026-11-04)
 		R_AttachFBOTexturePackedDepthStencil(tr.renderDepthImage->texnum);
 		FBO_SetupDrawBuffers();
 

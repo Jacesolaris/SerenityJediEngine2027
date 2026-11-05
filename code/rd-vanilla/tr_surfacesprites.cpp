@@ -402,7 +402,9 @@ void R_GrassCutWorldPlants(const char* entities, const int length, const world_t
 		}
 	}
 	R_GrassCutFinishPlantSurfaces();
+#ifdef _DEBUG
 	GRASSCUT_RI Printf(PRINT_DEVELOPER, "grass cut: %d plant models, %d grass surfaces\n", grassCutNumPlants, grassCutNumGrass);
+#endif
 }
 // Grass cutting, plant models (rd-common tr_grasscut_plant.h): tr_shade.cpp calls this for a plant shader before the
 // deforms. While anything is cut, the vertices of plants in cut cells move (fall, lie, stubble, regrow) and the cut parts

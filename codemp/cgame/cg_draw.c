@@ -7466,21 +7466,37 @@ static void CG_DrawDashTimerBar(void)
 }
 
 // ------------------------------------------------------------
-// The bars over the heads, as SP (code/cgame/cg_draw.cpp): health (cg_debugHealthBars, or while level 3 Force
-// Sight is on) and block points with the saber fatigue above them (cg_drawblockpointbar). The client only knows
-// the other players' and NPCs' values from their entity state, filled by the server in
-// BG_PlayerStateToEntityState: health / maxhealth, blockPoints and the saber fatigue in userInt2.
-// CG_Player adds the entities each frame, CG_Draw2D draws them, CG_DrawActiveFrame clears the lists.
+// The bars over the heads, as SP (code/cgame/cg_draw.cpp CG_DrawOverheadBars): health (cg_debugHealthBars, or while
+// level 3 Force Sight is on), block points (cg_drawblockpointbar) and the saber fatigue as stamina left with them
+// (cg_drawStaminaBar, default 1). The client only knows the other players' and NPCs' values from their entity
+// state, filled by the server in BG_PlayerStateToEntityState: health / maxhealth, blockPoints and the saber fatigue in
+// userInt2. CG_Player adds the entities each frame, CG_Draw2D draws them, CG_DrawActiveFrame clears the lists.
+// 2026-11-03 (as MovieDuels): the bars and the crosshair name hang from one anchor point above the head
+// (CG_OverheadAnchor) with one distance scale and fade, so they keep their spacing and size together as you move.
+// Only the bars that are on are stacked, tightly, from the bottom up: block points, stamina, health, then the name.
+// Each bar is the black back, the fill (a white copy of the back tinted with the bar colour and clipped by texture
+// coordinates, so its rounded left end stays) and the gold frame on top (gfx/2d/npcbar_*).
 // ------------------------------------------------------------
 #define MAX_HEAD_BAR_ENTS	32
 #define HEAD_BAR_RANGE		200
-#define HEAD_BAR_WIDTH		50
-#define HEAD_BAR_HEIGHT		5
+#define OVERHEAD_BAR_WIDTH	60.0f	// virtual 640x480 units at scale 1
+#define OVERHEAD_BAR_T0		(12.0f / 128.0f)	// rows of the bar images that hold the frame
+#define OVERHEAD_BAR_T1		(116.0f / 128.0f)
+#define OVERHEAD_BAR_S0		(20.0f / 1024.0f)	// columns of the back (the fill runs from S0 to S1)
+#define OVERHEAD_BAR_S1		(1004.0f / 1024.0f)
+#define OVERHEAD_BAR_HEIGHT	(OVERHEAD_BAR_WIDTH * (OVERHEAD_BAR_T1 - OVERHEAD_BAR_T0) * 128.0f / 1024.0f)
+#define OVERHEAD_HEAD_GAP	6.0f	// world units from the top of the box to the anchor
+#define OVERHEAD_NAME_SCALE	0.4f
 
 static int cg_numHealthBarEnts = 0;
 static int cg_healthBarEnts[MAX_HEAD_BAR_ENTS];
 static int cg_numBlockPointBarEnts = 0;
 static int cg_blockPointBarEnts[MAX_HEAD_BAR_ENTS];
+
+// where the name goes for each character this frame: just above its top bar (CG_DrawOverheadBars)
+static float cg_overheadTop[MAX_GENTITIES];
+static float cg_overheadAlpha[MAX_GENTITIES];
+static int cg_overheadTime[MAX_GENTITIES];
 
 // a player or NPC that gets bars: not me, alive, not an object
 static qboolean CG_HeadBarEnt(const centity_t* cent)
@@ -7496,8 +7512,10 @@ static qboolean CG_HeadBarEnt(const centity_t* cent)
 	return qtrue;
 }
 
-// the screen point "above" units over its head (the top of its box, from the packed solid)
-static qboolean CG_HeadBarScreenPoint(const centity_t* cent, const float above, float* x, float* y)
+// the anchor above cent's head on screen (the top of its box, from the packed solid), and the scale for that
+// distance: 1 up close, easing down to 0.75 by 256 units from the view (a gentle shrink, the bars keep about the same
+// size on screen)
+static qboolean CG_OverheadAnchor(const centity_t* cent, float* x, float* y, float* scale)
 {
 	vec3_t pos;
 	float top = DEFAULT_MAXS_2;
@@ -7507,114 +7525,150 @@ static qboolean CG_HeadBarScreenPoint(const centity_t* cent, const float above, 
 		top = (float)(((cent->currentState.solid >> 16) & 255) - 32);
 	}
 	VectorCopy(cent->lerpOrigin, pos);
-	pos[2] += top + above;
-	return CG_WorldCoordToScreenCoordFloat(pos, x, y);
+	pos[2] += top + OVERHEAD_HEAD_GAP;
+	if (!CG_WorldCoordToScreenCoordFloat(pos, x, y))
+	{
+		return qfalse;
+	}
+	float t = (Distance(cent->lerpOrigin, cg.refdef.vieworg) - 64.0f) / (256.0f - 64.0f);
+	t = t < 0.0f ? 0.0f : t > 1.0f ? 1.0f : t;
+	*scale = 1.0f - 0.25f * t * t * (3.0f - 2.0f * t);
+	return qtrue;
 }
 
-static void CG_DrawHeadHealthBar(const centity_t* cent, const float chX, const float chY, const float ch_w, const float ch_h)
+// 1, fading to 0 over the last fifth of range
+static float CG_OverheadFade(const float dist, const float range)
 {
-	const vec4_t aColor = { 1.0f, 0.0f, 0.0f, 0.4f }; //hostile
-	const vec4_t cColor = { 0.5f, 0.5f, 0.5f, 0.4f }; //greyed out "missing health"
-	const float x = chX - ch_w / 2;
-	const float y = chY - ch_h;
-
-	if (!CG_HeadBarEnt(cent) || cent->currentState.maxhealth <= 0)
-	{
-		return;
-	}
-	const float percent = (float)cent->currentState.health / (float)cent->currentState.maxhealth;
-	if (percent <= 0)
-	{
-		return;
-	}
-
-	//draw the background (black)
-	CG_DrawRect(x, y, ch_w, ch_h, 1.0f, colorTable[CT_BLACK]);
-	//now draw the part to show how much health there is in the color specified
-	CG_FillRect(x + 1.0f, y + 1.0f, percent * ch_w - 1.0f, ch_h - 1.0f, aColor);
-	//then draw the other part greyed out
-	CG_FillRect(x + percent * ch_w, y + 1.0f, ch_w - percent * ch_w - 1.0f, ch_h - 1.0f, cColor);
+	const float a = (range - dist) / (range * 0.2f);
+	return a < 0.0f ? 0.0f : a > 1.0f ? 1.0f : a;
 }
 
-static void CG_DrawBlockPointBar(const centity_t* cent, const float chX, const float chY, const float ch_w, const float ch_h)
+static void CG_DrawOverheadBar(const float cx, const float y, const float w, const float h, const float frac,
+	const float* color, const float alpha)
 {
-	const vec4_t aColor = { 1.0f, 0.0f, 1.0f, 0.4f };
-	const vec4_t cColor = { 0.5f, 0.5f, 0.5f, 0.4f };
-	const float x = chX - ch_w / 2;
-	const float y = chY - ch_h;
-
-	if (!CG_HeadBarEnt(cent) || cent->currentState.weapon != WP_SABER)
+	const float x = cx - w / 2.0f;
+	const vec4_t white = { 1.0f, 1.0f, 1.0f, alpha };
+	trap->R_SetColor(white);
+	trap->R_DrawStretchPic(x, y, w, h, 0.0f, OVERHEAD_BAR_T0, 1.0f, OVERHEAD_BAR_T1, cgs.media.npcBarBack);
+	if (frac > 0.0f)
 	{
-		return;
+		const float s = OVERHEAD_BAR_S0 + (frac > 1.0f ? 1.0f : frac) * (OVERHEAD_BAR_S1 - OVERHEAD_BAR_S0);
+		const vec4_t fill = { color[0], color[1], color[2], color[3] * alpha };
+		trap->R_SetColor(fill);
+		trap->R_DrawStretchPic(x, y, w * s, h, 0.0f, OVERHEAD_BAR_T0, s, OVERHEAD_BAR_T1, cgs.media.npcBarFill);
 	}
-	const float block_percent = (float)cent->currentState.blockPoints / (float)BLOCK_POINTS_MAX;
-	if (block_percent <= 0)
-	{
-		return;
-	}
-
-	CG_DrawRect(x, y, ch_w, ch_h, 1.0f, colorTable[CT_BLACK]);
-	CG_FillRect(x + 1.0f, y + 1.0f, block_percent * ch_w - 1.0f, ch_h - 1.0f, aColor);
-	CG_FillRect(x + block_percent * ch_w, y + 1.0f, ch_w - block_percent * ch_w - 1.0f, ch_h - 1.0f, cColor);
+	trap->R_SetColor(white);
+	trap->R_DrawStretchPic(x, y, w, h, 0.0f, OVERHEAD_BAR_T0, 1.0f, OVERHEAD_BAR_T1, cgs.media.npcBarFrame);
+	trap->R_SetColor(NULL);
 }
 
-// the saber fatigue, 8 above the block point bar: SP draws it with a negative width, i.e. the fatigue (grey) fills
-// from the right edge and the rest (light) is on the left - the same here with a positive width
-static void CG_DrawFatiguePointBar(const centity_t* cent, const float chX, const float chY, const float ch_w,
-	const float ch_h)
+static qboolean CG_InBarList(const int* list, const int count, const int entNum)
 {
-	const vec4_t aColor = { 0.8f, 0.8f, 0.8f, 0.8f };
-	const vec4_t cColor = { 0.5f, 0.5f, 0.5f, 0.4f };
-	const float x = chX - ch_w / 2;
-	const float y = chY - ch_h - 8.0f;
-
-	if (!CG_HeadBarEnt(cent) || cent->currentState.weapon != WP_SABER)
+	for (int i = 0; i < count; i++)
 	{
-		return;
-	}
-	float fatigue_percent = (float)cent->currentState.userInt2 / (float)MISHAPLEVEL_MAX;
-	if (fatigue_percent > 1.0f)
-	{
-		fatigue_percent = 1.0f;
-	}
-	const float fatigue_w = fatigue_percent * ch_w;
-
-	CG_DrawRect(x, y, ch_w, ch_h, 1.0f, colorTable[CT_BLACK]);
-	//the fatigue, from the right
-	CG_FillRect(x + ch_w - fatigue_w, y + 1.0f, fatigue_w - 1.0f, ch_h - 1.0f, cColor);
-	//the rest
-	CG_FillRect(x + 1.0f, y + 1.0f, ch_w - fatigue_w - 1.0f, ch_h - 1.0f, aColor);
-}
-
-static void CG_DrawHealthBars(void)
-{
-	float chX = 0, chY = 0;
-
-	for (int i = 0; i < cg_numHealthBarEnts; i++)
-	{
-		const centity_t* cent = &cg_entities[cg_healthBarEnts[i]];
-		if (CG_HeadBarScreenPoint(cent, HEAD_BAR_HEIGHT + 8, &chX, &chY))
+		if (list[i] == entNum)
 		{
-			//on screen
-			CG_DrawHeadHealthBar(cent, chX, chY, HEAD_BAR_WIDTH, HEAD_BAR_HEIGHT);
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+// all the overhead bars that are on, for each character in the bar lists
+static void CG_DrawOverheadBars(const qboolean drawHealth, const qboolean drawBlock, const qboolean drawFatigue)
+{
+	static const vec4_t healthColor = { 1.0f, 0.0f, 0.0f, 0.9f };
+	static const vec4_t blockColor = { 1.0f, 0.0f, 1.0f, 0.9f };
+	static const vec4_t fatigueColor = { 0.8f, 0.8f, 0.8f, 0.9f };
+	const int healthCount = drawHealth ? cg_numHealthBarEnts : 0;
+	const int blockCount = drawBlock || drawFatigue ? cg_numBlockPointBarEnts : 0;
+
+	for (int l = 0; l < 2; l++)
+	{
+		const int* list = l ? cg_blockPointBarEnts : cg_healthBarEnts;
+		const int count = l ? blockCount : healthCount;
+		for (int i = 0; i < count; i++)
+		{
+			const int num = list[i];
+			const centity_t* cent = &cg_entities[num];
+			// once per character: skip it if an earlier list has it
+			if (CG_InBarList(list, i, num) || l && CG_InBarList(cg_healthBarEnts, healthCount, num) || !CG_HeadBarEnt(cent))
+			{
+				continue;
+			}
+
+			float frac[3] = { 0.0f, 0.0f, 0.0f };
+			const float* colors[3] = { NULL, NULL, NULL };
+			int bars = 0;
+			if (CG_InBarList(cg_blockPointBarEnts, blockCount, num) && cent->currentState.weapon == WP_SABER)
+			{
+				if (drawBlock && cent->currentState.blockPoints > 0)
+				{
+					frac[bars] = (float)cent->currentState.blockPoints / (float)BLOCK_POINTS_MAX;
+					colors[bars++] = blockColor;
+				}
+				if (drawFatigue)
+				{	// stamina left: the fatigue against the most it gets
+					frac[bars] = 1.0f - (float)cent->currentState.userInt2 / (float)MISHAPLEVEL_MAX;
+					colors[bars++] = fatigueColor;
+				}
+			}
+			if (CG_InBarList(cg_healthBarEnts, healthCount, num) && cent->currentState.maxhealth > 0)
+			{
+				frac[bars] = (float)cent->currentState.health / (float)cent->currentState.maxhealth;
+				colors[bars++] = healthColor;
+			}
+
+			float x, y, scale;
+			if (!bars || !CG_OverheadAnchor(cent, &x, &y, &scale))
+			{
+				continue;
+			}
+			const float alpha = CG_OverheadFade(Distance(cent->lerpOrigin, cg.predictedPlayerState.origin), HEAD_BAR_RANGE);
+			if (alpha <= 0.0f)
+			{
+				continue;
+			}
+			const float w = OVERHEAD_BAR_WIDTH * scale;
+			const float h = OVERHEAD_BAR_HEIGHT * scale;
+			for (int b = 0; b < bars; b++)
+			{	// bottom up, frame to frame
+				y -= h;
+				CG_DrawOverheadBar(x, y, w, h, frac[b] < 0.0f ? 0.0f : frac[b], colors[b], alpha);
+			}
+			cg_overheadTop[num] = y;
+			cg_overheadAlpha[num] = alpha;
+			cg_overheadTime[num] = cg.time;
 		}
 	}
 }
 
-static void CG_DrawBlockPointBars(void)
+// the crosshair name over cent's head, with the bars' anchor, scale and fade, just above its top bar this frame
+static void CG_DrawOverheadName(const centity_t* cent, const char* name, const float* color)
 {
-	float chX = 0, chY = 0;
-
-	for (int i = 0; i < cg_numBlockPointBarEnts; i++)
+	float x, y, scale;
+	if (!cent || !name || !name[0] || !CG_OverheadAnchor(cent, &x, &y, &scale))
 	{
-		const centity_t* cent = &cg_entities[cg_blockPointBarEnts[i]];
-		if (CG_HeadBarScreenPoint(cent, HEAD_BAR_HEIGHT + 12, &chX, &chY))
-		{
-			//on screen
-			CG_DrawBlockPointBar(cent, chX, chY, HEAD_BAR_WIDTH, HEAD_BAR_HEIGHT);
-			CG_DrawFatiguePointBar(cent, chX, chY, HEAD_BAR_WIDTH, HEAD_BAR_HEIGHT);
-		}
+		return;
 	}
+	const int num = cent->currentState.number;
+	float alpha = CG_OverheadFade(Distance(cent->lerpOrigin, cg.refdef.vieworg), 256.0f);
+	if (cg_overheadTime[num] == cg.time)
+	{
+		y = cg_overheadTop[num];
+		alpha = cg_overheadAlpha[num];
+	}
+	if (alpha <= 0.0f)
+	{
+		return;
+	}
+	const float fontScale = OVERHEAD_NAME_SCALE * scale;
+	const float w = (float)trap->R_Font_StrLenPixels(name, cgDC.Assets.qhMediumFont, fontScale);
+	const float h = (float)trap->R_Font_HeightPixels(cgDC.Assets.qhMediumFont, fontScale);
+	const vec4_t c = { color[0], color[1], color[2], color[3] * alpha };
+	// the font takes whole virtual units: round, don't truncate
+	trap->R_Font_DrawString((int)floorf(x - w / 2.0f + 0.5f), (int)floorf(y - h - scale + 0.5f), name, c,
+		cgDC.Assets.qhMediumFont, -1, fontScale);
 }
 
 static qboolean CG_HeadBarInRange(const int entNum)
@@ -9567,6 +9621,11 @@ static void CG_DrawCrosshairNames(void)
 	const qboolean isClient = (idx >= 0 && idx < MAX_CLIENTS) ? qtrue : qfalse;
 	const qboolean isEntity = (idx >= 0 && idx < ENTITYNUM_WORLD) ? qtrue : qfalse;
 	vec3_t diff;
+	if (isEntity == qfalse)
+	{
+		trap->R_SetColor(NULL);
+		return; // no character under the crosshair (idx -1 read cg_entities[-1])
+	}
 	VectorSubtract(cg_entities[idx].lerpOrigin, cg.refdef.vieworg, diff);
 
 	float distSq = VectorLengthSquared(diff);
@@ -9576,13 +9635,6 @@ static void CG_DrawCrosshairNames(void)
 		trap->R_SetColor(NULL);
 		return;
 	}
-	// Hard safety: ensure idx is valid for clientinfo[]
-	if (idx < 0 || idx >= MAX_CLIENTS)
-	{
-		trap->R_SetColor(NULL);
-		return;
-	}
-
 	if (isClient == qtrue)
 	{
 		if (cgs.clientinfo[idx].infoValid != 0)
@@ -9619,9 +9671,6 @@ static void CG_DrawCrosshairNames(void)
 	// Sanitize name for drawing
 	CG_SanitizeString(name, sanitized);
 
-	// Width used for centering the label
-	const float w = CG_DrawStrlen(sanitized) * TINYCHAR_WIDTH;
-
 	// Vehicle pilot label
 	if (is_veh == qtrue)
 	{
@@ -9649,119 +9698,119 @@ static void CG_DrawCrosshairNames(void)
 			switch (ncent->currentState.NPC_class)
 			{
 			case CLASS_REBEL:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Rebel", colorTable[CT_GREEN]);       break;
+				CG_DrawOverheadName(&cg_entities[idx], "Rebel", colorTable[CT_GREEN]);       break;
 			case CLASS_WOOKIE:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Wookie", colorTable[CT_GREEN]);       break;
+				CG_DrawOverheadName(&cg_entities[idx], "Wookie", colorTable[CT_GREEN]);       break;
 			case CLASS_JEDI:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Jedi Knight", colorTable[CT_CYAN]);        break;
+				CG_DrawOverheadName(&cg_entities[idx], "Jedi Knight", colorTable[CT_CYAN]);        break;
 			case CLASS_KYLE:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "kyle Katarn", colorTable[CT_VLTPURPLE1]);  break;
+				CG_DrawOverheadName(&cg_entities[idx], "kyle Katarn", colorTable[CT_VLTPURPLE1]);  break;
 			case CLASS_YODA:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Master Yoda", colorTable[CT_VLTPURPLE1]);  break;
+				CG_DrawOverheadName(&cg_entities[idx], "Master Yoda", colorTable[CT_VLTPURPLE1]);  break;
 			case CLASS_LUKE:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Luke Skywalker", colorTable[CT_VLTPURPLE1]);  break;
+				CG_DrawOverheadName(&cg_entities[idx], "Luke Skywalker", colorTable[CT_VLTPURPLE1]);  break;
 			case CLASS_JAN:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Jan Ors", colorTable[CT_MAGENTA]);     break;
+				CG_DrawOverheadName(&cg_entities[idx], "Jan Ors", colorTable[CT_MAGENTA]);     break;
 			case CLASS_MONMOTHA:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Monmothma", colorTable[CT_GREEN]);       break;
+				CG_DrawOverheadName(&cg_entities[idx], "Monmothma", colorTable[CT_GREEN]);       break;
 			case CLASS_MORGANKATARN:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Morgan Katarn", colorTable[CT_LTORANGE]);    break;
+				CG_DrawOverheadName(&cg_entities[idx], "Morgan Katarn", colorTable[CT_LTORANGE]);    break;
 			case CLASS_GONK:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "gonk", colorTable[CT_LTORANGE]);    break;
+				CG_DrawOverheadName(&cg_entities[idx], "gonk", colorTable[CT_LTORANGE]);    break;
 			case CLASS_STORMTROOPER:
 			case CLASS_CLONETROOPER:
 			case CLASS_STORMCOMMANDO:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Trooper", colorTable[CT_RED]);         break;
+				CG_DrawOverheadName(&cg_entities[idx], "Trooper", colorTable[CT_RED]);         break;
 			case CLASS_SWAMPTROOPER:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Swamptrooper", colorTable[CT_RED]);         break;
+				CG_DrawOverheadName(&cg_entities[idx], "Swamptrooper", colorTable[CT_RED]);         break;
 			case CLASS_IMPWORKER:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "ImpWorker", colorTable[CT_RED]);         break;
+				CG_DrawOverheadName(&cg_entities[idx], "ImpWorker", colorTable[CT_RED]);         break;
 			case CLASS_IMPERIAL:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Imperial", colorTable[CT_RED]);         break;
+				CG_DrawOverheadName(&cg_entities[idx], "Imperial", colorTable[CT_RED]);         break;
 			case CLASS_GALAKMECH:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "GalakMech", colorTable[CT_RED]);         break;
+				CG_DrawOverheadName(&cg_entities[idx], "GalakMech", colorTable[CT_RED]);         break;
 			case CLASS_SHADOWTROOPER:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Shadowtrooper", colorTable[CT_DKRED1]);      break;
+				CG_DrawOverheadName(&cg_entities[idx], "Shadowtrooper", colorTable[CT_DKRED1]);      break;
 			case CLASS_COMMANDO:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Commando", colorTable[CT_RED]);         break;
+				CG_DrawOverheadName(&cg_entities[idx], "Commando", colorTable[CT_RED]);         break;
 			case CLASS_TAVION:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Tavion", colorTable[CT_VLTPURPLE1]);  break;
+				CG_DrawOverheadName(&cg_entities[idx], "Tavion", colorTable[CT_VLTPURPLE1]);  break;
 			case CLASS_ALORA:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Alora", colorTable[CT_VLTPURPLE1]);  break;
+				CG_DrawOverheadName(&cg_entities[idx], "Alora", colorTable[CT_VLTPURPLE1]);  break;
 			case CLASS_DESANN:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Desann", colorTable[CT_VLTPURPLE1]);  break;
+				CG_DrawOverheadName(&cg_entities[idx], "Desann", colorTable[CT_VLTPURPLE1]);  break;
 			case CLASS_REBORN:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Reborn", colorTable[CT_VLTPURPLE1]);  break;
+				CG_DrawOverheadName(&cg_entities[idx], "Reborn", colorTable[CT_VLTPURPLE1]);  break;
 			case CLASS_BOBAFETT:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Bobafett", colorTable[CT_LTORANGE]);    break;
+				CG_DrawOverheadName(&cg_entities[idx], "Bobafett", colorTable[CT_LTORANGE]);    break;
 			case CLASS_MANDO:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Mandolorian", colorTable[CT_VLTPURPLE1]);  break;
+				CG_DrawOverheadName(&cg_entities[idx], "Mandolorian", colorTable[CT_VLTPURPLE1]);  break;
 			case CLASS_ATST:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "ATST", colorTable[CT_BLUE]);        break;
+				CG_DrawOverheadName(&cg_entities[idx], "ATST", colorTable[CT_BLUE]);        break;
 			case CLASS_HOWLER:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Howler", colorTable[CT_MDGREY]);      break;
+				CG_DrawOverheadName(&cg_entities[idx], "Howler", colorTable[CT_MDGREY]);      break;
 			case CLASS_MINEMONSTER:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "MineMonster", colorTable[CT_MDGREY]);      break;
+				CG_DrawOverheadName(&cg_entities[idx], "MineMonster", colorTable[CT_MDGREY]);      break;
 			case CLASS_RANCOR:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Rancor", colorTable[CT_MDGREY]);      break;
+				CG_DrawOverheadName(&cg_entities[idx], "Rancor", colorTable[CT_MDGREY]);      break;
 			case CLASS_WAMPA:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Wampa", colorTable[CT_MDGREY]);      break;
+				CG_DrawOverheadName(&cg_entities[idx], "Wampa", colorTable[CT_MDGREY]);      break;
 			case CLASS_VEHICLE:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Vehicle", colorTable[CT_BLUE]);        break;
+				CG_DrawOverheadName(&cg_entities[idx], "Vehicle", colorTable[CT_BLUE]);        break;
 			case CLASS_BESPIN_COP:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Bespin Cop", colorTable[CT_GREEN]);       break;
+				CG_DrawOverheadName(&cg_entities[idx], "Bespin Cop", colorTable[CT_GREEN]);       break;
 			case CLASS_LANDO:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Lando", colorTable[CT_GREEN]);       break;
+				CG_DrawOverheadName(&cg_entities[idx], "Lando", colorTable[CT_GREEN]);       break;
 			case CLASS_PRISONER:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Prisoner", colorTable[CT_GREEN]);       break;
+				CG_DrawOverheadName(&cg_entities[idx], "Prisoner", colorTable[CT_GREEN]);       break;
 			case CLASS_GALAK:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Galak", colorTable[CT_RED]);         break;
+				CG_DrawOverheadName(&cg_entities[idx], "Galak", colorTable[CT_RED]);         break;
 			case CLASS_GRAN:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Gran", colorTable[CT_RED]);         break;
+				CG_DrawOverheadName(&cg_entities[idx], "Gran", colorTable[CT_RED]);         break;
 			case CLASS_REELO:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Reelo", colorTable[CT_RED]);         break;
+				CG_DrawOverheadName(&cg_entities[idx], "Reelo", colorTable[CT_RED]);         break;
 			case CLASS_MURJJ:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Murjj", colorTable[CT_RED]);         break;
+				CG_DrawOverheadName(&cg_entities[idx], "Murjj", colorTable[CT_RED]);         break;
 			case CLASS_RODIAN:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Rodian", colorTable[CT_RED]);         break;
+				CG_DrawOverheadName(&cg_entities[idx], "Rodian", colorTable[CT_RED]);         break;
 			case CLASS_TRANDOSHAN:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Trandoshan", colorTable[CT_RED]);         break;
+				CG_DrawOverheadName(&cg_entities[idx], "Trandoshan", colorTable[CT_RED]);         break;
 			case CLASS_UGNAUGHT:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Ugnaught", colorTable[CT_GREEN]);       break;
+				CG_DrawOverheadName(&cg_entities[idx], "Ugnaught", colorTable[CT_GREEN]);       break;
 			case CLASS_WEEQUAY:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Weequay", colorTable[CT_RED]);         break;
+				CG_DrawOverheadName(&cg_entities[idx], "Weequay", colorTable[CT_RED]);         break;
 			case CLASS_BARTENDER:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Bartender", colorTable[CT_BLUE]);        break;
+				CG_DrawOverheadName(&cg_entities[idx], "Bartender", colorTable[CT_BLUE]);        break;
 			case CLASS_JAWA:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Jawa", colorTable[CT_MAGENTA]);     break;
+				CG_DrawOverheadName(&cg_entities[idx], "Jawa", colorTable[CT_MAGENTA]);     break;
 			case CLASS_REMOTE:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Remote Droid", colorTable[CT_YELLOW]);      break;
+				CG_DrawOverheadName(&cg_entities[idx], "Remote Droid", colorTable[CT_YELLOW]);      break;
 			case CLASS_SEEKER:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Seeker Droid", colorTable[CT_YELLOW]);      break;
+				CG_DrawOverheadName(&cg_entities[idx], "Seeker Droid", colorTable[CT_YELLOW]);      break;
 			case CLASS_PROTOCOL:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Protocol Droid", colorTable[CT_YELLOW]);      break;
+				CG_DrawOverheadName(&cg_entities[idx], "Protocol Droid", colorTable[CT_YELLOW]);      break;
 			case CLASS_R2D2:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "R2 Astromech Droid", colorTable[CT_YELLOW]);      break;
+				CG_DrawOverheadName(&cg_entities[idx], "R2 Astromech Droid", colorTable[CT_YELLOW]);      break;
 			case CLASS_PROBE:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Probe Droid", colorTable[CT_YELLOW]);      break;
+				CG_DrawOverheadName(&cg_entities[idx], "Probe Droid", colorTable[CT_YELLOW]);      break;
 			case CLASS_R5D2:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "R5 Astromech Droid", colorTable[CT_YELLOW]);      break;
+				CG_DrawOverheadName(&cg_entities[idx], "R5 Astromech Droid", colorTable[CT_YELLOW]);      break;
 			case CLASS_DROIDEKA:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Droideka", colorTable[CT_MAGENTA]);     break;
+				CG_DrawOverheadName(&cg_entities[idx], "Droideka", colorTable[CT_MAGENTA]);     break;
 			case CLASS_BATTLEDROID:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Battle Droid", colorTable[CT_MAGENTA]);     break;
+				CG_DrawOverheadName(&cg_entities[idx], "Battle Droid", colorTable[CT_MAGENTA]);     break;
 			case CLASS_SBD:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Super Battle Droid", colorTable[CT_MAGENTA]);     break;
+				CG_DrawOverheadName(&cg_entities[idx], "Super Battle Droid", colorTable[CT_MAGENTA]);     break;
 			case CLASS_ASSASSIN_DROID:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Assassin droid", colorTable[CT_YELLOW]);      break;
+				CG_DrawOverheadName(&cg_entities[idx], "Assassin droid", colorTable[CT_YELLOW]);      break;
 			case CLASS_SABER_DROID:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Saber Droid", colorTable[CT_MAGENTA]);     break;
+				CG_DrawOverheadName(&cg_entities[idx], "Saber Droid", colorTable[CT_MAGENTA]);     break;
 			case CLASS_TUSKEN:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Tusken", colorTable[CT_VLTORANGE]);   break;
+				CG_DrawOverheadName(&cg_entities[idx], "Tusken", colorTable[CT_VLTORANGE]);   break;
 			case CLASS_MARK1:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Droid", colorTable[CT_VLTORANGE]);   break;
+				CG_DrawOverheadName(&cg_entities[idx], "Droid", colorTable[CT_VLTORANGE]);   break;
 			case CLASS_MARK2:
-				CG_DrawSmallStringColor(320 - w / 2, 170, "Droid", colorTable[CT_VLTORANGE]);   break;
+				CG_DrawOverheadName(&cg_entities[idx], "Droid", colorTable[CT_VLTORANGE]);   break;
 			default:
 				// Intentionally no default label to preserve original behaviour
 				break;
@@ -9786,33 +9835,33 @@ static void CG_DrawCrosshairNames(void)
 				{
 					if (cgs.gametype == GT_FFA)
 					{
-						CG_DrawSmallStringColor(320 - w / 2, 170, sanitized, colorTable[CT_WHITE]);
+						CG_DrawOverheadName(&cg_entities[idx], sanitized, colorTable[CT_WHITE]);
 					}
 					else
 					{
 						if (cgs.clientinfo[idx].team == TEAM_RED)
 						{
-							CG_DrawSmallStringColor(320 - w / 2, 170, sanitized, colorTable[CT_RED]);
+							CG_DrawOverheadName(&cg_entities[idx], sanitized, colorTable[CT_RED]);
 						}
 						else if (cgs.clientinfo[idx].team == TEAM_BLUE)
 						{
-							CG_DrawSmallStringColor(320 - w / 2, 170, sanitized, colorTable[CT_BLUE]);
+							CG_DrawOverheadName(&cg_entities[idx], sanitized, colorTable[CT_BLUE]);
 						}
 						else if (cgs.clientinfo[idx].team == TEAM_SPECTATOR)
 						{
-							CG_DrawSmallStringColor(320 - w / 2, 170, sanitized, colorTable[CT_CYAN]);
+							CG_DrawOverheadName(&cg_entities[idx], sanitized, colorTable[CT_CYAN]);
 						}
 						else if (cgs.clientinfo[idx].npcteam == NPCTEAM_PLAYER)
 						{
-							CG_DrawSmallStringColor(320 - w / 2, 170, sanitized, colorTable[CT_GREEN]);
+							CG_DrawOverheadName(&cg_entities[idx], sanitized, colorTable[CT_GREEN]);
 						}
 						else if (cgs.clientinfo[idx].npcteam == NPCTEAM_ENEMY)
 						{
-							CG_DrawSmallStringColor(320 - w / 2, 170, sanitized, colorTable[CT_RED]);
+							CG_DrawOverheadName(&cg_entities[idx], sanitized, colorTable[CT_RED]);
 						}
 						else
 						{
-							CG_DrawSmallStringColor(320 - w / 2, 170, sanitized, colorTable[CT_WHITE]);
+							CG_DrawOverheadName(&cg_entities[idx], sanitized, colorTable[CT_WHITE]);
 						}
 					}
 				}
@@ -11951,13 +12000,11 @@ static void CG_Draw2D(void)
 	}
 
 	// the bars over the heads (as SP: also while force sight is on)
-	if (cg_debugHealthBars.integer || cg.snap->ps.fd.forcePowersActive & 1 << FP_SEE)
-	{
-		CG_DrawHealthBars();
-	}
-	if (cg_drawblockpointbar.integer || cg.snap->ps.fd.forcePowersActive & 1 << FP_SEE)
-	{
-		CG_DrawBlockPointBars();
+	{	// stacked: health, block points and the stamina with them (cg_drawStaminaBar)
+		const qboolean sight = cg.snap->ps.fd.forcePowersActive & 1 << FP_SEE ? qtrue : qfalse;
+		const qboolean drawBlock = cg_drawblockpointbar.integer || sight ? qtrue : qfalse;
+		CG_DrawOverheadBars(cg_debugHealthBars.integer || sight ? qtrue : qfalse, drawBlock,
+			drawBlock && cg_drawStaminaBar.integer ? qtrue : qfalse);
 	}
 
 	//if (cg.predictedPlayerState.communicatingflags & (1 << HACKER))

@@ -1178,8 +1178,10 @@ static void CG_OffsetThirdPersonView(void)
 	{
 		//saber lock / aiming camera (first, so the shoulder shift works for every model: the oversized / undersized
 		//gunner and undersized Jedi branches that came before it only applied cg_thirdPersonHorzOffset, as below)
+		//the aiming camera's side offset from cg_aimCamHorzOffset, not the preset's cg_thirdPersonHorzOffset: the same on every
+		//camera preset (DH 2026-11-04)
 		thirdPersonHorzOffset = CG_SaberLockBlendValue(CG_AimBlendValue(thirdPersonHorzOffset,
-			CG_AimShoulderOffset(thirdPersonHorzOffset)), SABERLOCK_CAMERA_HORZ);
+			CG_AimShoulderOffset(cg_aimCamHorzOffset.value)), SABERLOCK_CAMERA_HORZ);
 		AnglesToAxis(cg.refdef.viewangles, cg.refdef.viewaxis);
 		{
 			// the side shift came after the wall traces: trace it too, so the camera stops at a wall instead of in it

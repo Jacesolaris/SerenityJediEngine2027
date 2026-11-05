@@ -426,6 +426,11 @@ using cgMedia_t = struct
 
 	qhandle_t bdecal_bodyburn1;
 	qhandle_t bdecal_burnmark1;
+	// force lightning burn marks (JKG burn line images, 2026-11-04)
+	qhandle_t	lightningBurnShader;
+	qhandle_t	lightningBurnAshShader;
+	qhandle_t	lightningBurnGlowShader;
+	qhandle_t	lightningBurnBodyShader;
 	qhandle_t bdecal_saberglowmark;
 	qhandle_t bdecal_saberglow;
 	qhandle_t saberSliceCapShader; // glowing cut face of a saber slice (vanilla renderer)
@@ -436,6 +441,9 @@ using cgMedia_t = struct
 
 	qhandle_t batteryChargeShader;
 	qhandle_t useableHint;
+	qhandle_t npcBarBack;	// the NPC overhead bars (cg_draw.cpp CG_DrawOverheadBars)
+	qhandle_t npcBarFill;
+	qhandle_t npcBarFrame;
 
 	qhandle_t hackerIconShader;
 

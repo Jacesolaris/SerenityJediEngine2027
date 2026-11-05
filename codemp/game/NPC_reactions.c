@@ -722,7 +722,7 @@ void NPC_Touch(gentity_t* self, gentity_t* other, trace_t* trace)
 			NPCS.NPCInfo->aiFlags |= NPCAI_TOUCHED_GOAL;
 		}
 
-		if (!(self->NPC->scriptFlags & SVF_LOCKEDENEMY) && !(self->NPC->scriptFlags & SVF_IGNORE_ENEMIES) && !(other->
+		if (!(self->r.svFlags & SVF_LOCKEDENEMY) && !(self->NPC->scriptFlags & SCF_IGNORE_ENEMIES) && !(other->
 			flags & FL_NOTARGET))
 		{
 			if (self->client->enemyTeam)
@@ -1032,7 +1032,7 @@ static void NPC_Respond(gentity_t* self, const int userNum)
 	case CLASS_YODA:
 		if (!self->enemy)
 		{
-			if (!(self->r.svFlags & SVF_IGNORE_ENEMIES)
+			if (!(self->NPC->scriptFlags & SCF_IGNORE_ENEMIES) // (MP keeps "ignore enemies" in scriptFlags)
 				&& self->NPC->scriptFlags & SCF_LOOK_FOR_ENEMIES
 				&& self->client->enemyTeam == NPCTEAM_ENEMY)
 			{

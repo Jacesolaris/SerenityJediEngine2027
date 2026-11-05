@@ -339,8 +339,8 @@ the next waypoint on the route) and returns qtrue; qfalse = no route either (the
 qboolean NPC_WPRoute_Direction(gentity_t* self, const vec3_t goal, vec3_t dir)
 {
 	npcPath_t* p;
-	vec3_t toNode;
-	float flatDist;
+	vec3_t toNode = { 0.0f, 0.0f, 0.0f };
+	float flatDist = 0.0f; // (set by the route walk below whenever a waypoint is left to head for)
 
 	if (!self || !self->client || self->s.number < 0 || self->s.number >= MAX_GENTITIES
 		|| !NPC_WPRoute_Enabled() || !NPC_WPRoute_Ready())

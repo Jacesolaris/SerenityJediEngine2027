@@ -21,6 +21,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "b_local.h"
+extern void npc_check_speak(gentity_t* speaker_npc); // NPC_AI_Stormtrooper.c (SP: idle combat chatter, g_Advancedaitalk)
 #include "g_nav.h"
 #include "anims.h"
 
@@ -726,5 +727,7 @@ void NPC_BSGrenadier_Default(void)
 	{
 		//have an enemy
 		NPC_BSGrenadier_Attack();
+
+		npc_check_speak(NPCS.NPC); // (SP)
 	}
 }

@@ -238,6 +238,7 @@ typedef struct clientInfo_s {
 	int				curWeapon;
 
 	int				handicap;
+	unsigned int	holsterHide;	// "hh": the guns this player doesn't carry on his body (weapon wheel "Holster")
 	int				wins, losses;	// in tourney mode
 
 	int				teamTask;		// task in teamplay (offence/defence)
@@ -571,7 +572,7 @@ typedef struct centity_s {
 	int				saberSliceInvert;					// bit i: this is the cut-off piece of cut i
 	int				saberSliceFxTime;					// next ember puff
 	int				saberSliceSpawnTime;				// piece: cg.time it was first drawn
-	void*			saberSliceGhoul2;					// the ghoul2 instance the cuts belong to
+	void* saberSliceGhoul2;					// the ghoul2 instance the cuts belong to
 } centity_t;
 
 //======================================================================
@@ -1412,6 +1413,9 @@ typedef struct cgMedia_s {
 	qhandle_t	binocularStatic;
 	qhandle_t	binocularOverlay;
 	qhandle_t	useableHint;
+	qhandle_t	npcBarBack;	// the bars over the heads (cg_draw.c CG_DrawOverheadBars)
+	qhandle_t	npcBarFill;
+	qhandle_t	npcBarFrame;
 
 	// weapon effect models
 	qhandle_t	lightningExplosionModel;
@@ -1600,6 +1604,11 @@ typedef struct cgMedia_s {
 	qhandle_t	saberSliceCapShader; // glowing cut face of a saber slice (vanilla renderer)
 	qhandle_t	bdecal_burn1;
 	qhandle_t	mSaberDamageGlow;
+	// force lightning burn marks (JKG burn line images, 2026-11-04)
+	qhandle_t	lightningBurnShader;
+	qhandle_t	lightningBurnAshShader;
+	qhandle_t	lightningBurnGlowShader;
+	qhandle_t	lightningBurnBodyShader;
 
 	// For vehicles only now
 	sfxHandle_t	noAmmoSound;

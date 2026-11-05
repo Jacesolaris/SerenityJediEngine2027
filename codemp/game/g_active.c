@@ -7689,7 +7689,7 @@ static void ClientThink_real(gentity_t* ent)
 				if (ent->client->ps.eFlags2 & EF2_FLYING || ent->s.groundEntityNum == ENTITYNUM_NONE || PM_CrouchAnim(
 					ent->client->ps.legsAnim))
 				{
-					//Boba_FireWristMissile(ent, BOBA_MISSILE_VIBROBLADE);
+					Boba_FireWristMissile(ent, BOBA_MISSILE_VIBROBLADE); // (SP: the wrist vibroblade stab; DH 2026-11-03)
 				}
 				else
 				{
@@ -7731,7 +7731,7 @@ static void ClientThink_real(gentity_t* ent)
 				if (ent->client->ps.eFlags2 & EF2_FLYING || ent->s.groundEntityNum == ENTITYNUM_NONE || PM_CrouchAnim(
 					ent->client->ps.legsAnim))
 				{
-					//Boba_FireWristMissile(ent, BOBA_MISSILE_VIBROBLADE);
+					Boba_FireWristMissile(ent, BOBA_MISSILE_VIBROBLADE); // (SP: the wrist vibroblade stab; DH 2026-11-03)
 				}
 				else
 				{

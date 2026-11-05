@@ -36,6 +36,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // perform the server side effects of a weapon firing
 
 #include "g_local.h"
+extern qboolean jedi_npc_disruptor_dodge_evasion(gentity_t* self, gentity_t* shooter, vec3_t dmg_origin, int hit_loc);
 #include "b_local.h" // AI clips and reloads (2026-10-31): combat points, NPC globals
 #include "botlib/be_aas.h"
 #include "qcommon/q_shared.h"
@@ -994,7 +995,7 @@ static void WP_DisruptorMainFire(gentity_t* ent)
 					Com_Printf(S_COLOR_ORANGE "should be dodging now\n");
 				}
 
-				jedi_disruptor_dodge_evasion(traceEnt, ent, tr.endpos, -1);
+				if (!(traceEnt->NPC && jedi_npc_disruptor_dodge_evasion(traceEnt, ent, tr.endpos, -1))) jedi_disruptor_dodge_evasion(traceEnt, ent, tr.endpos, -1); // (NPCs: SP's NPC dodge, NPC_AI_Jedi.c)
 
 				ignore = tr.entityNum;
 				VectorCopy(tr.endpos, start);
@@ -1274,7 +1275,7 @@ static void WP_DisruptorAltFire(gentity_t* ent)
 					Com_Printf(S_COLOR_ORANGE "should be dodging now\n");
 				}
 
-				jedi_disruptor_dodge_evasion(traceEnt, ent, tr.endpos, -1);
+				if (!(traceEnt->NPC && jedi_npc_disruptor_dodge_evasion(traceEnt, ent, tr.endpos, -1))) jedi_disruptor_dodge_evasion(traceEnt, ent, tr.endpos, -1); // (NPCs: SP's NPC dodge, NPC_AI_Jedi.c)
 
 				ignore = tr.entityNum;
 				VectorCopy(tr.endpos, start);
@@ -4721,7 +4722,7 @@ static void WP_FireConcussionAlt(gentity_t* ent)
 				}
 
 				//force player into a projective block move.
-				jedi_disruptor_dodge_evasion(traceEnt, ent, tr.endpos, -1);
+				if (!(traceEnt->NPC && jedi_npc_disruptor_dodge_evasion(traceEnt, ent, tr.endpos, -1))) jedi_disruptor_dodge_evasion(traceEnt, ent, tr.endpos, -1); // (NPCs: SP's NPC dodge, NPC_AI_Jedi.c)
 
 				skip = tr.entityNum;
 				VectorCopy(tr.endpos, start);
