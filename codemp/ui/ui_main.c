@@ -869,7 +869,7 @@ static void UI_LoadNonIngame()
 	const char* menuSet = UI_Cvar_VariableString("ui_menuFilesMP");
 	if (menuSet == NULL || menuSet[0] == '\0')
 	{
-		menuSet = "ui/SJE-mpmenus.txt";
+		menuSet = "ui/SJE_MP/mpmenus.txt";
 	}
 	UI_LoadMenus(menuSet, qfalse);
 	uiInfo.inGameLoad = qfalse;
@@ -954,7 +954,7 @@ void UI_ParseMenu(const char* menuFile);
 static void UI_LoadSingleMenuFile(const char* menuFile)
 {
 	//load in a single menu file
-	trap->PC_LoadGlobalDefines("ui/sjemp/menudef.h"); //Load globaldefines for parsing.
+	trap->PC_LoadGlobalDefines("ui/SJE_MP/menudef.h"); //Load globaldefines for parsing.
 	UI_ParseMenu(menuFile);
 	trap->PC_RemoveAllGlobalDefines(); //Close globaldefines.
 }
@@ -1550,16 +1550,16 @@ void UI_LoadMenus(const char* menuFile, const qboolean reset)
 
 	const int start = trap->Milliseconds();
 
-	trap->PC_LoadGlobalDefines("ui/sjemp/menudef.h");
+	trap->PC_LoadGlobalDefines("ui/SJE_MP/menudef.h");
 
 	int handle = trap->PC_LoadSource(menuFile);
 	if (!handle)
 	{
 		Com_Printf(S_COLOR_YELLOW "menu file not found: %s, using default\n", menuFile);
-		handle = trap->PC_LoadSource("ui/SJE-mpmenus.txt");
+		handle = trap->PC_LoadSource("ui/SJE_MP/mpmenus.txt");
 		if (!handle)
 		{
-			trap->Error(ERR_DROP, S_COLOR_RED "default menu file not found: ui/SJE-mpmenus.txt, unable to continue!\n");
+			trap->Error(ERR_DROP, S_COLOR_RED "default menu file not found: ui/SJE_MP/mpmenus.txt, unable to continue!\n");
 		}
 	}
 
@@ -1598,8 +1598,8 @@ void UI_LoadMenus(const char* menuFile, const qboolean reset)
 	Com_Printf("--------------------- Client Initialization ---------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("---------- genuine SerenityJediEngine-(Solaris Edition)MP--------\n");
-	Com_Printf("---------------------Build date 05/11/2026-----------------------\n"); // build date
-	Com_Printf("---------------------------Build 05------------------------------\n");
+	Com_Printf("---------------------Build date 08/11/2026-----------------------\n"); // build date
+	Com_Printf("---------------------------Build 07------------------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("------------------------LightSaber-------------------------------\n");
 	Com_Printf("-----------An elegant weapon for a more civilized age------------\n");
@@ -1632,7 +1632,7 @@ void UI_Load(void)
 
 	if (uiInfo.inGameLoad)
 	{
-		menuSet = "ui/SJE-mpingame.txt";
+		menuSet = "ui/SJE_MP/mpingame.txt";
 	}
 	else
 	{
@@ -1640,7 +1640,7 @@ void UI_Load(void)
 	}
 	if (menuSet == NULL || menuSet[0] == '\0')
 	{
-		menuSet = "ui/SJE-mpmenus.txt";
+		menuSet = "ui/SJE_MP/mpmenus.txt";
 	}
 
 	String_Init();
@@ -1648,7 +1648,7 @@ void UI_Load(void)
 #ifdef PRE_RELEASE_TADEMO
 	UI_ParseGameInfo("demogameinfo.txt");
 #else
-	UI_ParseGameInfo("ui/sjemp/gameinfo.txt");
+	UI_ParseGameInfo("ui/SJE_MP/gameinfo.txt");
 #endif
 
 	if (gametype != GT_SINGLE_PLAYER)
@@ -7152,7 +7152,7 @@ static void UI_RunMenuScript(char** args)
 		}
 		else if (Q_stricmp(name, "loadGameInfo") == 0)
 		{
-			UI_ParseGameInfo("ui/sjemp/gameinfo.txt");
+			UI_ParseGameInfo("ui/SJE_MP/gameinfo.txt");
 		}
 		else if (Q_stricmp(name, "RefreshServers") == 0)
 		{
@@ -11721,18 +11721,18 @@ static void UI_Init(qboolean inGameLoad)
 	uiInfo.characterCount = 0;
 	uiInfo.aliasCount = 0;
 
-	UI_ParseGameInfo("ui/sjemp/gameinfo.txt");
+	UI_ParseGameInfo("ui/SJE_MP/gameinfo.txt");
 
 	const char* menuSet = UI_Cvar_VariableString("ui_menuFilesMP");
 	if (menuSet == NULL || menuSet[0] == '\0')
 	{
-		menuSet = "ui/SJE-mpmenus.txt";
+		menuSet = "ui/SJE_MP/mpmenus.txt";
 	}
 
 #if 1
 	if (inGameLoad)
 	{
-		UI_LoadMenus("ui/SJE-mpingame.txt", qtrue);
+		UI_LoadMenus("ui/SJE_MP/mpingame.txt", qtrue);
 	}
 	else if (!ui_bypassMainMenuLoad.integer)
 	{
@@ -11740,7 +11740,7 @@ static void UI_Init(qboolean inGameLoad)
 	}
 #else //this was adding quite a giant amount of time to the load time
 	UI_LoadMenus(menuSet, qtrue);
-	UI_LoadMenus("ui/SJE-mpingame.txt", qtrue);
+	UI_LoadMenus("ui/SJE_MP/mpingame.txt", qtrue);
 #endif
 
 	{

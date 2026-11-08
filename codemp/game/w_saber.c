@@ -12094,12 +12094,14 @@ void WP_SaberPositionUpdate(gentity_t* self, usercmd_t* ucmd)
 			if (self->client->ps.torsoAnim == BOTH_KYLE_PA_3 && (self->client->ps.torsoTimer > 100 ||
 				self->client->ps.legsTimer > 100))
 			{
+				self->client->ps.torsoTimer = self->client->ps.legsTimer = 0; // MD: BG_SetAnim keeps a locked grapple anim (PM_LockedAnim) while it has time left, so end it for this one to play
 				G_SetAnim(self, &self->client->pers.cmd, SETANIM_BOTH, BOTH_STAND1, SETANIM_FLAG_OVERRIDE, 0);
 				self->client->ps.weaponTime = self->client->ps.torsoTimer = 0;
 			}
 			else if ((PM_InGrappleMove(self->client->ps.torsoAnim) && self->client->ps.torsoTimer > 100) ||
 				(PM_InGrappleMove(self->client->ps.legsAnim) && self->client->ps.legsTimer > 100))
 			{ //if they're pretty far from finishing the anim then shove them into another anim
+				self->client->ps.torsoTimer = self->client->ps.legsTimer = 0; // MD: BG_SetAnim keeps a locked grapple anim (PM_LockedAnim) while it has time left, so end it for this one to play
 				G_SetAnim(self, &self->client->pers.cmd, SETANIM_BOTH, BOTH_KYLE_MISS, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
 				if (self->client->ps.torsoAnim == BOTH_KYLE_MISS)
 				{ //providing the anim set succeeded..
@@ -12120,6 +12122,7 @@ void WP_SaberPositionUpdate(gentity_t* self, usercmd_t* ucmd)
 				{
 					self->client->grappleState = 0;
 
+					self->client->ps.torsoTimer = self->client->ps.legsTimer = 0; // MD: BG_SetAnim keeps a locked grapple anim (PM_LockedAnim) while it has time left, so end it for this one to play
 					G_SetAnim(self, &self->client->pers.cmd, SETANIM_BOTH, BOTH_KYLE_MISS, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
 					if (self->client->ps.torsoAnim == BOTH_KYLE_MISS)
 					{ //providing the anim set succeeded..
@@ -12250,6 +12253,7 @@ void WP_SaberPositionUpdate(gentity_t* self, usercmd_t* ucmd)
 									//grappler->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
 									//No more Yeeting them across the map
 									G_Knockdown(grappler, self, tossDir, 100, qtrue);
+									grappler->client->ps.torsoTimer = grappler->client->ps.legsTimer = 0; // MD: BG_SetAnim keeps a locked grapple anim (PM_LockedAnim) while it has time left, so end it for this one to play
 									G_SetAnim(grappler, &grappler->client->pers.cmd, SETANIM_BOTH, BOTH_KNOCKDOWN1, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
 
 									grappler->client->ps.forceHandExtendTime = level.time + 500;
@@ -12305,6 +12309,7 @@ void WP_SaberPositionUpdate(gentity_t* self, usercmd_t* ucmd)
 								{
 									grappler->client->ps.torsoTimer = 500;
 									SetClientViewAngle(grappler, grapAng);
+									grappler->client->ps.torsoTimer = grappler->client->ps.legsTimer = 0; // MD: BG_SetAnim keeps a locked grapple anim (PM_LockedAnim) while it has time left, so end it for this one to play
 									G_SetAnim(grappler, &grappler->client->pers.cmd, SETANIM_BOTH, BOTH_GETUP3, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
 									grappler->client->grappleState = 0;
 								}
@@ -12374,6 +12379,7 @@ void WP_SaberPositionUpdate(gentity_t* self, usercmd_t* ucmd)
 									//grappler->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
 									//No more Yeeting them across the map
 									G_Knockdown(grappler, self, tossDir, 200, qtrue);
+									grappler->client->ps.torsoTimer = grappler->client->ps.legsTimer = 0; // MD: BG_SetAnim keeps a locked grapple anim (PM_LockedAnim) while it has time left, so end it for this one to play
 									G_SetAnim(grappler, &grappler->client->pers.cmd, SETANIM_BOTH, BOTH_KNOCKDOWN3, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
 
 									grappler->client->ps.forceHandExtendTime = level.time + 500;

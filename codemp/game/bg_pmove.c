@@ -664,8 +664,27 @@ static QINLINE qboolean PM_IsRocketTrooper(void)
 	return qfalse;
 }
 
+// a battle droid (player / bot class or NPC) with a blaster rifle: as in SP (PM_TorsoAnimation / PM_Weapon, alt_fire ||
+// CLASS_BATTLEDROID) it fires and aims from the hip, the rifle's alt-fire poses, never from the shoulder (DH 2026-11-08)
+static qboolean PM_BattleDroidHipGun(const int weapon)
+{
+	if (weapon != WP_BLASTER)
+	{
+		return qfalse;
+	}
+	if (pm->ps->clientNum < MAX_CLIENTS)
+	{
+		return pm->ps->botclass == BCLASS_BATTLEDROID ? qtrue : qfalse;
+	}
+	return pm_entSelf && pm_entSelf->s.NPC_class == CLASS_BATTLEDROID ? qtrue : qfalse;
+}
+
 static animNumber_t QINLINE PM_GetWeaponAimAnim(void)
 {
+	if (PM_BattleDroidHipGun(pm->ps->weapon))
+	{
+		return WeaponAltAimAnim[pm->ps->weapon];
+	}
 	if (pm->cmd.buttons & BUTTON_ALT_ATTACK)
 	{// Alternate weapon firing
 		if (pm->ps->eFlags & EF3_DUAL_WEAPONS && (pm->ps->weapon == WP_BRYAR_PISTOL))
@@ -16085,7 +16104,8 @@ static void PM_Weapon(void)
 			}
 			else
 			{
-				PM_StartTorsoAnim(WeaponAttackAnim[pm->ps->weapon]);
+				PM_StartTorsoAnim(PM_BattleDroidHipGun(pm->ps->weapon) ? WeaponAltAttackAnim[pm->ps->weapon]
+					: WeaponAttackAnim[pm->ps->weapon]); // SP: battle droids fire from the hip
 			}
 		}
 	}

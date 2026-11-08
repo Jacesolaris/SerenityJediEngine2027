@@ -85,6 +85,7 @@ extern qboolean InFront(vec3_t spot, vec3_t from, vec3_t from_angles, float thre
 extern void WP_ForcePowerDrain(const gentity_t* self, forcePowers_t force_power, int override_amt);
 extern qboolean ValidAnimFileIndex(int index);
 extern qboolean PM_ControlledByPlayer();
+extern qboolean PM_KickingAnim(int anim);
 extern qboolean PM_DroidMelee(int npc_class);
 extern qboolean PM_PainAnim(int anim);
 extern qboolean PM_JumpingAnim(int anim);
@@ -7889,6 +7890,14 @@ void PM_TorsoAnimation()
 		return;
 	}
 
+	// a kick (e.g. the crouched back kick) is a whole-body anim: while it plays, the gun torso code below must not
+	// put the arms back in a weapon pose (crouched counts as "weapon busy" and forces TORSO_WEAPONREADY with override)
+	if (PM_KickingAnim(pm->ps->torsoAnim)
+		&& pm->ps->torsoAnimTimer > 0)
+	{
+		return;
+	}
+
 	qboolean weaponBusy = qfalse;
 	// this is the ammount of time the gun is considered busy and stays in position after the last shot was fired
 
@@ -9075,7 +9084,8 @@ void PM_TorsoAnimation()
 							{
 								if (is_walking_and_blocking == qtrue)
 								{
-									PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY4, SETANIM_FLAG_NORMAL);
+									// battle droids aim from the hip, as they fire (BOTH_ATTACK3 above), not from the shoulder (DH 2026-11-08)
+									PM_SetAnim(pm, SETANIM_TORSO, pm->gent->client->NPC_class == CLASS_BATTLEDROID ? TORSO_WEAPONREADY3 : TORSO_WEAPONREADY4, SETANIM_FLAG_NORMAL);
 
 									PM_HandleGunnerAim(is_walking_and_blocking);
 								}

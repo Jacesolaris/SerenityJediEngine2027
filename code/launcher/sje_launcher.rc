@@ -8,3 +8,6 @@ IDR_BG              RCDATA  "art/launcher_bg.png"
 // sound/interface/menuroam.mp3 decoded to WAV (MD-work/sje-launcher/mp3towav.ps1): PlaySound only plays WAV
 IDR_SND_MENU        RCDATA  "sound/menuroam.wav"
 IDR_MUSIC           RCDATA  "sound/MainMenuTheme.mp3"
+
+// the SerenityJediEngine2027 mod folder of a release: the installation check allows exactly these files
+IDR_ALLOWED_FILES   RCDATA  "texts/AllowedFiles.txt"

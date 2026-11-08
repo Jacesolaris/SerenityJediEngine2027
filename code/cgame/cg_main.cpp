@@ -5615,7 +5615,8 @@ qboolean CG_MDWheel_BlocksButtons()
 static void CG_MDWheel_ToggleOnPerson(const int weapon)
 {
 	// grenades / mines / det packs are never drawn on the body
-	if (weapon <= WP_NONE || weapon >= 64 || weapon == WP_THERMAL || weapon == WP_TRIP_MINE || weapon == WP_DET_PACK)
+	if (weapon <= WP_NONE || weapon == WP_MELEE || weapon == WP_SABER || weapon >= 64 ||
+		weapon == WP_THERMAL || weapon == WP_TRIP_MINE || weapon == WP_DET_PACK)
 	{
 		return;
 	}
@@ -5976,7 +5977,6 @@ void CG_DrawMDWheel()
 	static constexpr vec4_t white = { 1.0f, 1.0f, 1.0f, 1.0f };
 	static constexpr vec4_t grey = { 0.7f, 0.7f, 0.7f, 0.9f };
 	static constexpr vec4_t greyed = { 0.5f, 0.5f, 0.5f, 0.85f };
-	static constexpr vec4_t red = { 1.0f, 0.4f, 0.4f, 1.0f };
 	const unsigned long long hidden = strtoull(cg_holsterHide.string, nullptr, 16);
 
 	if (!mdWheel.open || !cg.snap)
@@ -6025,10 +6025,7 @@ void CG_DrawMDWheel()
 			{
 				color[3] = 0.5f;
 			}
-			if (item < 64 && hidden & 1ull << item)
-			{
-				color[1] = color[2] = 0.4f; // holster disabled
-			}
+			// MD 2026-11-06: no red tint on a weapon whose holster is off (the Holster text says it)
 		}
 		else
 		{
@@ -6084,9 +6081,9 @@ void CG_DrawMDWheel()
 					CG_MDWheel_CenterText(my - 12.0f, 0.6f, grey,
 						va("Ammo: %d", cg.snap->ps.ammo[weaponData[item].ammoIndex]), ax);
 				}
-				if (item != WP_THERMAL && item != WP_TRIP_MINE && item != WP_DET_PACK && item < 64)
+				if (item != WP_MELEE && item != WP_SABER && item != WP_THERMAL && item != WP_TRIP_MINE && item != WP_DET_PACK && item < 64)
 				{
-					CG_MDWheel_CenterText(my + 12.0f, 0.55f, hidden & 1ull << item ? red : grey,
+					CG_MDWheel_CenterText(my + 12.0f, 0.55f, grey,
 						hidden & 1ull << item ? "Holster: Disabled" : "Holster: Enabled", ax);
 				}
 			}

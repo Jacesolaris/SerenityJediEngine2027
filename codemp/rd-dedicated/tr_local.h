@@ -1009,7 +1009,7 @@ using backEndState_t = struct backEndState_s
 ** by the frontend.
 */
 
-#define NUM_SCRATCH_IMAGES 16
+#define NUM_SCRATCH_IMAGES 32
 
 using trGlobals_t = struct trGlobals_s
 {

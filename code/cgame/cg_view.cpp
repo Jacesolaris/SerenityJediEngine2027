@@ -928,21 +928,23 @@ struct cameraBlendField_t
 	float aim; // aiming camera
 	float lock; // saber lock camera
 	bool lockSets; // false: the saber lock camera keeps this value
+	float grasp; // Force Grasp camera (Jace 2026-11-05): pulled back, normal FOV, so the player and the held are seen
+	bool graspSets; // false: the Force Grasp camera keeps this value
 };
 
 static const cameraBlendField_t cameraBlendFields[] =
 {
-	{ CG_OVERRIDE_3RD_PERSON_ANG, &overrides_t::thirdPersonAngle, &cg_thirdPersonAngle, 0.0f, 40.5f, true },
-	{ CG_OVERRIDE_3RD_PERSON_APH, &overrides_t::thirdPersonAlpha, &cg_thirdPersonAlpha, 1.0f, 1.0f, false },
-	{ CG_OVERRIDE_3RD_PERSON_POF, &overrides_t::thirdPersonPitchOffset, &cg_thirdPersonPitchOffset, 0.0f, -11.25f, true },
-	{ CG_OVERRIDE_3RD_PERSON_HOF, &overrides_t::thirdPersonHorzOffset, &cg_thirdPersonHorzOffset, -20.0f, -12.5f, true },
-	{ CG_OVERRIDE_3RD_PERSON_VOF, &overrides_t::thirdPersonVertOffset, &cg_thirdPersonVertOffset, 4.0f, -15.5f, true },
+	{ CG_OVERRIDE_3RD_PERSON_ANG, &overrides_t::thirdPersonAngle, &cg_thirdPersonAngle, 0.0f, 40.5f, true, 25.0f, true },
+	{ CG_OVERRIDE_3RD_PERSON_APH, &overrides_t::thirdPersonAlpha, &cg_thirdPersonAlpha, 1.0f, 1.0f, false, 1.0f, false },
+	{ CG_OVERRIDE_3RD_PERSON_POF, &overrides_t::thirdPersonPitchOffset, &cg_thirdPersonPitchOffset, 0.0f, -11.25f, true, 0.0f, false },
+	{ CG_OVERRIDE_3RD_PERSON_HOF, &overrides_t::thirdPersonHorzOffset, &cg_thirdPersonHorzOffset, -20.0f, -12.5f, true, -10.0f, true },
+	{ CG_OVERRIDE_3RD_PERSON_VOF, &overrides_t::thirdPersonVertOffset, &cg_thirdPersonVertOffset, 4.0f, -15.5f, true, 12.0f, true },
 	// No damping during the whole blend: the blend already eases the camera. Blending the damping
 	// too made the camera trail behind and then snap into place when it reached 1.
-	{ CG_OVERRIDE_3RD_PERSON_CDP, &overrides_t::thirdPersonCameraDamp, nullptr, 1.0f, 1.0f, true },
-	{ CG_OVERRIDE_3RD_PERSON_TDP, &overrides_t::thirdPersonTargetDamp, nullptr, 1.0f, 1.0f, true },
-	{ CG_OVERRIDE_3RD_PERSON_RNG, &overrides_t::thirdPersonRange, &cg_thirdPersonRange, 50.0f, 82.5f, true },
-	{ CG_OVERRIDE_FOV, &overrides_t::fov, &cg_fov, 60.0f, 40.5f, true },
+	{ CG_OVERRIDE_3RD_PERSON_CDP, &overrides_t::thirdPersonCameraDamp, nullptr, 1.0f, 1.0f, true, 1.0f, true },
+	{ CG_OVERRIDE_3RD_PERSON_TDP, &overrides_t::thirdPersonTargetDamp, nullptr, 1.0f, 1.0f, true, 1.0f, true },
+	{ CG_OVERRIDE_3RD_PERSON_RNG, &overrides_t::thirdPersonRange, &cg_thirdPersonRange, 50.0f, 82.5f, true, 140.0f, true },
+	{ CG_OVERRIDE_FOV, &overrides_t::fov, &cg_fov, 60.0f, 40.5f, true, 0.0f, false },
 };
 
 static constexpr float AIM_CAMERA_SHOULDER = 24.0f; // right-shoulder shift of a normal-sized model (cg_aimShoulder 1)
@@ -973,6 +975,7 @@ static float CG_AimShoulderOffset(const float normal)
 
 static float cg_aimBlend = 0.0f;
 static float cg_saberLockBlend = 0.0f;
+static float cg_graspBlend = 0.0f;
 static int cg_cameraBlendLastTime = 0;
 static bool cg_cameraBlendOwned = false; // the blends have written into cg.overrides
 static overrides_t cg_cameraBlendSaved; // the overrides without the blends
@@ -1008,6 +1011,22 @@ static bool CG_SaberLockCamera()
 	const int view_ent = cg.snap ? cg.snap->ps.viewEntity : 0;
 	return view_ent > 0 && view_ent < ENTITYNUM_WORLD && g_entities[view_ent].client
 		&& g_entities[view_ent].client->ps.communicatingflags & (1 << CF_SABERLOCKING);
+}
+
+// the Force Grasp camera: while the player (or an NPC he controls) holds someone with Force Grasp (Jace 2026-11-05)
+static bool CG_GraspCamera()
+{
+	if (CG_SaberLockCamera())
+	{
+		return false;
+	}
+	if (cg.predictedPlayerState.forcePowersActive & (1 << FP_GRASP))
+	{
+		return true;
+	}
+	const int view_ent = cg.snap ? cg.snap->ps.viewEntity : 0;
+	return view_ent > 0 && view_ent < ENTITYNUM_WORLD && g_entities[view_ent].client
+		&& g_entities[view_ent].client->ps.forcePowersActive & (1 << FP_GRASP);
 }
 
 // Whatever the game changed in the overrides since the blends last wrote them is what it wants without the blends.
@@ -1055,7 +1074,17 @@ static void CG_UpdateCameraBlends()
 		cg_saberLockBlend = CG_StepCameraBlend(cg_saberLockBlend, can_blend && CG_SaberLockCamera(), step);
 	}
 
-	if (cg_aimBlend <= 0.0f && cg_saberLockBlend <= 0.0f)
+	// Force Grasp camera (same option as the saber lock camera)
+	if (!cg_saberLockCinematicCamera.integer)
+	{
+		cg_graspBlend = 0.0f;
+	}
+	else
+	{
+		cg_graspBlend = CG_StepCameraBlend(cg_graspBlend, can_blend && CG_GraspCamera(), step);
+	}
+
+	if (cg_aimBlend <= 0.0f && cg_saberLockBlend <= 0.0f && cg_graspBlend <= 0.0f)
 	{
 		if (cg_cameraBlendOwned)
 		{
@@ -1084,6 +1113,7 @@ static void CG_UpdateCameraBlends()
 	// each value goes from the normal setting (0) to the aiming setting and then to the saber lock setting
 	const float aim = CG_CameraBlendEase(cg_aimBlend);
 	const float lock = CG_CameraBlendEase(cg_saberLockBlend);
+	const float grasp = CG_CameraBlendEase(cg_graspBlend);
 	for (const cameraBlendField_t& f : cameraBlendFields)
 	{
 		if (f.normal == nullptr)
@@ -1100,6 +1130,10 @@ static void CG_UpdateCameraBlends()
 			if (f.lockSets)
 			{
 				value = CG_CameraBlendLerp(value, f.lock, lock);
+			}
+			if (f.graspSets)
+			{
+				value = CG_CameraBlendLerp(value, f.grasp, grasp);
 			}
 			cg.overrides.*f.field = value;
 		}
@@ -1269,7 +1303,7 @@ static void CG_OffsetThirdPersonView()
 		}
 	}
 	// Saber lock or aiming cinematic camera (also while it is still blending in or out)
-	else if (cg.renderingThirdPerson && (cg_saberLockBlend > 0.0f || cg_aimBlend > 0.0f))
+	else if (cg.renderingThirdPerson && (cg_saberLockBlend > 0.0f || cg_aimBlend > 0.0f || cg_graspBlend > 0.0f))
 	{
 		cameraFocusAngles[YAW] += cg.overrides.thirdPersonAngle;
 		cameraFocusAngles[PITCH] += cg.overrides.thirdPersonPitchOffset;

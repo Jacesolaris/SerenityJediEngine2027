@@ -432,8 +432,17 @@ is above 0: the blend already eases it, and damping on top made it trail behind 
 #define SABERLOCK_CAMERA_HORZ	-25.5f
 #define SABERLOCK_CAMERA_VERT	-15.5f	// the FOV is cg_saberlockfov, the range stays
 
+// Force Grasp camera (Jace 2026-11-05): a side view like the saber lock's, but pulled back with the normal FOV so the
+// player and everyone held (lifted) can be seen
+#define GRASP_CAMERA_ANGLE		25.0f
+#define GRASP_CAMERA_PITCH		0.0f
+#define GRASP_CAMERA_HORZ		-10.0f
+#define GRASP_CAMERA_VERT		12.0f
+#define GRASP_CAMERA_RANGE		140.0f	// the FOV stays cg_fov
+
 static float cg_aimBlend = 0.0f;
 static float cg_saberLockBlend = 0.0f;
+static float cg_graspBlend = 0.0f;
 static int cg_cameraBlendLastTime = 0;
 
 static float CG_StepCameraBlend(float blend, const qboolean wanted, const float step)
@@ -492,11 +501,22 @@ static void CG_UpdateCameraBlends(void)
 		cg_saberLockBlend = CG_StepCameraBlend(cg_saberLockBlend,
 			can_blend && cg.predictedPlayerState.communicatingflags & (1 << CF_SABERLOCKING), step);
 	}
+
+	// Force Grasp camera: while the player holds someone with Force Grasp (same option as the saber lock camera)
+	if (!cg.renderingThirdPerson || !g_saberLockCinematicCamera.integer)
+	{
+		cg_graspBlend = 0.0f;
+	}
+	else
+	{
+		cg_graspBlend = CG_StepCameraBlend(cg_graspBlend, can_blend && !(cg.predictedPlayerState.communicatingflags
+			& (1 << CF_SABERLOCKING)) && cg.predictedPlayerState.fd.forcePowersActive & (1 << FP_GRASP), step);
+	}
 }
 
 static qboolean CG_CameraBlending(void)
 {
-	return cg_aimBlend > 0.0f || cg_saberLockBlend > 0.0f;
+	return cg_aimBlend > 0.0f || cg_saberLockBlend > 0.0f || cg_graspBlend > 0.0f;
 }
 
 static float CG_CameraBlendEase(const float blend)
@@ -514,6 +534,12 @@ static float CG_AimBlendValue(const float normal, const float aimed)
 static float CG_SaberLockBlendValue(const float value, const float locked)
 {
 	return value + (locked - value) * CG_CameraBlendEase(cg_saberLockBlend);
+}
+
+// from the (normal / aiming / saber lock) camera value to the Force Grasp camera value
+static float CG_GraspBlendValue(const float value, const float grasp)
+{
+	return value + (grasp - value) * CG_CameraBlendEase(cg_graspBlend);
 }
 
 // the player's own third-person alpha (cg_players.c)
@@ -651,8 +677,9 @@ static void CG_CalcIdealThirdPersonViewTarget(void)
 	// ----------------------------------------------------------------------
 	else if (CG_CameraBlending())
 	{
-		localVertOffset = CG_SaberLockBlendValue(CG_AimBlendValue(
-			localVertOffset - CG_LongLeapCameraBlend() * LONG_LEAP_CAMERA_DROP, AIM_CAMERA_VERT), SABERLOCK_CAMERA_VERT);
+		localVertOffset = CG_GraspBlendValue(CG_SaberLockBlendValue(CG_AimBlendValue(
+			localVertOffset - CG_LongLeapCameraBlend() * LONG_LEAP_CAMERA_DROP, AIM_CAMERA_VERT), SABERLOCK_CAMERA_VERT),
+			GRASP_CAMERA_VERT);
 		VectorCopy(cameraFocusLoc, cameraIdealTarget);
 		cameraIdealTarget[2] += localVertOffset;
 		return;
@@ -721,7 +748,7 @@ static void CG_CalcIdealThirdPersonViewLocation(void)
 
 	if (CG_CameraBlending())
 	{
-		thirdPersonRange = CG_AimBlendValue(thirdPersonRange, AIM_CAMERA_RANGE);
+		thirdPersonRange = CG_GraspBlendValue(CG_AimBlendValue(thirdPersonRange, AIM_CAMERA_RANGE), GRASP_CAMERA_RANGE);
 	}
 
 	VectorMA(cameraIdealTarget, -thirdPersonRange, camerafwd, cameraIdealLoc);
@@ -1051,9 +1078,10 @@ static void CG_OffsetThirdPersonView(void)
 	// Saber lock / aiming cinematic camera (also while it blends in or out)
 	else if (CG_CameraBlending())
 	{
-		thirdPersonAngle = CG_SaberLockBlendValue(CG_AimBlendValue(thirdPersonAngle, AIM_CAMERA_ANGLE), SABERLOCK_CAMERA_ANGLE);
-		thirdPersonPitchOffset = CG_SaberLockBlendValue(CG_AimBlendValue(thirdPersonPitchOffset, AIM_CAMERA_PITCH),
-			SABERLOCK_CAMERA_PITCH);
+		thirdPersonAngle = CG_GraspBlendValue(CG_SaberLockBlendValue(CG_AimBlendValue(thirdPersonAngle, AIM_CAMERA_ANGLE),
+			SABERLOCK_CAMERA_ANGLE), GRASP_CAMERA_ANGLE);
+		thirdPersonPitchOffset = CG_GraspBlendValue(CG_SaberLockBlendValue(CG_AimBlendValue(thirdPersonPitchOffset,
+			AIM_CAMERA_PITCH), SABERLOCK_CAMERA_PITCH), GRASP_CAMERA_PITCH);
 
 		cameraFocusAngles[YAW] += thirdPersonAngle;
 		cameraFocusAngles[PITCH] += thirdPersonPitchOffset;
@@ -1180,8 +1208,8 @@ static void CG_OffsetThirdPersonView(void)
 		//gunner and undersized Jedi branches that came before it only applied cg_thirdPersonHorzOffset, as below)
 		//the aiming camera's side offset from cg_aimCamHorzOffset, not the preset's cg_thirdPersonHorzOffset: the same on every
 		//camera preset (DH 2026-11-04)
-		thirdPersonHorzOffset = CG_SaberLockBlendValue(CG_AimBlendValue(thirdPersonHorzOffset,
-			CG_AimShoulderOffset(cg_aimCamHorzOffset.value)), SABERLOCK_CAMERA_HORZ);
+		thirdPersonHorzOffset = CG_GraspBlendValue(CG_SaberLockBlendValue(CG_AimBlendValue(thirdPersonHorzOffset,
+			CG_AimShoulderOffset(cg_aimCamHorzOffset.value)), SABERLOCK_CAMERA_HORZ), GRASP_CAMERA_HORZ);
 		AnglesToAxis(cg.refdef.viewangles, cg.refdef.viewaxis);
 		{
 			// the side shift came after the wall traces: trace it too, so the camera stops at a wall instead of in it
@@ -1653,7 +1681,8 @@ static int CG_CalcFov(void)
 	else if (cg.renderingThirdPerson && CG_CameraBlending())
 	{
 		//saber lock / aiming camera (also while it blends in or out)
-		cgFov = CG_SaberLockBlendValue(CG_AimBlendValue(cg_fov.value, AIM_CAMERA_FOV), cg_saberlockfov.value);
+		cgFov = CG_GraspBlendValue(CG_SaberLockBlendValue(CG_AimBlendValue(cg_fov.value, AIM_CAMERA_FOV), cg_saberlockfov.value),
+			cg_fov.value);
 	}
 	else
 	{

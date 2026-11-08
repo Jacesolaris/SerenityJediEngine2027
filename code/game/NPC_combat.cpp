@@ -50,6 +50,7 @@ extern qboolean G_ValidEnemy(const gentity_t* self, const gentity_t* enemy);
 extern qboolean PM_ReloadAnim(int anim);
 void ChangeWeapon(const gentity_t* ent, int new_weapon);
 extern void npc_check_speak(gentity_t* speaker_npc);
+extern cvar_t* com_outcast;
 
 void G_ClearEnemy(gentity_t* self)
 {
@@ -2931,15 +2932,38 @@ void SP_point_combat(gentity_t* self)
 
 void CP_FindCombatPointWaypoints()
 {
-	for (int i = 0; i < level.numCombatPoints; i++)
+	if ((com_outcast && com_outcast->integer == 1) || (com_outcast && com_outcast->integer == 4)) //playing outcast
 	{
-		level.combatPoints[i].waypoint = NAV::GetNearestNode(level.combatPoints[i].origin);
-		if (level.combatPoints[i].waypoint == WAYPOINT_NONE)
+		for (int i = 0; i < level.numCombatPoints; i++)
 		{
-			assert(0);
 			level.combatPoints[i].waypoint = NAV::GetNearestNode(level.combatPoints[i].origin);
-			gi.Printf(S_COLOR_RED"ERROR: Combat Point at %s has no waypoint!\n", vtos(level.combatPoints[i].origin));
-			delayedShutDown = level.time + 100;
+			if (level.combatPoints[i].waypoint == WAYPOINT_NONE)
+			{
+				// JK2 maps: their combat points can sit above or below the nearest node, so allow a node at another height
+				level.combatPoints[i].waypoint = NAV::GetNearestNode(level.combatPoints[i].origin, 0, 0, ENTITYNUM_NONE, true);
+			}
+#ifndef FINAL_BUILD
+			if (level.combatPoints[i].waypoint == WAYPOINT_NONE)
+			{
+				// as JK2: a warning, not an assert / shutdown (a combat point without a waypoint is only used by the
+				// clear-path checks)
+				gi.Printf(S_COLOR_YELLOW"WARNING: Combat Point at %s has no waypoint\n", vtos(level.combatPoints[i].origin));
+			}
+#endif
+		}
+	}
+	else
+	{
+		for (int i = 0; i < level.numCombatPoints; i++)
+		{
+			level.combatPoints[i].waypoint = NAV::GetNearestNode(level.combatPoints[i].origin);
+			if (level.combatPoints[i].waypoint == WAYPOINT_NONE)
+			{
+				assert(0);
+				level.combatPoints[i].waypoint = NAV::GetNearestNode(level.combatPoints[i].origin);
+				gi.Printf(S_COLOR_RED"ERROR: Combat Point at %s has no waypoint!\n", vtos(level.combatPoints[i].origin));
+				delayedShutDown = level.time + 100;
+			}
 		}
 	}
 }

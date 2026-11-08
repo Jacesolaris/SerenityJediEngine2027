@@ -1051,6 +1051,7 @@ static void CG_RegisterSounds(void)
 	trap->S_RegisterSound("sound/weapons/force/jumpsmall.mp3"); //PDSOUND_FORCEJUMP
 	trap->S_RegisterSound("sound/weapons/force/grip.mp3"); //PDSOUND_FORCEGRIP
 	trap->S_RegisterSound("sound/weapons/force/griploop.wav"); //PDSOUND_FORCEGRIP
+	trap->S_RegisterSound("sound/weapons/force/force_grasp.mp3"); //PDSOUND_FORCEGRASP
 
 	if (cgs.gametype >= GT_TEAM || com_buildScript.integer)
 	{

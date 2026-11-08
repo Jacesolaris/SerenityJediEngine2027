@@ -581,6 +581,7 @@ void CG_RegisterWeapon(const int weapon_num)
 		cgi_S_RegisterSound("sound/weapons/force/grab.mp3");
 		cgi_S_RegisterSound("sound/weapons/force/grip.mp3");
 		cgi_S_RegisterSound("sound/weapons/force/griploop.wav");
+		cgi_S_RegisterSound("sound/weapons/force/force_grasp.mp3");
 		//new Jedi Academy force sounds
 		cgi_S_RegisterSound("sound/weapons/force/absorb.mp3");
 		cgi_S_RegisterSound("sound/weapons/force/absorbhit.mp3");

@@ -29256,7 +29256,7 @@ void ForceGrasp(gentity_t* self)
 			}
 			else
 			{
-				G_SoundOnEnt(self, CHAN_BODY, "sound/weapons/force/grab.mp3");
+				G_SoundOnEnt(self, CHAN_BODY, "sound/weapons/force/force_grasp.mp3");
 			}
 		}
 	}
@@ -29280,7 +29280,7 @@ void ForceGrasp(gentity_t* self)
 		}
 		else
 		{
-			G_SoundOnEnt(self, CHAN_BODY, "sound/weapons/force/grab.mp3");
+			G_SoundOnEnt(self, CHAN_BODY, "sound/weapons/force/force_grasp.mp3");
 		}
 	}
 }

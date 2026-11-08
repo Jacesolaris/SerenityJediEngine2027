@@ -8653,7 +8653,7 @@ static void ForceGrasp(gentity_t* self)
 	self->client->graspStartTime = level.time;
 	self->client->ps.fd.forcePowerDebounce[FP_GRASP] = level.time + 1000;
 	G_SetAnim(self, NULL, SETANIM_TORSO, BOTH_FORCEGRIP_HOLD, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
-	G_EntitySound(self, CHAN_BODY, G_SoundIndex("sound/weapons/force/grip.mp3"));
+	G_EntitySound(self, CHAN_BODY, G_SoundIndex("sound/weapons/force/force_grasp.mp3"));
 
 	if (lvl >= FORCE_LEVEL_3 || target->client->ps.weapon == WP_SABER)
 	{

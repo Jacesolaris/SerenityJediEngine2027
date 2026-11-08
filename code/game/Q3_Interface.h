@@ -631,6 +631,16 @@ using setType_t = enum //# setType_e
 	SET_PAZAAK_END,
 	//## %s="NULL" !!"W:\game\base\scripts\!!#*.txt" # Script to run when the next Pazaak match is over (pazaak_result is set by then)
 
+	//# #sep The player's weapons, inventory and force powers (MovieDuels)
+	SET_PLAYER_CLEAR_ALL,
+	//## %s="NULL" # Take away all the player's weapons, inventory and force powers (the value is not used)
+	SET_PLAYER_CLEAR_INVENTORY,
+	//## %s="NULL" # Take away all the player's inventory items (the value is not used)
+	SET_PLAYER_CLEAR_WEAPONS,
+	//## %s="NULL" # Take away all the player's weapons (the value is not used)
+	SET_PLAYER_CLEAR_FORCE,
+	//## %s="NULL" # Take away all the player's force powers and saber styles (the value is not used)
+
 	//# #eol
 	SET_
 };

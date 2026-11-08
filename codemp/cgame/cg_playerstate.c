@@ -346,7 +346,8 @@ static void CG_CheckLocalSounds(const playerState_t* ps, const playerState_t* op
 		return;
 	}
 
-	if (cg_awardsounds.integer)
+	// award sounds only for this player's own awards: not while following (spectating) someone else (Jace 2026-11-05)
+	if (cg_awardsounds.integer && ps->clientNum == cg.clientNum && !(ps->pm_flags & PMF_FOLLOW))
 	{
 		if (ps->persistant[PERS_EXCELLENT_COUNT] != ops->persistant[PERS_EXCELLENT_COUNT])
 		{

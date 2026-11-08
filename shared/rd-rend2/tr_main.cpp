@@ -1870,7 +1870,13 @@ R_SortAndSubmitDrawSurfs
 void R_SortAndSubmitDrawSurfs(drawSurf_t* drawSurfs, int numDrawSurfs) {
 	// it is possible for some views to not have any surfaces
 	if (numDrawSurfs < 1)
+	{
+		// a shadow map view still has to clear its depth, or the last picture drawn into that shadow map stays and
+		// keeps casting an old shadow (dynamic light sides with nothing in them, 2026-11-08)
+		if ((tr.viewParms.flags & VPF_DEPTHSHADOW) && tr.viewParms.targetFbo)
+			R_AddDrawSurfCmd(drawSurfs, 0);
 		return;
+	}
 
 	// if we overflowed MAX_DRAWSURFS, the drawsurfs
 	// wrapped around in the buffer and we will be missing
@@ -2887,17 +2893,8 @@ void R_GatherFrameViews(trRefdef_t* refdef)
 					shadowParms.targetFbo = tr.shadowCubeFbo[i * 6 + j];
 					shadowParms.targetFboLayer = 0;
 
-#ifdef REND2_SP
-					// SP renders these views here, before RE_BeginScene opens the scene debug group: open the scene and
-					// view groups first, or every draw list warns "invalid layer order" (r_dlightMode 2, 2026-10-26)
-					R_PushDebugGroup(AL_SCENE, "Dlight shadows");
-					R_PushDebugGroup(AL_VIEW, va("Point light shadow %i, side %i", i, j));
-					R_RenderView(&shadowParms);
-
-					R_IssuePendingRenderCommands();
-
-					tr.refdef.numDrawSurfs = 0;
-#else
+					// queued like every other view, SP too: SP drew these straight away with no view or projection set up,
+					// using another view's camera, so dlight shadows showed small copies of the player on walls (2026-11-08)
 					shadowParms.currentViewParm = tr.numCachedViewParms;
 					shadowParms.viewParmType = VPT_POINT_SHADOWS;
 
@@ -2907,7 +2904,6 @@ void R_GatherFrameViews(trRefdef_t* refdef)
 
 					Com_Memcpy(&tr.cachedViewParms[tr.numCachedViewParms], &shadowParms, sizeof(viewParms_t));
 					tr.numCachedViewParms++;
-#endif
 				}
 			}
 		}

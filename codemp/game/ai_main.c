@@ -1428,6 +1428,105 @@ static void bot_unapply_delta_angles(bot_state_t* bs)
 		bs->viewangles[j] = AngleMod(bs->viewangles[j] - SHORT2ANGLE(bs->cur_ps.delta_angles[j]));
 }
 
+// Saber bots too close for too long (Jace 2026-11-05: two bots stuck blade to blade, jittering, neither getting a
+// swing in): after 1.2 - 2 s closer than BOT_SABER_TOO_CLOSE a bot breaks it up with a hilt bash, a front kick or a
+// slap (left / right; staff: smack), then waits 4 - 7 s before the next. The move is picked here and played by
+// PM_MeleeMoveForConditions (bg_saber.c) through Bot_ShoveMove, while the bot holds the kick button.
+#define BOT_SABER_TOO_CLOSE		60.0f	// inside the duel band's near end (BOT_SABER_IDEAL_MIN 65)
+#define BOT_SHOVE_HOLD			500		// ms the kick button is held for the chosen move (until it starts)
+static int s_botCloseSince[MAX_CLIENTS];
+static int s_botCloseLimit[MAX_CLIENTS];
+static int s_botNextShove[MAX_CLIENTS];
+static int s_botShoveUntil[MAX_CLIENTS];
+static int s_botShoveMove[MAX_CLIENTS];
+
+// the close-range move a bot's AI wants now (-1: none)
+int Bot_ShoveMove(const int clientNum)
+{
+	if (clientNum < 0 || clientNum >= MAX_CLIENTS || s_botShoveUntil[clientNum] <= level.time
+		|| s_botShoveUntil[clientNum] > level.time + BOT_SHOVE_HOLD)
+	{
+		return -1;
+	}
+	return s_botShoveMove[clientNum];
+}
+
+static void Bot_TooCloseShove(bot_state_t* bs, bot_input_t* bi)
+{
+	const int c = bs->client;
+	const gentity_t* enemy = bs->currentEnemy;
+
+	if (s_botNextShove[c] > level.time + 10000 || s_botShoveUntil[c] > level.time + BOT_SHOVE_HOLD)
+	{// left over from an earlier map
+		s_botNextShove[c] = s_botShoveUntil[c] = s_botCloseSince[c] = 0;
+	}
+
+	if (s_botShoveUntil[c] > level.time)
+	{
+		if (PM_KickMove(bs->cur_ps.saberMove))
+		{// it started: let go of the button
+			s_botShoveUntil[c] = 0;
+			return;
+		}
+		bi->actionflags |= ACTION_KICK;
+		bi->actionflags &= ~(ACTION_ATTACK | ACTION_ALT_ATTACK);
+		return;
+	}
+
+	if (bs->cur_ps.weapon != WP_SABER || bs->cur_ps.saberInFlight || bs->cur_ps.saberHolstered == 2
+		|| !enemy || !enemy->client || enemy->health <= 0 || !bs->frame_Enemy_Vis
+		|| bs->cur_ps.groundEntityNum == ENTITYNUM_NONE || enemy->client->ps.groundEntityNum == ENTITYNUM_NONE
+		|| PM_InKnockDown(&bs->cur_ps) || bs->frame_Enemy_Len > BOT_SABER_TOO_CLOSE + 15.0f)
+	{// not (or no longer) too close: the clock stops (15 units of slack so it doesn't restart on every small step)
+		s_botCloseSince[c] = 0;
+		return;
+	}
+
+	if (!s_botCloseSince[c])
+	{
+		if (bs->frame_Enemy_Len <= BOT_SABER_TOO_CLOSE)
+		{
+			s_botCloseSince[c] = level.time;
+			s_botCloseLimit[c] = Q_irand(1200, 2000);
+		}
+		return;
+	}
+
+	if (level.time - s_botCloseSince[c] < s_botCloseLimit[c] || s_botNextShove[c] > level.time
+		|| PM_KickMove(bs->cur_ps.saberMove))
+	{
+		return;
+	}
+
+	{
+		const qboolean staff = bs->cur_ps.fd.saberAnimLevel == SS_STAFF ? qtrue : qfalse;
+		const int r = Q_irand(0, 99);
+
+		if (r < 35)
+		{
+			s_botShoveMove[c] = LS_HILT_BASH;
+		}
+		else if (r < 55)
+		{
+			s_botShoveMove[c] = LS_KICK_F2;
+		}
+		else if (r < 78)
+		{
+			s_botShoveMove[c] = staff ? LS_SMACK_L : LS_SLAP_L;
+		}
+		else
+		{
+			s_botShoveMove[c] = staff ? LS_SMACK_R : LS_SLAP_R;
+		}
+	}
+	s_botShoveUntil[c] = level.time + BOT_SHOVE_HOLD;
+	s_botNextShove[c] = level.time + Q_irand(4000, 7000);
+	s_botCloseSince[c] = 0;
+
+	bi->actionflags |= ACTION_KICK;
+	bi->actionflags &= ~(ACTION_ATTACK | ACTION_ALT_ATTACK);
+}
+
 #define BOT_TIMED_ACTION_HOLD	250		// ms a timed action (kick) holds its button
 #define BOT_MELEE_SWING_RANGE	80.0f	// melee bots punch only this close
 static qboolean bot_try_timed_action(
@@ -1751,6 +1850,7 @@ static void bot_update_input(bot_state_t* bs, const int time, const int elapsed_
 	// Manual overrides
 	if (bs->doWalk)       bi.actionflags |= ACTION_WALK;
 	if (bs->doBotKick)    bi.actionflags |= ACTION_KICK;
+	Bot_TooCloseShove(bs, &bi); // too close too long: kick / hilt bash / slap
 	if (bs->doBotGesture) bi.actionflags |= ACTION_GESTURE;
 	if (bs->doBotBlock && bs->cur_ps.weapon == WP_SABER)
 		bi.actionflags |= ACTION_BLOCK;
@@ -9885,10 +9985,46 @@ static qboolean bot_behave_check_backstab(bot_state_t* bs)
 // ------------------------------------------------------------------
 // Smart kata decision: bots kata when enemy is weak or vulnerable
 // ------------------------------------------------------------------
+// Bots' kata (Jace 2026-11-05: two bots close up kata'd over and over): every kata ends with a cooldown of 8 - 15 s
+// before the next (counted from the end of the kata: it is pushed back on every frame the bot is in one).
+static int s_botNextKata[MAX_CLIENTS];
+static qboolean Bot_KataReady(const bot_state_t* bs)
+{
+	const int c = bs->client;
+
+	if (PM_SaberInKata(bs->cur_ps.saberMove))
+	{
+		s_botNextKata[c] = level.time + Q_irand(8000, 15000);
+		return qfalse;
+	}
+	if (s_botNextKata[c] > level.time + 15000)
+	{
+		s_botNextKata[c] = 0; // left over from an earlier map
+	}
+	return s_botNextKata[c] <= level.time ? qtrue : qfalse;
+}
+
+// The direction of the bot's next saber swing (the move direction picks the swing's direction): it was picked at random
+// on every frame the saber was idle, bouncing or returning, so the bot stepped a new way every frame - the jerking when
+// two bots duel close up (Jace 2026-11-05). Now one direction is kept 0.4 - 0.8 s.
+static int s_botAttackQuad[MAX_CLIENTS];
+static int s_botAttackQuadTime[MAX_CLIENTS];
+static int Bot_HeldAttackQuad(const bot_state_t* bs)
+{
+	const int c = bs->client;
+
+	if (s_botAttackQuadTime[c] < level.time || s_botAttackQuadTime[c] > level.time + 2000)
+	{
+		s_botAttackQuad[c] = Q_irand(Q_BR, Q_B);
+		s_botAttackQuadTime[c] = level.time + Q_irand(400, 800);
+	}
+	return s_botAttackQuad[c];
+}
+
 static qboolean bot_behave_check_use_kata(bot_state_t* bs)
 {
-	// Must be using a saber
-	if (bs->cur_ps.weapon != WP_SABER)
+	// Must be using a saber, and no kata cooldown running
+	if (bs->cur_ps.weapon != WP_SABER || !Bot_KataReady(bs))
 	{
 		return qfalse;
 	}
@@ -10157,8 +10293,8 @@ void bot_behave_attack_basic(bot_state_t* bs, const gentity_t* target)
 		bot_weapon_detpack(bs, target);
 	}
 
-	if (!PM_SaberInKata(bs->cur_ps.saberMove) && bs->cur_ps.fd.forcePower > 60 &&
-		bs->cur_ps.weapon == WP_SABER && dist < 128 && in_field_of_vision(bs->viewangles, 90, ang))
+	if (bs->cur_ps.fd.forcePower > 60 && bs->cur_ps.weapon == WP_SABER && dist < 128
+		&& in_field_of_vision(bs->viewangles, 90, ang) && Bot_KataReady(bs)) // the kata cooldown (was a kata whenever possible)
 	{
 		//KATA!
 		trap->EA_Attack(bs->client);
@@ -10225,7 +10361,7 @@ void bot_behave_attack_basic(bot_state_t* bs, const gentity_t* target)
 			|| PM_SaberInReturn(bs->cur_ps.saberMove))
 		{
 			//we want to attack, and we need to choose a new attack swing, pick randomly.
-			movefor_attack_quad(bs, moveDir, Q_irand(Q_BR, Q_B));
+			movefor_attack_quad(bs, moveDir, Bot_HeldAttackQuad(bs)); // held 0.4 - 0.8 s (was a new random one every frame)
 		}
 		else if (bs->cur_ps.userInt3 & 1 << FLAG_ATTACKFAKE)
 		{
@@ -10291,30 +10427,50 @@ static qboolean BotEnemyInKata(const playerState_t* ps)
 	return qfalse;
 }
 
+// Backing off from an enemy's kata when the bot can't dash (2 dash rule / not enough force). Called on every frame of
+// the kata. It cleared the bot's whole velocity every frame, so the bot never got going and stood stuck in front of the
+// kata (Jace 2026-11-05): now it runs straight away from the enemy, and only on the first frame of a retreat its speed
+// towards the enemy is dropped.
 static void BotStartBackOff(bot_state_t* bs)
 {
 	gentity_t* self = &g_entities[bs->client];
+	vec3_t away = { 0.0f, 0.0f, 0.0f };
+	qboolean haveAway = qfalse;
 
-	// Force backward retreat
-	bs->lastucmd.forwardmove = -127;
-	bs->lastucmd.rightmove = 0;
-	bs->lastucmd.upmove = 0;
+	if (bs->currentEnemy)
+	{
+		const float* enemyOrg = bs->currentEnemy->client ? bs->currentEnemy->client->ps.origin : bs->currentEnemy->s.origin;
+
+		VectorSubtract(bs->origin, enemyOrg, away);
+		away[2] = 0.0f;
+		haveAway = VectorNormalize(away) > 0.001f ? qtrue : qfalse;
+	}
+
+	// run backwards, away from the enemy (full speed: no walk)
+	if (haveAway)
+	{
+		trap->EA_Move(bs->client, away, 400);
+	}
 	trap->EA_MoveBack(bs->client);
-
-	// Disable walk mode for this retreat
 	bs->forceNoWalk = qtrue;
-
-	// Bot walk flag off too
 	bs->doWalk = qfalse;
 
-	// Lock retreat for 600ms
+	// the first frame of this retreat: no more speed towards the enemy (the rest of the velocity stays)
+	if (bs->kataRetreatChangeTime < level.time && haveAway)
+	{
+		const float toward = -DotProduct(self->client->ps.velocity, away);
+
+		if (toward > 0.0f)
+		{
+			VectorMA(self->client->ps.velocity, toward, away, self->client->ps.velocity);
+		}
+	}
+
+	// the retreat holds (no walk) 600 ms after the last call
 	bs->kataRetreatChangeTime = level.time + 600;
 
-	// Optional: mark bot as defending
+	// defending: no attacks while backing off
 	bs->saberDefending = 1;
-
-	// Clear velocity so retreat is clean
-	VectorClear(self->client->ps.velocity);
 }
 
 static qboolean InFront_MP(const vec3_t from, const vec3_t to,
@@ -10592,6 +10748,24 @@ static float Bot_SaberReach(const bot_state_t* bs)
 	return blade + BOT_SABER_SWING_EXTRA;
 }
 
+// The far end of the saber duel band (Bot_SaberSpacing): inside the bot's own swing reach. The band went to 100 while
+// the swing (Bot_SaberReach) reaches about 90, so two bots could stand 90 - 100 apart, both "in the band" (hold) and
+// both out of reach (no swing): they faced each other and never attacked (Jace 2026-11-05).
+static float Bot_SaberIdealMax(const bot_state_t* bs)
+{
+	float m = Bot_SaberReach(bs) - 10.0f;
+
+	if (m > BOT_SABER_IDEAL_MAX)
+	{
+		m = BOT_SABER_IDEAL_MAX;
+	}
+	if (m < BOT_SABER_IDEAL_MIN + 10.0f)
+	{
+		m = BOT_SABER_IDEAL_MIN + 10.0f;
+	}
+	return m;
+}
+
 static void saber_combat_handling(bot_state_t* bs)
 {
 	/* Defensive: ensure bot state and enemy exist before any dereference */
@@ -10709,7 +10883,7 @@ static void saber_combat_handling(bot_state_t* bs)
 	// IDEAL SPACING FOR DUELS
 	// -------------------------------------------------
 	const float idealMin = BOT_SABER_IDEAL_MIN; // was 85: saber contact needs closer
-	const float idealMax = BOT_SABER_IDEAL_MAX; // was 150
+	const float idealMax = Bot_SaberIdealMax(bs); // inside the swing reach (was BOT_SABER_IDEAL_MAX)
 	const float MaxDashDist = 256.0f;
 	const int spacing = Bot_SaberSpacing(bs, idealMin, idealMax);
 
@@ -10873,7 +11047,7 @@ static void Enhanced_saber_combat_handling(bot_state_t* bs)
 	// IDEAL SPACING FOR ENHANCED DUELS
 	// -------------------------------------------------
 	const float idealMin = BOT_SABER_IDEAL_MIN; // was 85: saber contact needs closer
-	const float idealMax = BOT_SABER_IDEAL_MAX; // was 150
+	const float idealMax = Bot_SaberIdealMax(bs); // inside the swing reach (was BOT_SABER_IDEAL_MAX)
 	const float MaxDashDist = 256.0f;
 	const int spacing = Bot_SaberSpacing(bs, idealMin, idealMax);
 

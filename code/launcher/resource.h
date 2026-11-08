@@ -9,3 +9,6 @@
 // the main menu's own sound (hover, click and back all use menuroam, as in the game's menus) and music
 #define IDR_SND_MENU        301
 #define IDR_MUSIC           302
+
+// the files a release may have in the SerenityJediEngine2027 mod folder (the installation check)
+#define IDR_ALLOWED_FILES   401

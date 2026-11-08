@@ -1834,7 +1834,7 @@ Missions (DH 2026-11-02): the mission's objective list
 
 The server sends "mobj <name> <state>" (0 hidden, 1 shown, 2 completed, 3 failed; name = the objectives.str reference)
 and "mobjclear" (g_ICARUScb.c G_MissionSetObjective). The console command "missionobjectives" (bind a key) shows the list
-in ui/sjemp/missionobjectives.menu, through the cvars ui_mobj1 .. ui_mobj12 (the objective's text from OBJECTIVES_<name>):
+in ui/SJE_MP/missionobjectives.menu, through the cvars ui_mobj1 .. ui_mobj12 (the objective's text from OBJECTIVES_<name>):
 the open ones first, then the completed / failed ones.
 -------------------------
 */
@@ -1917,7 +1917,7 @@ static void CG_MissionObjectiveClear_f(void)
 void CG_MissionObjectives_f(void)
 {
 	CG_MissionObjectivesToCvars();
-	trap->Cvar_Set("ui_menubrief", "sjemp/missionobjectives"); // (the MP menu folder: ui/sjemp/missionobjectives.menu)
+	trap->Cvar_Set("ui_menubrief", "SJE_MP/missionobjectives"); // (the MP menu folder: ui/SJE_MP/missionobjectives.menu)
 	trap->OpenUIMenu(UIMENU_BRIEFING); // (ui_main.c loads ui/<ui_menubrief>.menu)
 }
 

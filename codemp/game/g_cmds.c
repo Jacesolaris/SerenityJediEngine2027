@@ -2451,7 +2451,7 @@ static qboolean G_VoteGametype(const gentity_t* ent, int num_args, const char* a
 	}
 
 	// GT_SINGLE_PLAYER ("Missions", the SP maps in co-op) can be voted for, as it can be chosen in the menus
-	// (gameinfo.txt): the next map comes from the arenas typed "missions" (G_RefreshNextMap)
+	// (ui/SJE_MP/gameinfo.txt): the next map comes from the arenas typed "missions" (G_RefreshNextMap)
 
 	level.votingGametype = qtrue;
 	level.votingGametypeTo = gt;

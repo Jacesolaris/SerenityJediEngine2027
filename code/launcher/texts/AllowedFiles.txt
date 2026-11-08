@@ -1,0 +1,34 @@
+# SerenityJediEngine2027: the files and folders of the SerenityJediEngine2027 mod folder of a release.
+# A release build of the launcher only starts the game when the mod folder holds exactly these: none missing and
+# nothing else (Windows' own desktop.ini and Thumbs.db are ignored). Debug builds show the check but always start.
+# One path per line, relative to the SerenityJediEngine2027 folder; a folder ends with "\" and its files are listed
+# under it. Letter case does not matter. Lines starting with "#" are notes.
+# Update this list (and rebuild the launcher) when a release adds, removes or renames a file.
+
+autoexec_mp.cfg
+autoexec_sp.cfg
+description.txt
+SerenityJediEngine-MP-FFA-Server.cfg
+SerenityJediEngine2027-Assets-0.pk3
+SerenityJediEngine2027-Assets-1.pk3
+SerenityJediEngine2027-Assets-2.pk3
+SerenityJediEngine2027-Assets-3.pk3
+Start SerenityJediEngine-MP-FFA-Server.bat
+
+Read Me\
+Read Me\AI Workshop Readme.txt
+Read Me\Cal Kestis readme.txt
+Read Me\Credits.txt
+Read Me\Darth Martyr Credit.txt
+Read Me\Darth Vader Credit.txt
+Read Me\eezstreet Credit.txt
+Read Me\JaceSolaris Edit.txt
+Read Me\JediRedemption Credit.txt
+Read Me\JOJA-Readme.txt
+Read Me\Kylo ren saber readme.txt
+Read Me\LICENSE.txt
+Read Me\OJP_Readme.html
+Read Me\Read Me God Damm it..txt
+Read Me\redsaurus Credit.txt
+Read Me\rv-readme.txt
+Read Me\Throwable Stuff.txt

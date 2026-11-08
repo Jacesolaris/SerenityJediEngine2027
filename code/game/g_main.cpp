@@ -255,6 +255,9 @@ cvar_t* g_IsSaberDoingAttackDamage;
 cvar_t* g_DebugSaberCombat;
 
 cvar_t* g_allowgunnerbash;
+cvar_t* g_squadTactics;
+cvar_t* g_squadAdvancers;
+cvar_t* g_squadDebug;
 cvar_t* g_weaponVariants; // weapon variants (2026-10-31): gunner NPCs each get their own gun (SJE guns)
 cvar_t* g_aiReload; // AI clips and reloads (2026-10-31): gunner NPCs stop to reload when their clip is empty
 cvar_t* g_aiClipScale; // x every AI clip size
@@ -865,6 +868,10 @@ static void G_InitCvars()
 	g_DebugSaberCombat = gi.cvar("g_DebugSaberCombat", "0", CVAR_ARCHIVE);
 
 	g_allowgunnerbash = gi.cvar("g_allowgunnerbash", "1", CVAR_ARCHIVE | CVAR_SAVEGAME | CVAR_NORESTART);
+	// Squad tactics: only g_squadAdvancers gunners per target push in, the others hold position (AI_Stormtrooper.cpp)
+	g_squadTactics = gi.cvar("g_squadTactics", "1", CVAR_ARCHIVE);
+	g_squadAdvancers = gi.cvar("g_squadAdvancers", "2", CVAR_ARCHIVE);
+	g_squadDebug = gi.cvar("g_squadDebug", "0", 0); // 1: print each squad's roles once a second
 	// gunner NPCs each get their own gun: a weapon variant (SJE guns, ext_data/sje_weaponvariants.dat) of their weapon,
 	// the least used one; saber users never (0: the stock guns) (DH 2026-10-31)
 	g_weaponVariants = gi.cvar("g_weaponVariants", "1", CVAR_ARCHIVE | CVAR_NORESTART);

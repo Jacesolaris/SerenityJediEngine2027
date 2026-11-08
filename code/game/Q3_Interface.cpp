@@ -642,6 +642,11 @@ stringID_table_t setTable[] =
 	ENUM2STRING(SET_PAZAAK_ALLOWED),
 	ENUM2STRING(SET_PAZAAK_END),
 
+	ENUM2STRING(SET_PLAYER_CLEAR_ALL),
+	ENUM2STRING(SET_PLAYER_CLEAR_INVENTORY),
+	ENUM2STRING(SET_PLAYER_CLEAR_WEAPONS),
+	ENUM2STRING(SET_PLAYER_CLEAR_FORCE),
+
 	{ "", SET_ }
 };
 
@@ -7000,6 +7005,42 @@ static void Q3_Remove(const int entID, const char* name)
 	}
 }
 
+static void Q3_ClearInventory()
+{
+	gentity_t* ent = &g_entities[0];
+
+	if (ent && ent->client)
+	{
+		for (int& i : ent->client->ps.inventory)
+		{
+			i = 0;
+		}
+	}
+}
+
+static void Q3_ClearWeapons()
+{
+	gentity_t* ent = &g_entities[0];
+
+	if (ent && ent->client)
+	{
+		ent->client->ps.stats[STAT_WEAPONS] = 0; // SJE keeps the weapons as bits here (MD: ps.weapons[])
+		ent->client->ps.weapon = WP_NONE;
+	}
+}
+
+static void Q3_ClearForce()
+{
+	gentity_t* ent = &g_entities[0];
+
+	if (ent && ent->client)
+	{
+		memset(ent->client->ps.forcePowerLevel, 0, sizeof(ent->client->ps.forcePowerLevel));
+		ent->client->ps.forcePowersKnown = 0;
+		ent->client->ps.saberStylesKnown = 0;
+	}
+}
+
 /*
 ============
 RemoveOwner
@@ -10095,6 +10136,24 @@ void CQuake3GameInterface::Set(const int taskID, const int entID, const char* ty
 
 	case SET_PAZAAK_END:
 		G_Pazaak_SetEndScript(entID, data);
+		break;
+
+	case SET_PLAYER_CLEAR_ALL:
+		Q3_ClearInventory();
+		Q3_ClearWeapons();
+		Q3_ClearForce();
+		break;
+
+	case SET_PLAYER_CLEAR_INVENTORY:
+		Q3_ClearInventory();
+		break;
+
+	case SET_PLAYER_CLEAR_WEAPONS:
+		Q3_ClearWeapons();
+		break;
+
+	case SET_PLAYER_CLEAR_FORCE:
+		Q3_ClearForce();
 		break;
 
 	default:

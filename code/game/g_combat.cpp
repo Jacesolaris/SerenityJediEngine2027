@@ -5285,6 +5285,12 @@ static int s_awardKills[MAX_CLIENTS];
 static int s_awardSaberKills[MAX_CLIENTS];
 static int s_awardDeaths[MAX_CLIENTS];
 
+// award sounds are only for the player who earned them: NPCs never get one (Jace 2026-11-05)
+static qboolean G_AwardHuman(const gentity_t* ent)
+{
+	return ent && ent->client && ent->s.number == 0 ? qtrue : qfalse;
+}
+
 static void G_AwardStreaks(gentity_t* self, gentity_t* attacker)
 {
 	if (!AWARD_STREAKS_ON || !self->client)
@@ -5295,7 +5301,7 @@ static void G_AwardStreaks(gentity_t* self, gentity_t* attacker)
 	{
 		s_awardKills[self->s.number] = 0;
 		s_awardSaberKills[self->s.number] = 0;
-		if (++s_awardDeaths[self->s.number] % AWARD_STREAK == 0)
+		if (++s_awardDeaths[self->s.number] % AWARD_STREAK == 0 && G_AwardHuman(self))
 		{
 			self->client->ps.persistant[PERS_GAUNTLET_FRAG_COUNT]++;
 		}
@@ -5307,13 +5313,13 @@ static void G_AwardStreaks(gentity_t* self, gentity_t* attacker)
 	const int a = attacker->s.number;
 
 	s_awardDeaths[a] = 0;
-	if (++s_awardKills[a] % AWARD_STREAK == 0)
+	if (++s_awardKills[a] % AWARD_STREAK == 0 && G_AwardHuman(attacker))
 	{
 		attacker->client->ps.persistant[PERS_EXCELLENT_COUNT]++;
 		attacker->client->rewardTime = level.time + REWARD_SPRITE_TIME;
 	}
 	if (self->client->ps.weapon == WP_SABER && self->client->ps.forcePowerLevel[FP_SABER_OFFENSE] >= FORCE_LEVEL_3
-		&& ++s_awardSaberKills[a] % AWARD_STREAK == 0)
+		&& ++s_awardSaberKills[a] % AWARD_STREAK == 0 && G_AwardHuman(attacker))
 	{
 		attacker->client->ps.persistant[PERS_IMPRESSIVE_COUNT]++;
 		attacker->client->rewardTime = level.time + REWARD_SPRITE_TIME;
@@ -5885,16 +5891,22 @@ void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 
 		if (!AWARD_STREAKS_ON && means_of_death == MOD_FORCE_LIGHTNING && (self->s.number < MAX_CLIENTS || G_ControlledByPlayer(self)))
 		{
-			// play humiliation on player
-			attacker->client->ps.persistant[PERS_GAUNTLET_FRAG_COUNT]++;
-			attacker->client->rewardTime = level.time + REWARD_SPRITE_TIME;
+			// play humiliation on player (only a human player: bots and NPCs never get award sounds)
+			if (G_AwardHuman(attacker))
+			{
+				attacker->client->ps.persistant[PERS_GAUNTLET_FRAG_COUNT]++;
+				attacker->client->rewardTime = level.time + REWARD_SPRITE_TIME;
+			}
 			// also play humiliation on target
-			self->client->ps.persistant[PERS_PLAYEREVENTS] ^= PLAYEREVENT_GAUNTLETREWARD;
+			if (G_AwardHuman(self))
+			{
+				self->client->ps.persistant[PERS_PLAYEREVENTS] ^= PLAYEREVENT_GAUNTLETREWARD;
+			}
 		}
 
 		// check for two kills in a short amount of time
 		// if this is close enough to the last kill, give a reward sound
-		if (!AWARD_STREAKS_ON && level.time - attacker->client->lastKillTime < CARNAGE_REWARD_TIME)
+		if (!AWARD_STREAKS_ON && level.time - attacker->client->lastKillTime < CARNAGE_REWARD_TIME && G_AwardHuman(attacker))
 		{
 			// play excellent on player
 			attacker->client->ps.persistant[PERS_EXCELLENT_COUNT]++;

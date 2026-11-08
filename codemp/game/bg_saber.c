@@ -41,6 +41,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "g_local.h"
 extern stringID_table_t animTable[MAX_ANIMATIONS + 1];
 extern stringID_table_t saber_moveTable[];
+extern int Bot_ShoveMove(int clientNum);
 #endif
 #include "anims.h"
 #include <qcommon\q_platform.h>
@@ -3933,6 +3934,30 @@ int PM_CheckKick(void)
 int PM_MeleeMoveForConditions(void)
 {
 	int kick_move = -1;
+
+#ifdef _GAME
+	// saber bots too close for too long: the move their AI picked (ai_main.c Bot_TooCloseShove), on the ground and
+	// not busy with another kick / bounce / knockdown (as below)
+	if (pm->ps->clientNum < MAX_CLIENTS && g_entities[pm->ps->clientNum].r.svFlags & SVF_BOT
+		&& pm->ps->groundEntityNum != ENTITYNUM_NONE
+		&& !PM_SaberInBounce(pm->ps->saberMove)
+		&& !PM_SaberInKnockaway(pm->ps->saberMove)
+		&& !PM_SaberInBrokenParry(pm->ps->saberMove)
+		&& !PM_KickMove(pm->ps->saberMove)
+		&& !PM_KickingAnim(pm->ps->torsoAnim)
+		&& !PM_KickingAnim(pm->ps->legsAnim)
+		&& !BG_InRoll(pm->ps, pm->ps->legsAnim)
+		&& !PM_InKnockDown(pm->ps))
+	{
+		const int shove = Bot_ShoveMove(pm->ps->clientNum);
+
+		if (shove != -1)
+		{
+			pm->cmd.forwardmove = pm->cmd.rightmove = 0;
+			return shove;
+		}
+	}
+#endif
 
 	if (!PM_SaberInBounce(pm->ps->saberMove)
 		&& !PM_SaberInKnockaway(pm->ps->saberMove)
