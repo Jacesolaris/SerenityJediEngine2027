@@ -2855,6 +2855,7 @@ void CG_Init(const int serverCommandSequence)
 		"gfx/mp/f_icon_dk_insanity", //FP_INSANITY,
 		"gfx/mp/f_icon_lt_blinding", //FP_BLINDING,
 		"gfx/mp/f_icon_dk_stasis", //FP_DARK_STASIS
+		"gfx/mp/f_icon_lt_sjeprojection", //FP_PROJECTION (SJE's own icon)
 	};
 
 	// Precache inventory icons
@@ -4327,6 +4328,7 @@ int showPowers[MAX_SHOWPOWERS] =
 	FP_LIGHTNING_STRIKE,
 	FP_BLAST,
 	FP_BLINDING,
+	FP_PROJECTION,
 
 	FP_STASIS,
 	FP_SPEED,
@@ -4356,6 +4358,7 @@ const char* showPowersName[MAX_SHOWPOWERS] =
 	"SP_INGAME_LIGHTNING_STRIKE2",
 	"SP_INGAME_BLAST2",
 	"SP_INGAME_BLINDING2",
+	"PROJECTION_NAME",
 
 	"SP_INGAME_STASIS2",
 	"SP_INGAME_SPEED2",
@@ -4388,6 +4391,7 @@ int showDataPadPowers[MAX_DPSHOWPOWERS] =
 	FP_BLAST,
 	FP_BLINDING,
 	FP_STASIS,
+	FP_PROJECTION,
 
 	// Core Powers
 	FP_LEVITATION,
@@ -4857,10 +4861,11 @@ void CG_DPPrevForcePower_f()
 	cg.DataPadforcepowerSelect = original;
 }
 
-// a force power text: SP_INGAME, then SPMOD_INGAME; the Dark Stasis texts are in their own package (darkstasis.str)
+// a force power text: SP_INGAME, then SPMOD_INGAME; the Dark Stasis and Projection texts are in their own packages
+// (darkstasis.str, projection.str)
 static int CG_ForceDescText(const char* reference, char* text, const int text_size)
 {
-	if (!Q_stricmpn(reference, "DARKSTASIS_", 11))
+	if (!Q_stricmpn(reference, "DARKSTASIS_", 11) || !Q_stricmpn(reference, "PROJECTION_", 11))
 	{
 		return cgi_SP_GetStringTextString(reference, text, text_size);
 	}
@@ -4881,6 +4886,7 @@ const char* forcepowerDesc[NUM_FORCE_POWERS] =
 	"FORCE_BLAST_DESC",
 	"FORCE_BLINDING_DESC",
 	"FORCE_STASIS_DESC",
+	"PROJECTION_DESC",
 
 	"FORCE_JUMP_DESC",
 	"FORCE_SPEED_DESC",
@@ -4914,6 +4920,7 @@ const char* forcepowerLvl1Desc[NUM_FORCE_POWERS] =
 	"FORCE_BLAST_LVL1_DESC",
 	"FORCE_BLINDING_LVL1_DESC",
 	"FORCE_STASIS_LVL1_DESC",
+	"PROJECTION_LVL1_DESC",
 
 	"FORCE_JUMP_LVL1_DESC",
 	"FORCE_SPEED_LVL1_DESC",
@@ -4947,6 +4954,7 @@ const char* forcepowerLvl2Desc[NUM_FORCE_POWERS] =
 	"FORCE_BLAST_LVL2_DESC",
 	"FORCE_BLINDING_LVL2_DESC",
 	"FORCE_STASIS_LVL2_DESC",
+	"PROJECTION_LVL2_DESC",
 
 	"FORCE_JUMP_LVL2_DESC",
 	"FORCE_SPEED_LVL2_DESC",
@@ -4980,6 +4988,7 @@ const char* forcepowerLvl3Desc[NUM_FORCE_POWERS] =
 	"FORCE_BLAST_LVL3_DESC",
 	"FORCE_BLINDING_LVL3_DESC",
 	"FORCE_STASIS_LVL3_DESC",
+	"PROJECTION_LVL3_DESC",
 
 	"FORCE_JUMP_LVL3_DESC",
 	"FORCE_SPEED_LVL3_DESC",
@@ -5327,6 +5336,7 @@ static int CG_MDWheel_ForceSide(const int power)
 	case FP_LIGHTNING_STRIKE:
 	case FP_BLAST:
 	case FP_BLINDING:
+	case FP_PROJECTION:
 		return 1;
 	case FP_DRAIN:
 	case FP_LIGHTNING:

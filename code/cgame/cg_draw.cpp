@@ -3761,7 +3761,8 @@ static void CG_DrawHUD(const centity_t* cent)
 		else if (cg.snap->ps.forcePowersActive & 1 << FP_ABSORB
 			|| cg.snap->ps.forcePowersActive & 1 << FP_HEAL
 			|| cg.snap->ps.forcePowersActive & 1 << FP_PROTECT
-			|| cg.snap->ps.forcePowersActive & 1 << FP_TELEPATHY)
+			|| cg.snap->ps.forcePowersActive & 1 << FP_TELEPATHY
+			|| cg.snap->ps.forcePowersActive & 1 << FP_PROJECTION)
 		{
 			hudTintColor = bluehudtint;
 		}
@@ -8738,6 +8739,11 @@ static void CG_Draw2D()
 		//force sight is on
 		//indicate this with sight cone thingy
 		CG_DrawPic(0, 0, 640, 480, cgi_R_RegisterShader("gfx/2d/jsense"));
+	}
+	if (cg.snap->ps.forcePowersActive & 1 << FP_PROJECTION)
+	{
+		// Force Projection: the caster looks through his copy's "remote" view (as MD 9)
+		CG_DrawPic(0, 0, 640, 480, cgi_R_RegisterShader("gfx/2d/droid_view"));
 	}
 
 	//if (cg.predictedPlayerState.hackingTime)

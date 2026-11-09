@@ -4981,6 +4981,7 @@ static void G_NoJumpTaunt(gentity_t* ent, const usercmd_t* ucmd)
 }
 
 extern void ForceDarkStasis(gentity_t* self); // w_force.c
+extern void ForceProjection(gentity_t* self); // w_force.c
 
 static void ClientThink_real(gentity_t* ent)
 {
@@ -7640,6 +7641,9 @@ static void ClientThink_real(gentity_t* ent)
 			break;
 		case GENCMD_FORCE_DARK_STASIS:
 			ForceDarkStasis(ent);
+			break;
+		case GENCMD_FORCE_PROJECTION:
+			ForceProjection(ent);
 			break;
 		default:
 			break;

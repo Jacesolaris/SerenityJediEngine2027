@@ -5356,6 +5356,9 @@ static const char* g_bindCommands[] =
 {
 	"pazaak",
 	"shop", // the shop menu (2026-10-31, g_pazaak shop code)
+	"ally_follow", // ally orders (2026-11-09, g_cmds.cpp Cmd_AllyOrder_f)
+	"ally_hold",
+	"ally_attack",
 	"+md_wheel", // the weapon / force wheel (cgame), held
 	"+md_forcewheel", // the same wheel on the force ring
 	"+altattack",
@@ -5412,6 +5415,7 @@ static const char* g_bindCommands[] =
 	"force_insanity",
 	"force_blinding",
 	"force_darkstasis",
+	"force_projection",
 #endif
 	"force_throw",
 	"forcenext",

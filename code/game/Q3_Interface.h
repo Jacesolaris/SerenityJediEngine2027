@@ -488,6 +488,7 @@ using setType_t = enum //# setType_e
 	SET_FORCE_BLAST,
 	SET_FORCE_INSANITY,
 	SET_FORCE_BLINDING,
+	SET_FORCE_PROJECTION,
 
 	SET_WINTER_GEAR,
 	//## %t="BOOL_TYPES" # Set the player to wear his/her winter gear (skins torso_g1 and lower_e1), or restore the default skins.
@@ -568,6 +569,7 @@ using setType_t = enum //# setType_e
 	SET_FORCE_INSANITY_LEVEL,
 	SET_FORCE_BLINDING_LEVEL,
 	SET_FORCE_DARK_STASIS_LEVEL,
+	SET_FORCE_PROJECTION_LEVEL, // = SET_FORCE_HEAL_LEVEL + FP_PROJECTION (Q3_SetForcePowerLevel)
 
 	SET_SABER1_COLOR1,
 	//## %t="SABER_COLORS" # Set color of first blade of first saber

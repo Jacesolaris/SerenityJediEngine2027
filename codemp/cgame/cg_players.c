@@ -13448,6 +13448,14 @@ void CG_AddSaberBlade(centity_t* cent, centity_t* scent, int renderfx, int saber
 	if (cent->currentState.eType == ET_NPC)
 	{
 		scolor = client->saber[saberNum].blade[bladeNum].color;
+
+		// a Force Projection copy (w_force.c) has its caster's blade colours (DH 2026-11-09)
+		if (cent->currentState.NPC_class == CLASS_PROJECTION && cent->currentState.otherentityNum2 >= 0
+			&& cent->currentState.otherentityNum2 < MAX_CLIENTS && cgs.clientinfo[cent->currentState.otherentityNum2].infoValid)
+		{
+			const clientInfo_t* caster = &cgs.clientinfo[cent->currentState.otherentityNum2];
+			scolor = saberNum == 0 ? caster->icolor1 : caster->icolor2;
+		}
 	}
 	else
 	{
@@ -22277,6 +22285,18 @@ stillDoSaber:
 		}
 
 		trap->R_AddRefEntityToScene(&legs);
+	}
+
+	if (cent->currentState.forcePowersActive & 1 << FP_PROJECTION)
+	{
+		// Force Projection: the caster glows white while he can't be hurt (MD 9 SP's projection shell)
+		refEntity_t shell = legs;
+
+		shell.shaderRGBA[0] = shell.shaderRGBA[1] = shell.shaderRGBA[2] = 255;
+		shell.shaderRGBA[3] = 254;
+		shell.renderfx &= ~RF_RGB_TINT;
+		shell.customShader = cgs.media.forceShell;
+		trap->R_AddRefEntityToScene(&shell);
 	}
 
 	//For now, these two are using the old shield shader. This is just so that you

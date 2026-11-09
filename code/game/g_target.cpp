@@ -1065,6 +1065,7 @@ static void set_mission_stats_cvars()
 	gi.cvar_set("ui_stats_deadlysight", va("%d", client->sess.missionStats.forceUsed[FP_DEADLYSIGHT]));
 	gi.cvar_set("ui_stats_blast", va("%d", client->sess.missionStats.forceUsed[FP_BLAST]));
 	gi.cvar_set("ui_stats_blinding", va("%d", client->sess.missionStats.forceUsed[FP_BLINDING]));
+	gi.cvar_set("ui_stats_projection", va("%d", client->sess.missionStats.forceUsed[FP_PROJECTION]));
 }
 
 #include "../cgame/cg_media.h"	//access to cgs

@@ -313,6 +313,7 @@ static const char* gcmds[] =
 	"force_insanity",
 	"force_blinding",
 	"force_darkstasis",
+	"force_projection",
 	"force_throw",
 	"give",
 	"gloat",

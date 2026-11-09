@@ -2225,6 +2225,209 @@ extern qboolean spawning; // the G_Spawn*() functions are valid  (only turned on
 extern void NPC_PrecacheByClassName(const char*);
 extern void NPC_PrecacheAnimationCFG(const char* NPC_type);
 
+// ---------------------------------------------------------------------------------------------------------------------
+// Force Projection (FP_PROJECTION, light side; ported from MD 9 SP, 2026-11-09)
+// The power (ForceProjection, wp_saber.cpp) makes a copy of the player appear: the NPC projection_close / _near / _far
+// (ext_data/npcs/projection.npc, levels 1 / 2 / 3: 50 / 75 / 100 health) 96 / 192 / 256 units in front of him, else
+// 48 to a side or behind. It looks exactly like him (G_InitPlayerLookFromPlayer, g_client.cpp), is on his team and
+// goes for his enemy. It fades: 1 health every 250 ms, and at 1 it is disintegrated (about 12 / 19 / 25 s).
+// ---------------------------------------------------------------------------------------------------------------------
+extern bool in_camera;
+
+qboolean G_IsForceProjection(const gentity_t* ent)
+{
+	return ent && ent->client && ent->NPC_type && !Q_stricmpn(ent->NPC_type, "projection_", 11) ? qtrue : qfalse;
+}
+
+static qboolean G_ProjectionSpawnSpot(const vec3_t org, const vec3_t fwd, const vec3_t right, const float dist,
+	const int skip, vec3_t spot)
+{
+	const vec3_t mins = { -16, -16, -24 };
+	const vec3_t maxs = { 16, 16, 40 };
+	vec3_t start, eye, ends[5];
+	trace_t tr;
+
+	VectorCopy(org, start);
+	start[2] += 8; // off the floor a bit
+	VectorCopy(org, eye);
+	eye[2] += 32; // about the caster's eyes
+
+	VectorMA(start, dist, fwd, ends[0]); // in front, a little to the left
+	VectorMA(ends[0], -8, right, ends[0]);
+	VectorMA(start, dist * 0.5f, fwd, ends[1]); // half as far in front
+	VectorMA(start, 48, right, ends[2]); // right
+	VectorMA(start, -48, right, ends[3]); // left
+	VectorMA(start, -48, fwd, ends[4]); // behind
+
+	for (const auto& end : ends)
+	{
+		// a clear way there for a body
+		gi.trace(&tr, start, mins, maxs, end, skip, MASK_PLAYERSOLID, static_cast<EG2_Collision>(0), 0);
+		if (tr.startsolid || tr.allsolid || tr.fraction < 1.0f)
+		{
+			continue;
+		}
+
+		// down onto the floor with the same box, so the copy stands on it (not NSF_DROP_TO_FLOOR: that traces
+		// with the spawner's empty box and puts the NPC's origin, its middle, on the floor = feet in the ground)
+		vec3_t down, mid;
+		VectorCopy(tr.endpos, spot);
+		VectorCopy(spot, down);
+		down[2] -= 128;
+		gi.trace(&tr, spot, mins, maxs, down, skip, MASK_PLAYERSOLID, static_cast<EG2_Collision>(0), 0);
+		if (tr.startsolid || tr.allsolid || tr.fraction >= 1.0f)
+		{
+			continue; // no floor under it (a drop) or stuck
+		}
+		VectorCopy(tr.endpos, spot);
+
+		// the body fits there (NPC clip too), and the caster can see the spot
+		gi.trace(&tr, spot, mins, maxs, spot, skip, MASK_NPCSOLID, static_cast<EG2_Collision>(0), 0);
+		if (tr.startsolid || tr.allsolid)
+		{
+			continue;
+		}
+		VectorCopy(spot, mid);
+		mid[2] += 24;
+		gi.trace(&tr, eye, nullptr, nullptr, mid, skip, MASK_SOLID, static_cast<EG2_Collision>(0), 0);
+		if (tr.startsolid || tr.fraction < 1.0f)
+		{
+			continue;
+		}
+		return qtrue;
+	}
+	return qfalse;
+}
+
+void G_SpawnForceProjection(gentity_t* caster)
+{
+	static const char* const projection_types[NUM_FORCE_POWER_LEVELS] =
+	{
+		"projection_close", "projection_close", "projection_near", "projection_far"
+	};
+	static constexpr float projection_dist[NUM_FORCE_POWER_LEVELS] = { 96, 96, 192, 256 };
+
+	if (!caster || !caster->client || caster->health < 1 || in_camera)
+	{
+		return;
+	}
+
+	int lvl = caster->client->ps.forcePowerLevel[FP_PROJECTION];
+	if (lvl < FORCE_LEVEL_1)
+	{
+		return;
+	}
+	if (lvl > FORCE_LEVEL_3)
+	{
+		lvl = FORCE_LEVEL_3;
+	}
+
+	vec3_t angles = { 0, caster->client->ps.viewangles[YAW], 0 }, fwd, right, spot;
+	AngleVectors(angles, fwd, right, nullptr);
+
+	if (!G_ProjectionSpawnSpot(caster->currentOrigin, fwd, right, projection_dist[lvl], caster->s.number, spot))
+	{
+		return; // no room
+	}
+
+	gentity_t* spawner = G_Spawn();
+	if (!spawner)
+	{
+		return;
+	}
+	spawner->classname = "NPC_spawner";
+	spawner->NPC_type = const_cast<char*>(projection_types[lvl]); // NPC_Spawn_Do takes its own copy
+	spawner->count = 1; // freed by NPC_Spawn_Do
+	G_SetOrigin(spawner, spot); // already on the floor (G_ProjectionSpawnSpot)
+	VectorCopy(spot, spawner->s.origin); // NPC_Spawn_Do reads s.origin; G_SetOrigin doesn't set it (DH: copy in the map-origin pillar)
+	G_SetAngles(spawner, angles);
+	VectorCopy(angles, spawner->s.angles);
+
+	NPC_PrecacheAnimationCFG(spawner->NPC_type);
+
+	gentity_t* copy = NPC_Spawn_Do(spawner, qtrue);
+	if (!copy)
+	{
+		G_FreeEntity(spawner); // only freed by NPC_Spawn_Do when the NPC was made
+		return;
+	}
+
+	// on the caster's side, with his saber skill
+	copy->client->playerTeam = caster->client->playerTeam;
+	copy->client->enemyTeam = caster->client->enemyTeam;
+	for (const int fp : { FP_SABER_OFFENSE, FP_SABER_DEFENSE })
+	{
+		copy->client->ps.forcePowersKnown |= caster->client->ps.forcePowersKnown & 1 << fp;
+		copy->client->ps.forcePowerLevel[fp] = caster->client->ps.forcePowerLevel[fp];
+	}
+	copy->client->ps.saberAnimLevel = caster->client->ps.saberAnimLevel;
+
+	if (caster->enemy && caster->enemy->inuse && caster->enemy->health > 0 && caster->enemy != copy)
+	{
+		G_SetEnemy(copy, caster->enemy);
+	}
+
+	// nobody sees the caster while it lasts (DH): the NPCs after him go for his copy instead
+	for (int i = 1; i < globals.num_entities; i++)
+	{
+		gentity_t* npc = &g_entities[i];
+
+		if (npc != copy && npc->inuse && npc->NPC && npc->client && npc->health > 0 && npc->enemy == caster)
+		{
+			G_ClearEnemy(npc);
+			if (npc->client->playerTeam != copy->client->playerTeam)
+			{
+				G_SetEnemy(npc, copy);
+			}
+		}
+	}
+
+	TIMER_Set(copy, "projectionFade", 250);
+}
+
+// disintegrated, as the charged disruptor kill (a saber is never dropped, a gun isn't with MOD_SNIPER)
+static void G_ForceProjectionVanish(gentity_t* ent)
+{
+	G_Damage(ent, nullptr, nullptr, nullptr, ent->currentOrigin, 100000, DAMAGE_NO_PROTECTION | DAMAGE_NO_KNOCKBACK,
+		MOD_SNIPER);
+}
+
+void G_ForceProjectionThink(gentity_t* ent)
+{
+	if (ent->health <= 0)
+	{
+		return;
+	}
+
+	const gentity_t* caster = &g_entities[0];
+	if (!caster->client || caster->health <= 0 || !(caster->client->ps.forcePowersActive & 1 << FP_PROJECTION))
+	{
+		G_ForceProjectionVanish(ent); // the power's time is up (DH): it goes with it
+		return;
+	}
+
+	// never goes for the player (a stray hit, a sound)
+	if (ent->enemy == caster)
+	{
+		G_ClearEnemy(ent);
+	}
+
+	if (!TIMER_Done(ent, "projectionFade"))
+	{
+		return;
+	}
+	TIMER_Set(ent, "projectionFade", 250);
+
+	if (ent->health > 1)
+	{
+		ent->health--;
+		ent->client->ps.stats[STAT_HEALTH] = ent->health;
+		return;
+	}
+
+	G_ForceProjectionVanish(ent); // faded out
+}
+
 void SP_NPC_spawner(gentity_t* self)
 {
 	float fDelay = 0.0f;

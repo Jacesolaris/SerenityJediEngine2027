@@ -451,6 +451,10 @@ static void IT_Tag(const char** hold_buf)
 	{
 		tag = FP_BLINDING;
 	}
+	else if (!Q_stricmp(token_str, "FP_PROJECTION"))
+	{
+		tag = FP_PROJECTION;
+	}
 	else if (!Q_stricmp(token_str, "FP_BLAST"))
 	{
 		tag = FP_BLAST;

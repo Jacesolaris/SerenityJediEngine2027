@@ -7284,6 +7284,25 @@ void CG_AddRefEntityWithPowerups(refEntity_t* ent, int powerups, centity_t* cent
 
 		cgi_R_AddRefEntityToScene(ent);
 	}
+	else if (cent->gent->client->ps.forcePowersActive & 1 << FP_PROJECTION)
+	{
+		// Force Projection: the caster turns see-through (refraction) while his copy fights (as MD 9)
+		if (cg_renderToTextureFX.integer && cg_shadows.integer != 2 && cgs.glconfig.stencilBits >= 4)
+		{
+			cgi_R_SetRefractProp(1.0f, 0.0f, qfalse, qfalse);
+			ent->customShader = 2; //"refractive" shader
+			cgi_R_AddRefEntityToScene(ent);
+			ent->customShader = 0;
+		}
+		else
+		{
+			//stencil buffer's in use
+			ent->renderfx = 0;
+			ent->shaderRGBA[0] = ent->shaderRGBA[1] = ent->shaderRGBA[2] = ent->shaderRGBA[3] = 255;
+			ent->customShader = cgs.media.forceShell;
+			cgi_R_AddRefEntityToScene(ent);
+		}
+	}
 	else if (cent->gent->client->ps.forcePowersActive & 1 << FP_ABSORB)
 	{
 		//absorb is represented by blue..

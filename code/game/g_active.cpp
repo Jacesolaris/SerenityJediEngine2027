@@ -6711,11 +6711,16 @@ static void CommandNPCtoAttack(gentity_t* caller, gentity_t* ourFriend)
 	}
 	else
 	{
-		vec3_t dir;
-		VectorSubtract(ourFriend->currentOrigin, tracedEnemy->currentOrigin, dir);
-		const vec_t angle = DotProduct(ourFriend->currentAngles, dir);
-
-		if (angle >= 0.2 && angle <= 1.0)
+		// ally -> enemy direction against the ally's facing (was a dot product with the view angles,
+		// so front/behind was close to random)
+		vec3_t dir, friend_fwd;
+		VectorSubtract(tracedEnemy->currentOrigin, ourFriend->currentOrigin, dir);
+		dir[2] = 0.0f;
+		VectorNormalize(dir);
+		const vec3_t friend_yaw = { 0.0f, ourFriend->currentAngles[YAW], 0.0f };
+		AngleVectors(friend_yaw, friend_fwd, nullptr, nullptr);
+		const vec_t angle = DotProduct(friend_fwd, dir); // 1 = straight ahead, -1 = behind
+		if (angle >= 0.2f)
 		{// enemy is in front of us, use a front callout
 			G_AddEvent(caller, Q_irand(EV_ANGER1, EV_ANGER3), 0);
 			NPC_SetAnim(ourFriend, SETANIM_TORSO, TORSO_HANDSIGNAL1, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
@@ -7185,6 +7190,9 @@ extern void ForceAbsorb(gentity_t* ent);
 extern void ForceHeal(gentity_t* ent);
 extern void ForceStasis(gentity_t* ent);
 extern void ForceDarkStasis(gentity_t* ent);
+extern void ForceProjection(gentity_t* self);
+extern qboolean G_IsForceProjection(const gentity_t* ent);
+extern void G_ForceProjectionThink(gentity_t* ent);
 extern void ForceDestruction(gentity_t* ent);
 extern void ForceRepulse(gentity_t* ent);
 extern void ForceGrasp(gentity_t* ent);
@@ -7268,6 +7276,9 @@ static void ProcessGenericCmd(gentity_t* ent, const byte cmd)
 		break;
 	case GENCMD_FORCE_DARK_STASIS:
 		ForceDarkStasis(ent);
+		break;
+	case GENCMD_FORCE_PROJECTION:
+		ForceProjection(ent);
 		break;
 	case GENCMD_FORCE_BLAST:
 		ForceBlast(ent);
@@ -9201,6 +9212,12 @@ static void ClientThink_real(gentity_t* ent, usercmd_t* ucmd)
 
 	// perform once-a-second actions
 	ClientTimerActions(ent, msec);
+
+	if (ent->NPC && G_IsForceProjection(ent))
+	{
+		// a Force Projection copy fades away (NPC_spawn.cpp)
+		G_ForceProjectionThink(ent);
+	}
 
 	ClientEndPowerUps(ent);
 

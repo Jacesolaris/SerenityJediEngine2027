@@ -432,6 +432,7 @@ typedef enum
 	FP_INSANITY,
 	FP_BLINDING,
 	FP_DARK_STASIS, // dark side: holds everyone in an arc around the caster (2026-10-27)
+	FP_PROJECTION, // light side: a copy of the caster fights for him (MD 9 SP's power, 2026-11-09)
 	NUM_FORCE_POWERS
 } forcePowers_t;
 
@@ -1714,7 +1715,8 @@ typedef enum
 	GENCMD_FLOURISH,
 	GENCMD_GLOAT,
 	GENCMD_SURRENDER,
-	GENCMD_FORCE_DARK_STASIS // the force_darkstasis key (2026-10-27)
+	GENCMD_FORCE_DARK_STASIS, // the force_darkstasis key (2026-10-27)
+	GENCMD_FORCE_PROJECTION // the force_projection key (2026-11-09)
 } genCmds_t;
 
 // usercmd_t is sent to the server each client frame

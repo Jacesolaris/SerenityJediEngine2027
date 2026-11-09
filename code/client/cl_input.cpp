@@ -156,6 +156,9 @@ static void IN_UseGivenForce()
 	case FP_DARK_STASIS:
 		genCmdNum = GENCMD_FORCE_DARK_STASIS;
 		break;
+	case FP_PROJECTION:
+		genCmdNum = GENCMD_FORCE_PROJECTION;
+		break;
 	case FP_BLAST:
 		genCmdNum = GENCMD_FORCE_BLAST;
 		break;

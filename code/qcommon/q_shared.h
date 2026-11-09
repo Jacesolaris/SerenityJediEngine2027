@@ -800,6 +800,8 @@ using forcePowers_t = enum
 	//instant
 	FP_DARK_STASIS,
 	//duration
+	FP_PROJECTION,
+	//duration - light side: a copy of the player appears and fights for him (from MD 9, 2026-11-09)
 #endif // !JK2_MODE
 
 	NUM_FORCE_POWERS
@@ -2886,6 +2888,7 @@ using genCmds_t = enum
 	GENCMD_FORCE_INSANITY,
 	GENCMD_FORCE_BLINDING,
 	GENCMD_FORCE_DARK_STASIS,
+	GENCMD_FORCE_PROJECTION,
 };
 
 // usercmd_t is sent to the server each client frame

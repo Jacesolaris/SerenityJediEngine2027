@@ -905,6 +905,8 @@ NPC_ValidEnemy
 -------------------------
 */
 
+extern qboolean G_IsForceProjection(const gentity_t* ent); // NPC_spawn.cpp
+
 qboolean G_ValidEnemy(const gentity_t* self, const gentity_t* enemy)
 {
 	//Must be a valid pointer
@@ -948,6 +950,15 @@ qboolean G_ValidEnemy(const gentity_t* self, const gentity_t* enemy)
 			return qtrue;
 		}
 		return qfalse;
+	}
+
+	// a Force Projection copy (NPC_spawn.cpp, on its caster's team) fights everyone who is not on that team, whatever
+	// side the player plays (DH): enemies, other teams, rampaging creatures; not the neutrals (civilians, droids), not
+	// the player, not another copy
+	if (self->client && G_IsForceProjection(self))
+	{
+		return enemy->s.number != 0 && enemy->client->playerTeam != self->client->playerTeam
+			&& enemy->client->playerTeam != TEAM_NEUTRAL && !G_IsForceProjection(enemy) ? qtrue : qfalse;
 	}
 
 	if (enemy->client->playerTeam == TEAM_FREE && enemy->s.number < MAX_CLIENTS)

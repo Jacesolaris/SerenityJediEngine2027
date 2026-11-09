@@ -212,7 +212,8 @@ const int forcePowerMinRank[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] = //0 == n
 		999, //FP_BLAST
 		999, //FP_INSANITY
 		999, //FP_BLINDING
-		999 //FP_DARK_STASIS
+		999, //FP_DARK_STASIS
+		999 //FP_PROJECTION
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -244,7 +245,8 @@ const int forcePowerMinRank[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] = //0 == n
 		10, //FP_BLAST
 		15, //FP_INSANITY
 		10, //FP_BLINDING
-		10 //FP_DARK_STASIS
+		10, //FP_DARK_STASIS
+		5 //FP_PROJECTION
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -276,7 +278,8 @@ const int forcePowerMinRank[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] = //0 == n
 		10, //FP_BLAST
 		15, //FP_INSANITY
 		10, //FP_BLINDING
-		10 //FP_DARK_STASIS
+		10, //FP_DARK_STASIS
+		5 //FP_PROJECTION
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -308,7 +311,8 @@ const int forcePowerMinRank[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] = //0 == n
 		10, //FP_BLAST
 		15, //FP_INSANITY
 		10, //FP_BLINDING
-		10 //FP_DARK_STASIS
+		10, //FP_DARK_STASIS
+		5 //FP_PROJECTION
 		//NUM_FORCE_POWERS
 	}
 };
@@ -1041,8 +1045,8 @@ int ForcePowerUsableOn(const gentity_t* attacker, const gentity_t* other, const 
 	if (!other)                     // FIX 1: prevent NULL dereference
 		return 0;
 
-	if (other->client && (other->client->repulseChargeStart || other->client->ps.fd.forcePowersActive & 1 << FP_DARK_STASIS))
-		return 0; // charging Force Repulse (2026-10-12) or Dark Stasis active (2026-10-27): no power works on him, DH
+	if (other->client && (other->client->repulseChargeStart || other->client->ps.fd.forcePowersActive & (1 << FP_DARK_STASIS | 1 << FP_PROJECTION)))
+		return 0; // charging Force Repulse (2026-10-12), Dark Stasis (2026-10-27) or Force Projection (2026-11-09) active: no power works on him, DH
 
 	if (other->client &&            // FIX 2: safe to dereference now
 		(other->client->ps.inAirAnim ||
@@ -1679,6 +1683,13 @@ void WP_ForcePowerStart(const gentity_t* self, const forcePowers_t forcePower, i
 		hearable = qtrue;
 		hearDist = 512;
 		duration = 1000 + 1000 * Com_Clampi(0, FORCE_LEVEL_3, self->client->ps.fd.forcePowerLevel[forcePower]);
+		self->client->ps.fd.forcePowersActive |= 1 << forcePower;
+		break;
+	case FP_PROJECTION:
+		// the caster is untouchable while his copy fights (ForceProjection)
+		hearable = qtrue;
+		hearDist = 512;
+		duration = 2500 + 2500 * Com_Clampi(FORCE_LEVEL_1, FORCE_LEVEL_3, self->client->ps.fd.forcePowerLevel[forcePower]); // 5 / 7.5 / 10 s (SP 10 / 15 / 20)
 		self->client->ps.fd.forcePowersActive |= 1 << forcePower;
 		break;
 	case FP_STASIS:
@@ -8194,6 +8205,289 @@ void ForceStasis(gentity_t* self)
 }
 
 // ------------------------------------------------------------------------------------------------------------------
+// FP_PROJECTION (light side, 2026-11-09): MD 9 SP's Force Projection in MP. The caster takes the absorb pose and a copy
+// of him (NPC projection_close / _near / _far, ext_data/mpnpcs/projection.npc, levels 1 / 2 / 3: 50 / 75 / 100 health)
+// appears 96 / 192 / 256 units in front of him (else 48 to a side or behind), with his model, skin, tint and sabers
+// (NPC_stats.c takes them from g_projectionCaster). It fights anyone but its caster (and his team mates in team games:
+// G_ValidEnemy) and fades: 1 health every 250 ms, disintegrated at 1 (about 12 / 19 / 25 s), or at once when the
+// caster leaves or casts a new one. While the power lasts the caster can't be hurt, knocked down, targeted or hit by
+// force powers: 5 / 7.5 / 10 s (half of SP's 10 / 15 / 20 s, as Dark Stasis' MP times). Players and bots only.
+// ------------------------------------------------------------------------------------------------------------------
+extern gentity_t* NPC_Spawn_Do(gentity_t* ent);
+extern qboolean WP_SaberParseParms(const char* saber_name, saberInfo_t* saber);
+
+gentity_t* g_projectionCaster = NULL; // NPC_stats.c: the copy being spawned takes this player's look
+
+static const char* const sjeProjectionNpc[NUM_FORCE_POWER_LEVELS] =
+{
+	"projection_close", "projection_close", "projection_near", "projection_far"
+};
+static const float sjeProjectionDist[NUM_FORCE_POWER_LEVELS] = { 96, 96, 192, 256 };
+
+qboolean G_IsForceProjection(const gentity_t* ent)
+{
+	return ent && ent->client && ent->NPC && ent->NPC_type && !Q_stricmpn(ent->NPC_type, "projection_", 11)
+		? qtrue : qfalse;
+}
+
+// the copy is gone: killed and disintegrated (as the charged disruptor shot), no corpse left standing
+static void SJE_ProjectionVanish(gentity_t* copy)
+{
+	if (copy->health > 0)
+	{
+		G_Damage(copy, NULL, NULL, NULL, copy->r.currentOrigin, 100000, DAMAGE_NO_PROTECTION | DAMAGE_NO_KNOCKBACK,
+			MOD_UNKNOWN);
+	}
+	if (copy->inuse && copy->client && copy->health <= 0)
+	{
+		copy->client->ps.eFlags |= EF_DISINTEGRATION;
+		VectorCopy(copy->r.currentOrigin, copy->client->ps.lastHitLoc);
+		VectorClear(copy->client->ps.velocity);
+		copy->r.contents = 0;
+	}
+}
+
+// every frame for a copy (WP_ForcePowersUpdate); qtrue when it went
+static qboolean SJE_ProjectionThink(gentity_t* copy)
+{
+	gentity_t* caster = copy->parent;
+
+	if (copy->health <= 0)
+	{
+		return qfalse;
+	}
+	if (!caster || !caster->inuse || !caster->client || caster->client->pers.connected != CON_CONNECTED
+		|| caster->client->sess.sessionTeam == TEAM_SPECTATOR)
+	{
+		SJE_ProjectionVanish(copy); // its caster left
+		return qtrue;
+	}
+
+	if (!(caster->client->ps.fd.forcePowersActive & 1 << FP_PROJECTION))
+	{
+		SJE_ProjectionVanish(copy); // the power's time is up: it disintegrates (DH)
+		return qtrue;
+	}
+
+	// stays his (NPC_Begin and the NPC file don't know about him)
+	copy->s.NPC_class = CLASS_PROJECTION; // the cgame draws its caster's blade colours (SJE_SpawnProjection)
+	copy->s.otherentityNum2 = caster->s.number;
+	copy->client->leader = caster;
+	copy->client->playerTeam = copy->s.teamowner = NPCTEAM_SOLO;
+	copy->client->enemyTeam = NPCTEAM_FREE;
+
+	// never goes for its caster or (team games) his team mates, whatever made it angry (a hit, a sound)
+	if (copy->enemy && copy->enemy->client && (copy->enemy == caster
+		|| level.gametype >= GT_TEAM && copy->enemy->s.number < MAX_CLIENTS && OnSameTeam(caster, copy->enemy)))
+	{
+		G_ClearEnemy(copy);
+	}
+
+	if (!TIMER_Done(copy, "projectionFade"))
+	{
+		return qfalse;
+	}
+	TIMER_Set(copy, "projectionFade", 250);
+
+	if (copy->health > 1)
+	{
+		copy->health--;
+		copy->client->ps.stats[STAT_HEALTH] = copy->health;
+		return qfalse;
+	}
+	SJE_ProjectionVanish(copy);
+	return qtrue;
+}
+
+static qboolean SJE_ProjectionSpot(const gentity_t* self, const vec3_t fwd, const vec3_t right, const float dist,
+	vec3_t spot)
+{
+	const vec3_t mins = { -15, -15, DEFAULT_MINS_2 };
+	const vec3_t maxs = { 15, 15, DEFAULT_MAXS_2 };
+	vec3_t start, eye, ends[5];
+	trace_t tr;
+
+	VectorCopy(self->client->ps.origin, start);
+	start[2] += 8; // off the floor a bit
+	VectorCopy(self->client->ps.origin, eye);
+	eye[2] += self->client->ps.viewheight;
+
+	VectorMA(start, dist, fwd, ends[0]); // in front, a little to the left
+	VectorMA(ends[0], -8, right, ends[0]);
+	VectorMA(start, dist * 0.5f, fwd, ends[1]); // half as far in front
+	VectorMA(start, 48, right, ends[2]); // right
+	VectorMA(start, -48, right, ends[3]); // left
+	VectorMA(start, -48, fwd, ends[4]); // behind
+
+	for (int i = 0; i < 5; i++)
+	{
+		vec3_t down, mid;
+
+		// a clear way there for a body
+		trap->Trace(&tr, start, mins, maxs, ends[i], self->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
+		if (tr.startsolid || tr.allsolid || tr.fraction < 1.0f)
+		{
+			continue;
+		}
+
+		// down onto the floor with the same box (no copy over a drop)
+		VectorCopy(tr.endpos, spot);
+		VectorCopy(spot, down);
+		down[2] -= 128;
+		trap->Trace(&tr, spot, mins, maxs, down, self->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
+		if (tr.startsolid || tr.allsolid || tr.fraction >= 1.0f)
+		{
+			continue;
+		}
+		VectorCopy(tr.endpos, spot);
+
+		// the body fits there (NPC clip too), and the caster can see the spot
+		trap->Trace(&tr, spot, mins, maxs, spot, self->s.number, MASK_NPCSOLID, qfalse, 0, 0);
+		if (tr.startsolid || tr.allsolid)
+		{
+			continue;
+		}
+		VectorCopy(spot, mid);
+		mid[2] += 24;
+		trap->Trace(&tr, eye, NULL, NULL, mid, self->s.number, MASK_SOLID, qfalse, 0, 0);
+		if (tr.startsolid || tr.fraction < 1.0f)
+		{
+			continue;
+		}
+		return qtrue;
+	}
+	return qfalse;
+}
+
+static void SJE_SpawnProjection(gentity_t* self)
+{
+	const int lvl = Com_Clampi(FORCE_LEVEL_1, FORCE_LEVEL_3, self->client->ps.fd.forcePowerLevel[FP_PROJECTION]);
+	vec3_t angles = { 0, 0, 0 }, fwd, right, spot;
+
+	angles[YAW] = self->client->ps.viewangles[YAW];
+	AngleVectors(angles, fwd, right, NULL);
+
+	if (!SJE_ProjectionSpot(self, fwd, right, sjeProjectionDist[lvl], spot))
+	{
+		return; // no room
+	}
+
+	// one copy at a time
+	for (int i = MAX_CLIENTS; i < level.num_entities; i++)
+	{
+		gentity_t* old = &g_entities[i];
+
+		if (old->inuse && old->parent == self && old->health > 0 && G_IsForceProjection(old))
+		{
+			SJE_ProjectionVanish(old);
+		}
+	}
+
+	gentity_t* spawner = G_Spawn();
+	if (!spawner)
+	{
+		return;
+	}
+	G_SetOrigin(spawner, spot);
+	VectorCopy(spot, spawner->s.origin);
+	spawner->s.angles[YAW] = angles[YAW];
+	spawner->NPC_type = G_NewString(sjeProjectionNpc[lvl]);
+	spawner->count = 1; // NPC_Spawn_Do frees the spawner
+	spawner->delay = 0;
+	trap->LinkEntity((sharedEntity_t*)spawner);
+
+	g_projectionCaster = self;
+	gentity_t* copy = NPC_Spawn_Do(spawner);
+	g_projectionCaster = NULL;
+
+	if (!copy || !copy->client)
+	{
+		return;
+	}
+
+	copy->parent = self;
+	copy->client->leader = self;
+	copy->client->playerTeam = copy->s.teamowner = NPCTEAM_SOLO;
+	copy->client->enemyTeam = NPCTEAM_FREE;
+
+	// his sabers and saber skill
+	for (int s = 0; s < MAX_SABERS; s++)
+	{
+		if (self->client->saber[s].name[0])
+		{
+			WP_SaberParseParms(self->client->saber[s].name, &copy->client->saber[s]);
+			if (s == 0)
+			{
+				copy->s.npcSaber1 = G_model_index(va("@%s", self->client->saber[s].name));
+			}
+			else
+			{
+				copy->s.npcSaber2 = G_model_index(va("@%s", self->client->saber[s].name));
+			}
+		}
+	}
+	copy->client->ps.fd.forcePowersKnown |= self->client->ps.fd.forcePowersKnown & (1 << FP_SABER_OFFENSE | 1 << FP_SABER_DEFENSE);
+	copy->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE] = self->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE];
+	copy->client->ps.fd.forcePowerLevel[FP_SABER_DEFENSE] = self->client->ps.fd.forcePowerLevel[FP_SABER_DEFENSE];
+	copy->client->saberStylesKnown |= self->client->saberStylesKnown;
+
+	// for the cgame: a copy (s.NPC_class CLASS_PROJECTION; the server's client->NPC_class stays CLASS_JEDI for the AI)
+	// of client s.otherentityNum2, whose blade colours it draws (SJE_ProjectionThink keeps them set)
+	copy->s.NPC_class = CLASS_PROJECTION;
+	copy->s.otherentityNum2 = self->s.number;
+
+	TIMER_Set(copy, "projectionFade", 250);
+}
+
+void ForceProjection(gentity_t* self)
+{
+	if (!self->client || self->NPC)
+	{
+		return;
+	}
+	if (self->client->ps.fd.forcePowersActive & 1 << FP_PROJECTION)
+	{
+		// pressed again: ends it once it has run 1 s (its copy then disintegrates, SJE_ProjectionThink)
+		const int total = 2500 + 2500 * Com_Clampi(FORCE_LEVEL_1, FORCE_LEVEL_3, self->client->ps.fd.forcePowerLevel[FP_PROJECTION]);
+		if (self->client->ps.fd.forcePowerDuration[FP_PROJECTION] - level.time < total - 1000)
+		{
+			WP_ForcePowerStop(self, FP_PROJECTION);
+		}
+		return;
+	}
+	if (!SJE_PowerReady(self, FP_PROJECTION) || self->client->ps.groundEntityNum == ENTITYNUM_NONE)
+	{
+		return;
+	}
+
+	if (self->client->ps.fd.forcePowersActive & 1 << FP_RAGE)
+	{
+		WP_ForcePowerStop(self, FP_RAGE);
+	}
+
+	WP_ForcePowerStart(self, FP_PROJECTION, 0);
+	// nobody sees him while it lasts (DH): his entity only goes to his own client, bots skip him
+	// (pass_standard_enemy_checks), NPCs can't target him (FL_NOTARGET); WP_ForcePowerStop undoes it
+	self->r.svFlags |= SVF_SINGLECLIENT;
+	self->r.singleClient = self->s.number;
+	SJE_CastAnim(self, BOTH_FORCE_ABSORB, "sound/weapons/force/absorbhit.mp3", NULL);
+	self->flags |= FL_NOTARGET; // WP_ForcePowerStop takes it off
+
+	SJE_SpawnProjection(self);
+
+	// the NPCs that were after him lose him (G_ValidEnemy drops a FL_NOTARGET enemy too, this is at once)
+	for (int i = MAX_CLIENTS; i < level.num_entities; i++)
+	{
+		gentity_t* npc = &g_entities[i];
+
+		if (npc->inuse && npc->NPC && npc->client && npc->enemy == self)
+		{
+			G_ClearEnemy(npc);
+		}
+	}
+}
+
+// ------------------------------------------------------------------------------------------------------------------
 // FP_DARK_STASIS (dark side, 2026-10-27): the repulse throw without the lift, and the rage sounds. Every enemy (players,
 // bots, NPCs - saber users too) and every flying missile in an arc around the caster is held in stasis, drawn red
 // (FLAG_DARKSTASIS); the caster's screen is tinted red while it lasts (cgame). Level 1 = 120 degrees in front, level 2
@@ -9166,6 +9460,16 @@ void WP_ForcePowerStop(gentity_t* self, const forcePowers_t forcePower)
 
 		self->client->ps.activeForcePass = 0;
 		break;
+	case FP_PROJECTION:
+		self->flags &= ~FL_NOTARGET;
+		self->r.svFlags &= ~SVF_SINGLECLIENT; // seen again
+		if (was_active & 1 << forcePower)
+		{
+			G_Sound(self, CHAN_AUTO, G_SoundIndex("sound/items/respawn1.wav"));
+			// 5 - 10 s before the next copy (MD 9 SP's projectToggleTime)
+			self->client->ps.fd.forcePowerDebounce[forcePower] = level.time + Q_irand(5000, 10000);
+		}
+		break;
 	case FP_DARK_STASIS:
 		// its rage loop (rage and absorb have their own on this track)
 		if (was_active & 1 << forcePower
@@ -10092,6 +10396,7 @@ static int WP_DoSpecificPower(gentity_t* self, const usercmd_t* ucmd, const forc
 	case FP_INSANITY:
 	case FP_BLINDING:
 	case FP_DARK_STASIS:
+	case FP_PROJECTION:
 		powerSucceeded = 0; //always 0 for nonhold powers
 		if (self->client->ps.fd.forceButtonNeedRelease)
 		{
@@ -10126,6 +10431,9 @@ static int WP_DoSpecificPower(gentity_t* self, const usercmd_t* ucmd, const forc
 			break;
 		case FP_DARK_STASIS:
 			ForceDarkStasis(self);
+			break;
+		case FP_PROJECTION:
+			ForceProjection(self);
 			break;
 		default:
 			ForceBlinding(self);
@@ -10686,6 +10994,12 @@ void WP_ForcePowersUpdate(gentity_t* self, usercmd_t* ucmd)
 
 	// a Repulse blast due at its throw frame, the saber back on after the throw
 	SJE_RepulsePending(self);
+
+	// a Force Projection copy fades away
+	if (G_IsForceProjection(self) && SJE_ProjectionThink(self))
+	{
+		return; // gone
+	}
 
 	if (self->r.svFlags & SVF_BOT && !Bot_Is_Allowed_to_use_force(self))
 	{

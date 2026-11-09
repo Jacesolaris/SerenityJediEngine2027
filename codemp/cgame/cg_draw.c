@@ -197,6 +197,7 @@ char* showPowersName[] =
 	"INSANITY2", //FP_INSANITY
 	"BLINDING2", //FP_BLINDING
 	"DARKSTASIS_NAME", //FP_DARK_STASIS (its own strings/English/darkstasis.str: CG_GetStringEdString)
+	"PROJECTION_NAME", //FP_PROJECTION (its own strings/English/projection.str: CG_GetStringEdString)
 	NULL
 };
 
@@ -8801,7 +8802,8 @@ static qboolean CG_IsDurationPower(const int power)
 		power == FP_PROTECT ||
 		power == FP_ABSORB ||
 		power == FP_SEE ||
-		power == FP_DARK_STASIS)
+		power == FP_DARK_STASIS ||
+		power == FP_PROJECTION)
 	{
 		return qtrue;
 	}
@@ -11375,6 +11377,21 @@ static void CG_Draw2DScreenTints(void)
 			{
 				cgRageRecTime = 0;
 			}
+		}
+
+		if (cg.snap->ps.fd.forcePowersActive & 1 << FP_PROJECTION)
+		{
+			// Force Projection: the caster looks through his copy's "remote" view while he can't be hurt (as MD 9 SP)
+			static qhandle_t projectionShader = 0;
+			const float pulse = 0.5f + 0.5f * sin(cg.time * 0.004f);
+			const vec4_t projectionTint = { 0.35f, 0.6f, 1.0f, 0.12f + 0.06f * pulse };
+
+			if (!projectionShader)
+			{
+				projectionShader = trap->R_RegisterShaderNoMip("gfx/2d/droid_view");
+			}
+			CG_FillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, projectionTint);
+			CG_DrawPic(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, projectionShader);
 		}
 
 		if (cg.snap->ps.fd.forcePowersActive & 1 << FP_DARK_STASIS)

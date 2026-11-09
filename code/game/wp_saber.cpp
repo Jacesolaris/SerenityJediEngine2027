@@ -311,6 +311,7 @@ int force_power_dark_light[NUM_FORCE_POWERS] = //0 == neutral
 	FORCE_DARKSIDE, //FP_INSANITY
 	FORCE_LIGHTSIDE, //FP_BLINDING
 	FORCE_DARKSIDE, //FP_DARK_STASIS
+	FORCE_LIGHTSIDE, //FP_PROJECTION
 	//NUM_FORCE_POWERS
 };
 
@@ -346,7 +347,8 @@ int force_power_needed[NUM_FORCE_POWERS] =
 	30, //FP_BLAST,//Instant
 	50, //FP_INSANITY
 	20, //FP_BLINDING
-	50 //FP_DARK_STASIS
+	50, //FP_DARK_STASIS
+	20 //FP_PROJECTION (MD 9)
 	//NUM_FORCE_POWERS
 };
 
@@ -382,7 +384,8 @@ int force_power_neededlevel1[NUM_FORCE_POWERS] =
 	30, //FP_BLAST,//Instant
 	50, //FP_INSANITY
 	20, //FP_BLINDING
-	50 //FP_DARK_STASIS
+	50, //FP_DARK_STASIS
+	20 //FP_PROJECTION (MD 9)
 	//NUM_FORCE_POWERS
 };
 
@@ -418,7 +421,8 @@ int force_power_neededlevel2[NUM_FORCE_POWERS] =
 	30, //FP_BLAST,//Instant
 	50, //FP_INSANITY
 	20, //FP_BLINDING
-	50 //FP_DARK_STASIS
+	50, //FP_DARK_STASIS
+	20 //FP_PROJECTION (MD 9)
 	//NUM_FORCE_POWERS
 };
 
@@ -17425,7 +17429,7 @@ static qboolean ShouldPlayerResistForceThrow(const gentity_t* player, gentity_t*
 		return qfalse;
 	}
 
-	if (player->client && (player->client->ps.repulseChargeStart || player->client->ps.forcePowersActive & 1 << FP_DARK_STASIS))
+	if (player->client && (player->client->ps.repulseChargeStart || player->client->ps.forcePowersActive & (1 << FP_DARK_STASIS | 1 << FP_PROJECTION)))
 	{
 		return qtrue; // charging Force Repulse: pushes and pulls don't move him (2026-10-12)
 	}
@@ -28662,6 +28666,76 @@ static void ForceDarkStasisHold(gentity_t* victim, const int duration)
 	G_AddVoiceEvent(victim, Q_irand(EV_PUSHED1, EV_PUSHED3), 2000);
 }
 
+// FP_PROJECTION (light side, ported from MD 9 SP, 2026-11-09): the player kneels into the absorb pose and a copy of him
+// appears in front (G_SpawnForceProjection, NPC_spawn.cpp) and fights his enemies until it fades. While the power lasts
+// (10 / 15 / 20 s) the caster can't be hurt (G_Damage, as Dark Stasis) or targeted (FL_NOTARGET). Level 1
+// roots him for the cast, level 2 only takes the torso, level 3 is the torso anim alone. Player only: the copy takes
+// the player's look. Pressing the key again (after the deactivate delay) ends it early.
+extern void G_SpawnForceProjection(gentity_t* caster);
+
+void ForceProjection(gentity_t* self)
+{
+	if (!self || !self->client || self->s.number != 0 || self->health <= 1 || in_camera)
+	{
+		return;
+	}
+
+	if (self->client->ps.forcePowersActive & 1 << FP_PROJECTION)
+	{
+		if (self->client->ps.forceAllowDeactivateTime < level.time)
+		{
+			WP_ForcePowerStop(self, FP_PROJECTION);
+		}
+		return;
+	}
+
+	if (self->client->ps.forcePowerDebounce[FP_PROJECTION] > level.time)
+	{
+		return;
+	}
+
+	if (!WP_ForcePowerUsable(self, FP_PROJECTION, 0))
+	{
+		return;
+	}
+
+	if (self->client->ps.groundEntityNum == ENTITYNUM_NONE || cg.zoomMode)
+	{
+		return;
+	}
+
+	if (self->client->ps.forcePowersActive & 1 << FP_RAGE)
+	{
+		WP_ForcePowerStop(self, FP_RAGE);
+	}
+
+	WP_DebounceForceDeactivateTime(self);
+
+	WP_ForcePowerStart(self, FP_PROJECTION, 0);
+
+	if (self->client->ps.saberLockTime < level.time && !PM_InKnockDown(&self->client->ps))
+	{
+		if (self->client->ps.forcePowerLevel[FP_PROJECTION] < FORCE_LEVEL_2)
+		{
+			// level 1: rooted for the cast
+			if (self->client->ps.groundEntityNum != ENTITYNUM_NONE)
+			{
+				VectorClear(self->client->ps.velocity);
+			}
+			NPC_SetAnim(self, SETANIM_BOTH, BOTH_FORCE_ABSORB, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+			self->client->ps.pm_flags |= PMF_TIME_KNOCKBACK;
+			self->client->ps.pm_time = self->client->ps.weaponTime = self->client->ps.torsoAnimTimer;
+			self->aimDebounceTime = level.time + self->client->ps.torsoAnimTimer;
+		}
+		else
+		{
+			// level 2 / 3: torso only, he can keep moving
+			NPC_SetAnim(self, SETANIM_TORSO, BOTH_FORCE_ABSORB, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+			self->client->ps.weaponTime = self->client->ps.torsoAnimTimer;
+		}
+	}
+}
+
 void ForceDarkStasis(gentity_t* self)
 {
 	if (self->health <= 0)
@@ -29011,7 +29085,7 @@ void ForceGrasp(gentity_t* self)
 
 		traceEnt = &g_entities[tr.entityNum];
 	}
-	if (traceEnt && traceEnt->client && (traceEnt->client->ps.repulseChargeStart || traceEnt->client->ps.forcePowersActive & 1 << FP_DARK_STASIS))
+	if (traceEnt && traceEnt->client && (traceEnt->client->ps.repulseChargeStart || traceEnt->client->ps.forcePowersActive & (1 << FP_DARK_STASIS | 1 << FP_PROJECTION)))
 	{
 		return; // charging Force Repulse: can't be gripped (2026-10-12)
 	}
@@ -29982,6 +30056,27 @@ void WP_ForcePowerStart(gentity_t* self, const forcePowers_t force_power, int ov
 		break;
 	case FP_LIGHTNING_STRIKE:
 		break;
+	case FP_PROJECTION:
+		switch (self->client->ps.forcePowerLevel[force_power])
+		{
+		case FORCE_LEVEL_3:
+			duration = 20000;
+			break;
+		case FORCE_LEVEL_2:
+			duration = 15000;
+			break;
+		case FORCE_LEVEL_1:
+		default:
+			duration = 10000;
+			break;
+		}
+		self->client->ps.forcePowersActive |= 1 << force_power;
+		G_SoundOnEnt(self, CHAN_ITEM, "sound/weapons/force/absorbhit.mp3");
+		self->s.loopSound = G_SoundIndex("sound/weapons/force/protectloop.mp3");
+		G_SpawnForceProjection(self);
+		// can't be targeted while the copy fights (no damage either: G_Damage, as Dark Stasis)
+		self->flags |= FL_NOTARGET;
+		break;
 	default:
 		break;
 	}
@@ -30755,6 +30850,13 @@ void WP_ForcePowerStop(gentity_t* self, const forcePowers_t force_power)
 	case FP_INSANITY:
 		break;
 	case FP_BLINDING:
+		break;
+	case FP_PROJECTION:
+		G_SoundOnEnt(self, CHAN_ITEM, "sound/items/respawn1.wav");
+		self->s.loopSound = 0;
+		self->flags &= ~FL_NOTARGET;
+		// 5 - 10 s before the next copy (MD 9's projectToggleTime)
+		self->client->ps.forcePowerDebounce[force_power] = level.time + Q_irand(5000, 10000);
 		break;
 	default:
 		break;
@@ -32542,6 +32644,11 @@ static void WP_CheckForcedPowers(gentity_t* self, usercmd_t* ucmd)
 				//do only once
 				self->client->ps.forcePowersForced &= ~(1 << force_power);
 				break;
+			case FP_PROJECTION:
+				ForceProjection(self);
+				//do only once
+				self->client->ps.forcePowersForced &= ~(1 << force_power);
+				break;
 			default:;
 			}
 		}
@@ -33006,7 +33113,7 @@ void WP_InitForcePowers(gentity_t* ent)
 				| 1 << FP_SABER_DEFENSE | 1 << FP_SABER_OFFENSE | 1 << FP_RAGE | 1 << FP_DRAIN | 1 << FP_PROTECT | 1 <<
 				FP_ABSORB | 1 << FP_SEE | 1 << FP_STASIS | 1 << FP_DESTRUCTION | 1 << FP_GRASP
 				| 1 << FP_REPULSE | 1 << FP_LIGHTNING_STRIKE | 1 << FP_FEAR | 1 << FP_DEADLYSIGHT | 1 << FP_BLAST | 1 <<
-				FP_INSANITY | 1 << FP_BLINDING | 1 << FP_DARK_STASIS;
+				FP_INSANITY | 1 << FP_BLINDING | 1 << FP_DARK_STASIS | 1 << FP_PROJECTION;
 
 			ent->client->ps.forcePowerLevel[FP_HEAL] = FORCE_LEVEL_2;
 			ent->client->ps.forcePowerLevel[FP_LEVITATION] = FORCE_LEVEL_2;
@@ -33039,6 +33146,7 @@ void WP_InitForcePowers(gentity_t* ent)
 			ent->client->ps.forcePowerLevel[FP_INSANITY] = FORCE_LEVEL_1;
 			ent->client->ps.forcePowerLevel[FP_BLINDING] = FORCE_LEVEL_1;
 			ent->client->ps.forcePowerLevel[FP_DARK_STASIS] = FORCE_LEVEL_1;
+			ent->client->ps.forcePowerLevel[FP_PROJECTION] = FORCE_LEVEL_1;
 		}
 	}
 }

@@ -3685,14 +3685,31 @@ qboolean G_DoDismembermentcin(gentity_t* self, vec3_t point, const int mod, cons
 // a pistol hit (G_IsPistolWeapon): G_DoGunDismemberment takes an arm or a hand, nothing else (DH 2026-10-31)
 static qboolean s_gun_arms_only = qfalse;
 
+// The gun MODs that also cut a body that is already dead (player_die). The repeater, disruptor (not the charged
+// sniper shot, that one disintegrates) and concussion families carry 17 of the SJE weapon variants (2026-11-09).
+static qboolean G_IsCorpseGunMOD(const int mod)
+{
+	switch (mod)
+	{
+	case MOD_BLASTER:
+	case MOD_BLASTER_ALT:
+	case MOD_BOWCASTER:
+	case MOD_BOWCASTER_ALT:
+	case MOD_FLECHETTE:
+	case MOD_REPEATER:
+	case MOD_REPEATER_ALT:
+	case MOD_DISRUPTOR:
+	case MOD_CONC:
+	case MOD_CONC_ALT:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
 static qboolean G_DoGunDismemberment(gentity_t* self, vec3_t point, const int mod, const int hit_loc, const qboolean gun_shot)
 {
-	if (gun_shot
-		|| mod == MOD_BLASTER
-		|| mod == MOD_BLASTER_ALT
-		|| mod == MOD_BOWCASTER
-		|| mod == MOD_BOWCASTER_ALT
-		|| mod == MOD_FLECHETTE)
+	if (gun_shot || G_IsCorpseGunMOD(mod))
 	{
 		if (g_gundismemberment->integer > 0 && g_standard_humanoid(self) && !NPC_IsNotDismemberable(self)
 			&& g_dismemberProbabilities->value > 0.0f)
@@ -3830,8 +3847,7 @@ static qboolean G_DoGunDismemberment(gentity_t* self, vec3_t point, const int mo
 				&& hit_loc != HL_HAND_LT)
 			{
 				do_dismemberment = qfalse; // a pistol takes an arm or a hand at the most
-			}
-			if (do_dismemberment)
+			}			if (do_dismemberment)
 			{
 				return G_Dismember(self, point, limb_bone, rotate_bone, limb_name, limb_cap_name, stub_cap_name,
 					limb_tag_name,
@@ -5208,6 +5224,11 @@ static qboolean G_IsGunMOD(const int mod)
 	case MOD_BOWCASTER_ALT:
 	case MOD_FLECHETTE:
 	case MOD_FLECHETTE_ALT:
+	case MOD_REPEATER:
+	case MOD_REPEATER_ALT:
+	case MOD_DISRUPTOR:
+	case MOD_CONC:
+	case MOD_CONC_ALT:
 	case MOD_Z6_ROTARY_CANNON:
 	case MOD_EMPLACED:
 	case MOD_ENERGY:
@@ -5215,6 +5236,31 @@ static qboolean G_IsGunMOD(const int mod)
 	case MOD_BRYAR_ALT:
 	case MOD_PISTOL:
 	case MOD_PISTOL_ALT:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+// The weapons (the inflictor's s.weapon) whose killing shot takes a head or a limb. Every SJE weapon variant shares
+// its base gun's number, so the repeater, disruptor and concussion entries cover those variants (2026-11-09).
+static qboolean G_IsGunShotWeapon(const int weapon)
+{
+	switch (weapon)
+	{
+	case WP_BLASTER:
+	case WP_BOWCASTER:
+	case WP_REPEATER:
+	case WP_DISRUPTOR:
+	case WP_CONCUSSION:
+	case WP_FLECHETTE:
+	case WP_TUSKEN_RIFLE:
+	case WP_TURRET:
+	case WP_EMPLACED_GUN:
+	case WP_WRIST_BLASTER:
+	case WP_DROIDEKA:
+	case WP_JAWA:
+	case WP_Z6_ROTARY_CANNON:
 		return qtrue;
 	default:
 		return qfalse;
@@ -5382,11 +5428,7 @@ void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 				G_DoDismemberment(self, self->pos1, means_of_death, hit_loc);
 			}
 			else if (g_gundismemberment->integer > 0
-				&& (means_of_death == MOD_BLASTER
-					|| means_of_death == MOD_BLASTER_ALT
-					|| means_of_death == MOD_BOWCASTER
-					|| means_of_death == MOD_BOWCASTER_ALT
-					|| means_of_death == MOD_FLECHETTE)
+				&& G_IsCorpseGunMOD(means_of_death)
 				&& (!inflictor || !G_IsPistolWeapon(inflictor->s.weapon)) // pistols never cut a body that is already dead
 				&& !NPC_IsNotDismemberable(self))
 			{
@@ -6966,9 +7008,9 @@ void G_Knockdown(gentity_t* self, gentity_t* attacker, const vec3_t push_dir, fl
 		return;
 	}
 
-	if (self->client->ps.repulseChargeStart || self->client->ps.forcePowersActive & 1 << FP_DARK_STASIS)
+	if (self->client->ps.repulseChargeStart || self->client->ps.forcePowersActive & (1 << FP_DARK_STASIS | 1 << FP_PROJECTION))
 	{
-		return; // charging Force Repulse or Dark Stasis active: can't be knocked down
+		return; // charging Force Repulse, Dark Stasis or Force Projection active: can't be knocked down
 	}
 
 	if (self->client->NPC_class == CLASS_ROCKETTROOPER)
@@ -8085,10 +8127,10 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const 
 		return; // targ is used unchecked below (targ->takedamage)
 	}
 
-	if (targ->client && (targ->client->ps.repulseChargeStart || targ->client->ps.forcePowersActive & 1 << FP_DARK_STASIS) && mod != MOD_TRIGGER_HURT && mod != MOD_SUICIDE
+	if (targ->client && (targ->client->ps.repulseChargeStart || targ->client->ps.forcePowersActive & (1 << FP_DARK_STASIS | 1 << FP_PROJECTION)) && mod != MOD_TRIGGER_HURT && mod != MOD_SUICIDE
 		&& mod != MOD_CRUSH)
 	{
-		return; // charging Force Repulse (2026-10-12) or Dark Stasis active (2026-10-27): invincible, no knockback, DH
+		return; // charging Force Repulse (2026-10-12), Dark Stasis (2026-10-27) or Force Projection (2026-11-09) active: invincible, no knockback, DH
 	}
 
 	if (mod == MOD_SABER && targ && targ->client && targ->client->ps.stats[STAT_SABER_BREAK_SAFE] > level.time)
@@ -9205,18 +9247,7 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const 
 	{
 		// do head shots; a pistol takes an arm or a hand at the most
 		const qboolean pistol_shot = G_IsPistolWeapon(inflictor->s.weapon);
-		if (pistol_shot
-			|| inflictor->s.weapon == WP_BLASTER
-			|| inflictor->s.weapon == WP_TUSKEN_RIFLE
-			|| inflictor->s.weapon == WP_FLECHETTE
-			|| inflictor->s.weapon == WP_TURRET
-			|| inflictor->s.weapon == WP_EMPLACED_GUN
-			|| inflictor->s.weapon == WP_TUSKEN_RIFLE
-			|| inflictor->s.weapon == WP_WRIST_BLASTER
-			|| inflictor->s.weapon == WP_BOWCASTER
-			|| inflictor->s.weapon == WP_DROIDEKA
-			|| inflictor->s.weapon == WP_JAWA
-			|| inflictor->s.weapon == WP_Z6_ROTARY_CANNON)
+		if (pistol_shot || G_IsGunShotWeapon(inflictor->s.weapon))
 		{
 			float targ_maxs2 = 0.0f;
 			int height = 0;
@@ -9238,32 +9269,19 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const 
 			z_rel = point[2] - targ->currentOrigin[2] + fabs(targ->mins[2]);
 			z_ratio = z_rel / height;
 
-			// -----------------------------------------
-			// HEALTH RESTRICTION FOR DISMEMBERMENT
-			// -----------------------------------------
-			const int maxHP = targ->client->ps.stats[STAT_MAX_HEALTH];
-			const int hp = targ->health;
-
-			if (hp > (maxHP * 0.25f))
+			// gun_shot is only used by player_die, so it only cuts when this shot kills. The old "only below 25% health
+			// before the shot" rule stopped every one-shot kill from cutting (2026-11-09).
+			if (pistol_shot)
 			{
-				// Too healthy → no head/body dismemberment
-				targ->client->lasthurt_location = LOCATION_NONE;
+				gun_shot = GUN_SHOT_ARMS;
+			}
+			else if (z_ratio > 0.90f)
+			{
+				gun_shot = GUN_SHOT_HEAD;
 			}
 			else
 			{
-				// Existing logic
-				if (pistol_shot)
-				{
-					gun_shot = GUN_SHOT_ARMS;
-				}
-				else if (z_ratio > 0.90f)
-				{
-					gun_shot = GUN_SHOT_HEAD;
-				}
-				else
-				{
-					gun_shot = GUN_SHOT_BODY;
-				}
+				gun_shot = GUN_SHOT_BODY;
 			}
 		}
 	}

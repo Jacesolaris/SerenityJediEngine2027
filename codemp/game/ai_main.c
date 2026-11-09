@@ -6543,6 +6543,29 @@ static int bot_trace_duck(const bot_state_t* bs, vec3_t traceto)
 //check of the potential enemy is a valid one
 static qboolean bot_vehicle_with_enemy(const bot_state_t* bs, const gentity_t* veh);
 
+extern qboolean G_IsForceProjection(const gentity_t* ent); // w_force.c
+
+// a Force Projection copy (an NPC, w_force.c) is fought like a player, unless it is this bot's own or (team games) its
+// team mate's
+static qboolean bot_projection_enemy(const bot_state_t* bs, const gentity_t* en)
+{
+	const gentity_t* bot = &g_entities[bs->client];
+
+	if (!G_IsForceProjection(en) || en->health < 1 || !en->takedamage || en->client->ps.eFlags & EF_DEAD)
+	{
+		return qfalse;
+	}
+	if (!en->parent || en->parent == bot)
+	{
+		return qfalse;
+	}
+	if (level.gametype >= GT_TEAM && en->parent->client && OnSameTeam(bot, en->parent))
+	{
+		return qfalse;
+	}
+	return qtrue;
+}
+
 static int pass_standard_enemy_checks(const bot_state_t* bs, const gentity_t* en)
 {
 	if (!bs || !en)
@@ -6567,6 +6590,16 @@ static int pass_standard_enemy_checks(const bot_state_t* bs, const gentity_t* en
 	{
 		//not a client, don't care about him
 		return 0;
+	}
+
+	if (G_IsForceProjection(en))
+	{
+		return bot_projection_enemy(bs, en) ? 1 : 0; // an NPC: the player rules below (connected, session) don't apply
+	}
+
+	if (en->client->ps.fd.forcePowersActive & 1 << FP_PROJECTION)
+	{
+		return 0; // Force Projection: nobody sees the caster while it lasts (w_force.c)
 	}
 
 	if (en->health < 1)
@@ -7254,6 +7287,30 @@ static int scan_for_enemies(bot_state_t* bs)
 		i++;
 	}
 
+	// the Force Projection copies (NPCs, above MAX_CLIENTS): a target like a player in sight
+	for (int p = MAX_CLIENTS; p < level.num_entities; p++)
+	{
+		const gentity_t* copy = &g_entities[p];
+		vec3_t a;
+
+		if (!copy->inuse || !copy->client || !bot_projection_enemy(bs, copy)
+			|| !bot_pvs_check(copy->client->ps.origin, bs->eye))
+		{
+			continue;
+		}
+		VectorSubtract(copy->client->ps.origin, bs->eye, a);
+		const float distcheck = VectorLength(a);
+		vectoangles(a, a);
+
+		if (distcheck < closest && (!has_enemy_dist || distcheck < has_enemy_dist - 128) && !no_attack_non_jm
+			&& (in_field_of_vision(bs->viewangles, 90, a) || bot_can_hear(bs, copy, distcheck))
+			&& bot_enemy_in_sight(bs, copy->client->ps.origin))
+		{
+			closest = distcheck;
+			bestindex = p;
+		}
+	}
+
 	return bestindex;
 }
 
@@ -7312,6 +7369,7 @@ static void advanced_scanfor_enemies(bot_state_t* bs)
 				|| bot_vehicle_with_enemy(bs, &g_entities[i])
 				|| g_entities[i].s.eType == ET_NPC && g_entities[i].s.NPC_class != CLASS_VEHICLE && g_entities[i].
 				health > 0 && !(g_entities[i].s.eFlags & EF_DEAD)
+				&& (!G_IsForceProjection(&g_entities[i]) || bot_projection_enemy(bs, &g_entities[i]))
 				|| g_entities[i].s.weapon == WP_EMPLACED_GUN
 				&& g_entities[i].teamnodmg != g_entities[bs->client].client->sess.sessionTeam
 				&& g_entities[i].s.pos.trType == TR_STATIONARY))
@@ -10685,6 +10743,8 @@ static int bot_sp_power(bot_state_t* bs, vec3_t toEnemyAngles)
 		cand[n++] = FP_REPULSE;
 	if (!enemyStunned && dist < 512 && bot_sp_power_ready(bs, FP_DARK_STASIS, 10))
 		cand[n++] = FP_DARK_STASIS;
+	if (dist < 1024 && bot_sp_power_ready(bs, FP_PROJECTION, 20))
+		cand[n++] = FP_PROJECTION;
 	if (!n)
 	{
 		return -1;

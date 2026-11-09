@@ -374,6 +374,7 @@ SetForceCmd SetForceTable[NUM_FORCE_POWERS] = {
 	{ "forceInsanity", "setForceInsanity", FORCE_LEVEL_3 },
 	{ "forceBlinding", "setForceBlinding", FORCE_LEVEL_3 },
 	{ "forceDarkStasis", "setForceDarkStasis", FORCE_LEVEL_3 },
+	{ "forceProjection", "setForceProjection", FORCE_LEVEL_3 },
 };
 
 static void Svcmd_ForceSetLevel_f(const int forcePower)
@@ -1374,6 +1375,7 @@ static void Svcmd_GiveForceAll_f()
 	Svcmd_ForceBlinding_f();
 	Svcmd_ForceRepulse_f();
 	Svcmd_ForceDarkStasis_f();
+	Svcmd_ForceSetLevel_f(FP_PROJECTION);
 	Svcmd_SaberDefense_f();
 	Svcmd_SaberOffense_f();
 	Svcmd_ForceSetLevel_f(FP_ABSORB);
@@ -1846,6 +1848,7 @@ static svcmd_t svcmds[] = {
 	{ "setForceInsanity", Svcmd_ForceSetLevel_f<FP_INSANITY>, CMD_CHEAT },
 	{ "setForceBlinding", Svcmd_ForceSetLevel_f<FP_BLINDING>, CMD_CHEAT },
 	{ "setForceDarkStasis", Svcmd_ForceSetLevel_f<FP_DARK_STASIS>, CMD_CHEAT },
+	{ "setForceProjection", Svcmd_ForceSetLevel_f<FP_PROJECTION>, CMD_CHEAT },
 	{ "setForceAll", Svcmd_SetForceAll_f, CMD_CHEAT },
 	{ "setSaberAll", Svcmd_SetSaberAll_f, CMD_CHEAT },
 

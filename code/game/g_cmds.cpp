@@ -47,6 +47,7 @@ extern void ItemUse_Bacta(gentity_t* ent);
 extern gentity_t* G_GetSelfForPlayerCmd();
 extern void ForceStasis(gentity_t* self);
 extern void ForceDarkStasis(gentity_t* self);
+extern void ForceProjection(gentity_t* self);
 extern void ForceDestruction(gentity_t* self);
 extern void ItemUse_UseCloak(gentity_t* ent);
 extern void ItemUse_Barrier(gentity_t* ent);
@@ -2780,6 +2781,177 @@ ClientCommand
 =================
 */
 extern void Svcmd_FighterTest_f(); // (2026-10-13) g_vehicles.cpp
+// ---------------------------------------------------------------------------------------------
+// Ally orders (2026-11-09): console commands ally_follow, ally_hold, ally_attack, bound on the controls page.
+// The player gives the order to every ally NPC within ALLY_ORDER_RANGE that follows him or got one of these orders
+// before (leader = player and BS_FOLLOW_LEADER / BS_STAND_GUARD / BS_STAND_AND_SHOOT / BS_HUNT_AND_KILL). Scripted or mission NPCs
+// (other behaviour states, no leader, cinematic spawnflag) are left alone. The existing Use toggle on an ally
+// (NPC_Use: follow <-> hunt) keeps working, because NPC_backupinfo is filled in the same way.
+//   ally_follow: follow the player again
+//   ally_hold:   stay here (stand guard; they still shoot at enemies they see)
+//   ally_attack: hunt; the enemy under the crosshair becomes their target if there is one
+// ---------------------------------------------------------------------------------------------
+enum allyOrder_t
+{
+	ALLY_ORDER_FOLLOW,
+	ALLY_ORDER_HOLD,
+	ALLY_ORDER_ATTACK
+};
+
+constexpr float ALLY_ORDER_RANGE = 1024.0f;
+extern void G_SetEnemy(gentity_t* self, gentity_t* enemy);
+extern qboolean PM_HasAnimation(const gentity_t* ent, int animation);
+
+static qboolean Ally_TakesOrders(const gentity_t* player, const gentity_t* ally)
+{
+	if (!ally->inuse || ally == player || !ally->NPC || !ally->client || ally->health <= 0
+		|| ally->client->playerTeam != player->client->playerTeam
+		|| ally->client->NPC_class == CLASS_VEHICLE || ally->client->NPC_class == CLASS_PLAYER
+		|| ally->spawnflags & SFB_CINEMATIC || ally->client->leader != player)
+	{
+		return qfalse;
+	}
+	switch (ally->NPC->behaviorState)
+	{
+	case BS_FOLLOW_LEADER:
+	case BS_STAND_GUARD:
+	case BS_STAND_AND_SHOOT: // a holding ally that saw an enemy (NPC_BSStandGuard switches to it)
+	case BS_HUNT_AND_KILL:
+		break;
+	default:
+		return qfalse; // scripted / mission behaviour
+	}
+	return DistanceSquared(ally->currentOrigin, player->currentOrigin) <= ALLY_ORDER_RANGE * ALLY_ORDER_RANGE
+		? qtrue : qfalse;
+}
+
+// The living enemy NPC or player under the crosshair, or nullptr
+static gentity_t* Ally_CrosshairEnemy(const gentity_t* player)
+{
+	trace_t tr;
+	vec3_t eyes, forward, end;
+	VectorCopy(player->client->renderInfo.eyePoint, eyes);
+	if (VectorCompare(eyes, vec3_origin))
+	{
+		VectorCopy(player->currentOrigin, eyes);
+		eyes[2] += player->client->ps.viewheight;
+	}
+	AngleVectors(player->client->ps.viewangles, forward, nullptr, nullptr);
+	VectorMA(eyes, 8192, forward, end);
+	gi.trace(&tr, eyes, vec3_origin, vec3_origin, end, player->s.number, MASK_SHOT, G2_NOCOLLIDE, 0);
+	if (tr.fraction >= 1.0f || tr.entityNum < 0 || tr.entityNum >= ENTITYNUM_WORLD)
+	{
+		return nullptr;
+	}
+	gentity_t* hit = &g_entities[tr.entityNum];
+	if (!hit->client || hit->health <= 0 || hit->client->playerTeam == player->client->playerTeam
+		|| hit->client->playerTeam == TEAM_NEUTRAL)
+	{
+		return nullptr;
+	}
+	return hit;
+}
+
+static void Ally_PlayTorsoAnim(gentity_t* ent, const int anim)
+{
+	if (anim < 0 || !ent->client || ent->client->ps.groundEntityNum == ENTITYNUM_NONE
+		|| ent->client->ps.weaponTime > 0 || ent->client->ps.torsoAnimTimer > 0)
+	{
+		return;
+	}
+	NPC_SetAnim(ent, SETANIM_TORSO, anim, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+}
+
+// SJE: the player's order gesture (attack: TORSO_HANDSIGNAL3 as in CommandNPCtoAttack) and the ally's answer
+static int Ally_OrderAnim(const gentity_t* player, const allyOrder_t order)
+{
+	const int anim = order == ALLY_ORDER_ATTACK ? TORSO_HANDSIGNAL3 : order == ALLY_ORDER_HOLD ? TORSO_HANDSIGNAL2 : TORSO_HANDSIGNAL1;
+	return PM_HasAnimation(player, anim) ? anim : -1;
+}
+
+static int Ally_AckAnim(const gentity_t* ally)
+{
+	return PM_HasAnimation(ally, TORSO_HANDSIGNAL1) ? TORSO_HANDSIGNAL1 : -1;
+}
+
+static void Cmd_AllyOrder_f(gentity_t* player, const allyOrder_t order)
+{
+	static int next_order_time = 0;
+	if (!player->client || player->health <= 0 || in_camera || player->s.number != 0)
+	{
+		return;
+	}
+	if (level.time < next_order_time && next_order_time - level.time < 1000)
+	{
+		return; // one order every half second (the second test survives a level.time reset on a new map)
+	}
+	next_order_time = level.time + 500;
+
+	gentity_t* target = order == ALLY_ORDER_ATTACK ? Ally_CrosshairEnemy(player) : nullptr;
+	int count = 0;
+	const int num = globals.num_entities < MAX_GENTITIES ? globals.num_entities : MAX_GENTITIES;
+	for (int i = 1; i < num; i++)
+	{
+		gentity_t* ally = &g_entities[i];
+		if (Ally_TakesOrders(player, ally) == qfalse)
+		{
+			continue;
+		}
+		if (g_squadDebug && g_squadDebug->integer)
+		{
+			gi.Printf("ALLYORDER %d order=%d ent=%d dist=%d oldstate=%d player=%s ally=%s\n", level.time, static_cast<int>(order), i,
+				static_cast<int>(Distance(ally->currentOrigin, player->currentOrigin)), static_cast<int>(ally->NPC->behaviorState), vtos(player->currentOrigin), vtos(ally->currentOrigin));
+		}
+		bState_t new_state;
+		switch (order)
+		{
+		case ALLY_ORDER_HOLD:
+			new_state = BS_STAND_GUARD;
+			break;
+		case ALLY_ORDER_ATTACK:
+			new_state = BS_HUNT_AND_KILL;
+			break;
+		default:
+			new_state = BS_FOLLOW_LEADER;
+			break;
+		}
+		// what the Use toggle (NPC_Use) restores: following the player
+		ally->NPC_backupinfo.behaviorState = BS_FOLLOW_LEADER;
+		ally->NPC_backupinfo.tempBehavior = BS_FOLLOW_LEADER;
+		ally->NPC_backupinfo.leader = player;
+		ally->NPC_backupinfo.enemy = ally->enemy;
+
+		ally->NPC->behaviorState = new_state;
+		ally->NPC->tempBehavior = new_state;
+		ally->client->leader = player;
+		if (order == ALLY_ORDER_HOLD)
+		{
+			ally->NPC->goalEntity = nullptr; // stop where they are
+		}
+		else if (order == ALLY_ORDER_ATTACK && target)
+		{
+			G_SetEnemy(ally, target);
+		}
+		Ally_PlayTorsoAnim(ally, Ally_AckAnim(ally));
+		count++;
+	}
+
+	Ally_PlayTorsoAnim(player, Ally_OrderAnim(player, order));
+	if (order == ALLY_ORDER_ATTACK)
+	{
+		G_AddEvent(player, Q_irand(EV_CHASE1, EV_CHASE3), 0);
+	}
+	const char* what = order == ALLY_ORDER_HOLD ? "hold position" : order == ALLY_ORDER_ATTACK ? "attack" : "follow me";
+	if (count > 0)
+	{
+		gi.SendServerCommand(0, va("cp \"Allies (%d): %s\"", count, what));
+	}
+	else
+	{
+		gi.SendServerCommand(0, "cp \"No allies nearby to command\"");
+	}
+}
+
 void ClientCommand(const int clientNum)
 {
 	gentity_t* ent = g_entities + clientNum;
@@ -2909,6 +3081,11 @@ void ClientCommand(const int clientNum)
 	{
 		ent = G_GetSelfForPlayerCmd();
 		ForceDarkStasis(ent);
+	}
+	else if (Q_stricmp(cmd, "force_projection") == 0)
+	{
+		ent = G_GetSelfForPlayerCmd();
+		ForceProjection(ent);
 	}
 	else if (Q_stricmp(cmd, "force_deadlysight") == 0)
 	{
@@ -3213,6 +3390,18 @@ void ClientCommand(const int clientNum)
 		{
 			Svcmd_FighterTest_f();
 		}
+	}
+	else if (Q_stricmp(cmd, "ally_follow") == 0)
+	{
+		Cmd_AllyOrder_f(ent, ALLY_ORDER_FOLLOW);
+	}
+	else if (Q_stricmp(cmd, "ally_hold") == 0)
+	{
+		Cmd_AllyOrder_f(ent, ALLY_ORDER_HOLD);
+	}
+	else if (Q_stricmp(cmd, "ally_attack") == 0)
+	{
+		Cmd_AllyOrder_f(ent, ALLY_ORDER_ATTACK);
 	}
 	else if (TryWorkshopCommand(ent))
 	{

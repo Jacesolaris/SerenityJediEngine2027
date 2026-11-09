@@ -554,6 +554,7 @@ stringID_table_t setTable[] =
 	ENUM2STRING(SET_FORCE_INSANITY_LEVEL),
 	ENUM2STRING(SET_FORCE_BLINDING_LEVEL),
 	ENUM2STRING(SET_FORCE_DARK_STASIS_LEVEL),
+	ENUM2STRING(SET_FORCE_PROJECTION_LEVEL),
 	ENUM2STRING(SET_SABER1_COLOR1),
 	ENUM2STRING(SET_SABER1_COLOR2),
 	ENUM2STRING(SET_SABER2_COLOR1),
@@ -630,6 +631,7 @@ stringID_table_t setTable[] =
 	ENUM2STRING(SET_FORCE_BLAST),
 	ENUM2STRING(SET_FORCE_INSANITY),
 	ENUM2STRING(SET_FORCE_BLINDING),
+	ENUM2STRING(SET_FORCE_PROJECTION),
 	ENUM2STRING(SET_WINTER_GEAR),
 	ENUM2STRING(SET_NO_ANGLES),
 	ENUM2STRING(SET_SABER_ORIGIN),
@@ -9915,6 +9917,7 @@ void CQuake3GameInterface::Set(const int taskID, const int entID, const char* ty
 	case SET_FORCE_BLAST_LEVEL:
 	case SET_FORCE_INSANITY_LEVEL:
 	case SET_FORCE_DARK_STASIS_LEVEL:
+	case SET_FORCE_PROJECTION_LEVEL:
 	case SET_FORCE_BLINDING_LEVEL:
 		int_data = atoi(data);
 		Q3_SetForcePowerLevel(entID, toSet - SET_FORCE_HEAL_LEVEL, int_data);
@@ -10033,6 +10036,9 @@ void CQuake3GameInterface::Set(const int taskID, const int entID, const char* ty
 		break;
 	case SET_FORCE_BLINDING:
 		Q3_SetForcePower(entID, FP_BLINDING, static_cast<qboolean>(Q_stricmp("true", data) == 0));
+		break;
+	case SET_FORCE_PROJECTION:
+		Q3_SetForcePower(entID, FP_PROJECTION, static_cast<qboolean>(Q_stricmp("true", data) == 0));
 		break;
 
 	case SET_WINTER_GEAR: // Created: 03/26/03 by AReis.

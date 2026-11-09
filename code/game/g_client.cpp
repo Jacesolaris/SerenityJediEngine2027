@@ -2646,6 +2646,109 @@ void G_SetSabersFromCVars(gentity_t* ent)
 	}
 }
 
+extern void WP_RemoveSaber(gentity_t* ent, int saberNum);
+
+// Force Projection (NPC_spawn.cpp): gives ent the player's look as it is right now: his model and skin (from his
+// ghoul2 model, so also after a character change in game or a save game load), his tint, scale, sounds and sabers.
+// qfalse if the player has no model to copy (the caller then uses the console cvars). Ported from MD 9 SP.
+qboolean G_InitPlayerLookFromPlayer(gentity_t* ent)
+{
+	const gentity_t* pl = &g_entities[0];
+	if (!ent || !ent->client || !pl->inuse || !pl->client || pl->playerModel < 0 || pl->ghoul2.size() <= pl->playerModel)
+	{
+		return qfalse;
+	}
+	const CGhoul2Info& g2 = pl->ghoul2[pl->playerModel];
+
+	// the model: models/players/<model>/model.glm (or model_sp.glm)
+	constexpr int prefix_len = sizeof "models/players/" - 1;
+	if (Q_stricmpn(g2.mFileName, "models/players/", prefix_len))
+	{
+		return qfalse;
+	}
+	char model_name[MAX_QPATH];
+	Q_strncpyz(model_name, g2.mFileName + prefix_len, sizeof model_name);
+	char* slash = strchr(model_name, '/');
+	if (!slash)
+	{
+		return qfalse;
+	}
+	*slash = '\0';
+
+	// the skin, as g_set_g2_player_model registered it: models/players/<model>/model_<skin>.skin or
+	// models/players/<model>/|head|torso|legs
+	char skin_path[MAX_QPATH] = {};
+	char skin[MAX_QPATH] = {};
+	const char* custom_skin = nullptr;
+	if (g2.mCustomSkin > 0 && g2.mCustomSkin < MAX_CHARSKINS)
+	{
+		gi.GetConfigstring(CS_CHARSKINS + g2.mCustomSkin, skin_path, sizeof skin_path);
+	}
+	const char* folder = va("models/players/%s/", model_name);
+	if (skin_path[0] && !Q_stricmpn(skin_path, folder, static_cast<int>(strlen(folder))))
+	{
+		const char* rest = skin_path + strlen(folder);
+		if (rest[0] == '|')
+		{
+			Q_strncpyz(skin, rest + 1, sizeof skin); // three part skin
+			custom_skin = skin;
+		}
+		else if (!Q_stricmpn(rest, "model_", 6))
+		{
+			Q_strncpyz(skin, rest + 6, sizeof skin);
+			COM_StripExtension(skin, skin, sizeof skin);
+			if (Q_stricmp(skin, "default"))
+			{
+				custom_skin = skin;
+			}
+		}
+	}
+
+	G_RemovePlayerModel(ent);
+	G_RemoveWeaponModels(ent);
+	G_RemoveHolsterModels(ent);
+	g_set_g2_player_model(ent, model_name, custom_skin, nullptr, nullptr);
+
+	VectorCopy(pl->s.modelScale, ent->s.modelScale);
+	for (int i = 0; i < 4; i++)
+	{
+		ent->client->renderInfo.customRGBA[i] = pl->client->renderInfo.customRGBA[i];
+	}
+
+	if (ent->client->clientInfo.customBasicSoundDir && gi.bIsFromZone(ent->client->clientInfo.customBasicSoundDir, TAG_G_ALLOC))
+	{
+		gi.Free(ent->client->clientInfo.customBasicSoundDir);
+	}
+	ent->client->clientInfo.customBasicSoundDir = pl->client->clientInfo.customBasicSoundDir
+		? G_NewString(pl->client->clientInfo.customBasicSoundDir)
+		: nullptr;
+
+	// the player's sabers, with his blade colours (G_MatchPlayerWeapon then gives the weapon and blade states)
+	for (int s = 0; s < MAX_SABERS; s++)
+	{
+		const saberInfo_t& from = pl->client->ps.saber[s];
+		if (from.name && from.name[0])
+		{
+			WP_SaberParseParms(from.name, &ent->client->ps.saber[s]);
+			for (int b = 0; b < MAX_BLADES; b++)
+			{
+				ent->client->ps.saber[s].blade[b].color = from.blade[b].color;
+			}
+		}
+		else if (s > 0)
+		{
+			WP_RemoveSaber(ent, s);
+		}
+	}
+	ent->client->ps.dualSabers = pl->client->ps.dualSabers;
+	ent->client->ps.saberStylesKnown |= pl->client->ps.saberStylesKnown;
+
+	G_AddWeaponModels(ent);
+	NPC_SetAnim(ent, SETANIM_LEGS, ent->client->ps.legsAnim, SETANIM_FLAG_NORMAL | SETANIM_FLAG_RESTART);
+	NPC_SetAnim(ent, SETANIM_TORSO, ent->client->ps.torsoAnim, SETANIM_FLAG_NORMAL | SETANIM_FLAG_RESTART);
+	return qtrue;
+}
+
 void G_InitPlayerFromCvars(gentity_t* ent)
 {
 	//set model based on cvars

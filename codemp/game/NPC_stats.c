@@ -3438,7 +3438,9 @@ qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 		if (Q_stricmp("player", playerModel) == 0)
 		{
 			//set up the playerModel to be the playerModel of the entity with the player script_targetname
-			gentity_t* player = G_Find(NULL, FOFS(script_targetname), "player");
+			// (a Force Projection copy: its caster, w_force.c)
+			extern gentity_t* g_projectionCaster;
+			gentity_t* player = g_projectionCaster ? g_projectionCaster : G_Find(NULL, FOFS(script_targetname), "player");
 			char* s = NULL;
 
 			if (!player)

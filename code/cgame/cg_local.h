@@ -571,11 +571,11 @@ using cg_t = struct
 	short bracketedEntities[64];
 };
 
-constexpr auto MAX_SHOWPOWERS = 23;
+constexpr auto MAX_SHOWPOWERS = 24;
 extern int showPowers[MAX_SHOWPOWERS];
 extern const char* showPowersName[MAX_SHOWPOWERS];
 extern int force_icons[NUM_FORCE_POWERS];
-constexpr auto MAX_DPSHOWPOWERS = 27;
+constexpr auto MAX_DPSHOWPOWERS = 28;
 
 void Weapon_HookThink(gentity_t* ent);
 void Weapon_HookFree(gentity_t* ent);

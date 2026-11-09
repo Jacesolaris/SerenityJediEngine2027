@@ -118,6 +118,7 @@ stringID_table_t FPTable[] =
 	ENUM2STRING(FP_INSANITY),
 	ENUM2STRING(FP_BLINDING),
 	ENUM2STRING(FP_DARK_STASIS),
+	ENUM2STRING(FP_PROJECTION),
 	{ "", -1 }
 };
 
@@ -2031,6 +2032,8 @@ static void NPC_BuildRandom()
 extern cvar_t* com_outcast;
 extern void G_MatchPlayerWeapon(gentity_t* ent);
 extern void G_InitPlayerFromCvars(gentity_t* ent);
+extern qboolean G_InitPlayerLookFromPlayer(gentity_t* ent);
+extern qboolean G_IsForceProjection(const gentity_t* ent);
 extern void g_set_g2_player_model(gentity_t* ent, const char* modelName, const char* customSkin, const char* surf_off, const char* surf_on);
 
 qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
@@ -4266,8 +4269,12 @@ qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 		npc->weaponModel[0] = -1;
 		if (Q_stricmp("player", player_model) == 0)
 		{
-			//set the model from the console cvars
-			G_InitPlayerFromCvars(npc);
+			// a Force Projection copy is the player exactly as he looks now (he may have changed character in
+			// game); otherwise set the model from the console cvars
+			if (!G_IsForceProjection(npc) || !G_InitPlayerLookFromPlayer(npc))
+			{
+				G_InitPlayerFromCvars(npc);
+			}
 			//now set the weapon, etc.
 			G_MatchPlayerWeapon(npc);
 			//NPC->NPC->aiFlags |= NPCAI_MATCHPLAYERWEAPON;//FIXME: may not always want this

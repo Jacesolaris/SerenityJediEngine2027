@@ -1644,6 +1644,12 @@ qboolean G_ValidEnemy(const gentity_t* self, const gentity_t* enemy)
 	{
 		return qfalse;
 	}
+	extern qboolean G_IsForceProjection(const gentity_t* ent); // w_force.c
+	if (enemy->client && self->client->leader && self->client->leader->client && enemy->s.number < MAX_CLIENTS
+		&& level.gametype >= GT_TEAM && G_IsForceProjection(self) && OnSameTeam(self->client->leader, enemy))
+	{
+		return qfalse; // a Force Projection copy (w_force.c) leaves its caster's team mates alone
+	}
 
 	if (enemy->client->playerTeam == NPCTEAM_FREE && enemy->s.number < MAX_CLIENTS)
 	{

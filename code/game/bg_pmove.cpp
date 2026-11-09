@@ -21927,6 +21927,7 @@ extern void ForceAbsorb(gentity_t* self);
 extern void ForceSeeing(gentity_t* self);
 extern void ForceStasis(gentity_t* self);
 extern void ForceDarkStasis(gentity_t* self);
+extern void ForceProjection(gentity_t* self);
 extern void ForceFear(gentity_t* self);
 extern void ForceRepulse(gentity_t* self);
 extern void ForceLightningStrike(gentity_t* self);
@@ -22017,6 +22018,9 @@ void PM_CheckForceUseButton(gentity_t* ent, usercmd_t* ucmd)
 				break;
 			case FP_BLINDING:
 				ForceBlinding(ent);
+				break;
+			case FP_PROJECTION:
+				ForceProjection(ent);
 				break;
 			default:;
 			}
