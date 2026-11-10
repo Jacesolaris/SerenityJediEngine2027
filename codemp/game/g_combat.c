@@ -5236,13 +5236,7 @@ void G_Dismember(const gentity_t* ent, const gentity_t* enemy, vec3_t point, con
 		BG_GetRootSurfNameWithVariant(ent->ghoul2, "hips", stub_name, sizeof(stub_name));
 		Com_sprintf(stub_cap_name, sizeof(stub_cap_name), "%s_cap_l_leg", stub_name);
 	}
-	else if (limb_type == G2_MODELPART_RLEG)
-	{
-		BG_GetRootSurfNameWithVariant(ent->ghoul2, "r_leg", limb_name, sizeof(limb_name));
-		BG_GetRootSurfNameWithVariant(ent->ghoul2, "hips", stub_name, sizeof(stub_name));
-		Com_sprintf(stub_cap_name, sizeof(stub_cap_name), "%s_cap_r_leg", stub_name);
-	}
-	else
+	else // 2026-11-10 (audit): the "else if (limb_type == G2_MODELPART_RLEG)" branch here was the same code; merged
 	{
 		// Default to right leg (matches client behaviour)
 		BG_GetRootSurfNameWithVariant(ent->ghoul2, "r_leg", limb_name, sizeof(limb_name));
@@ -6202,10 +6196,12 @@ static qboolean G_SaberSlice(gentity_t* ent, const gentity_t* enemy)
 	{
 		return qfalse;
 	}
-	if (s_saberSliceHit.victim != ent->s.number || level.time - s_saberSliceHit.time > 150
-		|| ent->client->lasthurt_mod != MOD_SABER)
+	if (s_saberSliceHit.victim != ent->s.number || level.time - s_saberSliceHit.time > 150)
 	{
-		return qfalse; // no saber blade to take the plane from
+		// no saber blade to take the plane from. 2026-11-10: no lasthurt_mod test any more (G_Damage only sets it for
+		// standard humanoids, so droids and creatures were never cut in MP); G_Damage drops the saber hit instead when
+		// something else hurts the body before it dies
+		return qfalse;
 	}
 	if (G_SaberSliceExcluded(ent))
 	{
@@ -6252,6 +6248,11 @@ static qboolean G_SaberSlice(gentity_t* ent, const gentity_t* enemy)
 	}
 	if (best_bone < 0 || !best_seg || best_score > 8.0f * scale)
 	{
+		if (g_DebugSaberCombat.integer)
+		{
+			Com_Printf("Debug: saber slice on entity %d found no bone near the hit (slot %d, %.1f units off): old dismemberment\n",
+				ent->s.number, best_bone, best_score);
+		}
 		return qfalse;
 	}
 
@@ -6540,8 +6541,7 @@ void G_CheckForDismemberment(gentity_t* ent, const gentity_t* enemy, vec3_t poin
 	}
 	if (g_saberSlice.integer && ent->saberSliceCount > 0 && ent->client
 		&& ent->saberSliceSpawn == ent->client->ps.persistant[PERS_SPAWN_COUNT]
-		&& s_saberSliceHit.victim == ent->s.number && level.time - s_saberSliceHit.time <= 150
-		&& ent->client->lasthurt_mod == MOD_SABER)
+		&& s_saberSliceHit.victim == ent->s.number && level.time - s_saberSliceHit.time <= 150)
 	{
 		return; // already sliced by a saber: never mix in the old limb cuts
 	}
@@ -7447,6 +7447,13 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, vec3_t
 
 	if (!targ)
 		return;
+
+	if (mod != MOD_SABER && s_saberSliceHit.victim == targ->s.number)
+	{
+		// 2026-11-10: something other than a saber hurts the body just after a saber hit: a kill now is not a saber
+		// kill, so no saber slice (replaces the lasthurt_mod test in G_SaberSlice)
+		s_saberSliceHit.victim = ENTITYNUM_NONE;
+	}
 
 	if (targ->client && (targ->client->repulseChargeStart || targ->client->ps.fd.forcePowersActive & (1 << FP_DARK_STASIS | 1 << FP_PROJECTION)) && mod != MOD_TRIGGER_HURT && mod != MOD_SUICIDE
 		&& mod != MOD_CRUSH && mod != MOD_TELEFRAG)
@@ -8662,10 +8669,15 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, vec3_t
 		// set the last client who damaged the target
 		targ->client->lasthurt_client = attacker->s.number;
 		targ->client->lasthurt_mod = mod;
-		// Modify the damage for location damage
-		if (point && targ && targ->health > 0 && attacker && take)
+		// Modify the damage for location damage. 2026-11-10: this block never ran in MP (g_standard_humanoid was always
+		// false, g_client.c), so MP damage was tuned without it: g_spLocationDamage 1 turns on the SP multipliers (on top of g_locationBasedDamage)
+		if (g_spLocationDamage.integer && point && targ && targ->health > 0 && attacker && take)
 		{
 			take = G_LocationDamage(point, targ, take);
+		}
+		else if (!g_spLocationDamage.integer)
+		{
+			targ->client->lasthurt_location = LOCATION_NONE;
 		}
 		else
 		{

@@ -54,6 +54,7 @@ layout(std140) uniform Entity
 	vec4 u_SliceSign;
 	int u_SliceCount;
 	float u_SliceHeat;
+	vec4 u_AmbientCube[6]; // r_ambientCube: +x -x +y -y +z -z, [0].w = 1 when valid
 };
 
 #if defined(USE_SKELETAL_ANIMATION)
@@ -462,6 +463,7 @@ layout(std140) uniform Entity
 	vec4 u_SliceSign;
 	int u_SliceCount;
 	float u_SliceHeat;
+	vec4 u_AmbientCube[6]; // r_ambientCube: +x -x +y -y +z -z, [0].w = 1 when valid
 };
 
 struct Light
@@ -1344,6 +1346,18 @@ void main()
 	N = CalcNormal(vertexNormal, var_Tangent, texCoords);
 	L /= sqrt(sqrLightDist);
 
+  #if defined(USE_LIGHT_VECTOR)
+	// r_ambientCube: directional ambient + floor bounce (world space)
+	if (u_AmbientCube[0].w > 0.5)
+	{
+		vec3 n2 = N * N;
+		vec3 cube = n2.x * (N.x > 0.0 ? u_AmbientCube[0].rgb : u_AmbientCube[1].rgb)
+		          + n2.y * (N.y > 0.0 ? u_AmbientCube[2].rgb : u_AmbientCube[3].rgb)
+		          + n2.z * (N.z > 0.0 ? u_AmbientCube[4].rgb : u_AmbientCube[5].rgb);
+		ambientColor = cube * var_Color.rgb;
+	}
+  #endif
+
   #if defined(USE_SHADOWMAP)
 	vec3 primaryLightDir = normalize(u_PrimaryLightOrigin.xyz);
 	float NPL = clamp(dot(N, primaryLightDir), 0.0, 1.0);
@@ -1384,6 +1398,7 @@ void main()
 	vec2 windowTex = gl_FragCoord.xy / r_FBufScale;
 	AO = texture(u_SSAOMap, windowTex).r;
 	#endif
+	const float screenAO = AO;	// SSAO only (not the material AO below)
 
 	vec4 specular = vec4(1.0);
 	float roughness = 0.99;
@@ -1404,6 +1419,10 @@ void main()
   #endif
   #endif
 	ambientColor *= AO;
+  #if defined(USE_SSAO) && (defined(USE_LIGHTMAP) || defined(USE_LIGHT_VERTEX))
+	// most of a lightmap is bounced light, so let SSAO darken it too (half strength)
+	lightColor *= mix(1.0, screenAO, 0.5);
+  #endif
 
 	vec3  H  = normalize(L + E);
 	float NE = abs(dot(N, E)) + 1e-5;

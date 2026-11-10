@@ -2639,8 +2639,8 @@ void SetupGameGhoul2Model(gentity_t* ent, char* modelname, char* skinName)
 		//add some extra bolts for some of the NPC classes
 		if (ent->client->NPC_class == CLASS_HOWLER)
 		{
-			ent->NPC->genericBolt1 = trap->G2API_AddBolt(&ent->ghoul2, 0, "Tongue01"); // tongue base
-			ent->NPC->genericBolt2 = trap->G2API_AddBolt(&ent->ghoul2, 0, "Tongue08"); // tongue tip
+			ent->NPC->genericBolt1 = trap->G2API_AddBolt(ent->ghoul2, 0, "Tongue01"); // tongue base (2026-11-10: was &ent->ghoul2)
+			ent->NPC->genericBolt2 = trap->G2API_AddBolt(ent->ghoul2, 0, "Tongue08"); // tongue tip
 		}
 	}
 }
@@ -7748,7 +7748,11 @@ qboolean g_standard_humanoid(gentity_t* self)
 		return qfalse;
 	}
 
-	trap->G2API_GetGLAName(&self->ghoul2, 0, GLAName);
+	// 2026-11-10: was &self->ghoul2 (the address of the pointer), which the engine read as a ghoul2 handle, so this
+	// was false (or random, the buffer was never filled) for every model in MP: no saber slice, no gun head shots,
+	// no tired-attacker bounce, no humanoid knockdowns. SP passes the instance itself.
+	GLAName[0] = '\0';
+	trap->G2API_GetGLAName(self->ghoul2, 0, GLAName);
 
 	assert(GLAName);
 

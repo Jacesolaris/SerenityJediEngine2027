@@ -146,6 +146,10 @@ extern float Manual_NPCKickAbsorbing(const gentity_t* defender);
 extern qboolean BG_FullBodyEmoteAnim(int anim);
 extern qboolean BG_FullBodyCowerAnim(int anim);
 extern cvar_t* d_slowmoaction;
+extern cvar_t* g_SaberPerfectBlockingTimerEasy;
+extern cvar_t* g_SaberPerfectBlockingTimerNormal;
+extern cvar_t* g_SaberPerfectBlockingTimerHard;
+extern qboolean WP_SaberPerfectBlockPress(const gentity_t* ent, int window);
 extern void G_StartStasisEffect(const gentity_t* ent, int me_flags = 0, int length = 1000, float time_scale = 0.0f, int spin_time = 0);
 extern qboolean IsSurrendering(const gentity_t* self);
 extern qboolean IsRespecting(const gentity_t* self);
@@ -854,11 +858,7 @@ static void G_SetClientSound(gentity_t* ent)
 	{ //loop hacking sound
 		ent->s.loopSound = G_SoundIndex("sound/player/hacking.wav");
 	}
-	else if (ent->client)
-	{
-		ent->s.loopSound = 0;
-	}
-	else
+	else // 2026-11-10 (audit): the "else if (ent->client)" branch here was the same code; merged
 	{
 		ent->s.loopSound = 0;
 	}
@@ -2105,9 +2105,10 @@ static void ClientTimerActions(gentity_t* ent, const int msec)
 			client->ps.saberBlockingTime < level.time &&
 			client->ps.groundEntityNum != ENTITYNUM_NONE)
 		{
-			// Half-speed regeneration:
-			// Regenerate 1 point every 2 frames instead of every frame.
-			if ((level.time & 1) == 0)  // even frame → regen
+			// Half-speed regeneration: this runs once a second (ClientTimerActions), so regenerate every 2nd second.
+			// 2026-11-10 (audit): was (level.time & 1), but level.time moves in whole frames (50 ms), so it was always
+			// even (full speed) or, on an MP server with odd frame times, never regenerated at all.
+			if (((level.time / 1000) & 1) == 0)
 			{
 				WP_SaberFatigueRegenerate(&client->ps, 1);
 			}
@@ -2126,9 +2127,10 @@ static void ClientTimerActions(gentity_t* ent, const int msec)
 				!PM_SaberInBrokenParry(client->ps.saberMove) &&
 				client->ps.saberBlockingTime < level.time)
 			{
-				// Half-speed regeneration:
-				// Regenerate 1 point every 2 frames instead of every frame.
-				if ((level.time & 1) == 0)  // even frame → regen
+				// Half-speed regeneration: this runs once a second (ClientTimerActions), so regenerate every 2nd second.
+				// 2026-11-10 (audit): was (level.time & 1), but level.time moves in whole frames (50 ms), so it was always
+				// even (full speed) or, on an MP server with odd frame times, never regenerated at all.
+				if (((level.time / 1000) & 1) == 0)
 				{
 					client->ps.blockPoints++;
 				}
@@ -2445,12 +2447,12 @@ extern qboolean PM_KnockDownAnim(int anim);
 // ============================================================
 static void WP_KnockdownAndDrain(gentity_t* hitEnt, const gentity_t* pusher, int knockAnimMin, int knockAnimMax, qboolean addFatigueBonus, qboolean useAbsorbDrain)
 {
-	const qboolean isNPC = (qboolean)(hitEnt->s.clientNum >= MAX_CLIENTS && !G_ControlledByPlayer(hitEnt));
-
 	if (!hitEnt || !hitEnt->client)
 	{
 		return;
 	}
+
+	const qboolean isNPC = (qboolean)(hitEnt->s.clientNum >= MAX_CLIENTS && !G_ControlledByPlayer(hitEnt));
 
 	NPC_SetAnim(hitEnt, SETANIM_BOTH, (knockAnimMin == knockAnimMax) ? knockAnimMin : Q_irand(knockAnimMin, knockAnimMax), SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 
@@ -2527,16 +2529,29 @@ qboolean WP_AbsorbKick(gentity_t* hitEnt, gentity_t* pusher, vec3_t push_dir)
 	// ============================================================
 	if (BotCanAbsorbKick(hitEnt, push_dir) && NPCBlocking && isNPC)
 	{
+		// 2026-11-09 (DH: NPCs/bots absorb a kick and turn the knockdown into a backflip). It was the wrong way round: a
+		// fresh NPC (BP and FP > 50) staggered AND switched its saber off, a tired one (35-50) backflipped, and the flip
+		// was played standing on the floor with no lift. Now a fresh NPC backflips out of it as a real jump (like the
+		// player's back-jump flip; the kick's throw in G_KickTrace pushes it back), a tired one only staggers, and the
+		// saber stays on. Sabers that forbid flips (SFL_NO_FLIPS) stagger.
+		const qboolean can_flip = (qboolean)(!(hitEnt->client->ps.saber[0].saberFlags & SFL_NO_FLIPS)
+			&& (!hitEnt->client->ps.dualSabers || !(hitEnt->client->ps.saber[1].saberFlags & SFL_NO_FLIPS)));
+
 		if (hitEnt->client->ps.blockPoints > 50 &&
-			hitEnt->client->ps.forcePower > 50)
+			hitEnt->client->ps.forcePower > 50 &&
+			can_flip)
 		{
-			G_Stagger(hitEnt);
+			NPC_SetAnim(hitEnt, SETANIM_BOTH, Q_irand(BOTH_FLIP_BACK1, BOTH_FLIP_BACK3), SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+			hitEnt->client->ps.pm_flags |= PMF_JUMP_HELD;
+			hitEnt->client->ps.groundEntityNum = ENTITYNUM_NONE;
+			hitEnt->client->ps.jumpZStart = hitEnt->currentOrigin[2];
+			hitEnt->client->ps.velocity[2] = JUMP_VELOCITY;
+			G_AddEvent(hitEnt, EV_JUMP, 0);
 			WP_BlockPointsDrain(hitEnt, FATIGUE_BP_ABSORB);
-			WP_DeactivateSaber(hitEnt, qtrue);
 		}
 		else
 		{
-			NPC_SetAnim(hitEnt, SETANIM_BOTH, Q_irand(BOTH_FLIP_BACK1, BOTH_FLIP_BACK2), SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+			G_Stagger(hitEnt);
 			WP_BlockPointsDrain(hitEnt, FATIGUE_BP_ABSORB);
 		}
 		G_Sound(hitEnt, G_SoundIndex(va("sound/weapons/melee/punch%d", Q_irand(1, 4))));
@@ -8364,32 +8379,28 @@ static void ClientThink_real(gentity_t* ent, usercmd_t* ucmd)
 				// --------------------------------------------------------------
 				// PERFECT BLOCKING WINDOW (difficulty‑based)
 				// --------------------------------------------------------------
+				// 2026-11-10: the window comes from g_SaberPerfectBlockingTimerEasy / Normal / Hard (500 / 200 / 80,
+				// the same in SJE + MD 9, SP + MP), and a press too soon after one that parried nothing opens no
+				// window (mash lockout, WP_SaberPerfectBlockPress in wp_saberblocking.cpp).
+				const int window = g_spskill->integer <= 0 ? g_SaberPerfectBlockingTimerEasy->integer
+					: g_spskill->integer == 1 ? g_SaberPerfectBlockingTimerNormal->integer
+					: g_SaberPerfectBlockingTimerHard->integer;
+
 				if (client->ps.ManualblockStartTime <= 0)
 				{
 					client->ps.ManualblockStartTime = level.time;
 
-					if ((client->ps.ManualBlockingFlags & (1 << MBF_PERFECTBLOCKING)) == 0)
+					if (WP_SaberPerfectBlockPress(ent, window))
 					{
 						client->ps.ManualBlockingFlags |= (1 << MBF_PERFECTBLOCKING);
+					}
+					else
+					{
+						client->ps.ManualBlockingFlags &= ~(1 << MBF_PERFECTBLOCKING);
 					}
 				}
 				else
 				{
-					int window = 0;
-
-					if (g_spskill->integer == 0)      // Easy
-					{
-						window = 500;
-					}
-					else if (g_spskill->integer == 1) // Medium
-					{
-						window = 200;
-					}
-					else                               // Hard
-					{
-						window = 80;
-					}
-
 					if (((client->ps.ManualBlockingFlags & (1 << MBF_PERFECTBLOCKING)) != 0) &&
 						(level.time - client->ps.ManualblockStartTime >= window))
 					{
@@ -8602,6 +8613,12 @@ static void ClientThink_real(gentity_t* ent, usercmd_t* ucmd)
 		{
 			client->ps.ManualBlockingFlags &= ~(1 << MBF_NPCKICKBLOCK);
 		}
+	}
+	else if (ent->NPC || ent->s.clientNum >= MAX_CLIENTS && !G_ControlledByPlayer(ent))
+	{
+		// saber off, thrown or bashed: no kick absorb. The flag used to stay set from the last frame the saber was on,
+		// so an NPC could keep absorbing kicks with its saber off (2026-11-09)
+		client->ps.ManualBlockingFlags &= ~(1 << MBF_NPCKICKBLOCK);
 	}
 
 	// Activate the flags

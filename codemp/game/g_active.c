@@ -54,6 +54,8 @@ extern float BG_WaterDeathFrame(const playerState_t* ps, const animation_t* anim
 #include <qcommon\q_platform.h>
 
 extern void player_Cloak(gentity_t* self);
+extern void G_SaberRiposteUpdate(gentity_t* ent); // w_saberblocking.c: riposte window / swing timers (g_saberPerfectParry, 2026-11-09)
+extern qboolean WP_SaberPerfectBlockPress(const gentity_t* ent, int window); // w_saberblocking.c: perfect block mash lockout (2026-11-10)
 extern void Jedi_Cloak(gentity_t* self);
 extern void Jedi_Decloak(gentity_t* self);
 extern int IsPressingKickButton(const gentity_t* self);
@@ -1629,9 +1631,10 @@ static void ClientTimerActions(gentity_t* ent, const int msec)
 			ent->client->ps.saberBlockingTime < level.time &&
 			ent->client->ps.groundEntityNum != ENTITYNUM_NONE)
 		{
-			// Half-speed regeneration:
-			// Regenerate 1 point every 2 frames instead of every frame.
-			if ((level.time & 1) == 0)  // even frame ? regen
+			// Half-speed regeneration: this runs once a second (ClientTimerActions), so regenerate every 2nd second.
+			// 2026-11-10 (audit): was (level.time & 1), but level.time moves in whole frames (50 ms), so it was always
+			// even (full speed) or, on an MP server with odd frame times, never regenerated at all.
+			if (((level.time / 1000) & 1) == 0)
 			{
 				WP_SaberFatigueRegenerate(&client->ps, 1);
 			}
@@ -1643,9 +1646,10 @@ static void ClientTimerActions(gentity_t* ent, const int msec)
 		if ((ent->r.svFlags & SVF_BOT) &&
 			ent->client->ps.fd.blockPoints < BLOCK_POINTS_MAX)
 		{
-			// Half-speed regeneration:
-			// Regenerate 1 point every 2 frames instead of every frame.
-			if ((level.time & 1) == 0)  // even frame ? regen
+			// Half-speed regeneration: this runs once a second (ClientTimerActions), so regenerate every 2nd second.
+			// 2026-11-10 (audit): was (level.time & 1), but level.time moves in whole frames (50 ms), so it was always
+			// even (full speed) or, on an MP server with odd frame times, never regenerated at all.
+			if (((level.time / 1000) & 1) == 0)
 			{
 				client->ps.fd.blockPoints++;
 			}
@@ -1892,7 +1896,6 @@ static void ClientEvents(gentity_t* ent, int old_event_sequence)
 		case EV_FALL:
 		{
 			const int delta = Client->ps.eventParms[index];
-			qboolean knockDownage = qfalse;
 
 			// Ignore if falling to death
 			if (Client->ps.fallingToDeath)
@@ -1919,7 +1922,6 @@ static void ClientEvents(gentity_t* ent, int old_event_sequence)
 				{
 					break;
 				}
-				knockDownage = qtrue;
 			}
 			else
 			{
@@ -1930,21 +1932,9 @@ static void ClientEvents(gentity_t* ent, int old_event_sequence)
 			}
 
 			// Damage calculation
-			if (knockDownage == qtrue)
-			{
-				damage = delta * 1;
-			}
-			else
-			{
-				if (level.gametype == GT_SIEGE && delta > 60)
-				{
-					damage = delta * 1;
-				}
-				else
-				{
-					damage = delta * 1;
-				}
-			}
+			// 2026-11-10 (audit): full fall damage in every case: the old "knocked down" / "Siege and delta > 60" branches all
+			// did delta * 1, so they were merged and the unused knockDownage flag removed.
+			damage = delta * 1;
 
 			VectorSet(dir, 0.0f, 0.0f, 1.0f);
 
@@ -3324,28 +3314,14 @@ void G_SetTauntAnim(gentity_t* ent, int taunt)
 		case TAUNT_BOW:
 			if (ent->client->ps.weapon != WP_SABER) //MP
 			{
-				if (PM_WalkingAnim(ent->client->ps.legsAnim) || PM_RunningAnim(ent->client->ps.legsAnim))
+				// 2026-11-10 (audit): "if (PM_WalkingAnim(ent->client->ps.legsAnim) || PM_RunningAnim(ent->client->ps.legsAnim))" had the same code in both branches; kept one
+				if (ent->client->pers.botclass == BCLASS_VADER || ent->client->pers.botclass == BCLASS_DESANN)
 				{
-					//TORSO ONLY
-					if (ent->client->pers.botclass == BCLASS_VADER || ent->client->pers.botclass == BCLASS_DESANN)
-					{
-						NPC_SetAnim(ent, SETANIM_TORSO, BOTH_VADERTAUNT, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-					}
-					else
-					{
-						NPC_SetAnim(ent, SETANIM_TORSO, BOTH_BOW, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-					}
+					NPC_SetAnim(ent, SETANIM_TORSO, BOTH_VADERTAUNT, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 				}
 				else
 				{
-					if (ent->client->pers.botclass == BCLASS_VADER || ent->client->pers.botclass == BCLASS_DESANN)
-					{
-						NPC_SetAnim(ent, SETANIM_TORSO, BOTH_VADERTAUNT, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-					}
-					else
-					{
-						NPC_SetAnim(ent, SETANIM_TORSO, BOTH_BOW, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-					}
+					NPC_SetAnim(ent, SETANIM_TORSO, BOTH_BOW, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 				}
 			}
 			else if (ent->client->saber[0].bowAnim != -1)
@@ -3359,43 +3335,22 @@ void G_SetTauntAnim(gentity_t* ent, int taunt)
 			}
 			else
 			{
-				if (PM_WalkingAnim(ent->client->ps.legsAnim) || PM_RunningAnim(ent->client->ps.legsAnim))
+				// 2026-11-10 (audit): "if (PM_WalkingAnim(ent->client->ps.legsAnim) || PM_RunningAnim(ent->client->ps.legsAnim))" had the same code in both branches; kept one
+				if (ent->client->ps.saberHolstered == 1
+					&& ent->client->saber[1].model[0])
 				{
-					//TORSO ONLY
-					if (ent->client->ps.saberHolstered == 1
-						&& ent->client->saber[1].model[0])
-					{
-						//turn off second saber
-						if (ent->client->ps.weapon == WP_SABER)
-							G_Sound(ent, CHAN_WEAPON, ent->client->saber[1].soundOff);
-					}
-					else if (ent->client->ps.saberHolstered == 0)
-					{
-						//turn off first
-						if (ent->client->ps.weapon == WP_SABER)
-							G_Sound(ent, CHAN_WEAPON, ent->client->saber[0].soundOff);
-					}
-					ent->client->ps.saberHolstered = 2;
-					NPC_SetAnim(ent, SETANIM_TORSO, BOTH_BOW, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+					//turn off second saber
+					if (ent->client->ps.weapon == WP_SABER)
+						G_Sound(ent, CHAN_WEAPON, ent->client->saber[1].soundOff);
 				}
-				else
+				else if (ent->client->ps.saberHolstered == 0)
 				{
-					if (ent->client->ps.saberHolstered == 1
-						&& ent->client->saber[1].model[0])
-					{
-						//turn off second saber
-						if (ent->client->ps.weapon == WP_SABER)
-							G_Sound(ent, CHAN_WEAPON, ent->client->saber[1].soundOff);
-					}
-					else if (ent->client->ps.saberHolstered == 0)
-					{
-						//turn off first
-						if (ent->client->ps.weapon == WP_SABER)
-							G_Sound(ent, CHAN_WEAPON, ent->client->saber[0].soundOff);
-					}
-					ent->client->ps.saberHolstered = 2;
-					NPC_SetAnim(ent, SETANIM_TORSO, BOTH_BOW, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+					//turn off first
+					if (ent->client->ps.weapon == WP_SABER)
+						G_Sound(ent, CHAN_WEAPON, ent->client->saber[0].soundOff);
 				}
+				ent->client->ps.saberHolstered = 2;
+				NPC_SetAnim(ent, SETANIM_TORSO, BOTH_BOW, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 			}
 			break;
 		case TAUNT_MEDITATE:
@@ -3473,45 +3428,22 @@ void G_SetTauntAnim(gentity_t* ent, int taunt)
 			G_AddEvent(ent, EV_TAUNT, taunt);
 			if (ent->client->ps.weapon != WP_SABER) //MP
 			{
-				if (PM_WalkingAnim(ent->client->ps.legsAnim) || PM_RunningAnim(ent->client->ps.legsAnim))
+				// 2026-11-10 (audit): "if (PM_WalkingAnim(ent->client->ps.legsAnim) || PM_RunningAnim(ent->client->ps.legsAnim))" had the same code in both branches; kept one
+				if (ent->client->pers.botclass == BCLASS_VADER || ent->client->pers.botclass == BCLASS_DESANN)
 				{
-					//TORSO ONLY
-					if (ent->client->pers.botclass == BCLASS_VADER || ent->client->pers.botclass == BCLASS_DESANN)
-					{
-						NPC_SetAnim(ent, SETANIM_TORSO, BOTH_VADERTAUNT, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-					}
-					else
-					{
-						if (ent->client->ps.weapon == WP_DISRUPTOR)
-						{
-							NPC_SetAnim(ent, SETANIM_TORSO, BOTH_TUSKENTAUNT1,
-								SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-						}
-						else
-						{
-							NPC_SetAnim(ent, SETANIM_TORSO, TORSO_HANDSIGNAL2,
-								SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-						}
-					}
+					NPC_SetAnim(ent, SETANIM_TORSO, BOTH_VADERTAUNT, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 				}
 				else
 				{
-					if (ent->client->pers.botclass == BCLASS_VADER || ent->client->pers.botclass == BCLASS_DESANN)
+					if (ent->client->ps.weapon == WP_DISRUPTOR)
 					{
-						NPC_SetAnim(ent, SETANIM_TORSO, BOTH_VADERTAUNT, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+						NPC_SetAnim(ent, SETANIM_TORSO, BOTH_TUSKENTAUNT1,
+							SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 					}
 					else
 					{
-						if (ent->client->ps.weapon == WP_DISRUPTOR)
-						{
-							NPC_SetAnim(ent, SETANIM_TORSO, BOTH_TUSKENTAUNT1,
-								SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-						}
-						else
-						{
-							NPC_SetAnim(ent, SETANIM_TORSO, TORSO_HANDSIGNAL2,
-								SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-						}
+						NPC_SetAnim(ent, SETANIM_TORSO, TORSO_HANDSIGNAL2,
+							SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 					}
 				}
 			}
@@ -3524,11 +3456,7 @@ void G_SetTauntAnim(gentity_t* ent, int taunt)
 			{
 				anim = ent->client->saber[1].flourishAnim;
 			}
-			else if (ent->client->saber[1].model[0]
-				&& ent->client->saber[1].flourishAnim != -1)
-			{
-				anim = ent->client->saber[1].flourishAnim;
-			}
+			// 2026-11-10 (audit): removed a second copy of the else if above (it could never run)
 			else
 			{
 				if (PM_WalkingAnim(ent->client->ps.legsAnim) || PM_RunningAnim(ent->client->ps.legsAnim))
@@ -3614,45 +3542,22 @@ void G_SetTauntAnim(gentity_t* ent, int taunt)
 			G_AddEvent(ent, EV_TAUNT, taunt);
 			if (ent->client->ps.weapon != WP_SABER) //MP
 			{
-				if (PM_WalkingAnim(ent->client->ps.legsAnim) || PM_RunningAnim(ent->client->ps.legsAnim))
+				// 2026-11-10 (audit): "if (PM_WalkingAnim(ent->client->ps.legsAnim) || PM_RunningAnim(ent->client->ps.legsAnim))" had the same code in both branches; kept one
+				if (ent->client->pers.botclass == BCLASS_VADER || ent->client->pers.botclass == BCLASS_DESANN)
 				{
-					//TORSO ONLY
-					if (ent->client->pers.botclass == BCLASS_VADER || ent->client->pers.botclass == BCLASS_DESANN)
-					{
-						NPC_SetAnim(ent, SETANIM_TORSO, BOTH_VADERTAUNT, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-					}
-					else
-					{
-						if (ent->client->ps.weapon == WP_DISRUPTOR)
-						{
-							NPC_SetAnim(ent, SETANIM_TORSO, BOTH_TUSKENTAUNT1,
-								SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-						}
-						else
-						{
-							NPC_SetAnim(ent, SETANIM_TORSO, TORSO_HANDSIGNAL3,
-								SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-						}
-					}
+					NPC_SetAnim(ent, SETANIM_TORSO, BOTH_VADERTAUNT, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 				}
 				else
 				{
-					if (ent->client->pers.botclass == BCLASS_VADER || ent->client->pers.botclass == BCLASS_DESANN)
+					if (ent->client->ps.weapon == WP_DISRUPTOR)
 					{
-						NPC_SetAnim(ent, SETANIM_TORSO, BOTH_VADERTAUNT, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+						NPC_SetAnim(ent, SETANIM_TORSO, BOTH_TUSKENTAUNT1,
+							SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 					}
 					else
 					{
-						if (ent->client->ps.weapon == WP_DISRUPTOR)
-						{
-							NPC_SetAnim(ent, SETANIM_TORSO, BOTH_TUSKENTAUNT1,
-								SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-						}
-						else
-						{
-							NPC_SetAnim(ent, SETANIM_TORSO, TORSO_HANDSIGNAL3,
-								SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-						}
+						NPC_SetAnim(ent, SETANIM_TORSO, TORSO_HANDSIGNAL3,
+							SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 					}
 				}
 			}
@@ -4884,14 +4789,8 @@ static void CG_BreathPuffsVader(gentity_t* ent)
 			}
 			else
 			{
-				if (!Q_irand(0, 4))
-				{
-					G_Sound(ent, CHAN_VOICE, G_SoundIndex("sound/chars/darthvader/breath2.mp3"));
-				}
-				else
-				{
-					G_Sound(ent, CHAN_VOICE, G_SoundIndex("sound/chars/darthvader/breath2.mp3"));
-				}
+				// 2026-11-10 (audit): "if (!Q_irand(0, 4))" had the same code in both branches; kept one
+				G_Sound(ent, CHAN_VOICE, G_SoundIndex("sound/chars/darthvader/breath2.mp3"));
 			}
 		}
 	}
@@ -6132,24 +6031,10 @@ static void ClientThink_real(gentity_t* ent)
 							G_Sound(ent, CHAN_WEAPON, client->saber[1].soundOn);
 							client->ps.saberHolstered = 0;
 						}
-						else if (client->saber[0].type == SABER_STAFF
-							|| client->saber[0].type == SABER_SINGLE_BACKHAND
-							|| client->saber[0].type == SABER_STAFF_UNSTABLE
-							|| client->saber[0].type == SABER_STAFF_THIN
-							|| client->saber[0].type == SABER_SINGLE_ASBACKHAND
-							|| client->saber[0].type == SABER_STAFF_MAUL
-							|| client->saber[0].type == SABER_STAFF_ELECTROSTAFF)
-						{
-							if (client->ps.saberHolstered == 2)
-							{
-								//turn on all blades
-								G_Sound(ent, CHAN_WEAPON, client->saber[0].soundOn);
-								client->ps.saberHolstered = 0;
-							}
-						}
+						// 2026-11-10 (audit): a staff-type "else if" here did the same as this one; merged
 						else if (client->ps.saberHolstered == 2)
 						{
-							//turn on first
+							//turn on first (all blades of a staff)
 							G_Sound(ent, CHAN_WEAPON, client->saber[0].soundOn);
 							client->ps.saberHolstered = 0;
 						}
@@ -6179,71 +6064,33 @@ static void ClientThink_real(gentity_t* ent)
 				}
 				ucmd->buttons &= ~(BUTTON_ATTACK);
 
-				if (g_npcspskill.integer == 0) //easy blocking
+				// 2026-11-10: one window table (g_SaberPerfectBlockingTimerEasy / Normal / Hard, 500 / 200 / 80, the
+				// same in SJE + MD 9, SP + MP), and a press too soon after one that parried nothing opens no window
+				// (mash lockout, WP_SaberPerfectBlockPress in w_saberblocking.c).
 				{
-					// started function
+					const int pb_window = g_npcspskill.integer <= 0 ? g_SaberPerfectBlockingTimerEasy.integer
+						: g_npcspskill.integer == 1 ? g_SaberPerfectBlockingTimerNormal.integer
+						: g_SaberPerfectBlockingTimerHard.integer;
+
 					if (client->ps.ManualblockStartTime <= 0) //fresh start
 					{
 						// They just pressed block. Mark the time...
 						client->ps.ManualblockStartTime = level.time;
 
-						if (!(client->ps.ManualBlockingFlags & 1 << MBF_PERFECTBLOCKING))
+						if (WP_SaberPerfectBlockPress(ent, pb_window))
 						{
 							client->ps.ManualBlockingFlags |= 1 << MBF_PERFECTBLOCKING; // activate the function
 						}
-					}
-					else
-					{
-						if (client->ps.ManualBlockingFlags & 1 << MBF_PERFECTBLOCKING && level.time - client->ps.
-							ManualblockStartTime >= 500)
+						else
 						{
-							// Been holding block for too long....Turn off
 							client->ps.ManualBlockingFlags &= ~(1 << MBF_PERFECTBLOCKING);
 						}
 					}
-				}
-				else if (g_npcspskill.integer == 1) // medium blocking
-				{
-					if (client->ps.ManualblockStartTime <= 0) //fresh start
+					else if (client->ps.ManualBlockingFlags & 1 << MBF_PERFECTBLOCKING
+						&& level.time - client->ps.ManualblockStartTime >= pb_window)
 					{
-						// They just pressed block. Mark the time...
-						client->ps.ManualblockStartTime = level.time;
-
-						if (!(client->ps.ManualBlockingFlags & 1 << MBF_PERFECTBLOCKING))
-						{
-							client->ps.ManualBlockingFlags |= 1 << MBF_PERFECTBLOCKING; // activate the function
-						}
-					}
-					else
-					{
-						if (client->ps.ManualBlockingFlags & 1 << MBF_PERFECTBLOCKING && level.time - client->ps.
-							ManualblockStartTime >= 200)
-						{
-							// Been holding block for too long....Turn off
-							client->ps.ManualBlockingFlags &= ~(1 << MBF_PERFECTBLOCKING);
-						}
-					}
-				}
-				else // hard blocking
-				{
-					if (client->ps.ManualblockStartTime <= 0) //fresh start
-					{
-						// They just pressed block. Mark the time...
-						client->ps.ManualblockStartTime = level.time;
-
-						if (!(client->ps.ManualBlockingFlags & 1 << MBF_PERFECTBLOCKING))
-						{
-							client->ps.ManualBlockingFlags |= 1 << MBF_PERFECTBLOCKING; // activate the function
-						}
-					}
-					else
-					{
-						if (client->ps.ManualBlockingFlags & 1 << MBF_PERFECTBLOCKING && level.time - client->ps.
-							ManualblockStartTime >= 80)
-						{
-							// Been holding block for too long....Turn off
-							client->ps.ManualBlockingFlags &= ~(1 << MBF_PERFECTBLOCKING);
-						}
+						// Been holding block for too long....Turn off
+						client->ps.ManualBlockingFlags &= ~(1 << MBF_PERFECTBLOCKING);
 					}
 				}
 
@@ -6380,6 +6227,12 @@ static void ClientThink_real(gentity_t* ent)
 		{
 			client->ps.ManualBlockingFlags &= ~(1 << MBF_NPCKICKBLOCK);
 		}
+	}
+	else if (ent->r.svFlags & SVF_BOT)
+	{
+		// saber off, thrown or bashed: no kick absorb. The flag used to stay set from the last frame the saber was on,
+		// so a bot could keep absorbing kicks with its saber off (2026-11-09)
+		client->ps.ManualBlockingFlags &= ~(1 << MBF_NPCKICKBLOCK);
 	}
 
 	if (ent->r.svFlags & SVF_BOT)
@@ -7308,6 +7161,8 @@ static void ClientThink_real(gentity_t* ent)
 	ent->client->saberBlasterLockEnemy = ent->client->ps.saberLockTime >= level.time ? ent->client->ps.saberLockEnemy : ENTITYNUM_NONE;
 
 	Pmove(&pmove);
+
+	G_SaberRiposteUpdate(ent); // riposte window 500 ms, riposte swing 1.5 s at most (g_saberPerfectParry, 2026-11-09)
 
 	if (ent->client->solidHack)
 	{

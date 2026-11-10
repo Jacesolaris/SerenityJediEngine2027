@@ -1552,6 +1552,8 @@ typedef struct siegePers_s
 #define FLAG_DOUBLEJUMPFLIP 23	// the double jump's flip is playing (twice as fast: PM_SaberStartTransAnim)
 #define FLAG_DARKSTASIS		24	// frozen by Dark Stasis (with FLAG_FROZEN): drawn red
 #define FLAG_TALKHINT		25	// the NPC / bot he faces can be talked to (pazaak / shop, g_pazaak.c): the use icon
+#define FLAG_RIPOSTEREADY	26	// riposte window after a perfect parry (g_saberPerfectParry): the next attack is the riposte (2026-11-09)
+#define FLAG_RIPOSTE		27	// the riposte swing is playing: 15% faster, can't be perfect-parried (PM_SetSaberMove, 2026-11-09)
 
 #define DODGE_BOLTBLOCK			1	//standard DP cost to block a missile bolt
 #define DODGE_BOWCASTERBLOCK	2

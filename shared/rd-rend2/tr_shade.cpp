@@ -1941,10 +1941,14 @@ static void RB_IterateStagesGeneric(shaderCommands_t* input, const VertexArraysP
 		}
 
 		// SJE: alpha-to-coverage (r_ext_alpha_to_coverage). Opaque cut-out stages (GE128 / GE192, no blending) drawn
-		// into the multisampled scene buffer get anti-aliased edges. Not for the depth pre-pass, shadow maps or refraction.
+		// into the multisampled scene buffer get anti-aliased edges. Not for shadow maps or refraction.
+		// A2C in the depth pre-pass too (2026-11-10): with a hard alpha test there, the pre-pass wrote leaf depth to every
+		// sample of an edge pixel while the colour pass covered only some; the sky behind was depth-rejected on the rest,
+		// which kept the clear colour - white outlines round trees and plants. Same coverage in both passes now.
 		if (r_ext_alpha_to_coverage && r_ext_alpha_to_coverage->integer
-			&& tr.msaaResolveFbo && glState.currentFBO == tr.renderFbo
-			&& !backEnd.depthFill && !(backEnd.viewParms.flags & VPF_DEPTHSHADOW) && !forceRefraction
+			&& tr.msaaResolveFbo
+			&& (glState.currentFBO == tr.renderFbo || (backEnd.depthFill && tr.depthVelocityFbo && glState.currentFBO == tr.depthVelocityFbo))
+			&& !(backEnd.viewParms.flags & VPF_DEPTHSHADOW) && !forceRefraction
 			&& !(stateBits & (GLS_SRCBLEND_BITS | GLS_DSTBLEND_BITS))
 			&& (alphaTestType == ALPHA_TEST_GE128 || alphaTestType == ALPHA_TEST_GE192))
 		{

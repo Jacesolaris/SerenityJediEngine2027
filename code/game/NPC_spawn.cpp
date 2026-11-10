@@ -6336,6 +6336,19 @@ void Svcmd_NPC_f()
 	}
 	else if (Q_stricmp(cmd, "spawn") == 0)
 	{
+		// npc_spawn_recent (ported from MD 9, 2026-11-10): remember the last "npc spawn ..." line so
+		// that "vstr npc_spawn_recent" (bindable in the controls list) spawns the same NPC again.
+		if (gi.argc() > 2 && gi.argv(2)[0])
+		{
+			char recent[MAX_STRING_CHARS];
+			Q_strncpyz(recent, "npc spawn", sizeof recent);
+			for (int i = 2; i < gi.argc(); i++)
+			{
+				Q_strcat(recent, sizeof recent, " ");
+				Q_strcat(recent, sizeof recent, gi.argv(i));
+			}
+			gi.cvar_set("npc_spawn_recent", recent);
+		}
 		NPC_Spawn_f();
 	}
 	else if (Q_stricmp(cmd, "kill") == 0)

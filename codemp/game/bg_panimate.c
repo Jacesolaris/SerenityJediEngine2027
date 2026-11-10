@@ -61,6 +61,9 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 // SS_BLASTER saber attack / transition anim speed (SS_FAST is 1.1): Jace 2026-10-30
 #define SABERBLASTER_SABER_ANIM_SPEED	1.3f
+// SS_BLASTER top-to-bottom attack: BOTH_PULL_IMPALE_STAB (PM_SetSaberMove) holds its stab pose a long time, so it plays
+// faster for SS_BLASTER only (item 318, DH 2026-11-10). Raise to shorten it more, 1.0f = as before.
+#define SABERBLASTER_IMPALE_STAB_SPEED	1.75f
 
 qboolean PM_SaberInTransition(int move);
 qboolean PM_SaberInDeflect(int move);
@@ -6546,6 +6549,12 @@ void PM_SaberStartTransAnim(const int clientNum, const int saberAnimLevel, const
 		*animSpeed *= LONG_LEAP_START_ANIM_SCALE;
 		return;
 	}
+	// SS_BLASTER (Kyle): its top-to-bottom attack is BOTH_PULL_IMPALE_STAB, which holds the stab pose a long time; it
+	// plays faster (item 318). No return: the saber speeds below still apply.
+	if (anim == BOTH_PULL_IMPALE_STAB && saberAnimLevel == SS_BLASTER && weapon == WP_SABER)
+	{
+		*animSpeed *= SABERBLASTER_IMPALE_STAB_SPEED;
+	}
 	char buf[128];
 
 	// Read global saber animation speed multiplier
@@ -6737,6 +6746,13 @@ void PM_SaberStartTransAnim(const int clientNum, const int saberAnimLevel, const
 				break;
 			}
 		}
+	}
+
+	// Riposte (g_saberPerfectParry, 2026-11-09): the riposte swing after a perfect parry plays 15% faster
+	// (FLAG_RIPOSTE in userInt3 while it runs, set in PM_SetSaberMove; networked, so every client plays it the same)
+	if (fatigued & 1 << FLAG_RIPOSTE)
+	{
+		*animSpeed *= 1.15f;
 	}
 }
 

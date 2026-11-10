@@ -35,6 +35,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "bg_local.h"
 #include "w_saber.h"
 #include "ai_main.h"
+extern qboolean WP_SaberLockChance(qboolean fake_lock);
 extern void G_SaberSliceSetHit(const gentity_t* victim, const vec3_t point, const vec3_t swing_dir, const vec3_t blade_dir);
 #include <string.h>
 #include <qcommon\q_platform.h>
@@ -420,14 +421,8 @@ static void G_Stumble(gentity_t* hitEnt)
 void bg_reduce_blaster_mishap_level_advanced(playerState_t* ps)
 {
 	//reduces a player's mishap meter by one level
-	if (ps->BlasterAttackChainCount > BLASTERMISHAPLEVEL_MIN)
-	{
-		ps->BlasterAttackChainCount = BLASTERMISHAPLEVEL_NONE;
-	}
-	else
-	{
-		ps->BlasterAttackChainCount = BLASTERMISHAPLEVEL_NONE;
-	}
+	// 2026-11-10 (audit): "if (ps->BlasterAttackChainCount > BLASTERMISHAPLEVEL_MIN)" had the same code in both branches; kept one
+	ps->BlasterAttackChainCount = BLASTERMISHAPLEVEL_NONE;
 }
 
 void BG_ReduceSaberMishapLevel(playerState_t* ps)
@@ -670,15 +665,17 @@ static QINLINE int g_saber_attack_power(gentity_t* ent, const qboolean attacking
 
 void WP_DeactivateSaber(gentity_t* self)
 {
+	// 2026-11-10 (audit): null check moved up, it came after the first use
+	if (!self || !self->client)
+	{
+		return;
+	}
+
 	const qboolean blocking = ((self->client->ps.ManualBlockingFlags & 1 << MBF_HOLDINGBLOCK) != 0) ? qtrue : qfalse;
 	//Normal Blocking
 	const qboolean is_holding_block_button_and_attack = ((self->client->ps.ManualBlockingFlags & 1 << MBF_HOLDINGBLOCKANDATTACK) != 0) ? qtrue : qfalse;
 	//Active Blocking
 
-	if (!self || !self->client)
-	{
-		return;
-	}
 
 	if (blocking || is_holding_block_button_and_attack)
 	{
@@ -2208,7 +2205,7 @@ static void G_SaberBounce(const gentity_t* attacker, gentity_t* victim)
 		return;
 	}
 
-	if (attacker->client->ps.saberFatigueChainCount < MISHAPLEVEL_HEAVY)
+	if (attacker->client->ps.saberFatigueChainCount < MISHAPLEVEL_HUDFLASH)
 	{
 		return;
 	}
@@ -3266,6 +3263,70 @@ int WP_SaberBlockCost(gentity_t* defender, const gentity_t* attacker, vec3_t hit
 
 qboolean wp_using_dual_saber_as_primary(const playerState_t* ps);
 
+// NPC / bot block (g_saberNPCBlockBox 1, SJE SP item 287 rounds 4 + 7, MP port 2026-11-09; DH: swings stopped at an
+// invisible box round the NPC, with no parry anim). An NPC parried every saber hit and a bot 80% of them the moment the
+// swing touched their collision box (wider than the body), even when no parry anim could play. Now an NPC / bot that
+// isn't swinging itself blocks only if it can show a parry right now; if it can't, the swing goes on to the model
+// (ghoul2 collision) and hits. 0 = the old blocks.
+static qboolean WP_SaberAIBlocker(const gentity_t* ent)
+{
+	return ent && ent->client && ((ent->s.number >= MAX_CLIENTS && !G_ControlledByPlayer(ent)) || (ent->r.svFlags & SVF_BOT))
+		? qtrue : qfalse;
+}
+
+// Can this NPC / bot play a parry anim now? The parry anim code's own checks (as SJE SP WP_SaberNPCCanShowParry).
+static qboolean WP_SaberAICanShowParry(const gentity_t* ent)
+{
+	const playerState_t* ps = &ent->client->ps;
+
+	if (ps->weaponstate == WEAPON_DROPPING || ps->weaponstate == WEAPON_RAISING)
+	{
+		return qfalse;
+	}
+	if (PM_SaberInAttack(ps->saberMove)
+		|| PM_SaberInTransitionAny(ps->saberMove)
+		|| PM_SaberInBounce(ps->saberMove)
+		|| PM_SaberInBrokenParry(ps->saberMove)
+		|| PM_SaberInKnockaway(ps->saberMove)
+		|| PM_SuperBreakLoseAnim(ps->torsoAnim)
+		|| PM_SuperBreakWinAnim(ps->torsoAnim)
+		|| PM_SaberInMassiveBounce(ps->torsoAnim)
+		|| PM_SaberInBashedAnim(ps->torsoAnim)
+		|| PM_InRoll(ps)
+		|| BG_InKnockDown(ps->legsAnim)
+		|| BG_InKnockDown(ps->torsoAnim)
+		|| PM_InKnockDown(ps))
+	{
+		return qfalse;
+	}
+	return ps->fd.blockPoints > BLOCKPOINTS_FAIL && ps->fd.forcePower > BLOCKPOINTS_DANGER ? qtrue : qfalse;
+}
+
+// The in-hand saber swing of atk reached self: with g_saberNPCBlockBox an NPC / bot that isn't swinging (a clash of two
+// swings is handled as before) and can't show a parry doesn't block it.
+static qboolean WP_SaberAINoParryShown(const gentity_t* self, const gentity_t* atk)
+{
+	if (!g_saberNPCBlockBox.integer || !WP_SaberAIBlocker(self) || !atk || !atk->client
+		|| atk->client->ps.weapon != WP_SABER || atk->client->ps.saberInFlight)
+	{
+		return qfalse;
+	}
+	if (PM_SaberInAttack(self->client->ps.saberMove) || PM_SaberInSpecialAttack(self->client->ps.torsoAnim))
+	{
+		return qfalse;
+	}
+	if (WP_SaberAICanShowParry(self))
+	{
+		return qfalse;
+	}
+	if (g_DebugSaberCombat.integer && WP_SaberAIBlocker(self) && !(atk->r.svFlags & SVF_BOT) && atk->s.number < MAX_CLIENTS)
+	{
+		Com_Printf(S_COLOR_MAGENTA"%d no block: %s can't show a parry (BP %d)\n", level.time,
+			self->NPC_type ? self->NPC_type : self->client->pers.netname, self->client->ps.fd.blockPoints);
+	}
+	return qtrue;
+}
+
 int wp_saber_must_block(gentity_t* self, const gentity_t* atk, const qboolean check_b_box_block, vec3_t point, const int rSaberNum, const int rBladeNum)
 {
 	if (!self || !self->client || !atk)
@@ -3294,6 +3355,11 @@ int wp_saber_must_block(gentity_t* self, const gentity_t* atk, const qboolean ch
 
 	if (PM_SaberInKata(self->client->ps.saberMove))
 	{
+		return 0;
+	}
+
+	if (WP_SaberAINoParryShown(self, atk))
+	{// g_saberNPCBlockBox: an NPC / bot blocks a swing only with a parry anim (2026-11-09)
 		return 0;
 	}
 
@@ -3731,17 +3797,14 @@ int WP_SaberMustBoltBlock(gentity_t* self, const gentity_t* atk, const qboolean 
 
 	if (!(((self->client->ps.ManualBlockingFlags & 1 << MBF_HOLDINGBLOCK) != 0)))
 	{
-		if (self->r.svFlags & SVF_BOT)
+		// bots and NPCs block bolts without the block button (as SP), but like a player they have to stand, not run in
+		// force speed, face the bolt and have the block points for it (checked below). Bots returned 1 here for every
+		// bolt - from behind, knocked down, in force speed - and NPCs never blocked a bolt that hit the body.
+		if (!((self->r.svFlags & SVF_BOT) || self->s.number >= MAX_CLIENTS)
+			|| self->client->ps.weapon != WP_SABER || BG_SabersOff(&self->client->ps) || self->client->ps.saberInFlight)
 		{
-			//bots just randomly parry to make up for them not intelligently parrying.
-			if (self->client->ps.weapon == WP_SABER && !BG_SabersOff(&self->client->ps) && !self->client->ps.
-				saberInFlight)
-			{
-				return 1;
-			}
 			return 0;
 		}
-		return 0;
 	}
 
 	if (PM_SaberInBrokenParry(self->client->ps.saberMove))
@@ -3776,17 +3839,7 @@ int WP_SaberMustBoltBlock(gentity_t* self, const gentity_t* atk, const qboolean 
 
 	if (self->client->ps.weaponstate == WEAPON_RAISING)
 	{
-		if (self->r.svFlags & SVF_BOT)
-		{
-			//bots just randomly parry to make up for them not intelligently parrying.
-			if (self->client->ps.weapon == WP_SABER && !BG_SabersOff(&self->client->ps) && !self->client->ps.
-				saberInFlight)
-			{
-				return 1;
-			}
-			return 0;
-		}
-		return 0;
+		return 0; // (bots too: they blocked here regardless)
 	}
 
 	if (!WalkCheck(self) && self->client->ps.fd.forcePowersActive & 1 << FP_SPEED)
@@ -3799,6 +3852,18 @@ int WP_SaberMustBoltBlock(gentity_t* self, const gentity_t* atk, const qboolean 
 	{
 		//can't block while knocked down or getting up from knockdown.
 		return 0;
+	}
+
+	if (atk->s.eType == ET_MISSILE)
+	{
+		// Jedi cannot block shots from behind (the cone of a bolt that hits the blade, as SP). A bolt hitting the body
+		// was blocked from any direction.
+		vec3_t bolt_org;
+		VectorCopy(atk->r.currentOrigin, bolt_org);
+		if (!InFront(bolt_org, self->r.currentOrigin, self->client->ps.viewangles, SABER_REFLECT_MISSILE_CONE))
+		{
+			return 0;
+		}
 	}
 
 	if (atk && atk->client && atk->client->ps.weapon == WP_SABER)
@@ -3857,19 +3922,9 @@ int WP_SaberMustBoltBlock(gentity_t* self, const gentity_t* atk, const qboolean 
 		}
 	}
 
-	//check to see if we have the BLOCKPOINTS to do this.
+	//check to see if we have the BLOCKPOINTS to do this. (bots too: they blocked without them)
 	if (self->client->ps.fd.blockPoints < WP_SaberBlockCost(self, atk, point))
 	{
-		if (self->r.svFlags & SVF_BOT)
-		{
-			//bots just randomly parry to make up for them not intelligently parrying.
-			if (self->client->ps.weapon == WP_SABER && !BG_SabersOff(&self->client->ps) && !self->client->ps.
-				saberInFlight)
-			{
-				return 1;
-			}
-			return 0;
-		}
 		return 0;
 	}
 
@@ -4723,6 +4778,34 @@ void AnimateStun(gentity_t* self, gentity_t* inflictor, vec3_t impact)
 	}
 }
 
+// Blaster-bolt block reactions (as SP): only BOLT_BLOCK_STAGGER_CHANCE % of them are a full stagger, the rest are a
+// stumble. After a stagger the victim can only stumble for BOLT_BLOCK_STAGGER_COOLDOWN ms, so he never chains stagger,
+// stagger, stagger.
+#define BOLT_BLOCK_STAGGER_CHANCE	20		// percent
+#define BOLT_BLOCK_STAGGER_COOLDOWN	10000	// ms
+static int s_bolt_block_stagger_until[MAX_GENTITIES];
+
+static void WP_BoltBlockStaggerOrStumble(gentity_t* victim)
+{
+	int* stagger_until = &s_bolt_block_stagger_until[victim->s.number];
+
+	// a time left over from an earlier map (level.time restarted) - forget it
+	if (*stagger_until - level.time > BOLT_BLOCK_STAGGER_COOLDOWN)
+	{
+		*stagger_until = 0;
+	}
+
+	if (level.time >= *stagger_until && Q_irand(1, 100) <= BOLT_BLOCK_STAGGER_CHANCE)
+	{
+		G_Stagger(victim);
+		*stagger_until = level.time + BOLT_BLOCK_STAGGER_COOLDOWN;
+	}
+	else
+	{
+		G_Stumble(victim);
+	}
+}
+
 qboolean WP_BrokenBoltBlockKnockBack(gentity_t* victim)
 {
 	if (!victim || !victim->client)
@@ -4730,13 +4813,18 @@ qboolean WP_BrokenBoltBlockKnockBack(gentity_t* victim)
 		return qfalse;
 	}
 
-	// Always stagger on a broken bolt block
-	G_Stagger(victim);
+	// only on low block points (as SP): this staggered on every call, and a bolt that glanced off the blade of someone
+	// not blocking called it every time
+	if (victim->s.weapon != WP_SABER || BG_SabersOff(&victim->client->ps)
+		|| victim->client->ps.fd.blockPoints > BLOCKPOINTS_TWENTYFIVE)
+	{
+		return qfalse;
+	}
 
-	// Check if victim is a saber user with saber active and low block points
-	if (victim->s.weapon == WP_SABER &&
-		!BG_SabersOff(&victim->client->ps) &&
-		victim->client->ps.fd.blockPoints <= BLOCKPOINTS_TEN)
+	WP_BoltBlockStaggerOrStumble(victim);
+
+	// Very low block points: the saber goes too
+	if (victim->client->ps.fd.blockPoints <= BLOCKPOINTS_TEN)
 	{
 		// Knock the saber out of their hand
 		const int saberEntNum = victim->client->ps.saberEntityNum;
@@ -4896,6 +4984,12 @@ extern qboolean PM_InKnockDown(const playerState_t* ps);
 //Returns qfalse if hit effects/damage is still suppose to be applied.
 qboolean G_DoDodge(gentity_t* self, gentity_t* shooter, vec3_t dmg_origin, int hit_loc, int* dmg, const int mod)
 {
+	// 2026-11-10 (audit): null check moved up, it came after the first use
+	if (!self || !self->client || !self->inuse || self->health <= 0)
+	{
+		return qfalse;
+	}
+
 	int dodge_anim = -1;
 	int dpcost = BasicWeaponBlockCosts[mod];
 	const int saved_dmg = *dmg;
@@ -4934,10 +5028,6 @@ qboolean G_DoDodge(gentity_t* self, gentity_t* shooter, vec3_t dmg_origin, int h
 		return qfalse;
 	}
 
-	if (!self || !self->client || !self->inuse || self->health <= 0)
-	{
-		return qfalse;
-	}
 
 	if (self->client->ps.stats[STAT_DODGE] < 30)
 	{
@@ -5553,6 +5643,12 @@ qboolean G_DoDodge(gentity_t* self, gentity_t* shooter, vec3_t dmg_origin, int h
 
 static qboolean G_DoSaberDodge(gentity_t* dodger, gentity_t* attacker, vec3_t dmg_origin, int hit_loc, int* dmg, const int mod)
 {
+	// 2026-11-10 (audit): null check moved up, it came after the first use
+	if (!dodger || !dodger->client || !dodger->inuse || dodger->health <= 0)
+	{
+		return qfalse;
+	}
+
 	int dodge_anim = -1;
 	int dpcost = BasicWeaponBlockCosts[MOD_SABER];
 	const int saved_dmg = *dmg;
@@ -5591,10 +5687,6 @@ static qboolean G_DoSaberDodge(gentity_t* dodger, gentity_t* attacker, vec3_t dm
 		return qfalse;
 	}
 
-	if (!dodger || !dodger->client || !dodger->inuse || dodger->health <= 0)
-	{
-		return qfalse;
-	}
 
 	//check for private duel conditions
 	if (attacker && attacker->client)
@@ -6599,6 +6691,43 @@ static qboolean WP_SaberStuckInBody(const gentity_t* saberEnt);
 static qboolean WP_SaberBodyCanStick(const gentity_t* owner, const gentity_t* victim);
 static void WP_SaberBodyNoCutThisHit(const gentity_t* victim);
 
+// Single-hit rule (bug fix 2026-11-10, as SP): the victims each attacker has already hit in the current swing.
+// This replaces client->saberHitEntityBitMask, an int shifted by entity number, which only worked for entities 0..31:
+// from 32 on (every NPC) the shift was undefined behaviour and wrapped, so an NPC shared a bit with a player or bot
+// (NPC 40 with client 8) and a hit on one blocked the damage to the other for the rest of the swing. The field is
+// kept, unused.
+#define MAX_SWING_VICTIMS 32
+static short swingVictims[MAX_GENTITIES][MAX_SWING_VICTIMS];
+static unsigned char swingVictimCount[MAX_GENTITIES];
+// The saber move each attacker had at the last swing check. A change to an attack, start or transition move begins
+// a new swing (see WP_SaberPositionUpdate).
+static short swingLastMove[MAX_GENTITIES];
+
+static void WP_SwingHitsReset(const gentity_t* ent)
+{
+	swingVictimCount[ent->s.number] = 0;
+}
+
+static qboolean WP_SwingAlreadyHit(const gentity_t* ent, const gentity_t* victim)
+{
+	for (int i = 0; i < swingVictimCount[ent->s.number]; i++)
+	{
+		if (swingVictims[ent->s.number][i] == victim->s.number)
+		{
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+static void WP_SwingAddHit(const gentity_t* ent, const gentity_t* victim)
+{
+	if (swingVictimCount[ent->s.number] < MAX_SWING_VICTIMS && !WP_SwingAlreadyHit(ent, victim))
+	{
+		swingVictims[ent->s.number][swingVictimCount[ent->s.number]++] = (short)victim->s.number;
+	}
+}
+
 static QINLINE qboolean CheckSaberDamage(gentity_t* self, const int rSaberNum, const int rBladeNum, vec3_t saber_start, vec3_t saber_end, const int trMask)
 {
 	trace_t tr;
@@ -7226,6 +7355,27 @@ static QINLINE qboolean CheckSaberDamage(gentity_t* self, const int rSaberNum, c
 		int dflags = 0;
 		gentity_t* victim = hitEnt;
 
+		// --------------------------------------------------------
+		// SINGLE-HIT ENFORCEMENT
+		// --------------------------------------------------------
+		// Checked first (bug fix 2026-11-10, as SP): the dodge, beskar bounce, hit-confirm and interrupt rules below must
+		// happen once per victim per swing. They ran before this check, i.e. on every frame of contact.
+		if (WP_SwingAlreadyHit(self, victim))
+		{
+			if (!PM_SaberInKata(self->client->ps.saberMove) &&
+				!PM_SaberInKillMove(self->client->ps.saberMove) &&
+				self->client->ps.saberLockTime < level.time)
+			{ // If we already hit this entity, and we're not in a kata or kill move, don't hit again
+				// Already hit this player with this saber swing → skip
+				if (g_HitTracking.integer && (victim->r.svFlags & SVF_BOT || victim->NPC))
+				{
+					Com_Printf(S_COLOR_RED "Single-hit enforcement: skip if already damaged this swing\n");
+				}
+				DebounceSaberImpact(self, blocker, rSaberNum, rBladeNum, sabimpactentity_num);
+				return qtrue;
+			}
+		}
+
 		// Random index for beskar impact sound
 		const int index = Q_irand(1, 3);
 
@@ -7253,18 +7403,17 @@ static QINLINE qboolean CheckSaberDamage(gentity_t* self, const int rSaberNum, c
 			G_Sound(victim, CHAN_BODY, G_SoundIndex(va("sound/weapons/impacts/beskar_impact%d.mp3", index)));
 		}
 
-		// Perfect parry: defender in active block/parry state
-		qboolean perfectParry = qfalse;
-
-		if (victim->client &&
-			!(dflags & DAMAGE_NO_DAMAGE) &&
-			(self_m_blocking == qtrue))
-		{
-			perfectParry = qtrue;
-		}
-
-		// Hit-confirm chain boost: landing a hit speeds up next chain swing
-		if (!perfectParry && !(dflags & DAMAGE_NO_DAMAGE) && victim->client)
+		// Perfect parry (SJE SP item 287, MP port 2026-11-09; DH: a perfect parry costs block points, never shield). The
+		// perfect block code (sab_beh_attack_vs_block / sab_beh_block_vs_attack, w_saberblocking.c) takes the attacker's
+		// block points, gives the riposte window (g_saberPerfectParry) and clears the damage of the parried hit. A second
+		// perfect parry here zeroed every hit while the ATTACKER's own perfect-block timing flag was up, took 10 shield
+		// (STAT_ARMOR) from him and stunned him 350 ms: removed. The defender's flag is only read now, so a hit on a
+		// perfect-blocking defender doesn't count for the hit-confirm.
+		const qboolean perfectParry = victim->client &&
+			(victim->client->ps.ManualBlockingFlags & (1 << MBF_PERFECTBLOCKING)) != 0 ? qtrue : qfalse;
+		// Hit-confirm chain boost (g_saberHitConfirm, default 0 since 2026-11-09): landing a hit speeds up the next
+		// chain swing
+		if (g_saberHitConfirm.integer && !perfectParry && !(dflags & DAMAGE_NO_DAMAGE) && victim->client)
 		{
 			// reduce weaponTime to let the next swing chain faster
 			self->client->ps.weaponTime = (int)(self->client->ps.weaponTime * 0.5f);
@@ -7272,23 +7421,10 @@ static QINLINE qboolean CheckSaberDamage(gentity_t* self, const int rSaberNum, c
 				self->client->ps.weaponTime = 50;
 		}
 
-		if (perfectParry)
-		{// defender perfectly parried: zero damage, stagger attacker, riposte
-			dflags |= DAMAGE_NO_DAMAGE;
-			// stagger attacker for 350ms, cancel their combo
-			self->client->ps.weaponTime = 350;
-			self->client->ps.saberAttackChainCount = 0;
-			self->client->ps.saberMove = LS_READY;
-			// deduct armor from attacker
-			self->client->ps.stats[STAT_ARMOR] -= 10;
-			if (self->client->ps.stats[STAT_ARMOR] < 0)
-				self->client->ps.stats[STAT_ARMOR] = 0;
-			// grant defender riposte window for 500ms
-			victim->client->ps.saberRiposteTime = level.time + 500;
-		}
-
-		// Startup wind-up interrupt: if victim is in early attack frames, bypass armor
-		if (victim->client &&
+		// Startup wind-up interrupt (g_saberHitConfirm, default 0 since 2026-11-09): a hit on a victim who is starting
+		// an attack bypasses armor and cancels his swing
+		if (g_saberHitConfirm.integer &&
+			victim->client &&
 			!perfectParry &&
 			PM_SaberInAttack(victim->client->ps.saberMove) &&
 			victim->client->ps.weaponstate == WEAPON_FIRING)
@@ -7297,25 +7433,6 @@ static QINLINE qboolean CheckSaberDamage(gentity_t* self, const int rSaberNum, c
 			victim->client->ps.saberAttackChainCount = 0;
 			victim->client->ps.saberMove = LS_READY;
 			victim->client->ps.weaponstate = WEAPON_IDLE;
-		}
-
-		// --------------------------------------------------------
-		// SINGLE-HIT ENFORCEMENT
-		// --------------------------------------------------------
-		if (self->client->saberHitEntityBitMask & (1 << victim->s.number))
-		{
-			if (!PM_SaberInKata(self->client->ps.saberMove) &&
-				!PM_SaberInKillMove(self->client->ps.saberMove) &&
-				self->client->ps.saberLockTime < level.time)
-			{ // If we already hit this entity, and we're not in a kata or kill move, don't hit again
-				// Already hit this player with this saber swing → skip
-				if (g_HitTracking.integer && (victim->r.svFlags & SVF_BOT || victim->NPC))
-				{
-					Com_Printf(S_COLOR_RED "Single-hit enforcement: skip if already damaged this swing\n");
-				}
-				DebounceSaberImpact(self, blocker, rSaberNum, rBladeNum, sabimpactentity_num);
-				return qtrue;
-			}
 		}
 
 		// --------------------------------------------------------
@@ -7385,7 +7502,7 @@ static QINLINE qboolean CheckSaberDamage(gentity_t* self, const int rSaberNum, c
 			{
 				Com_Printf(S_COLOR_RED "Tracking damage to player %d\n", victim->s.number);
 			}
-			self->client->saberHitEntityBitMask |= (1 << victim->s.number);
+			WP_SwingAddHit(self, victim);
 		}
 
 		// --------------------------------------------------------
@@ -7466,9 +7583,7 @@ static QINLINE qboolean CheckSaberDamage(gentity_t* self, const int rSaberNum, c
 			if (dmg > SABER_NONATTACK_DAMAGE ||
 				PM_SaberInNonIdleDamageMove(&blocker->client->ps, blocker->localAnimIndex))
 			{
-				const int lock_factor = g_saberLockFactor.integer;
-
-				if (Q_irand(1, 20) < lock_factor)
+				if (WP_SaberLockChance(qfalse)) // 2026-11-10: g_saberLockRandomNess (w_saberblocking.c), with g_saberLockFactor
 				{
 					if (WP_SabersCheckLock(self, blocker))
 					{
@@ -8681,15 +8796,8 @@ static void DownedSaberThink(gentity_t* saberent)
 	}
 	else if (saber_own->r.svFlags & SVF_BOT)
 	{
-		if (saber_own->client->ps.fd.saberAnimLevel != SS_DUAL &&
-			level.time - saber_own->client->saberKnockedTime > MAX_BOT_LEAVE_TIME)
-		{
-			pull_back = qtrue;
-		}
-		else
-		{
-			pull_back = qtrue;
-		}
+		// 2026-11-10 (audit): "if (saber_own->client->ps.fd.saberAnimLevel != SS_DUAL && level.time - saber_own->client->s...)" had the same code in both branches; kept one
+		pull_back = qtrue;
 	}
 	else if (level.time - saber_own->client->saberKnockedTime > MAX_LEAVE_TIME)
 	{
@@ -9580,17 +9688,15 @@ void WP_saberBackToOwner(gentity_t* saberent)
 				WP_BlockPointsRegenerate(saber_owner, BLOCKPOINTS_TWENTYFIVE);
 				WP_ForcePowerRegenerate(saber_owner, BLOCKPOINTS_TWENTYFIVE);
 
-				// Schedule delayed saber-style switch (2.5 seconds)
-				saber_owner->client->botPendingFlags |= BOT_SABER_PENDING_MASK;
-				saber_owner->client->ps.botPendingStyleTime = level.time + 2500;
-
 				// Reset saber state
 				saber_owner->client->ps.saberMove = LS_READY;
 				saber_owner->client->ps.saberBlocked = BLOCKED_NONE;
 
-				// Schedule BOTH_STAND1TO2 to play 1.2 seconds later
-				saber_owner->client->botPendingFlags |= BOT_PENDING_STAND_ANIM;
-				saber_owner->client->ps.botPendingStandTime = level.time + 1200;
+				// (2026-11-09, DH: bots freeze for a few seconds after catching their thrown saber) A bot no longer
+				// plays a second draw anim (BOTH_STAND1TO2) 1.2 s after the catch and a style switch with the put away
+				// anim (BOTH_STAND2TO1) 2.5 s after it: the catch itself already plays the draw (HANDEXTEND_SABERCATCH),
+				// as for a player, and the bot AI picks its style in the fight. Any of those still pending is cleared.
+				saber_owner->client->botPendingFlags &= ~(BOT_SABER_PENDING_MASK | BOT_PENDING_STAND_ANIM);
 			}
 			else
 			{
@@ -10248,12 +10354,12 @@ static void WP_HolsterSaberAndPlayOffSounds(gentity_t* hitEnt)
 extern qboolean PM_KnockDownAnim(int anim);
 static void WP_KnockdownAndDrain(gentity_t* hitEnt, gentity_t* pusher, int knockAnimMin, int knockAnimMax, qboolean addFatigueBonus, qboolean useAbsorbDrain)
 {
-	const qboolean isBot = (qboolean)((hitEnt->r.svFlags & SVF_BOT) != 0);
-
 	if (!hitEnt || !hitEnt->client)
 	{
 		return;
 	}
+
+	const qboolean isBot = (qboolean)((hitEnt->r.svFlags & SVF_BOT) != 0); // read after the null check (2026-11-09)
 
 	G_SetAnim(hitEnt, &hitEnt->client->pers.cmd, SETANIM_BOTH, (knockAnimMin == knockAnimMax) ? knockAnimMin : Q_irand(knockAnimMin, knockAnimMax), SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
 
@@ -10334,19 +10440,31 @@ qboolean WP_AbsorbKick(gentity_t* hitEnt, gentity_t* pusher, vec3_t push_dir)
 	// ============================================================
 	if (BotCanAbsorbKick(hitEnt, push_dir) && npc_blocking && isBot)
 	{
-		if (hitEnt->client->ps.fd.blockPoints > 50 && hitEnt->client->ps.fd.forcePower > 50)
-		{
-			G_Stagger(hitEnt);
-			WP_BlockPointsDrain(hitEnt, FATIGUE_BP_ABSORB);
-			WP_DeactivateSaber(hitEnt);
-		}
-		else
+		// 2026-11-09 (SJE SP item 287 round 2, DH: NPCs/bots absorb a kick and turn the knockdown into a backflip). It was
+		// the wrong way round: a fresh bot (BP and FP > 50) staggered AND switched its saber off, a tired one backflipped,
+		// and the flip played standing on the floor with no lift. Now a fresh bot backflips out of it as a real jump (like
+		// the player's back-jump flip; the kick's throw pushes it back), a tired one only staggers, and the saber stays on.
+		// Sabers that forbid flips (SFL_NO_FLIPS) stagger.
+		const qboolean can_flip = (qboolean)(!(hitEnt->client->saber[0].saberFlags & SFL_NO_FLIPS)
+			&& (hitEnt->client->saber[1].model[0] == 0 || !(hitEnt->client->saber[1].saberFlags & SFL_NO_FLIPS)));
+
+		if (hitEnt->client->ps.fd.blockPoints > 50 && hitEnt->client->ps.fd.forcePower > 50 && can_flip)
 		{
 			G_SetAnim(hitEnt, &hitEnt->client->pers.cmd,
 				SETANIM_BOTH,
-				Q_irand(BOTH_FLIP_BACK1, BOTH_FLIP_BACK2),
+				Q_irand(BOTH_FLIP_BACK1, BOTH_FLIP_BACK3),
 				SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD,
 				0);
+			hitEnt->client->ps.pm_flags |= PMF_JUMP_HELD;
+			hitEnt->client->ps.groundEntityNum = ENTITYNUM_NONE;
+			hitEnt->client->ps.fd.forceJumpZStart = hitEnt->client->ps.origin[2];
+			hitEnt->client->ps.velocity[2] = JUMP_VELOCITY;
+			G_AddEvent(hitEnt, EV_JUMP, 0);
+			WP_BlockPointsDrain(hitEnt, FATIGUE_BP_ABSORB);
+		}
+		else
+		{
+			G_Stagger(hitEnt);
 			WP_BlockPointsDrain(hitEnt, FATIGUE_BP_ABSORB);
 		}
 
@@ -10628,15 +10746,9 @@ static gentity_t* G_KickTrace(gentity_t* ent, vec3_t kick_dir, const float kick_
 							else
 							{
 								//force them to play a pain anim
-								if (hitEnt->s.number < MAX_CLIENTS)
-								{
-									NPC_SetPainEvent(hitEnt);
-								}
-								else
-								{
-									NPC_SetPainEvent(hitEnt);
-									//GEntity_PainFunc(hitEnt, ent, ent, hitEnt->r.currentOrigin, 0, MOD_MELEE);
-								}
+								// 2026-11-10 (audit): "if (hitEnt->s.number < MAX_CLIENTS)" had the same code in both branches; kept one
+								NPC_SetPainEvent(hitEnt);
+								//GEntity_PainFunc(hitEnt, ent, ent, hitEnt->r.currentOrigin, 0, MOD_MELEE);
 							}
 							//just so we don't hit him again...
 							hitEnt->client->ps.pm_flags |= PMF_TIME_KNOCKBACK;
@@ -12142,15 +12254,7 @@ void WP_SaberPositionUpdate(gentity_t* self, usercmd_t* ucmd)
 					vec3_t gFwd, idealSpot;
 					trace_t trace;
 
-					if (grappler->client->ps.torsoAnim == BOTH_KYLE_PA_1)
-					{ //grab punch
-						idealDist = 46.0f;
-					}
-					else if (grappler->client->ps.torsoAnim == BOTH_KYLE_PA_2)
-					{ //knee-throw
-						idealDist = 46.0f;
-					}
-					else
+					// 2026-11-10 (audit): "if (grappler->client->ps.torsoAnim == BOTH_KYLE_PA_1)" had the same code in both branches; kept one
 					{ //head lock
 						idealDist = 46.0f;
 					}
@@ -12827,16 +12931,26 @@ nextStep:
 			!PM_SaberInKillMove(self->client->ps.saberMove) &&
 			self->client->ps.saberLockTime < level.time)
 		{ // If we already hit this entity, and we're not in a kata or kill move, don't hit again
-			if (self->client->ps.saberAttackSequence != self->client->saberLastAttackSequence)
+			// Bug fix 2026-11-10 (as SP): a new swing also begins when the attacker goes into a new attack, start or transition
+			// move. saberAttackSequence (the torso anim) is only saved on the WEAPON_FIRING path of PM_WeaponLightsaber, and
+			// never while the block button is held. Moves set before that path returns (spin, leap, roll-stab and pull
+			// attacks, the chain on attack release) kept the old sequence, so the new swing did no damage to an enemy the old
+			// swing had already hit.
+			const int swing_move = self->client->ps.saberMove;
+			const qboolean new_swing_move = swing_move != swingLastMove[self->s.number]
+				&& (PM_SaberInAttack(swing_move) || PM_SaberInStart(swing_move) || PM_SaberInTransition(swing_move)) ? qtrue : qfalse;
+			if (self->client->ps.saberAttackSequence != self->client->saberLastAttackSequence || new_swing_move)
 			{
 				if (g_HitTracking.integer && !(self->r.svFlags & SVF_BOT) && !(self->NPC))
 				{
 					Com_Printf(S_COLOR_RED "Reset hit tracking when a new swing begins\n");
 				}
-				self->client->saberHitEntityBitMask = 0;
+				WP_SwingHitsReset(self);
 				self->client->saberLastAttackSequence = self->client->ps.saberAttackSequence;
 			}
 		}
+
+		swingLastMove[self->s.number] = (short)self->client->ps.saberMove;
 
 		WP_SaberClearDamage();
 		saberDoClashEffect = qfalse;
@@ -13385,8 +13499,8 @@ qboolean manual_saberblocking(const gentity_t* defender)
 		|| PM_SaberInBounce(defender->client->ps.saberMove)
 		|| PM_SaberInKnockaway(defender->client->ps.saberMove)
 		|| PM_SaberInBrokenParry(defender->client->ps.saberMove)
-		|| PM_SaberInMassiveBounce(defender->client->ps.saberMove)
-		|| PM_SaberInBashedAnim(defender->client->ps.saberMove)
+		|| PM_SaberInMassiveBounce(defender->client->ps.torsoAnim)
+		|| PM_SaberInBashedAnim(defender->client->ps.torsoAnim)
 		|| defender->client->ps.groundEntityNum == ENTITYNUM_NONE
 		|| defender->client->ps.fd.blockPoints < BLOCKPOINTS_FIVE
 		|| defender->client->ps.fd.forcePower < BLOCKPOINTS_FIVE)
@@ -13634,14 +13748,14 @@ int PlayerCanAbsorbKick(const gentity_t* defender, const vec3_t push_dir) //Can 
 {
 	vec3_t p_l_angles, p_l_fwd;
 
-	const qboolean is_holding_block_button = ((defender->client->ps.ManualBlockingFlags & 1 << MBF_HOLDINGBLOCK) != 0) ? qtrue : qfalse;
-	//Normal Blocking
-
 	if (!defender || !defender->client)
 	{
 		//non-humanoids can't absorb kicks.
 		return qfalse;
 	}
+
+	const qboolean is_holding_block_button = ((defender->client->ps.ManualBlockingFlags & 1 << MBF_HOLDINGBLOCK) != 0) ? qtrue : qfalse;
+	//Normal Blocking (read after the null check, 2026-11-09)
 	if (!is_holding_block_button) // Must be holding Block button
 	{
 		// Not doing any blocking can't absorb kicks.
@@ -13770,8 +13884,8 @@ float Manual_NPCKickAbsorbing(const gentity_t* defender)
 		|| PM_SaberInReturn(defender->client->ps.saberMove)
 		|| PM_SaberInKnockaway(defender->client->ps.saberMove)
 		|| PM_SaberInBrokenParry(defender->client->ps.saberMove)
-		|| PM_SaberInMassiveBounce(defender->client->ps.saberMove)
-		|| PM_SaberInBashedAnim(defender->client->ps.saberMove)
+		|| PM_SaberInMassiveBounce(defender->client->ps.torsoAnim)
+		|| PM_SaberInBashedAnim(defender->client->ps.torsoAnim)
 		|| defender->client->ps.groundEntityNum == ENTITYNUM_NONE
 		|| defender->client->ps.fd.blockPoints < BLOCKPOINTS_THIRTY
 		|| defender->client->ps.fd.forcePower < BLOCKPOINTS_THIRTY
@@ -16722,16 +16836,9 @@ static void player_StopFreeze(const gentity_t* self)
 {
 	if (self && self->client)
 	{
-		if (self->client->ps.PlayerEffectFlags & 1 << PEF_FREEZING)
-		{
-			//UnFreeze
-			self->client->ps.PlayerEffectFlags &= ~(1 << PEF_FREEZING);
-		}
-		else
-		{
-			//UnFreeze
-			self->client->ps.PlayerEffectFlags &= ~(1 << PEF_FREEZING);
-		}
+		// 2026-11-10 (audit): "if (self->client->ps.PlayerEffectFlags & 1 << PEF_FREEZING)" had the same code in both branches; kept one
+		//UnFreeze
+		self->client->ps.PlayerEffectFlags &= ~(1 << PEF_FREEZING);
 	}
 }
 
@@ -16739,22 +16846,8 @@ void Player_CheckFreeze(const gentity_t* self)
 {
 	if (self && self->client)
 	{
-		if (self->health <= 0 || self->painDebounceTime < level.time)
-		{
-			player_StopFreeze(self);
-		}
-		else if (PM_InRoll(&self->client->ps))
-		{
-			player_StopFreeze(self);
-		}
-		else if (TIMER_Done(self, "FreezeDebounce"))
-		{
-			player_StopFreeze(self);
-		}
-		else
-		{
-			player_StopFreeze(self);
-		}
+		// 2026-11-10 (audit): "if (self->health <= 0 || self->painDebounceTime < level.time)" had the same code in both branches; kept one
+		player_StopFreeze(self);
 	}
 }
 

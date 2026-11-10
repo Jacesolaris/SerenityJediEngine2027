@@ -90,9 +90,59 @@ float ambientOcclusion(sampler2D depthMap, const vec2 tex, const float zFarDivZN
 	return result;
 }
 
+// r_aoHorizon (KatarnEngine): horizon-based AO (GTAO-style). For a few directions around the pixel, find how far
+// the nearby geometry rises above the surface's tangent plane within a world-space radius.
+// u_ViewInfo = zfar/znear, zfar, proj[0][0], proj[1][1]
+vec3 ViewPosAO(vec2 tex)
+{
+	float z = u_ViewInfo.y * getLinearDepth(u_ScreenDepthMap, tex, u_ViewInfo.x);
+	vec2 ndc = tex * 2.0 - 1.0;
+	return vec3(ndc.x * z / u_ViewInfo.z, ndc.y * z / u_ViewInfo.w, z);
+}
+
+float horizonAO(vec2 tex)
+{
+	vec3 P = ViewPosAO(tex);
+	if (P.z > u_ViewInfo.y * 0.98) return 1.0;
+	vec3 N = normalize(cross(dFdy(P), dFdx(P)));
+	if (dot(N, P) > 0.0) N = -N;
+
+	const float radius = 40.0;                  // game units
+	vec2 texRadius = vec2(radius * u_ViewInfo.z, radius * u_ViewInfo.w) / P.z * 0.5;
+	if (max(texRadius.x, texRadius.y) < 0.002) return 1.0;
+	texRadius = min(texRadius, vec2(0.15));
+
+	float jitter = random(tex) * 6.2831853;
+	float occ = 0.0;
+	const int DIRS = 6, STEPS = 6;
+	for (int d = 0; d < DIRS; d++)
+	{
+		float a = jitter + float(d) * (3.14159265 / float(DIRS));
+		vec2 dir = vec2(cos(a), sin(a));
+		for (int side = -1; side <= 1; side += 2)
+		{
+			float best = 0.0;
+			for (int s = 1; s <= STEPS; s++)
+			{
+				float t = (float(s) - fract(jitter * 7.0)) / float(STEPS);
+				vec3 S = ViewPosAO(tex + dir * float(side) * texRadius * t);
+				vec3 D = S - P;
+				float dist = length(D);
+				if (dist < 0.1) continue;
+				float h = dot(D / dist, N) - 0.05;             // elevation above the surface plane
+				float fall = clamp(1.0 - dist / radius, 0.0, 1.0);
+				best = max(best, h * fall);
+			}
+			occ += clamp(best, 0.0, 1.0);
+		}
+	}
+	occ /= float(DIRS * 2);
+	return clamp(1.0 - occ * 1.2, 0.25, 1.0);
+}
+
 void main()
 {
-	float result = ambientOcclusion(u_ScreenDepthMap, var_ScreenTex, u_ViewInfo.x, u_ViewInfo.y);
+	float result = (u_ViewInfo.z > 0.0) ? horizonAO(var_ScreenTex) : ambientOcclusion(u_ScreenDepthMap, var_ScreenTex, u_ViewInfo.x, u_ViewInfo.y);
 
 	out_Color = vec4(vec3(result), 1.0);
 }

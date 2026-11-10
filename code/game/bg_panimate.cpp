@@ -65,6 +65,9 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 // SS_BLASTER saber attack / transition anim speed (SS_FAST is 1.1): Jace 2026-10-30
 #define SABERBLASTER_SABER_ANIM_SPEED	1.3f
+// SS_BLASTER top-to-bottom attack: BOTH_PULL_IMPALE_STAB (PM_SetSaberMove) holds its stab pose a long time, so it plays
+// faster for SS_BLASTER only (item 318, DH 2026-11-10). Raise to shorten it more, 1.0f = as before.
+#define SABERBLASTER_IMPALE_STAB_SPEED	1.75f
 
 extern pmove_t* pm;
 extern pml_t pml;
@@ -76,6 +79,7 @@ extern cvar_t* g_noFootSlide;
 extern cvar_t* g_noFootSlideRunScale;
 extern cvar_t* g_noFootSlideWalkScale;
 extern cvar_t* g_saberAnimSpeed;
+extern cvar_t* g_saberPerfectParry;
 extern cvar_t* g_saberAutoAim;
 extern cvar_t* g_speederControlScheme;
 extern cvar_t* g_saberNewControlScheme;
@@ -5937,6 +5941,12 @@ void PM_SaberStartTransAnim(const int saberAnimLevel, const int anim, float* ani
 		*animSpeed *= WALL_RUN_ANIM_SCALE;
 		return;
 	}
+	// SS_BLASTER (Kyle): its top-to-bottom attack is BOTH_PULL_IMPALE_STAB, which holds the stab pose a long time; it
+	// plays faster (item 318). No return: the saber speeds below still apply.
+	if (anim == BOTH_PULL_IMPALE_STAB && saberAnimLevel == SS_BLASTER)
+	{
+		*animSpeed *= SABERBLASTER_IMPALE_STAB_SPEED;
+	}
 	char buf[128];
 
 	// Read global saber animation speed multiplier
@@ -6197,6 +6207,14 @@ void PM_SaberStartTransAnim(const int saberAnimLevel, const int anim, float* ani
 				break;
 			}
 		}
+	}
+
+	// Riposte (g_saberPerfectParry, 2026-11-09): the riposte swing after a perfect parry plays 15% faster
+	// (saberRiposteTime < 0 while it runs, set in PM_SetSaberMove)
+	if (gent->client->ps.saberRiposteTime < 0 && -gent->client->ps.saberRiposteTime > level.time
+		&& g_saberPerfectParry && g_saberPerfectParry->integer)
+	{
+		*animSpeed *= 1.15f;
 	}
 }
 
@@ -6560,10 +6578,10 @@ void PM_SetAnimFinal(int* torso_anim, int* legs_anim, const int setAnimParts, in
 		(cg_debugAnim.integer == 2 && gent->s.number != 0) ||							// 2 = only everyone else
 		(cg_debugAnim.integer == 4 && gent->s.number != cg_debugAnimTarget.integer)) 	// 4 = specific entnum
 	{
-		if (bodyPlay || torsPlay)
+		if (body_play || tors_play) // 2026-11-10: old names (bodyPlay, torsPlay, actualTime) here broke any build without FINAL_BUILD
 		{
-			char* entName = gent->targetname;
-			char* location;
+			const char* entName = gent->targetname;
+			const char* location;
 
 			// Select Entity Name
 			//--------------------
@@ -6586,11 +6604,11 @@ void PM_SetAnimFinal(int* torso_anim, int* legs_anim, const int setAnimParts, in
 
 			// Select Play Location
 			//----------------------
-			if (bodyPlay && torsPlay)
+			if (body_play && tors_play)
 			{
 				location = "BOTH ";
 			}
-			else if (bodyPlay)
+			else if (body_play)
 			{
 				location = "LEGS ";
 			}
@@ -6602,7 +6620,7 @@ void PM_SetAnimFinal(int* torso_anim, int* legs_anim, const int setAnimParts, in
 			// Print It!
 			//-----------
 			Com_Printf("[%10d] ent[%3d-%18s] %s anim[%3d] - %s\n",
-				actualTime,
+				actual_time,
 				gent->s.number,
 				entName,
 				location,
@@ -8393,52 +8411,21 @@ void PM_TorsoAnimation()
 						|| PM_SwimmingAnim(pm->ps->legsAnim))
 					{
 						//running sniper weapon uses normal ready
-						if (pm->ps->clientNum)
-						{
-							if (cg.renderingThirdPerson)
-							{
-								PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY4, SETANIM_FLAG_NORMAL);
-							}
-							else
-							{
-								PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY4, SETANIM_FLAG_NORMAL);
-							}
-						}
-						else
-						{
-							if (cg.renderingThirdPerson)
-							{
-								PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY4, SETANIM_FLAG_NORMAL);
-							}
-							else
-							{
-								PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY4, SETANIM_FLAG_NORMAL);
-							}
-						}
+						// 2026-11-10 (audit): "if (pm->ps->clientNum)" had the same code in both branches; kept one
+						// 2026-11-10 (audit): "if (cg.renderingThirdPerson)" had the same code in both branches; kept one
+						PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY4, SETANIM_FLAG_NORMAL);
 					}
 					else
 					{
 						if (pm->ps->clientNum)
 						{
-							if (cg.renderingThirdPerson)
-							{
-								PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY4, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-							}
-							else
-							{
-								PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY4, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-							}
+							// 2026-11-10 (audit): "if (cg.renderingThirdPerson)" had the same code in both branches; kept one
+							PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY4, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 						}
 						else
 						{
-							if (cg.renderingThirdPerson)
-							{
-								PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY4, SETANIM_FLAG_NORMAL);
-							}
-							else
-							{
-								PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY4, SETANIM_FLAG_NORMAL);
-							}
+							// 2026-11-10 (audit): "if (cg.renderingThirdPerson)" had the same code in both branches; kept one
+							PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY4, SETANIM_FLAG_NORMAL);
 						}
 					}
 					break;
@@ -8504,14 +8491,8 @@ void PM_TorsoAnimation()
 					}
 					else
 					{
-						if (weaponBusy)
-						{
-							PM_SetAnim(pm, SETANIM_TORSO, BOTH_STAND1, SETANIM_FLAG_NORMAL);
-						}
-						else
-						{
-							PM_SetAnim(pm, SETANIM_TORSO, BOTH_STAND1, SETANIM_FLAG_NORMAL);
-						}
+						// 2026-11-10 (audit): "if (weaponBusy)" had the same code in both branches; kept one
+						PM_SetAnim(pm, SETANIM_TORSO, BOTH_STAND1, SETANIM_FLAG_NORMAL);
 					}
 					break;
 				default:
@@ -9129,38 +9110,18 @@ void PM_TorsoAnimation()
 					{// Holding an enemy aloft with force-grasp
 						return;
 					}
-					if (pm->ps->weaponstate != WEAPON_FIRING
-						&& pm->ps->weaponstate != WEAPON_CHARGING
-						&& pm->ps->weaponstate != WEAPON_CHARGING_ALT
-						|| PM_RunningAnim(pm->ps->legsAnim)
-						|| PM_WalkingAnim(pm->ps->legsAnim)
-						|| PM_JumpingAnim(pm->ps->legsAnim)
-						|| PM_SwimmingAnim(pm->ps->legsAnim))
+					// 2026-11-10 (audit): "if (pm->ps->weaponstate != WEAPON_FIRING && pm->ps->weaponstate != WEAPON_CHARGING && pm->p...)" had the same code in both branches; kept one
+					if (pm->ps->clientNum)
 					{
-						//running sniper weapon uses normal ready
-						if (pm->ps->clientNum)
+						if (weaponBusy)
 						{
-							if (weaponBusy)
+							if (cg.renderingThirdPerson)
 							{
-								if (cg.renderingThirdPerson)
-								{
-									PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY4, SETANIM_FLAG_NORMAL);
-								}
-								else
-								{
-									PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY3, SETANIM_FLAG_NORMAL);
-								}
+								PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY4, SETANIM_FLAG_NORMAL);
 							}
 							else
 							{
-								if (cg.renderingThirdPerson)
-								{
-									PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONIDLE4, SETANIM_FLAG_NORMAL);
-								}
-								else
-								{
-									PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY3, SETANIM_FLAG_NORMAL);
-								}
+								PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY3, SETANIM_FLAG_NORMAL);
 							}
 						}
 						else
@@ -9177,41 +9138,13 @@ void PM_TorsoAnimation()
 					}
 					else
 					{
-						if (pm->ps->clientNum)
+						if (cg.renderingThirdPerson)
 						{
-							if (weaponBusy)
-							{
-								if (cg.renderingThirdPerson)
-								{
-									PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY4, SETANIM_FLAG_NORMAL);
-								}
-								else
-								{
-									PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY3, SETANIM_FLAG_NORMAL);
-								}
-							}
-							else
-							{
-								if (cg.renderingThirdPerson)
-								{
-									PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONIDLE4, SETANIM_FLAG_NORMAL);
-								}
-								else
-								{
-									PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY3, SETANIM_FLAG_NORMAL);
-								}
-							}
+							PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONIDLE4, SETANIM_FLAG_NORMAL);
 						}
 						else
 						{
-							if (cg.renderingThirdPerson)
-							{
-								PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONIDLE4, SETANIM_FLAG_NORMAL);
-							}
-							else
-							{
-								PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY3, SETANIM_FLAG_NORMAL);
-							}
+							PM_SetAnim(pm, SETANIM_TORSO, TORSO_WEAPONREADY3, SETANIM_FLAG_NORMAL);
 						}
 					}
 					break;

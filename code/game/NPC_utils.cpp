@@ -1160,6 +1160,10 @@ static qboolean NPC_CheckPlayerDistance()
 	if (!NPC->client || NPC->client->enemyTeam != TEAM_PLAYER)
 		return qfalse;
 
+	//the player must be a valid enemy (notarget, dead): else G_SetEnemy refuses him but we still returned qtrue
+	if (NPC_ValidEnemy(&g_entities[0]) == qfalse)
+		return qfalse;
+
 	//Must be within our FOV and in sight, not behind a wall (DH 2026-10-24)
 	if (NPC_CheckVisibility(&g_entities[0], CHECK_360 | CHECK_FOV) < VIS_FOV)
 		return qfalse;
@@ -1197,20 +1201,6 @@ static qboolean NPC_FindEnemy(const qboolean check_alerts = qfalse)
 		isOfficerWithFlechette = qtrue;
 	}
 
-	if (com_outcast && com_outcast->integer == 0)
-	{
-		// 1. Force acquisition of the player if visible (except excluded officers)
-		if (!isOfficerWithFlechette)
-		{
-			gentity_t* player = &g_entities[0];
-			if (NPC_CheckVisibility(player, CHECK_PVS | CHECK_360 | CHECK_FOV | CHECK_VISRANGE) >= VIS_FOV) // in sight, not through walls (DH 2026-10-24)
-			{
-				G_SetEnemy(NPC, player);
-				return qtrue;
-			}
-		}
-	}
-
 	// 2. Ignore enemies if flagged
 	if (NPC->svFlags & SVF_IGNORE_ENEMIES)
 	{
@@ -1228,6 +1218,23 @@ static qboolean NPC_FindEnemy(const qboolean check_alerts = qfalse)
 	// 4. Keep locked enemy if valid
 	if ((NPC->svFlags & SVF_LOCKEDENEMY) && NPC_ValidEnemy(NPC->enemy))
 		return qtrue;
+
+	// 4b. JKA campaign: take the player as soon as he is in sight (except the excluded officers). Only when he is a
+	// valid enemy (not notarget, alive, not on our team). This used to run first, before the ignore-enemies, mind
+	// trick and locked-enemy checks, and returned qtrue even when G_SetEnemy refused him (notarget), so a notarget
+	// player kept being targeted and the old enemy was never dropped.
+	if (com_outcast && com_outcast->integer == 0 && !isOfficerWithFlechette)
+	{
+		gentity_t* player = &g_entities[0];
+		if (NPC_ValidEnemy(player) && NPC_CheckVisibility(player, CHECK_PVS | CHECK_360 | CHECK_FOV | CHECK_VISRANGE) >= VIS_FOV)
+		{
+			G_SetEnemy(NPC, player);
+			if (NPC->enemy == player)
+			{
+				return qtrue;
+			}
+		}
+	}
 
 	// 5. Player-distance priority (except monsters)
 	if (NPC->client->NPC_class != CLASS_RANCOR &&

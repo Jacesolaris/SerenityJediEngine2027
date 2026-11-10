@@ -760,12 +760,17 @@ struct SVertexTemp
 };
 
 #define MAX_GORE_VERTS (3000)
-static SVertexTemp GoreVerts[MAX_GORE_VERTS];
-static int GoreIndexCopy[MAX_GORE_VERTS];
+// Work space for one surface. It was 3000 verts / 6000 indexes, but Ghoul2 surfaces load up to
+// SHADER_MAX_VERTEXES (4000) verts, so a gore hit on a bigger surface wrote past the end.
+// MAX_GORE_VERTS / MAX_GORE_INDECIES stay as they are (rend2 sizes its gore buffers from them).
+#define G2_GORE_WORK_VERTS (SHADER_MAX_VERTEXES)
+#define G2_GORE_WORK_INDEXES (SHADER_MAX_INDEXES)
+static SVertexTemp GoreVerts[G2_GORE_WORK_VERTS];
+static int GoreIndexCopy[G2_GORE_WORK_VERTS];
 static int GoreTouch = 1;
 
 #define MAX_GORE_INDECIES (6000)
-static int GoreIndecies[MAX_GORE_INDECIES];
+static int GoreIndecies[G2_GORE_WORK_INDEXES];
 
 #define GORE_MARGIN (0.0f)
 int G2API_GetTime(int arg_time);
@@ -813,7 +818,10 @@ static void G2_GorePolys(const mdxmSurface_t* surface, CTraceSurface& TS, const 
 	const float* verts = reinterpret_cast<float*>(TS.TransformedVertsArray[surface->thisSurfaceIndex]);
 	const int numVerts = surface->numVerts;
 	int flags = 15;
-	assert(numVerts < MAX_GORE_VERTS);
+	if (numVerts > G2_GORE_WORK_VERTS || surface->numTriangles * 3 > G2_GORE_WORK_INDEXES)
+	{
+		return; // bigger than the work space: no gore rather than writing past it
+	}
 	for (j = 0; j < numVerts; j++)
 	{
 		const int pos = j * 5;
@@ -897,7 +905,7 @@ static void G2_GorePolys(const mdxmSurface_t* surface, CTraceSurface& TS, const 
 			}
 		}
 
-		assert(newNumTris * 3 + 3 < MAX_GORE_INDECIES);
+		assert(newNumTris * 3 + 3 <= G2_GORE_WORK_INDEXES);
 		for (int k = 0; k < 3; k++)
 		{
 			if (GoreVerts[tris[j].indexes[k]].touch == GoreTouch)

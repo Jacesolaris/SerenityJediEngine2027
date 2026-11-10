@@ -5523,6 +5523,7 @@ static const char* g_bindCommands[] =
 	"hips",
 	"won",
 	"emote",
+	"vstr npc_spawn_recent",
 	"use_barrier",
 	"use_jetpack",
 	"scale",

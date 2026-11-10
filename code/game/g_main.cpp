@@ -265,6 +265,7 @@ cvar_t* g_aiReload; // AI clips and reloads (2026-10-31): gunner NPCs stop to re
 cvar_t* g_aiClipScale; // x every AI clip size
 cvar_t* g_grenadeCook; // grenades (2026-10-31): 1 = the player can cook a grenade (hold past a full throw), 0 = old
 cvar_t* g_allowslipping;
+cvar_t* g_npcQuickGetUp; //item 319: non-Force NPCs get up 1-2 s sooner after a knockdown
 cvar_t* g_allowClimbing;
 
 cvar_t* g_newgameplusJKA;
@@ -294,6 +295,16 @@ cvar_t* g_AimingCinematicCamera;
 cvar_t* g_HitTracking;
 
 cvar_t* g_SaberBounceOnWalls;
+cvar_t* g_saberPerfectParry; // perfect parry: heavy swing cost, guard break, riposte (2026-11-09)
+cvar_t* g_SaberPerfectBlockingTimerEasy; // perfect block window ms per skill (2026-11-10, as MD 9)
+cvar_t* g_SaberPerfectBlockingTimerNormal;
+cvar_t* g_SaberPerfectBlockingTimerHard;
+cvar_t* g_saberHitConfirm; // hit-confirm chain boost + wind-up armour bypass (2026-11-09)
+cvar_t* g_saberAIAdapt; // saber NPCs read the player's favourite swings (2026-11-09)
+cvar_t* g_saberAIRecover; // saber NPCs back off to meditate / heal when low (2026-11-09)
+cvar_t* g_saberAITactics; // saber NPCs kick/slap at the right moments, feint and taunt now and then (2026-11-09)
+cvar_t* g_saberNPCBlockBox; // NPC saber block box: tight, and a block always shows a parry (2026-11-09)
+cvar_t* g_saberAIDefend; // saber NPCs defend first: quick parry re-think, no attack into a swing (2026-11-09)
 
 qboolean stop_icarus = qfalse;
 
@@ -886,6 +897,7 @@ static void G_InitCvars()
 	g_grenadeCook = gi.cvar("g_grenadeCook", "1", CVAR_ARCHIVE | CVAR_NORESTART);
 
 	g_allowslipping = gi.cvar("g_allowslipping", "1", CVAR_ARCHIVE | CVAR_SAVEGAME | CVAR_NORESTART);
+	g_npcQuickGetUp = gi.cvar("g_npcQuickGetUp", "1", CVAR_ARCHIVE);
 
 	g_allowClimbing = gi.cvar("g_allowClimbing", "1", CVAR_ARCHIVE | CVAR_SAVEGAME | CVAR_NORESTART);
 
@@ -927,6 +939,17 @@ static void G_InitCvars()
 	g_HitTracking = gi.cvar("g_HitTracking", "0", CVAR_ARCHIVE);
 
 	g_SaberBounceOnWalls = gi.cvar("g_saberbounceonwalls", "0", CVAR_ARCHIVE);
+
+	g_saberPerfectParry = gi.cvar("g_saberPerfectParry", "1", CVAR_ARCHIVE);
+	g_SaberPerfectBlockingTimerEasy = gi.cvar("g_SaberPerfectBlockingTimerEasy", "500", CVAR_ARCHIVE);
+	g_SaberPerfectBlockingTimerNormal = gi.cvar("g_SaberPerfectBlockingTimerNormal", "200", CVAR_ARCHIVE);
+	g_SaberPerfectBlockingTimerHard = gi.cvar("g_SaberPerfectBlockingTimerHard", "80", CVAR_ARCHIVE);
+	g_saberHitConfirm = gi.cvar("g_saberHitConfirm", "0", CVAR_ARCHIVE);
+	g_saberAIAdapt = gi.cvar("g_saberAIAdapt", "1", CVAR_ARCHIVE);
+	g_saberAIRecover = gi.cvar("g_saberAIRecover", "1", CVAR_ARCHIVE);
+	g_saberAITactics = gi.cvar("g_saberAITactics", "1", CVAR_ARCHIVE);
+	g_saberNPCBlockBox = gi.cvar("g_saberNPCBlockBox", "1", CVAR_ARCHIVE);
+	g_saberAIDefend = gi.cvar("g_saberAIDefend", "1", CVAR_ARCHIVE);
 }
 
 /*
@@ -2525,10 +2548,10 @@ void G_RunFrame(const int levelTime)
 				//using jetpack, drain fuel
 				if (ent->client->jetPackDebReduce < level.time)
 				{
-					if ((ent->client->pers.cmd.forwardmove || ent->client->pers.cmd.upmove || ent->client->pers.cmd.
+					if ((ent->client->usercmd.forwardmove || ent->client->usercmd.upmove || ent->client->usercmd.
 						rightmove) && ent->client->jetPackOn)
 					{
-						//take more if they're thrusting
+						//take more if they're thrusting (usercmd: pers.cmd is never filled in SP)
 						ent->client->ps.jetpackFuel -= 10;
 					}
 					else if (ent->client->flamethrowerOn && ent->client->jetPackOn)

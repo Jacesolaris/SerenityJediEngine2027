@@ -11934,6 +11934,130 @@ static void CG_DynamicHudEnd(const float alpha)
 	}
 }
 
+// Saber lock meter (cg_saberLockMeter 1, 2026-11-09, as SP): a bar near the bottom middle of the screen while the
+// player is in a saber lock. Blue = the player's side, red = the enemy's; the marker is the lock position (the lock
+// anim frame PM_SaberLocked pushes, ps.saberLockFrame, networked). The thin bar under it is the lock time left.
+extern qboolean BG_CheckIncrementLockAnim(int anim, int win_or_lose); // bg_saber.c
+
+#define CG_SABERLOCK_TIME 10000 // WP_SabersCheckLock2 (w_saber.c): saberLockTime = level.time + 10000
+
+static float CG_SaberLockMeterProgress(float* time_frac)
+{
+	const playerState_t* ps = &cg.predictedPlayerState;
+	const centity_t* cent = &cg_entities[cg.snap->ps.clientNum];
+
+	*time_frac = 0.0f;
+	if (ps->saberLockEnemy == ENTITYNUM_NONE || ps->saberLockTime <= cg.time || !ps->saberLockFrame)
+	{
+		return -1.0f;
+	}
+	if (!PM_InSaberLock(ps->torsoAnim) || cent->localAnimIndex < 0 || cent->localAnimIndex >= MAX_ANIM_FILES
+		|| !bgAllAnims[cent->localAnimIndex].anims)
+	{
+		return -1.0f;
+	}
+	const animation_t* anim = &bgAllAnims[cent->localAnimIndex].anims[ps->torsoAnim];
+	if (anim->numFrames <= 1)
+	{
+		return -1.0f;
+	}
+	float progress = (ps->saberLockFrame - anim->firstFrame) / (float)anim->numFrames;
+	if (progress < 0.0f)
+	{
+		progress = 0.0f;
+	}
+	else if (progress > 1.0f)
+	{
+		progress = 1.0f;
+	}
+	qboolean increment_to_win;
+	if (ps->torsoAnim == BOTH_CCWCIRCLELOCK || ps->torsoAnim == BOTH_BF2LOCK)
+	{
+		increment_to_win = qfalse; // old locks: these two win by dropping the frame
+	}
+	else if (ps->torsoAnim == BOTH_CWCIRCLELOCK || ps->torsoAnim == BOTH_BF1LOCK)
+	{
+		increment_to_win = qtrue;
+	}
+	else
+	{
+		increment_to_win = BG_CheckIncrementLockAnim(ps->torsoAnim, SABER_LOCK_WIN);
+	}
+	if (!increment_to_win)
+	{
+		progress = 1.0f - progress;
+	}
+
+	float left = (ps->saberLockTime - cg.time) / (float)CG_SABERLOCK_TIME;
+	if (left < 0.0f)
+	{
+		left = 0.0f;
+	}
+	else if (left > 1.0f)
+	{
+		left = 1.0f;
+	}
+	*time_frac = left;
+	return progress;
+}
+
+static void CG_DrawSaberLockMeter(void)
+{
+	static float shown = 0.5f;
+	static int last_time = 0;
+	float time_frac = 0.0f;
+
+	if (!cg_saberLockMeter.integer || cg.snap->ps.stats[STAT_HEALTH] <= 0
+		|| !(cg.predictedPlayerState.communicatingflags & 1 << CF_SABERLOCKING))
+	{
+		shown = 0.5f;
+		return;
+	}
+	const float progress = CG_SaberLockMeterProgress(&time_frac);
+	if (progress < 0.0f)
+	{
+		shown = 0.5f;
+		return;
+	}
+
+	// glide to the new position instead of jumping a whole push at once
+	int msec = cg.time - last_time;
+	last_time = cg.time;
+	if (msec < 0 || msec > 200)
+	{
+		msec = 200;
+	}
+	const float blend = msec / 80.0f > 1.0f ? 1.0f : msec / 80.0f;
+	shown += (progress - shown) * blend;
+
+	const float w = 200.0f;
+	const float h = 8.0f;
+	const float x = (SCREEN_WIDTH - w) * 0.5f;
+	const float y = 452.0f;
+	const float split = w * shown;
+
+	vec4_t back = { 0.0f, 0.0f, 0.0f, 0.6f };
+	vec4_t mine = { 0.25f, 0.55f, 1.0f, 0.9f };
+	vec4_t theirs = { 1.0f, 0.22f, 0.15f, 0.9f };
+	vec4_t frame = { 0.85f, 0.75f, 0.4f, 1.0f };
+	vec4_t marker = { 1.0f, 1.0f, 1.0f, 1.0f };
+	vec4_t timer = { 0.85f, 0.75f, 0.4f, 0.8f };
+
+	if (shown > 0.85f || shown < 0.15f)
+	{
+		// close to the end: the marker pulses
+		marker[3] = 0.6f + 0.4f * (float)sin(cg.time * 0.02f);
+	}
+
+	CG_FillRect(x - 1.0f, y - 1.0f, w + 2.0f, h + 2.0f, back);
+	CG_FillRect(x, y, split, h, mine);
+	CG_FillRect(x + split, y, w - split, h, theirs);
+	CG_FillRect(x + w * 0.5f - 0.5f, y, 1.0f, h, back); // the middle
+	CG_FillRect(x + split - 1.0f, y - 2.0f, 2.0f, h + 4.0f, marker);
+	CG_DrawRect(x - 1.0f, y - 1.0f, w + 2.0f, h + 2.0f, 1.0f, frame);
+	CG_FillRect(x, y + h + 3.0f, w * time_frac, 2.0f, timer);
+}
+
 static void CG_Draw2D(void)
 {
 	const float in_time = cg.invenSelectTime + WEAPON_SELECT_TIME;
@@ -12023,6 +12147,9 @@ static void CG_Draw2D(void)
 		CG_DrawOverheadBars(cg_debugHealthBars.integer || sight ? qtrue : qfalse, drawBlock,
 			drawBlock && cg_drawStaminaBar.integer ? qtrue : qfalse);
 	}
+
+	// the saber lock meter (cg_saberLockMeter, 2026-11-09)
+	CG_DrawSaberLockMeter();
 
 	//if (cg.predictedPlayerState.communicatingflags & (1 << HACKER))
 	//if (cg.snap->ps.userInt3 & (1 << FLAG_PERFECTBLOCK))

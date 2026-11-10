@@ -1246,6 +1246,8 @@ extern cvar_t* r_meshClothGravity;
 extern cvar_t* r_meshClothDrag;
 extern cvar_t* r_meshClothIter;
 extern cvar_t* r_meshClothLodNear;		// cloth beyond this distance: half the passes, updated at most every 32 ms (0 = off)
+extern cvar_t* r_meshClothWalls;		// cloth stays in front of walls round near characters (0 = off)
+extern cvar_t* r_meshClothBodyFit;		// cloth collides with the body's real shape, fitted from the mesh (0 = off)
 extern cvar_t* r_meshClothLodFar;		// cloth beyond this distance: not simulated (0 = off)
 extern cvar_t* r_threads;				// renderer job workers: -1 automatic, 0 off (draws exactly as before), N workers
 extern cvar_t* r_DynamicGlowFinish;	// 1: wait for the GPU before copying the glow (old behaviour), 0: no wait (default)

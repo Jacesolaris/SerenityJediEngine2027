@@ -143,6 +143,10 @@ cvar_t* r_forceAutoExposureMax;
 
 cvar_t* r_depthPrepass;
 cvar_t* r_ssao;
+cvar_t* r_ambientCube;
+cvar_t* r_aoHorizon;
+cvar_t* r_reshadeDepth;
+cvar_t* r_distanceCull;
 
 cvar_t* r_normalMapping;
 cvar_t* r_specularMapping;
@@ -247,6 +251,8 @@ cvar_t* r_meshClothGravity;
 cvar_t* r_meshClothDrag;
 cvar_t* r_meshClothIter;
 cvar_t* r_meshClothLodNear;
+cvar_t* r_meshClothWalls;
+cvar_t* r_meshClothBodyFit;
 cvar_t* r_meshClothLodFar;
 cvar_t* r_threads;
 cvar_t* r_meshClothShape;
@@ -1628,6 +1634,10 @@ static void R_Register(void)
 
 	r_depthPrepass = ri.Cvar_Get("r_depthPrepass", "1", CVAR_ARCHIVE, "");
 	r_ssao = ri.Cvar_Get("r_ssao", "1", CVAR_LATCH | CVAR_ARCHIVE, "");
+	r_ambientCube = ri.Cvar_Get("r_ambientCube", "1", CVAR_ARCHIVE, "directional ambient + floor bounce on models from the light grid (strength 0..2, 0 = off)");
+	r_aoHorizon = ri.Cvar_Get("r_aoHorizon", "1", CVAR_ARCHIVE, "1 = horizon-based ambient occlusion (needs r_ssao 1), 0 = stock rend2 SSAO");
+	r_reshadeDepth = ri.Cvar_Get("r_reshadeDepth", "0", CVAR_ARCHIVE, "copy the world depth to the window for ReShade depth effects (DOF, AO, fog)");
+	r_distanceCull = ri.Cvar_Get("r_distanceCull", "0", CVAR_ARCHIVE, "view distance in units (0 = worldspawn distanceCull key, or the whole map when it is larger than 32768 units)");
 
 	r_normalMapping = ri.Cvar_Get("r_normalMapping", "1", CVAR_ARCHIVE | CVAR_LATCH, "Disable/enable normal mapping");
 	r_specularMapping = ri.Cvar_Get("r_specularMapping", "1", CVAR_ARCHIVE | CVAR_LATCH, "Disable/enable specular mapping");
@@ -1798,6 +1808,8 @@ static void R_Register(void)
 	r_meshClothDrag = ri.Cvar_Get("r_meshClothDrag", "1.4", CVAR_ARCHIVE, "");
 	r_meshClothIter = ri.Cvar_Get("r_meshClothIter", "6", CVAR_ARCHIVE, "");
 	r_meshClothLodNear = ri.Cvar_Get("r_meshClothLodNear", "600", CVAR_ARCHIVE, "Mesh cloth beyond this distance: half the passes, updated at most every 32 ms (0 = off)");
+	r_meshClothWalls = ri.Cvar_Get("r_meshClothWalls", "1", CVAR_ARCHIVE, "Mesh cloth stays in front of walls round near characters (0 = off)");
+	r_meshClothBodyFit = ri.Cvar_Get("r_meshClothBodyFit", "1", CVAR_ARCHIVE, "Mesh cloth collides with the body's real shape, fitted from the model's mesh (0 = off)");
 	r_meshClothLodFar = ri.Cvar_Get("r_meshClothLodFar", "1800", CVAR_ARCHIVE, "Mesh cloth beyond this distance: not simulated (0 = off)");
 	r_threads = ri.Cvar_Get("r_threads", "-1", CVAR_ARCHIVE_ND, "Renderer job threads for mesh cloth: -1 automatic, 0 off, N threads");
 	r_meshClothShape = ri.Cvar_Get("r_meshClothShape", "1", CVAR_ARCHIVE, "");

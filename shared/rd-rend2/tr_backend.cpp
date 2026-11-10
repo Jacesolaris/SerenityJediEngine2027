@@ -2438,6 +2438,13 @@ static void RB_RenderSSAO()
 	const float zmax = backEnd.viewParms.zFar;
 	const float zmin = r_znear->value;
 	const vec4_t viewInfo = { zmax / zmin, zmax, 0.0f, 0.0f };
+	// r_aoHorizon (KatarnEngine): horizon-based AO; the shader takes it when z/w hold the projection scale
+	vec4_t aoViewInfo = { zmax / zmin, zmax, 0.0f, 0.0f };
+	if (r_aoHorizon->integer)
+	{
+		aoViewInfo[2] = backEnd.viewParms.projectionMatrix[0];
+		aoViewInfo[3] = backEnd.viewParms.projectionMatrix[5];
+	}
 
 	FBO_Bind(tr.quarterFbo[0]);
 
@@ -2448,7 +2455,7 @@ static void RB_RenderSSAO()
 	GLSL_BindProgram(&tr.ssaoShader);
 
 	GL_BindToTMU(tr.hdrDepthImage, TB_COLORMAP);
-	GLSL_SetUniformVec4(&tr.ssaoShader, UNIFORM_VIEWINFO, viewInfo);
+	GLSL_SetUniformVec4(&tr.ssaoShader, UNIFORM_VIEWINFO, aoViewInfo);
 
 	RB_InstantTriangle();
 
@@ -2829,6 +2836,11 @@ static void RB_UpdateEntityLightConstants(
 	VectorScale(refEntity->ambientLight, normalizeFactor, entityBlock.ambientLight);
 	VectorScale(refEntity->directedLight, normalizeFactor, entityBlock.directedLight);
 	VectorCopy(refEntity->lightDir, entityBlock.lightOrigin);
+	for (int f = 0; f < 6; f++)	// r_ambientCube
+	{
+		VectorScale(refEntity->ambientCube[f], normalizeFactor, entityBlock.ambientCube[f]);
+		entityBlock.ambientCube[f][3] = refEntity->ambientCube[0][3];
+	}
 
 	vec3_t lightDir;
 	float lightRadius = 0.0f;
@@ -3423,6 +3435,19 @@ static const void* RB_SwapBuffers(const void* data) {
 		{
 			FBO_FastBlit(tr.renderFbo, NULL, NULL, NULL, GL_COLOR_BUFFER_BIT, GL_NEAREST);
 		}
+	}
+
+	// r_reshadeDepth (KatarnEngine): ReShade and other OpenGL post-process injectors only see the window's own
+	// depth buffer; rend2 draws the world into its own framebuffer, so give them a copy of its depth
+	if (r_reshadeDepth->integer && tr.renderFbo && tr.renderFbo->frameBuffer)
+	{
+		qglBindFramebuffer(GL_READ_FRAMEBUFFER, tr.renderFbo->frameBuffer);
+		qglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+		qglBlitFramebuffer(0, 0, tr.renderFbo->width, tr.renderFbo->height, 0, 0, glConfig.vidWidth, glConfig.vidHeight,
+			GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+		while (qglGetError() != GL_NO_ERROR) {}	// formats or sizes can differ: then ReShade just has no depth
+		qglBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glState.currentFBO = nullptr;
 	}
 
 	if (tr.renderFbo)

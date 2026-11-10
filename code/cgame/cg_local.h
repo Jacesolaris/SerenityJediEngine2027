@@ -768,6 +768,7 @@ extern vmCvar_t cg_missionstatusscreen;
 
 extern vmCvar_t cg_hudRatio;
 extern vmCvar_t cg_saberLockCinematicCamera;
+extern vmCvar_t cg_saberLockMeter;
 extern vmCvar_t cg_AimingCinematicCamera;
 extern vmCvar_t cg_aimShoulder;
 extern vmCvar_t cg_aimCamHorzOffset;

@@ -77,6 +77,8 @@ struct mcCapsule_t {
 	float	r;
 	int		hard;	// 1 = limbs/hands: always push cloth fully out, even where the animated cloth is inside;
 	// 2 = the same, for the shoulders (used by grid-simulated cloth only, so older capes keep their tuning)
+	// 3 = body shape fitted from the mesh (MC_BodyShapesPose, r_meshClothBodyFit): pushes hanging cloth fully out,
+	//     no edge or drawn-point pushes
 };
 
 struct mcParams_t {
@@ -103,6 +105,9 @@ struct mcParams_t {
 	int		floor;			// 1: floorPt / floorN hold the floor plane under the character (world)
 	float	floorPt[3];
 	float	floorN[3];
+	int		numWalls = 0;	// r_meshClothWalls: walls round the character (world planes the cloth stays in front of)
+	float	wallPt[8][3];
+	float	wallN[8][3];
 	float	lodDist;		// distance level of detail: the character's distance from the camera
 	float	lodNear;		//   (scaled by the field of view). Beyond lodNear: half the constraint passes,
 	float	lodFar;			//   updated at most every 32 ms. Beyond lodFar: not simulated. 0 = no limit.
@@ -189,3 +194,12 @@ void MC_SetCharacters(int frameId, const float (*origins)[3], int count);
 bool MC_CharactersListed(int frameId);
 int  MC_NearCharacters(const float origin[3], mcCapsule_t* out, int max);
 const int MC_MAX_OTHERS = 4;
+
+// r_meshClothBodyFit: collision shapes fitted to the model's own (non-cloth) mesh for the cloth group of
+// clothSurface: each torso, hip, leg, neck and head bone's vertices cut into height slices, each slice a "stadium"
+// (flat front and back, round sides). boneClass[bone]: 0 = fit this bone, -1 = skip. Fitted on the first call per
+// model. Main thread only. Returns a handle for MC_BodyShapesPose, or nullptr.
+const void* MC_BodyFit(const void* clothSurface, const int* boneClass, int numBones);
+// Any thread: the fitted shapes posed by the bone matrices, in world space (hard 3). Returns the number written.
+int MC_BodyShapesPose(const void* fit, mcBoneFn_t boneFn, void* boneCtx, const vec3_t origin, const vec3_t axis[3],
+	mcCapsule_t* out, int maxOut);

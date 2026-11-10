@@ -1198,7 +1198,8 @@ static qboolean NPC_CheckPlayerDistance(void)
 		if (!player->inuse || !player->client
 			|| player->client->pers.connected != CON_CONNECTED
 			|| player->client->sess.sessionTeam == TEAM_SPECTATOR
-			|| player->health < 0)
+			|| player->health < 0
+			|| (player->flags & FL_NOTARGET)) // notarget: G_SetEnemy refuses him, but we returned qtrue and kept the old enemy
 		{
 			//not a good player
 			continue;

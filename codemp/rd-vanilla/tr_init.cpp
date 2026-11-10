@@ -149,6 +149,8 @@ cvar_t* r_meshClothGravity;
 cvar_t* r_meshClothDrag;
 cvar_t* r_meshClothIter;
 cvar_t* r_meshClothLodNear;
+cvar_t* r_meshClothWalls;
+cvar_t* r_meshClothBodyFit;
 cvar_t* r_meshClothLodFar;
 cvar_t* r_threads;
 cvar_t* r_DynamicGlowFinish;
@@ -1800,6 +1802,8 @@ static void R_Register()
 	r_meshClothDrag = ri.Cvar_Get("r_meshClothDrag", "1.4", CVAR_ARCHIVE, "");
 	r_meshClothIter = ri.Cvar_Get("r_meshClothIter", "6", CVAR_ARCHIVE, "");
 	r_meshClothLodNear = ri.Cvar_Get("r_meshClothLodNear", "600", CVAR_ARCHIVE, "Mesh cloth beyond this distance: half the passes, updated at most every 32 ms (0 = off)");
+	r_meshClothWalls = ri.Cvar_Get("r_meshClothWalls", "1", CVAR_ARCHIVE, "Mesh cloth stays in front of walls round near characters (0 = off)");
+	r_meshClothBodyFit = ri.Cvar_Get("r_meshClothBodyFit", "1", CVAR_ARCHIVE, "Mesh cloth collides with the body's real shape, fitted from the model's mesh (0 = off)");
 	r_meshClothLodFar = ri.Cvar_Get("r_meshClothLodFar", "1800", CVAR_ARCHIVE, "Mesh cloth beyond this distance: not simulated (0 = off)");
 	r_threads = ri.Cvar_Get("r_threads", "-1", CVAR_ARCHIVE_ND, "Renderer job threads for ghoul2 skinning and mesh cloth: -1 automatic, 0 off, N threads");
 	r_smp = ri.Cvar_Get("r_smp", "0", CVAR_ARCHIVE_ND | CVAR_LATCH, "Render thread: 1 runs the renderer back end on its own thread (takes effect at the next vid_restart or map load)");

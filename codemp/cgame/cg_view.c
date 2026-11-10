@@ -427,10 +427,15 @@ is above 0: the blend already eases it, and damping on top made it trail behind 
 #define AIM_CAMERA_FOV			60.0f	// closer FOV
 #define AIM_CAMERA_ALPHA		1.0f	// fully visible player
 
-#define SABERLOCK_CAMERA_ANGLE	0.0f
-#define SABERLOCK_CAMERA_PITCH	0.0f
-#define SABERLOCK_CAMERA_HORZ	-25.5f
-#define SABERLOCK_CAMERA_VERT	-15.5f	// the FOV is cg_saberlockfov, the range stays
+// the saber lock camera: the same as SP's (cg_view.cpp cameraBlendFields, 2026-11-09, DH: the MP one was not the same):
+// it swings 40.5 to the side and looks down a little, closer and with a narrow FOV (MP had angle 0, pitch 0, side -25.5,
+// the normal range and cg_saberlockfov 60). cg_saberlockfov still sets the undersized gunner camera's FOV.
+#define SABERLOCK_CAMERA_ANGLE	40.5f
+#define SABERLOCK_CAMERA_PITCH	-11.25f
+#define SABERLOCK_CAMERA_HORZ	-12.5f
+#define SABERLOCK_CAMERA_VERT	-15.5f
+#define SABERLOCK_CAMERA_RANGE	82.5f
+#define SABERLOCK_CAMERA_FOV	40.5f
 
 // Force Grasp camera (Jace 2026-11-05): a side view like the saber lock's, but pulled back with the normal FOV so the
 // player and everyone held (lifted) can be seen
@@ -748,7 +753,8 @@ static void CG_CalcIdealThirdPersonViewLocation(void)
 
 	if (CG_CameraBlending())
 	{
-		thirdPersonRange = CG_GraspBlendValue(CG_AimBlendValue(thirdPersonRange, AIM_CAMERA_RANGE), GRASP_CAMERA_RANGE);
+		thirdPersonRange = CG_GraspBlendValue(CG_SaberLockBlendValue(CG_AimBlendValue(thirdPersonRange, AIM_CAMERA_RANGE),
+			SABERLOCK_CAMERA_RANGE), GRASP_CAMERA_RANGE);
 	}
 
 	VectorMA(cameraIdealTarget, -thirdPersonRange, camerafwd, cameraIdealLoc);
@@ -1681,7 +1687,7 @@ static int CG_CalcFov(void)
 	else if (cg.renderingThirdPerson && CG_CameraBlending())
 	{
 		//saber lock / aiming camera (also while it blends in or out)
-		cgFov = CG_GraspBlendValue(CG_SaberLockBlendValue(CG_AimBlendValue(cg_fov.value, AIM_CAMERA_FOV), cg_saberlockfov.value),
+		cgFov = CG_GraspBlendValue(CG_SaberLockBlendValue(CG_AimBlendValue(cg_fov.value, AIM_CAMERA_FOV), SABERLOCK_CAMERA_FOV),
 			cg_fov.value);
 	}
 	else

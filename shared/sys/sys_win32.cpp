@@ -661,6 +661,132 @@ bool Sys_DLLNeedsUnpacking()
 
 /*
 ================
+Crash report (Windows)
+
+An access violation or other hardware exception used to close the game without any log (crashlog-*.txt
+was only written for Sys_Error). This writes crash-<time>.txt (exception, faulting module + offset,
+call stack, last console lines) and crash-<time>.dmp (small minidump for Visual Studio / WinDbg) into
+the home path. Runs only for exceptions nothing else handled; not called while a debugger is attached.
+================
+*/
+#include "con_local.h"
+#include <DbgHelp.h> // types only; dbghelp.dll is loaded at crash time
+
+static volatile LONG sys_crashHandled = 0;
+
+static void Sys_CrashWriteAddress(FILE* fp, const void* addr)
+{
+	HMODULE mod = nullptr;
+	char name[MAX_PATH] = "?";
+	if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+		static_cast<LPCSTR>(addr), &mod) && mod)
+	{
+		GetModuleFileNameA(mod, name, sizeof name);
+		const char* base = strrchr(name, PATH_SEP);
+		fprintf(fp, "  %s+0x%llx\n", base ? base + 1 : name,
+			static_cast<unsigned long long>(static_cast<const char*>(addr) - reinterpret_cast<const char*>(mod)));
+	}
+	else
+	{
+		fprintf(fp, "  %p\n", addr);
+	}
+}
+
+typedef BOOL(WINAPI* MiniDumpWriteDump_t)(HANDLE, DWORD, HANDLE, MINIDUMP_TYPE, PMINIDUMP_EXCEPTION_INFORMATION,
+	PMINIDUMP_USER_STREAM_INFORMATION, PMINIDUMP_CALLBACK_INFORMATION);
+
+static LONG WINAPI Sys_CrashFilter(EXCEPTION_POINTERS* ep)
+{
+	if (InterlockedExchange(&sys_crashHandled, 1))
+	{
+		return EXCEPTION_CONTINUE_SEARCH;
+	}
+
+	char timeStr[32] = {};
+	const time_t rawtime = time(nullptr);
+	strftime(timeStr, sizeof timeStr, "%Y-%m-%d_%H-%M-%S", localtime(&rawtime));
+	const char* home = Cvar_VariableString("fs_homepath");	// where this session writes its configs and logs
+	if (!home || !*home)
+	{
+		home = Sys_DefaultHomePath();
+	}
+	if (!home || !*home)
+	{
+		home = ".";
+	}
+	char txtPath[MAX_OSPATH], dmpPath[MAX_OSPATH];
+	Com_sprintf(txtPath, sizeof txtPath, "%s%ccrash-%s.txt", home, PATH_SEP, timeStr);
+	Com_sprintf(dmpPath, sizeof dmpPath, "%s%ccrash-%s.dmp", home, PATH_SEP, timeStr);
+	CreateDirectoryA(home, nullptr);
+
+	FILE* fp = fopen(txtPath, "w");
+	if (fp)
+	{
+		const EXCEPTION_RECORD* er = ep->ExceptionRecord;
+		fprintf(fp, "Crash: exception 0x%08lx at\n", er->ExceptionCode);
+		Sys_CrashWriteAddress(fp, er->ExceptionAddress);
+		if (er->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && er->NumberParameters >= 2)
+		{
+			fprintf(fp, "Access violation %s address %p\n",
+				er->ExceptionInformation[0] == 1 ? "writing" : er->ExceptionInformation[0] == 8 ? "executing" : "reading",
+				reinterpret_cast<void*>(er->ExceptionInformation[1]));
+		}
+#if defined(_M_X64)
+		if (er->ExceptionCode != EXCEPTION_STACK_OVERFLOW)
+		{
+			fprintf(fp, "Call stack:\n");
+			CONTEXT ctx = *ep->ContextRecord;
+			for (int i = 0; i < 48 && ctx.Rip; i++)
+			{
+				Sys_CrashWriteAddress(fp, reinterpret_cast<void*>(ctx.Rip));
+				DWORD64 imageBase = 0;
+				PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(ctx.Rip, &imageBase, nullptr);
+				if (!fn)
+				{
+					// leaf function: the return address is at rsp
+					ctx.Rip = *reinterpret_cast<DWORD64*>(ctx.Rsp);
+					ctx.Rsp += 8;
+				}
+				else
+				{
+					void* handlerData = nullptr;
+					DWORD64 establisher = 0;
+					RtlVirtualUnwind(UNW_FLAG_NHANDLER, imageBase, ctx.Rip, fn, &ctx, &handlerData, &establisher, nullptr);
+				}
+			}
+		}
+#endif
+		fprintf(fp, "\nMinidump: %s\n\nLast console lines:\n", dmpPath);
+		fflush(fp);
+		ConsoleLogWriteOut(fp);
+		fclose(fp);
+	}
+
+	HMODULE dbghelp = LoadLibraryA("dbghelp.dll");
+	if (dbghelp)
+	{
+		const auto writeDump = reinterpret_cast<MiniDumpWriteDump_t>(GetProcAddress(dbghelp, "MiniDumpWriteDump"));
+		if (writeDump)
+		{
+			const HANDLE file = CreateFileA(dmpPath, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+			if (file != INVALID_HANDLE_VALUE)
+			{
+				MINIDUMP_EXCEPTION_INFORMATION info;
+				info.ThreadId = GetCurrentThreadId();
+				info.ExceptionPointers = ep;
+				info.ClientPointers = FALSE;
+				writeDump(GetCurrentProcess(), GetCurrentProcessId(), file, MiniDumpNormal, &info, nullptr, nullptr);
+				CloseHandle(file);
+			}
+		}
+	}
+
+	fprintf(stderr, "Crash report written to %s\n", txtPath);
+	return EXCEPTION_CONTINUE_SEARCH;
+}
+
+/*
+================
 Sys_PlatformInit
 
 Platform-specific initialization
@@ -668,6 +794,8 @@ Platform-specific initialization
 */
 void Sys_PlatformInit()
 {
+	SetUnhandledExceptionFilter(Sys_CrashFilter);
+
 	TIMECAPS ptc;
 	if (timeGetDevCaps(&ptc, sizeof ptc) == MMSYSERR_NOERROR)
 	{

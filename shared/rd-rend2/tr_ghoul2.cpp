@@ -3838,6 +3838,31 @@ static const mcBoneLookup_t* MC_Lookup(const mdxaHeader_t* h)
 	return &c;
 }
 
+// r_meshClothBodyFit: which bones get a fitted body shape (torso, hips, legs, neck and head). Main thread.
+static const std::vector<int>& MC_BoneClass(const mdxaHeader_t* h)
+{
+	static std::unordered_map<const mdxaHeader_t*, std::vector<int>> cache;
+	const auto it = cache.find(h);
+	if (it != cache.end())
+	{
+		return it->second;
+	}
+	static const char* const fitBones[] = { "pelvis", "lower_lumbar", "upper_lumbar", "thoracic", "cervical", "cranium",
+		"lfemurYZ", "lfemurX", "ltibia", "ltalus", "rfemurYZ", "rfemurX", "rtibia", "rtalus" };
+	std::vector<int> cls(h->numBones, -1);
+	for (int i = 0; i < h->numBones; i++)
+	{
+		for (const char* n : fitBones)
+		{
+			if (!Q_stricmp(MC_Skel(h, i)->name, n))
+			{
+				cls[i] = 0;
+			}
+		}
+	}
+	return cache.emplace(h, std::move(cls)).first->second;
+}
+
 static const float (*MC_BoneFn(void* ctx, const int boneIndex))[4]
 {
 	return reinterpret_cast<const float(*)[4]>(static_cast<CBoneCache*>(ctx)->boneMatrices[boneIndex]);
@@ -4133,6 +4158,63 @@ static void MC_FloorUnder(const trRefEntity_t* ent, const int timeMs, mcParams_t
 	prm.floor = c.ok;
 	VectorCopy(c.pt, prm.floorPt);
 	VectorCopy(c.n, prm.floorN);
+
+	// r_meshClothWalls (KatarnEngine): walls round the character at chest height, so a cape doesn't swing through
+	// them. 8 traces per character per frame, only for characters at full cloth detail (inside r_meshClothLodNear).
+	prm.numWalls = 0;
+	if (!r_meshClothWalls || !r_meshClothWalls->integer || (prm.lodNear > 0.0f && prm.lodDist > prm.lodNear))
+	{
+		return;
+	}
+	struct wallCache_t { int time; int num; float pt[8][3]; float n[8][3]; };
+	static std::unordered_map<const void*, wallCache_t> walls;
+	wallCache_t& w = walls[ent];
+	if (w.time != timeMs || w.num < 0)
+	{
+		w.time = timeMs;
+		w.num = 0;
+		for (int k = 0; k < 8 && w.num < 8; k++)
+		{
+			trace_t tr;
+			vec3_t start, end;
+			VectorCopy(ent->e.origin, start);
+			start[2] += 30.0f;
+			const float a = k * (M_PI / 4.0f);
+			VectorSet(end, start[0] + cosf(a) * 48.0f, start[1] + sinf(a) * 48.0f, start[2]);
+		#ifdef REND2_SP
+				ri.SV_Trace(&tr, start, nullptr, nullptr, end, ENTITYNUM_NONE, CONTENTS_SOLID, G2_NOCOLLIDE, 0);
+		#else
+				ri.CM_BoxTrace(&tr, start, end, vec3_origin, vec3_origin, 0, CONTENTS_SOLID, qfalse);	// MP: world only
+		#endif
+			if (tr.fraction >= 1.0f || tr.startsolid || tr.allsolid || fabsf(tr.plane.normal[2]) > 0.7f)
+			{
+				continue;
+			}
+			// one plane per wall: neighbouring rays often hit the same one
+			bool dup = false;
+			for (int q = 0; q < w.num && !dup; q++)
+			{
+				vec3_t d;
+				VectorSubtract(tr.endpos, w.pt[q], d);
+				dup = DotProduct(tr.plane.normal, w.n[q]) > 0.98f && fabsf(DotProduct(d, w.n[q])) < 1.0f;
+			}
+			if (dup)
+			{
+				continue;
+			}
+			VectorCopy(tr.endpos, w.pt[w.num]);
+			VectorCopy(tr.plane.normal, w.n[w.num]);
+			w.num++;
+		}
+		if (walls.size() > 256) { const wallCache_t keep = w; walls.clear(); walls[ent] = keep; }
+	}
+	const wallCache_t& wc = walls[ent];
+	prm.numWalls = wc.num;
+	for (int q = 0; q < wc.num; q++)
+	{
+		VectorCopy(wc.pt[q], prm.wallPt[q]);
+		VectorCopy(wc.n[q], prm.wallN[q]);
+	}
 }
 
 // Per cloth surface: bind-pose tangents and an index buffer starting at 0.
@@ -4391,6 +4473,7 @@ struct g2ClothPrep_t
 	int time = 0;
 	mcCapsule_t others[MC_MAX_OTHERS]{};	// nearby characters (r_meshClothOthers)
 	int numOthers = 0;
+	const void* bodyFit = nullptr;	// r_meshClothBodyFit (MC_BodyFit, fitted on the main thread)
 	bool ok = false;	// false: no cloth state for this surface (skin it, don't simulate)
 };
 
@@ -4433,6 +4516,13 @@ static void RB_MeshClothPrepare(CBoneCache* bones, const mdxmSurface_t* surface,
 	MC_LodParams(ent, prm);
 	MC_FloorUnder(ent, timeMs, prm);
 	cp.numOthers = MC_OthersNear(ent, cp.others);
+	// r_meshClothBodyFit (KatarnEngine): only for characters at full cloth detail (inside r_meshClothLodNear)
+	cp.bodyFit = nullptr;
+	if (r_meshClothBodyFit && r_meshClothBodyFit->integer && !(prm.lodNear > 0.0f && prm.lodDist > prm.lodNear))
+	{
+		const std::vector<int>& cls = MC_BoneClass(bones->header);
+		cp.bodyFit = MC_BodyFit(surface, cls.data(), static_cast<int>(cls.size()));
+	}
 }
 
 // false: a degenerate bone, draw the surface normally
@@ -4442,7 +4532,7 @@ static bool RB_MeshClothBuild(CBoneCache* bones, const mdxmSurface_t* surface, c
 	const vec3_t* axis = cp.axis;
 
 	// capsules: posed bone origin = skin matrix * bind position, then to world
-	mcCapsule_t caps[MC_NUM_COLLIDERS + 4 + MC_MAX_OTHERS]{};
+	mcCapsule_t caps[MC_NUM_COLLIDERS + 4 + MC_MAX_OTHERS + 96]{};	// + fitted body shapes (r_meshClothBodyFit)
 	int ncaps = 0;
 	const mcBoneLookup_t* lk = &cp.lk;	// copied on the main thread (MC_Lookup is a shared cache)
 	for (int k = 0; k < MC_NUM_COLLIDERS; k++)
@@ -4535,6 +4625,12 @@ static bool RB_MeshClothBuild(CBoneCache* bones, const mdxmSurface_t* surface, c
 	for (int i = 0; i < cp.numOthers; i++)
 	{
 		caps[ncaps++] = cp.others[i];
+	}
+	// the body's real shape, fitted from the model's own mesh (on top of the capsules above)
+	if (cp.bodyFit)
+	{
+		ncaps += MC_BodyShapesPose(cp.bodyFit, MC_BoneFn, bones, ent->e.origin, axis, caps + ncaps,
+			static_cast<int>(sizeof(caps) / sizeof(caps[0])) - ncaps);
 	}
 
 	if (cp.ok)

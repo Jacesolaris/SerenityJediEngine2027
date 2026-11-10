@@ -689,6 +689,7 @@ vec2 GetParallaxOffset(in vec2 texCoords, in vec3 tangentDir)
 
 void main()
 {
+	float coverage = 1.0;	// alpha-to-coverage (written to out_Color.a)
 #if defined(USE_ALPHA_TEST)
 	vec2 texCoords = var_TexCoords.xy;
 #if defined(USE_PARALLAXMAP)
@@ -720,6 +721,15 @@ void main()
 		if (alpha < 1.00)
 			discard;
 	}
+	else if (u_AlphaTestType == ALPHA_TEST_GE128_A2C || u_AlphaTestType == ALPHA_TEST_GE192_A2C)
+	{
+		// A2C in the depth pre-pass: the same sample coverage as the colour pass (generic / lightall)
+		float cutoff = (u_AlphaTestType == ALPHA_TEST_GE128_A2C) ? 0.5 : 0.75;
+		coverage = (alpha - cutoff) / max(fwidth(alpha), 0.0001) + 0.5;
+		if (coverage <= 0.0)
+			discard;
+		coverage = clamp(coverage, 0.0, 1.0);
+	}
 #endif
 	vec2 currentPos = (var_Position.xy / var_Position.w) * 0.5 + 0.5;
 	vec2 prevPos = (var_prevPosition.xy / var_prevPosition.w) * 0.5 + 0.5;
@@ -728,5 +738,5 @@ void main()
 	motionVector -= u_currentJitter / r_FBufScale.xy;
 	motionVector -= u_previousJitter / r_FBufScale.xy;
 
-	out_Color = vec4(motionVector, 0.0, 1.0);
+	out_Color = vec4(motionVector, 0.0, coverage);
 }

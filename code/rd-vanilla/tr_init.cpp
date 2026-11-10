@@ -142,6 +142,8 @@ cvar_t* r_meshClothGravity;
 cvar_t* r_meshClothDrag;
 cvar_t* r_meshClothIter;
 cvar_t* r_meshClothLodNear;
+cvar_t* r_meshClothWalls;
+cvar_t* r_meshClothBodyFit;
 cvar_t* r_meshClothLodFar;
 cvar_t* r_threads;
 cvar_t* r_DynamicGlowFinish;
@@ -1859,6 +1861,8 @@ static void R_Register()
 	r_meshClothDrag = ri.Cvar_Get("r_meshClothDrag", "1.4", CVAR_ARCHIVE);
 	r_meshClothIter = ri.Cvar_Get("r_meshClothIter", "6", CVAR_ARCHIVE);
 	r_meshClothLodNear = ri.Cvar_Get("r_meshClothLodNear", "600", CVAR_ARCHIVE);
+	r_meshClothWalls = ri.Cvar_Get("r_meshClothWalls", "1", CVAR_ARCHIVE);
+	r_meshClothBodyFit = ri.Cvar_Get("r_meshClothBodyFit", "1", CVAR_ARCHIVE);
 	r_meshClothLodFar = ri.Cvar_Get("r_meshClothLodFar", "1800", CVAR_ARCHIVE);
 	r_threads = ri.Cvar_Get("r_threads", "-1", CVAR_ARCHIVE_ND);
 	r_smp = ri.Cvar_Get("r_smp", "0", CVAR_ARCHIVE_ND | CVAR_LATCH);	// render thread (tr_smp.cpp): 1 on, takes effect at the next vid_restart or map load

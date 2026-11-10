@@ -231,6 +231,39 @@ static unsigned WV_NameHash(const char* name)
 	return h;
 }
 
+// stormtroopers keep the stock gun (2026-11-10, DH): the stormtrooper NPC types never get a weapon variant, so plain
+// troopers carry the stock E-11 and officers / commanders / snipers / rocket troopers the stock version of their own
+// gun. Matched by NPC type, not class: CLASS_STORMTROOPER is also used by mercs, Lando, droids and others.
+// A "_nina" suffix counts as the same type.
+static qboolean WV_IsStormtrooper(const gentity_t* ent)
+{
+	static const char* const st_types[] = {
+		"stormtrooper", "stormtrooper2", "stormtrooper_blue", "stormtrooper_red",
+		"snowtrooper", "snowtrooper2", "elitetrooper", "elitetrooper2",
+		"stofficer", "stofficer2", "stofficeralt", "stcommander", "etofficer", "etcommander",
+		"st_sniper", "sniper_stormtrooper", "rockettrooper", "rockettrooper_ver1"
+	};
+	if (!ent->NPC_type || !ent->NPC_type[0])
+	{
+		return qfalse;
+	}
+	char type[64];
+	Q_strncpyz(type, ent->NPC_type, sizeof type);
+	const size_t len = strlen(type);
+	if (len > 5 && !Q_stricmp(type + len - 5, "_nina"))
+	{
+		type[len - 5] = '\0';
+	}
+	for (const char* const st : st_types)
+	{
+		if (!Q_stricmp(type, st))
+		{
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
 // the least used variant of this base weapon among the living; ties go by the NPC type (and entity number)
 static int WV_PickVariant(const gentity_t* self, const int weapon)
 {
@@ -307,9 +340,10 @@ void G_WeaponVariantThink(gentity_t* ent)
 	const int weapon = cl->ps.weapon;
 
 	if (!g_weaponVariants->integer || bgNumWeaponVariants <= 1
-		|| weapon == WP_SABER || BG_HasWeapon(&cl->ps, WP_SABER) || cl->NPC_class == CLASS_VEHICLE)
+		|| weapon == WP_SABER || BG_HasWeapon(&cl->ps, WP_SABER) || cl->NPC_class == CLASS_VEHICLE
+		|| WV_IsStormtrooper(ent))
 	{
-		// off, or a saber user (never, DH), or a vehicle
+		// off, or a saber user (never, DH), or a vehicle, or a stormtrooper (stock guns, DH 2026-11-10)
 		cl->ps.weaponVariant = 0;
 	}
 	else if (old_variant && BG_GetWeaponVariant(old_variant, weapon))
@@ -2216,7 +2250,7 @@ void FireWeapon(gentity_t* ent, const qboolean alt_fire)
 
 					if (ent->client->cloneFired == 2)
 					{
-						if (ent->client->pers.cmd.forwardmove == 0 && ent->client->pers.cmd.rightmove == 0)
+						if (ent->client->usercmd.forwardmove == 0 && ent->client->usercmd.rightmove == 0)
 						{
 							G_AddBlasterAttackChainCount(ent, BLASTERMISHAPLEVEL_MIN);
 						}
@@ -2260,7 +2294,7 @@ void FireWeapon(gentity_t* ent, const qboolean alt_fire)
 
 					if (ent->client->BoltsFired == 2)
 					{
-						if (ent->client->pers.cmd.forwardmove == 0 && ent->client->pers.cmd.rightmove == 0)
+						if (ent->client->usercmd.forwardmove == 0 && ent->client->usercmd.rightmove == 0)
 						{
 							G_AddBlasterAttackChainCount(ent, BLASTERMISHAPLEVEL_MIN);
 						}

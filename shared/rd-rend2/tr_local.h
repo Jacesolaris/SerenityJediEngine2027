@@ -182,6 +182,10 @@ extern cvar_t* r_forceAutoExposureMax;
 
 extern cvar_t* r_depthPrepass;
 extern cvar_t* r_ssao;
+extern cvar_t* r_ambientCube;	// directional ambient + floor bounce on models (KatarnEngine)
+extern cvar_t* r_aoHorizon;	// horizon-based SSAO (KatarnEngine)
+extern cvar_t* r_reshadeDepth;	// copy the world depth to the window for ReShade (KatarnEngine)
+extern cvar_t* r_distanceCull;	// view distance override, 0 = map / automatic (KatarnEngine)
 
 extern cvar_t* r_normalMapping;
 extern cvar_t* r_specularMapping;
@@ -309,6 +313,8 @@ extern cvar_t* r_meshClothGravity;
 extern cvar_t* r_meshClothDrag;
 extern cvar_t* r_meshClothIter;
 extern cvar_t* r_meshClothLodNear;		// cloth beyond this distance: half the passes, updated at most every 32 ms (0 = off)
+extern cvar_t* r_meshClothWalls;		// cloth stays in front of walls round near characters (0 = off)
+extern cvar_t* r_meshClothBodyFit;		// cloth collides with the body's real shape, fitted from the mesh (0 = off)
 extern cvar_t* r_meshClothLodFar;		// cloth beyond this distance: not simulated (0 = off)
 extern cvar_t* r_threads;				// renderer job workers: -1 automatic, 0 off (draws exactly as before), N workers
 extern cvar_t* r_meshClothShape;
@@ -478,6 +484,7 @@ typedef struct trRefEntity_s {
 	vec3_t		ambientLight;	// color normalized to 0-255
 	int			ambientLightInt;	// 32 bit rgba packed
 	vec3_t		directedLight;
+	vec4_t		ambientCube[6];	// r_ambientCube: +x -x +y -y +z -z ambient, 0-255; [0][3] = 1 when valid
 } trRefEntity_t;
 
 typedef struct {
@@ -839,9 +846,11 @@ struct EntityBlock
 	int sliceCount;
 	float sliceHeat;
 	float slicePad[2];
+	vec4_t ambientCube[6];	// r_ambientCube (lightall.glsl u_AmbientCube)
 	bool operator == (const EntityBlock& other) const
 	{
 		return (
+			memcmp(this->ambientCube, other.ambientCube, sizeof(ambientCube)) == 0 &&
 			this->sliceCount == 0 && other.sliceCount == 0 &&
 			Matrix16Compare(this->modelMatrix, other.modelMatrix) == qtrue &&
 			VectorCompare4(this->lightOrigin, other.lightOrigin) == qtrue &&

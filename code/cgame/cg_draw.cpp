@@ -8626,6 +8626,74 @@ static void CG_DynamicHudEnd(const float alpha)
 // the HUD's fade this frame (set in CG_Draw2D), for the radar, which is drawn later but fades with the HUD
 static float cg_dynamicHudFrameAlpha = 1.0f;
 
+// Saber lock meter (cg_saberLockMeter 1, 2026-11-09): a bar at the bottom middle of the screen while the player is in a
+// saber lock. Blue = the player's side, red = the enemy's; the marker is the lock position (WP_SaberLockMeterProgress,
+// the lock anim frame PM_SaberLocked pushes). The thin bar under it is the lock time left.
+extern float WP_SaberLockMeterProgress(gentity_t* ent, float* time_frac); // game/wp_saber.cpp
+
+static void CG_DrawSaberLockMeter()
+{
+	static float shown = 0.5f;
+	static int last_time = 0;
+
+	if (!cg_saberLockMeter.integer || cg.snap->ps.stats[STAT_HEALTH] <= 0)
+	{
+		shown = 0.5f;
+		return;
+	}
+	if (!(cg.predictedPlayerState.communicatingflags & 1 << CF_SABERLOCKING))
+	{
+		shown = 0.5f;
+		return;
+	}
+	gentity_t* player = cg_entities[cg.snap->ps.clientNum].gent;
+	float time_frac = 0.0f;
+	const float progress = WP_SaberLockMeterProgress(player, &time_frac);
+	if (progress < 0.0f)
+	{
+		shown = 0.5f;
+		return;
+	}
+
+	// glide to the new position instead of jumping a whole push at once
+	int msec = cg.time - last_time;
+	last_time = cg.time;
+	if (msec < 0 || msec > 200)
+	{
+		msec = 200;
+	}
+	const float blend = msec / 80.0f > 1.0f ? 1.0f : msec / 80.0f;
+	shown += (progress - shown) * blend;
+
+	const float ratio = cg_hudRatio.integer ? cgs.widthRatioCoef : 1.0f;
+	const float w = 200.0f * ratio;
+	const float h = 8.0f;
+	const float x = (SCREEN_WIDTH - w) * 0.5f;
+	const float y = 452.0f; // bottom of the screen, between the HUD corners (DH 2026-11-09; was 372, under the middle)
+	const float split = w * shown;
+
+	vec4_t back = { 0.0f, 0.0f, 0.0f, 0.6f };
+	vec4_t mine = { 0.25f, 0.55f, 1.0f, 0.9f };
+	vec4_t theirs = { 1.0f, 0.22f, 0.15f, 0.9f };
+	vec4_t frame = { 0.85f, 0.75f, 0.4f, 1.0f };
+	vec4_t marker = { 1.0f, 1.0f, 1.0f, 1.0f };
+	vec4_t timer = { 0.85f, 0.75f, 0.4f, 0.8f };
+
+	if (shown > 0.85f || shown < 0.15f)
+	{
+		// close to the end: the marker pulses
+		marker[3] = 0.6f + 0.4f * sinf(cg.time * 0.02f);
+	}
+
+	CG_FillRect(x - 1.0f, y - 1.0f, w + 2.0f, h + 2.0f, back);
+	CG_FillRect(x, y, split, h, mine);
+	CG_FillRect(x + split, y, w - split, h, theirs);
+	CG_FillRect(x + w * 0.5f - 0.5f, y, 1.0f, h, back); // the middle
+	CG_FillRect(x + split - 1.0f, y - 2.0f, 2.0f, h + 4.0f, marker);
+	CG_DrawRect(x - 1.0f, y - 1.0f, w + 2.0f, h + 2.0f, 1.0f, frame);
+	CG_FillRect(x, y + h + 3.0f, w * time_frac, 2.0f, timer);
+}
+
 static void CG_Draw2D()
 {
 	char text[1024] = { 0 };
@@ -8775,6 +8843,9 @@ static void CG_Draw2D()
 		CG_DrawOverheadBars(cg_debugHealthBars.integer || sight ? qtrue : qfalse, drawBlock,
 			drawBlock && cg_drawStaminaBar.integer ? qtrue : qfalse);
 	}
+
+	// the saber lock meter (cg_saberLockMeter, 2026-11-09)
+	CG_DrawSaberLockMeter();
 
 	// don't draw any status if dead
 	if (cg.snap->ps.stats[STAT_HEALTH] > 0)

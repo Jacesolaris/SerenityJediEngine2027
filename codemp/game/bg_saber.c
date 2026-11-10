@@ -136,12 +136,7 @@ void WP_ForcePowerDrain(playerState_t* ps, const forcePowers_t force_power, cons
 		{
 			drain = forcePowerNeededlevel2[ps->fd.forcePowerLevel[force_power]][force_power];
 		}
-		else if (ps->fd.forcePowerLevel[FP_SPEED] == FORCE_LEVEL_3 &&
-			ps->fd.forcePowersActive & 1 << FP_SPEED)
-		{
-			drain = forcePowerNeeded[ps->fd.forcePowerLevel[force_power]][force_power];
-		}
-		else
+		else // 2026-11-10 (audit): the "else if (ps->fd.forcePowerLevel[FP_SPEED] == FORCE_LEVEL_3 && ps->fd.forcePowersActive & 1 << FP...)" branch here was the same code; merged
 		{
 			drain = forcePowerNeeded[ps->fd.forcePowerLevel[force_power]][force_power];
 		}
@@ -1662,6 +1657,8 @@ static int PM_SaberLockWinAnim(const qboolean victory, const qboolean super_brea
 #ifdef _GAME
 extern void NPC_SetAnim(gentity_t* ent, int setAnimParts, int anim, int setAnimFlags);
 extern gentity_t g_entities[];
+extern qboolean WP_SaberAIFeintWanted(gentity_t* npc); // w_saberblocking.c (g_saberAITactics, 2026-11-09)
+extern void WP_SaberAIAdaptRecord(const int clientNum, const int move); // w_saberblocking.c (g_saberAIAdapt, 2026-11-09)
 #elif defined(_CGAME)
 #include "cgame/cg_local.h"
 #endif
@@ -4336,11 +4333,7 @@ void PM_SetMeleeBlock(void)
 				{
 					anim = pm->ps->torsoAnim;
 				}
-				else if (Q_irand(0, 1))
-				{
-					anim = MELEE_STANCE_T;
-				}
-				else
+				else // 2026-11-10 (audit): the "else if (Q_irand(0, 1))" branch here was the same code; merged
 				{
 					anim = MELEE_STANCE_T;
 				}
@@ -4353,11 +4346,7 @@ void PM_SetMeleeBlock(void)
 				{
 					anim = pm->ps->torsoAnim;
 				}
-				else if (Q_irand(0, 1))
-				{
-					anim = MELEE_STANCE_B;
-				}
-				else
+				else // 2026-11-10 (audit): the "else if (Q_irand(0, 1))" branch here was the same code; merged
 				{
 					anim = MELEE_STANCE_B;
 				}
@@ -5339,13 +5328,12 @@ static qboolean PM_SaberSmashOnCooldown(const playerState_t* ps)
 extern int Bot_CurrentEnemy(int client);
 #endif
 
-// The bot's / NPC's enemy: horizontal distance, height difference and how much in front (dot); qfalse = none known
-static qboolean PM_KataEnemyDistance(float* dist, float* dz, float* dot)
-{
 #ifdef _GAME
+// The bot's / NPC's enemy, or NULL
+static const gentity_t* PM_KataEnemyEnt(void)
+{
 	const gentity_t* self = &g_entities[pm->ps->clientNum];
 	const gentity_t* enemy = NULL;
-	vec3_t diff, fwd, yaw_angles;
 
 	if (self->r.svFlags & SVF_BOT)
 	{
@@ -5360,6 +5348,21 @@ static qboolean PM_KataEnemyDistance(float* dist, float* dz, float* dot)
 		enemy = self->enemy;
 	}
 	if (!enemy || !enemy->inuse || !enemy->client || enemy->health <= 0)
+	{
+		return NULL;
+	}
+	return enemy;
+}
+#endif
+
+// The bot's / NPC's enemy: horizontal distance, height difference and how much in front (dot); qfalse = none known
+static qboolean PM_KataEnemyDistance(float* dist, float* dz, float* dot)
+{
+#ifdef _GAME
+	const gentity_t* enemy = PM_KataEnemyEnt();
+	vec3_t diff, fwd, yaw_angles;
+
+	if (!enemy)
 	{
 		return qfalse;
 	}
@@ -5376,16 +5379,107 @@ static qboolean PM_KataEnemyDistance(float* dist, float* dz, float* dot)
 #endif
 }
 
-// A bot / NPC wants a kata: the smashdown is the better choice when the kata can't reach the enemy but the smashdown
-// can (in front, roughly level). No enemy known: the old check (no enemy in the kata's arc).
-static qboolean PM_SmashdownBetterThanKata(void)
+// Smart smashdown (DH 2026-11-10). The smashdown is a ground slam: every enemy within 300 units of it is thrown and
+// knocked down, those within 150 also take damage (G_PlayerSaberSmash). An NPC / bot that wants a kata now does the
+// smashdown when that pays off (PM_SmashdownWorthIt). It used to need the enemy 100 - 240 units away, but NPCs only
+// start a kata while swinging at a close enemy, and it needed 99% force, so it never happened.
+#define PM_SMASHDOWN_CROWD_RANGE	200.0f	// enemies this close count as "surrounded"
+#define PM_SMASHDOWN_TURTLE_MS		1500	// an enemy holding block this long is turtling
+
+#ifdef _GAME
+// Living enemies of the bot / NPC within range (horizontally, roughly level): its enemy, anyone after it, and for an
+// NPC anyone on its enemy team, for a bot any player not on its team
+static int PM_SmashdownEnemiesNear(const gentity_t* enemy, const float range)
 {
+	const gentity_t* self = &g_entities[pm->ps->clientNum];
+	int ents[128];
+	vec3_t mins, maxs;
+	int i, num, count = 0;
+
+	for (i = 0; i < 3; i++)
+	{
+		mins[i] = pm->ps->origin[i] - range;
+		maxs[i] = pm->ps->origin[i] + range;
+	}
+	num = trap->EntitiesInBox(mins, maxs, ents, 128);
+	for (i = 0; i < num; i++)
+	{
+		const gentity_t* ent = &g_entities[ents[i]];
+		vec3_t diff;
+
+		if (ent == self || !ent->inuse || !ent->client || ent->health <= 0)
+		{
+			continue;
+		}
+		if (ent != enemy && ent->enemy != self)
+		{
+			if (self->s.eType == ET_NPC)
+			{
+				if (ent->client->playerTeam != self->client->enemyTeam)
+				{
+					continue;
+				}
+			}
+			else if (ent->s.eType != ET_PLAYER || ent->client->sess.sessionTeam == TEAM_SPECTATOR || OnSameTeam(self, ent))
+			{
+				continue;
+			}
+		}
+		VectorSubtract(ent->r.currentOrigin, pm->ps->origin, diff);
+		if (fabs(diff[2]) > 72.0f)
+		{
+			continue;
+		}
+		diff[2] = 0.0f;
+		if (VectorLength(diff) <= range)
+		{
+			count++;
+		}
+	}
+	return count;
+}
+#endif
+
+// Smashdown or kata? The smashdown when it pays off:
+// - 2 or more enemies close by (surrounded),
+// - the enemy turtles (holds block 1.5 s or more) or is worn out (30 block points or less, or fatigue at the flash
+//   level), so the slam knocks him over,
+// - the kata can't reach the enemy but the smashdown can (100 - 240 units, in front),
+// never when the enemy is already knocked down or on another level. No enemy known: the old check (no enemy in the
+// kata's arc).
+static qboolean PM_SmashdownWorthIt(void)
+{
+#ifdef _GAME
 	float dist = 0.0f, dz = 0.0f, dot = 0.0f;
-	if (!PM_KataEnemyDistance(&dist, &dz, &dot))
+	const gentity_t* enemy = PM_KataEnemyEnt();
+	const playerState_t* eps;
+	qboolean turtling, worn_out;
+
+	if (!enemy || !PM_KataEnemyDistance(&dist, &dz, &dot))
 	{
 		return PM_EnemyCloseEnoughForNormalKata() ? qfalse : qtrue;
 	}
-	return dist > PM_KATA_REACH && dist <= PM_SMASHDOWN_REACH && fabs(dz) <= 72.0f && dot >= 0.7f ? qtrue : qfalse;
+	eps = &enemy->client->ps;
+	if (BG_InKnockDown(eps->legsAnim) || dist > PM_SMASHDOWN_REACH || fabs(dz) > 72.0f)
+	{
+		return qfalse;
+	}
+	if (PM_SmashdownEnemiesNear(enemy, PM_SMASHDOWN_CROWD_RANGE) >= 2)
+	{
+		return qtrue;
+	}
+	turtling = eps->ManualblockStartTime > 0
+		&& level.time - eps->ManualblockStartTime >= PM_SMASHDOWN_TURTLE_MS ? qtrue : qfalse;
+	worn_out = eps->fd.blockPoints <= BLOCKPOINTS_THIRTY
+		|| eps->saberFatigueChainCount >= MISHAPLEVEL_HUDFLASH ? qtrue : qfalse;
+	if (turtling || worn_out)
+	{
+		return qtrue;
+	}
+	return dist > PM_KATA_REACH && dot >= 0.7f ? qtrue : qfalse;
+#else
+	return PM_EnemyCloseEnoughForNormalKata() ? qfalse : qtrue;
+#endif
 }
 
 static qboolean PM_CanDoSmashdown(const pmove_t* pm)
@@ -5433,13 +5527,16 @@ static qboolean PM_CanDoSmashdown(const pmove_t* pm)
 	const qboolean ButtonUse = (pm->cmd.buttons & BUTTON_USE) ? qtrue : qfalse;
 
 #ifdef _GAME
+	// NPCs / bots: half their force (the kata cost is checked in PM_CanDoKata); was 99%, which they hardly ever had
+	const qboolean npcHasEnoughForce = (forceCurrent >= forceMax / 2) ? qtrue : qfalse;
 	if (g_entities[pm->ps->clientNum].r.svFlags & SVF_BOT || pm->ps->clientNum >= MAX_CLIENTS) // bots and NPCs
 	{
 		// Final combined rule
 		if (smashReady == qtrue &&                 // Not on cooldown
 			NPCMustHaveForceSaberOffense >= FORCE_LEVEL_1 &&  // Must have Force saber offense level 1
-			hasEnoughForce == qtrue &&             // Must have enough Force
-			PM_SmashdownBetterThanKata() == qtrue) // the kata can't reach the enemy, the smashdown can
+			npcHasEnoughForce == qtrue &&             // Must have enough Force
+			Chance == qtrue &&                     // style chance (was worked out but never used)
+			PM_SmashdownWorthIt() == qtrue)        // it pays off (PM_SmashdownWorthIt)
 		{
 			return qtrue;
 		}
@@ -5469,12 +5566,7 @@ static void PM_KataAnimationStyle(void)
 		return;
 	}
 
-	const int saberOffenseLevel = pm->ps->fd.forcePowerLevel[FP_PUSH];
-	const int forceCurrent = pm->ps->fd.forcePower;
-	const int forceMax = pm->ps->fd.forcePowerMax;
-	const qboolean hasEnoughForce = (forceCurrent >= (int)(forceMax * 0.99f)) ? qtrue : qfalse;
-	const qboolean smashReady = (PM_SaberSmashOnCooldown(pm->ps) == qfalse) ? qtrue : qfalse;
-	const qboolean EnemyTooFarForSmashdown = PM_EnemyCloseEnoughForNormalKata();
+	// 2026-11-10: removed six unused locals here (one ran a 3-way trace on every kata)
 	saberInfo_t* saber0 = BG_MySaber(pm->ps->clientNum, 0); // right hand saber
 	saberInfo_t* saber1 = BG_MySaber(pm->ps->clientNum, 1); // left hand saber
 	qboolean dualSabers = qfalse;
@@ -5538,14 +5630,8 @@ static void PM_KataAnimationStyle(void)
 		{
 			if (PM_CanDoSmashdown(pm) == qtrue)
 			{
-				if (pm->ps->fd.saberAnimLevel == SS_BLASTER)
-				{
-					PM_SetSaberMove(LS_SMASHDOWN_SINGLE);
-				}
-				else
-				{
-					PM_SetSaberMove(LS_SMASHDOWN_SINGLE);
-				}
+				// 2026-11-10 (audit): "if (pm->ps->fd.saberAnimLevel == SS_BLASTER)" had the same code in both branches; kept one
+				PM_SetSaberMove(LS_SMASHDOWN_SINGLE);
 			}
 			else if (saber0 && saber0->type == SABER_SINGLE_YODA)
 			{
@@ -5950,11 +6036,7 @@ void PM_WeaponLightsaber(void)
 				{
 					PM_SetAnim(SETANIM_TORSO, PM_BlockingPoseForsaber_anim_levelStaff(), SETANIM_FLAG_OVERRIDE);
 				}
-				else if (pm->ps->fd.saberAnimLevel == SS_BLASTER)
-				{
-					PM_SetAnim(SETANIM_TORSO, PM_BlockingPoseForsaber_anim_levelSingle(), SETANIM_FLAG_OVERRIDE);
-				}
-				else
+				else // 2026-11-10 (audit): the "else if (pm->ps->fd.saberAnimLevel == SS_BLASTER)" branch here was the same code; merged
 				{
 					PM_SetAnim(SETANIM_TORSO, PM_BlockingPoseForsaber_anim_levelSingle(), SETANIM_FLAG_OVERRIDE);
 				}
@@ -6336,29 +6418,8 @@ weapChecks:
 			}
 			else
 			{
-				if (is_walking_and_blocking == qtrue)
-				{
-					if ((pm->ps->saberAnimLevel == SS_DUAL)) // SS_BLASTER (2026-10-14)
-					{
-						PM_BlockingPoseForsaber_anim_levelDual();
-					}
-					else if (pm->ps->saberAnimLevel == SS_STAFF)
-					{
-						PM_BlockingPoseForsaber_anim_levelStaff();
-					}
-					else if (pm->ps->saberAnimLevel == SS_BLASTER)
-					{
-						PM_BlockingPoseForsaber_anim_levelSingle();
-					}
-					else
-					{
-						PM_BlockingPoseForsaber_anim_levelSingle();
-					}
-				}
-				else
-				{
-					PM_IdlePoseForsaber_anim_level();
-				}
+				// 2026-11-10 (audit): holding block. The blocking code sets the pose. The calls that were here worked out a
+				// blocking / idle pose and threw the result away (and the SS_BLASTER branch was the same as the else).
 			}
 		}
 
@@ -6565,7 +6626,12 @@ weapChecks:
 				{
 					// Player: perform an attack fake, returning to a block/ready quad.
 					newmove = PM_ReturnforQuad(saberMoveData[curmove].endQuad);
-					PM_AddBlockFatigue(pm->ps, FATIGUE_ATTACKFAKE);
+					// 2026-11-10 (as SP): a feint (letting go of attack in the wind-up) costs 1 fatigue, as a swing
+					// does, and no block points (was 2 block points)
+					if (pm->ps->saberFatigueChainCount < MISHAPLEVEL_MAX)
+					{
+						pm->ps->saberFatigueChainCount++;
+					}
 				}
 			}
 			// Case 2: We finished an attack (LS_A_*), must continue into a return move.
@@ -6594,36 +6660,10 @@ weapChecks:
 			// Case 4: We are in a bounce state.
 			else if (PM_SaberInBounce(curmove))
 			{
-				// In a bounce.
-#ifdef _GAME
-				if ((g_entities[pm->ps->clientNum].r.svFlags & SVF_BOT) || (pm_entSelf->s.eType == ET_NPC))
-				{
-					// NPCs/bots must play sequential attack from a bounce.
-					if (PM_SaberKataDone(LS_NONE, LS_NONE))
-					{
-						// Done with this kata, must return to ready before attacking again.
-						newmove = saberMoveData[curmove].chain_idle;
-					}
-					else
-					{
-						// Okay to chain to another attack.
-						newmove = saberMoveData[curmove].chain_attack;
-
-						// We assume they're attacking, even if input says otherwise.
-						pm->ps->saberAttackChainCount++;
-
-						if (pm->ps->saberFatigueChainCount < MISHAPLEVEL_MAX)
-						{
-							pm->ps->saberFatigueChainCount++;
-						}
-					}
-				}
-				else
-#endif
-				{
-					// Player: bounce without chaining, return to idle.
-					newmove = saberMoveData[curmove].chain_idle; // Not attacking, so don't chain.
-				}
+				// In a bounce, not attacking: return to idle. 2026-11-10 (as SP; DH: NPCs / bots must not swing spam):
+				// NPCs and bots chained straight into another attack here with no attack input; now they follow their
+				// input as players do (their AI holds the next swing until the blocker's block has finished).
+				newmove = saberMoveData[curmove].chain_idle; // Not attacking, so don't chain.
 			}
 			// Case 5: No special state, just return to ready and exit.
 			else
@@ -6637,10 +6677,15 @@ weapChecks:
 		// Attack + Use: fancy faking logic (attack fakes while holding USE).
 		// Only applies to players (clients) or controlled entities.
 		// ----------------------------------------------------------------------
+		// Saber NPCs and bots (g_saberAITactics 1, 2026-11-09) sometimes feint the same way when their wind-up ends and
+		// the player turtles: WP_SaberAIFeintWanted (w_saberblocking.c) rolls the chance and keeps the cooldown.
 #ifdef _GAME
 		else if ((pm->cmd.buttons & BUTTON_ATTACK) &&
-			(pm->cmd.buttons & BUTTON_USE) &&
-			(!(g_entities[pm->ps->clientNum].r.svFlags & SVF_BOT) && !(pm_entSelf->s.eType == ET_NPC)))
+			(((pm->cmd.buttons & BUTTON_USE) &&
+				(!(g_entities[pm->ps->clientNum].r.svFlags & SVF_BOT) && !(pm_entSelf->s.eType == ET_NPC)))
+				|| (curmove >= LS_S_TL2BR && curmove <= LS_S_T2B
+					&& (pm_entSelf->s.eType == ET_NPC || g_entities[pm->ps->clientNum].r.svFlags & SVF_BOT)
+					&& WP_SaberAIFeintWanted(&g_entities[pm->ps->clientNum]))))
 		{
 			// Do some fancy faking stuff.
 
@@ -6713,11 +6758,7 @@ weapChecks:
 				{
 					PM_SetAnim(SETANIM_TORSO, PM_BlockingPoseForsaber_anim_levelStaff(), SETANIM_FLAG_OVERRIDE);
 				}
-				else if (pm->ps->fd.saberAnimLevel == SS_BLASTER)
-				{
-					PM_SetAnim(SETANIM_TORSO, PM_BlockingPoseForsaber_anim_levelSingle(), SETANIM_FLAG_OVERRIDE);
-				}
-				else
+				else // 2026-11-10 (audit): the "else if (pm->ps->fd.saberAnimLevel == SS_BLASTER)" branch here was the same code; merged
 				{
 					PM_SetAnim(SETANIM_TORSO, PM_BlockingPoseForsaber_anim_levelSingle(), SETANIM_FLAG_OVERRIDE);
 				}
@@ -7057,29 +7098,8 @@ weapChecks:
 				}
 				else
 				{
-					if (is_walking_and_blocking == qtrue)
-					{
-						if ((pm->ps->saberAnimLevel == SS_DUAL)) // SS_BLASTER (2026-10-14)
-						{
-							PM_BlockingPoseForsaber_anim_levelDual();
-						}
-						else if (pm->ps->saberAnimLevel == SS_STAFF)
-						{
-							PM_BlockingPoseForsaber_anim_levelStaff();
-						}
-						else if (pm->ps->saberAnimLevel == SS_BLASTER)
-						{
-							PM_BlockingPoseForsaber_anim_levelSingle();
-						}
-						else
-						{
-							PM_BlockingPoseForsaber_anim_levelSingle();
-						}
-					}
-					else
-					{
-						PM_IdlePoseForsaber_anim_level();
-					}
+					// 2026-11-10 (audit): holding block. The blocking code sets the pose. The calls that were here worked out a
+					// blocking / idle pose and threw the result away (and the SS_BLASTER branch was the same as the else).
 				}
 
 				newmove = LS_READY;
@@ -7146,11 +7166,7 @@ weapChecks:
 		{
 			PM_SetAnim(SETANIM_TORSO, PM_BlockingPoseForsaber_anim_levelDual(), SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 		}
-		else if ((pm->ps->fd.saberAnimLevel == SS_BLASTER)) // SS_BLASTER (2026-10-14)
-		{
-			PM_SetAnim(SETANIM_TORSO, PM_BlockingPoseForsaber_anim_levelSingle(), SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-		}
-		else
+		else // 2026-11-10 (audit): the "else if ((pm->ps->fd.saberAnimLevel == SS_BLASTER))" branch here was the same code; merged
 		{
 			PM_SetAnim(SETANIM_TORSO, PM_BlockingPoseForsaber_anim_levelSingle(), SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 		}
@@ -7279,22 +7295,10 @@ static void PM_SaberFatigue(playerState_t* ps, const int new_move)
 			PM_AddBlockFatigue(ps, Fatigue_SaberAttack());
 		}
 		else if (PM_SaberInTransition(new_move) && pm->ps->userInt3 & 1 << FLAG_ATTACKFAKE)
-		{//attack fakes cost sf as well
-			if (ps->saberAnimLevel == SS_DUAL)
-			{//dual sabers don't have transition/sf costs.
-			}
-			else
-			{//single sabers
-				if (pm->ps->saberFatigueChainCount < MISHAPLEVEL_MAX)
-				{
-					//if ((pm->ps->saberAttackChainCount & 1) == 0)  // even number
-					//{
-					//	if (pm->ps->saberFatigueChainCount < MISHAPLEVEL_MAX)
-					//	{
-					//		pm->ps->saberFatigueChainCount++;
-					//	}
-					//}
-				}
+		{//attack fakes cost fatigue as well (2026-11-10: +1 for every feint, all styles; was free)
+			if (pm->ps->saberFatigueChainCount < MISHAPLEVEL_MAX)
+			{
+				pm->ps->saberFatigueChainCount++;
 			}
 		}
 	}
@@ -7329,18 +7333,10 @@ static void PM_NPCFatigue(playerState_t* ps, const int new_move)
 		}
 		else if (PM_SaberInTransition(new_move) && pm->ps->userInt3 & 1 << FLAG_ATTACKFAKE)
 		{
-			//attack fakes cost FP as well
-			if (ps->fd.saberAnimLevel == SS_DUAL)
+			//attack fakes cost fatigue as well (2026-11-10: all styles, as for players)
+			if (pm->ps->saberFatigueChainCount < MISHAPLEVEL_MAX)
 			{
-				//dual sabers don't have transition/FP costs.
-			}
-			else
-			{
-				//single sabers
-				if (pm->ps->saberFatigueChainCount < MISHAPLEVEL_MAX)
-				{
-					pm->ps->saberFatigueChainCount++;
-				}
+				pm->ps->saberFatigueChainCount++;
 			}
 		}
 	}
@@ -7388,6 +7384,11 @@ void WP_SaberFatigueRegenerate(playerState_t* ps, const int override_amt)
 		if (ps->saberFatigueChainCount > MISHAPLEVEL_MAX)
 		{
 			ps->saberFatigueChainCount = MISHAPLEVEL_MAX;
+		}
+		// 2026-11-10 (audit): a 2-point regen from 1 left the meter at -1 (one free swing before fatigue counted)
+		if (ps->saberFatigueChainCount < MISHAPLEVEL_NONE)
+		{
+			ps->saberFatigueChainCount = MISHAPLEVEL_NONE;
 		}
 	}
 }
@@ -7444,28 +7445,44 @@ void PM_SetSaberMove(saberMoveName_t new_move)
 		else
 #endif
 		{
-			// Only add fatigue every 2 swings (half as fast)
-			if ((pm->ps->saberAttackChainCount & 1) == 0)  // even number
+			// 2026-11-10 (as SP): every swing adds fatigue (was every 2nd swing for players)
+			if (pm->ps->saberFatigueChainCount < MISHAPLEVEL_MAX)
 			{
-				if (pm->ps->saberFatigueChainCount < MISHAPLEVEL_MAX)
-				{
-					pm->ps->saberFatigueChainCount++;
-				}
+				pm->ps->saberFatigueChainCount++;
 			}
 		}
 	}
 
-	// Riposte speed boost: 1.15x faster counter-attack after perfect parry
-	if (PM_SaberInAttack(new_move) && pm->ps->saberRiposteTime > pm->cmd.serverTime)
+	// Riposte (g_saberPerfectParry, 2026-11-09). FLAG_RIPOSTEREADY in userInt3: the 500 ms window after a perfect parry
+	// is open (WP_SaberPerfectParryBonus, w_saberblocking.c). The first attack started in it is the riposte:
+	// FLAG_RIPOSTE is set, the swing plays 15% faster (PM_SaberStartTransAnim, bg_panimate.c) and can't be
+	// perfect-parried (sab_beh_attack_vs_block). The next move that is not that attack ends it. The timers live on
+	// the server (G_SaberRiposteUpdate, w_saberblocking.c); userInt3 is networked, so every client sees the speed.
+	// This replaces a riposte that cut torsoTimer to 87%, which only chopped the end off the swing.
+	if (pm->ps->userInt3 & 1 << FLAG_RIPOSTEREADY)
 	{
-		// 1.15x speed multiplier = reduce timer by ~13%
-		int oldTimer = pm->ps->torsoTimer;
-		if (oldTimer > 50)
+		if (PM_SaberInAttack(new_move))
 		{
-			pm->ps->torsoTimer = (int)(oldTimer * 0.87f);
+			pm->ps->userInt3 &= ~(1 << FLAG_RIPOSTEREADY);
+			pm->ps->userInt3 |= 1 << FLAG_RIPOSTE;
 		}
-		pm->ps->saberRiposteTime = 0;
 	}
+	else if (pm->ps->userInt3 & 1 << FLAG_RIPOSTE)
+	{
+		if (!PM_SaberInAttack(new_move)
+			|| (new_move != pm->ps->saberMove && PM_SaberInAttack(pm->ps->saberMove)))
+		{
+			pm->ps->userInt3 &= ~(1 << FLAG_RIPOSTE);
+		}
+	}
+
+#ifdef _GAME
+	// Adaptive duel AI (g_saberAIAdapt, 2026-11-09): saber NPCs and bots remember the human player's swing directions
+	if (PM_SaberInAttack(new_move) && new_move != pm->ps->saberMove && pm->ps->clientNum < MAX_CLIENTS)
+	{
+		WP_SaberAIAdaptRecord(pm->ps->clientNum, new_move);
+	}
+#endif
 
 	if (pm->ps->saberFatigueChainCount > MISHAPLEVEL_OVERLOAD)
 	{
@@ -7546,11 +7563,7 @@ void PM_SetSaberMove(saberMoveName_t new_move)
 			{
 				anim = BOTH_SABER_BACKHAND_IGNITION;
 			}
-			else if (saber1 && saber1->type == SABER_STAFF_MAUL)
-			{
-				anim = BOTH_S1_S7;
-			}
-			else
+			else // 2026-11-10 (audit): the "else if (saber1 && saber1->type == SABER_STAFF_MAUL)" branch here was the same code; merged
 			{
 				anim = BOTH_S1_S7;
 			}
@@ -7745,11 +7758,7 @@ void PM_SetSaberMove(saberMoveName_t new_move)
 				{
 					anim = PM_BlockingPoseForsaber_anim_levelStaff();
 				}
-				else if (pm->ps->fd.saberAnimLevel == SS_BLASTER)
-				{
-					anim = PM_BlockingPoseForsaber_anim_levelSingle();
-				}
-				else
+				else // 2026-11-10 (audit): the "else if (pm->ps->fd.saberAnimLevel == SS_BLASTER)" branch here was the same code; merged
 				{
 					anim = PM_BlockingPoseForsaber_anim_levelSingle();
 				}
@@ -7772,11 +7781,7 @@ void PM_SetSaberMove(saberMoveName_t new_move)
 				{
 					PM_SetAnim(SETANIM_TORSO, PM_BlockingPoseForsaber_anim_levelStaff(), SETANIM_FLAG_OVERRIDE);
 				}
-				else if (pm->ps->fd.saberAnimLevel == SS_BLASTER)
-				{
-					PM_SetAnim(SETANIM_TORSO, PM_BlockingPoseForsaber_anim_levelSingle(), SETANIM_FLAG_OVERRIDE);
-				}
-				else
+				else // 2026-11-10 (audit): the "else if (pm->ps->fd.saberAnimLevel == SS_BLASTER)" branch here was the same code; merged
 				{
 					PM_SetAnim(SETANIM_TORSO, PM_BlockingPoseForsaber_anim_levelSingle(), SETANIM_FLAG_OVERRIDE);
 				}
@@ -7800,11 +7805,7 @@ void PM_SetSaberMove(saberMoveName_t new_move)
 				{
 					anim = PM_BlockingPoseForsaber_anim_levelStaff();
 				}
-				else if (pm->ps->fd.saberAnimLevel == SS_BLASTER)
-				{
-					anim = PM_BlockingPoseForsaber_anim_levelSingle();
-				}
-				else
+				else // 2026-11-10 (audit): the "else if (pm->ps->fd.saberAnimLevel == SS_BLASTER)" branch here was the same code; merged
 				{
 					anim = PM_BlockingPoseForsaber_anim_levelSingle();
 				}
@@ -7827,11 +7828,7 @@ void PM_SetSaberMove(saberMoveName_t new_move)
 				{
 					anim = PM_BlockingPoseForsaber_anim_levelStaff();
 				}
-				else if (pm->ps->fd.saberAnimLevel == SS_BLASTER)
-				{
-					anim = PM_BlockingPoseForsaber_anim_levelSingle();
-				}
-				else
+				else // 2026-11-10 (audit): the "else if (pm->ps->fd.saberAnimLevel == SS_BLASTER)" branch here was the same code; merged
 				{
 					anim = PM_BlockingPoseForsaber_anim_levelSingle();
 				}
@@ -7930,11 +7927,7 @@ void PM_SetSaberMove(saberMoveName_t new_move)
 				{
 					anim = PM_BlockingPoseForsaber_anim_levelStaff();
 				}
-				else if (pm->ps->fd.saberAnimLevel == SS_BLASTER)
-				{
-					anim = PM_BlockingPoseForsaber_anim_levelSingle();
-				}
-				else
+				else // 2026-11-10 (audit): the "else if (pm->ps->fd.saberAnimLevel == SS_BLASTER)" branch here was the same code; merged
 				{
 					anim = PM_BlockingPoseForsaber_anim_levelSingle();
 				}

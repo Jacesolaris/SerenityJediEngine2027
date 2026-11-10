@@ -6059,10 +6059,7 @@ void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 	{
 		G_ClearViewEntity(self);
 	}
-	else if (!self->s.number && self->client->ps.viewEntity > 0 && self->client->ps.viewEntity < ENTITYNUM_NONE)
-	{
-		G_ClearViewEntity(self);
-	}
+	// 2026-11-10 (audit, harmless): removed a second copy of the else if above (it could never run)
 
 	self->s.loopSound = 0;
 
