@@ -19126,6 +19126,186 @@ static void CG_SaberIgnitionStep(const centity_t* cent, saberInfo_t* saber)
 	}
 }
 
+// Dead droid wreck fx (DH 2026-11-12, item 353, cg_droidWreckFx 1, 0 = off): a dead saber droid (NPC or saber droid
+// bot) or remote keeps smoking where it lies (a column of smoke sprites, gfx/effects/jk_smoke5), thick at first and
+// thinner later, gone after 60 s; the first 30 s it also throws sparks. When the body is first seen dead it gets scorch marks (saber burn
+// glow + burn mark, ghoul2 marks) that last as long as the smoke and a bit. Same as SP (code/cgame/cg_players.cpp).
+// MP remotes are removed at death (they blow up), so in MP this mostly shows on saber droids.
+#define DROID_WRECK_SMOKE_TIME 60000
+#define DROID_WRECK_SPARK_TIME 30000 // DH 11:13: more sparks (was 10 s, one every 1.2-2.8 s)
+
+static qboolean CG_DroidWreckClass(const centity_t* cent)
+{
+	if (cent->currentState.eType == ET_NPC)
+	{
+		return cent->currentState.NPC_class == CLASS_REMOTE || cent->currentState.NPC_class == CLASS_SABER_DROID
+			? qtrue : qfalse;
+	}
+	return cent->currentState.botclass == BCLASS_SABER_DROID ? qtrue : qfalse;
+}
+
+static void CG_DroidWreckMarks(centity_t* cent, const vec3_t center, const float radius, const int count, const int life)
+{
+	int i;
+	for (i = 0; i < count; i++)
+	{
+		// rays from above (a little off to the sides), so the marks land on the side the player sees
+		vec3_t dir, hit, past;
+		const qhandle_t shader = i & 1 ? cgs.media.bdecal_burn1 : cgs.media.bdecal_saberglow;
+		VectorSet(dir, flrand(-0.6f, 0.6f), flrand(-0.6f, 0.6f), 1.0f);
+		VectorNormalize(dir);
+		VectorMA(center, radius, dir, hit);
+		hit[0] += flrand(-radius, radius) * 0.5f;
+		hit[1] += flrand(-radius, radius) * 0.5f;
+		VectorMA(hit, -4.0f, dir, past);
+		if (!shader)
+		{
+			continue;
+		}
+		CG_AddGhoul2Mark(shader, flrand(0.3f, 0.45f) * radius, hit, past, cent->currentState.number,
+			cent->lerpOrigin, cent->lerpAngles[YAW], cent->ghoul2, cent->modelScale, life);
+	}
+}
+
+static void CG_DroidWreckFx(centity_t* cent, const refEntity_t* ent)
+{
+	static vmCvar_t cg_droidWreckFx;
+	static qboolean registered = qfalse;
+	static qhandle_t smokeShader = 0;
+	static fxHandle_t sparkFx = 0, darkFx = 0;
+	static int deadSince[MAX_GENTITIES], nextSmoke[MAX_GENTITIES], nextSpark[MAX_GENTITIES], nextDark[MAX_GENTITIES];
+	static qboolean marked[MAX_GENTITIES];
+	static void* bodyGhoul2[MAX_GENTITIES];
+	const int num = cent->currentState.number;
+	qboolean remote;
+	float radius;
+	int age;
+	vec3_t start, end, spot;
+	trace_t tr;
+
+	if (num < 0 || num >= MAX_GENTITIES)
+	{
+		return;
+	}
+	if (!(cent->currentState.eFlags & EF_DEAD) || !CG_DroidWreckClass(cent) || bodyGhoul2[num] != cent->ghoul2
+		|| deadSince[num] > cg.time)
+	{
+		// alive, another body in this slot, or time went back (map restart): forget the last body
+		deadSince[num] = 0;
+		marked[num] = qfalse;
+		bodyGhoul2[num] = cent->ghoul2;
+		if (!(cent->currentState.eFlags & EF_DEAD) || !CG_DroidWreckClass(cent))
+		{
+			return;
+		}
+	}
+	if (!registered)
+	{
+		trap->Cvar_Register(&cg_droidWreckFx, "cg_droidWreckFx", "1", CVAR_ARCHIVE);
+		smokeShader = trap->R_RegisterShader("gfx/effects/jk_smoke5");
+		sparkFx = trap->FX_RegisterEffect("sparks/spark_nosnd");
+		darkFx = trap->FX_RegisterEffect("volumetric/black_smoke");
+		registered = qtrue;
+	}
+	trap->Cvar_Update(&cg_droidWreckFx);
+	if (!cg_droidWreckFx.integer)
+	{
+		return;
+	}
+	if (!deadSince[num])
+	{
+		deadSince[num] = cg.time;
+		nextSmoke[num] = cg.time + Q_irand(100, 400);
+		nextSpark[num] = cg.time + Q_irand(300, 900);
+		nextDark[num] = cg.time + Q_irand(100, 300);
+		if (cg_droidWreckFx.integer > 1)
+		{
+			trap->Print("droid wreck fx: entity %d starts smoking\n", num);
+		}
+	}
+	age = cg.time - deadSince[num];
+	if (age > DROID_WRECK_SMOKE_TIME)
+	{
+		return;
+	}
+
+	if (DistanceSquared(ent->origin, cg.refdef.vieworg) > 3000.0f * 3000.0f)
+	{
+		return;
+	}
+	remote = cent->currentState.eType == ET_NPC && cent->currentState.NPC_class == CLASS_REMOTE ? qtrue : qfalse;
+	radius = remote ? 10.0f : 24.0f;
+
+	// where it lies: the floor below the model origin, the smoke starts a little above it
+	VectorCopy(ent->origin, start);
+	start[2] += 8.0f;
+	VectorCopy(start, end);
+	end[2] -= 96.0f;
+	CG_Trace(&tr, start, vec3_origin, vec3_origin, end, num, MASK_SOLID);
+	VectorCopy(tr.endpos, spot);
+	spot[2] += remote ? 6.0f : 10.0f;
+
+	if (!marked[num] && cent->ghoul2)
+	{
+		marked[num] = qtrue;
+		CG_DroidWreckMarks(cent, spot, radius, remote ? 2 : 4, DROID_WRECK_SMOKE_TIME - age + 15000);
+	}
+
+	if (smokeShader && cg.time >= nextSmoke[num])
+	{
+		// a puff every 0.3 s at first, every 0.9 s at the end; each puff is 4 sprites that rise at different
+		// speeds and grow, so together they make a soft column
+		vec3_t puff;
+		int k;
+		const float thick = 1.0f - 0.6f * (float)age / DROID_WRECK_SMOKE_TIME;
+		const float scale = remote ? 0.6f : 1.0f;
+		nextSmoke[num] = cg.time + 300 + age / 100 + Q_irand(0, 150);
+		VectorCopy(spot, puff);
+		puff[0] += flrand(-0.4f, 0.4f) * radius;
+		puff[1] += flrand(-0.4f, 0.4f) * radius;
+		for (k = 0; k < 4; k++)
+		{
+			addspriteArgStruct_t s = { 0 };
+			VectorCopy(puff, s.origin);
+			VectorSet(s.vel, flrand(-3.0f, 3.0f), flrand(-3.0f, 3.0f), 14.0f + k * 5.0f);
+			VectorSet(s.accel, 0.0f, 0.0f, 3.0f);
+			s.scale = (4.0f + k) * scale;
+			s.dscale = (16.0f + k * 4.0f) * scale;
+			s.sAlpha = (0.55f - k * 0.07f) * thick;
+			s.eAlpha = 0.0f;
+			s.rotation = flrand(0.0f, 360.0f);
+			s.bounce = 0.0f;
+			s.life = 3000 + k * 300;
+			s.shader = smokeShader;
+			s.flags = 0x08000000; // FX_USE_ALPHA, as the grass cut smoke
+			trap->FX_AddSprite(&s);
+		}
+	}
+	if (darkFx && cg.time >= nextDark[num])
+	{
+		// darker smoke in the column (DH 2026-11-12 11:05): the black volumetric smoke, about every 1-2 s
+		vec3_t up;
+		nextDark[num] = cg.time + 900 + age / 60 + Q_irand(0, 300);
+		VectorSet(up, 0, 0, 1);
+		trap->FX_PlayEffectID(darkFx, spot, up, -1, -1, qfalse);
+	}
+	if (sparkFx && age < DROID_WRECK_SPARK_TIME && cg.time >= nextSpark[num])
+	{
+		// sparks every 0.3-0.8 s at first, every 0.9-1.4 s by the end, 1-3 at a time from different spots
+		int k;
+		const int count = Q_irand(1, 3);
+		nextSpark[num] = cg.time + Q_irand(300, 800) + age / 50;
+		for (k = 0; k < count; k++)
+		{
+			vec3_t spark, dir;
+			VectorSet(dir, flrand(-1.0f, 1.0f), flrand(-1.0f, 1.0f), flrand(0.3f, 1.0f));
+			VectorNormalize(dir);
+			VectorMA(spot, radius * flrand(0.3f, 0.7f), dir, spark);
+			trap->FX_PlayEffectID(sparkFx, spark, dir, -1, -1, qfalse);
+		}
+	}
+}
+
 void CG_Player(centity_t* cent)
 {
 	clientInfo_t* ci = NULL;
@@ -20311,6 +20491,7 @@ SkipTrueView:
 
 	ScaleModelAxis(&legs);
 	CG_SaberSliceApply(cent, &legs); // saber cuts (g_combat.c G_SaberSlice)
+	CG_DroidWreckFx(cent, &legs); // dead saber droid / remote smoke + scorch marks (item 353)
 
 	memset(&torso, 0, sizeof torso);
 

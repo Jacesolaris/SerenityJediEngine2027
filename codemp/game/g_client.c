@@ -4662,6 +4662,7 @@ void ClientSpawn(gentity_t* ent)
 	qboolean changedSaber = qfalse, inSiegeWithClass = qfalse;
 
 	index = ent - g_entities;
+	G_MissionClearDown(index); // (Missions: a (re)spawned player is up, g_target.c)
 	client = ent->client;
 	client->pers.botclass = client->pers.nextbotclass;
 	if (ent->r.svFlags & SVF_BOT)

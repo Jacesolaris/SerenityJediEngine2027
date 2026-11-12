@@ -955,7 +955,11 @@ qboolean G_ValidEnemy(const gentity_t* self, const gentity_t* enemy)
 	// a Force Projection copy (NPC_spawn.cpp, on its caster's team) fights everyone who is not on that team, whatever
 	// side the player plays (DH): enemies, other teams, rampaging creatures; not the neutrals (civilians, droids), not
 	// the player, not another copy
-	if (self->client && G_IsForceProjection(self))
+	if (!self->client)
+	{
+		return qfalse; // the team checks below need my client (C6011)
+	}
+	if (G_IsForceProjection(self))
 	{
 		return enemy->s.number != 0 && enemy->client->playerTeam != self->client->playerTeam
 			&& enemy->client->playerTeam != TEAM_NEUTRAL && !G_IsForceProjection(enemy) ? qtrue : qfalse;

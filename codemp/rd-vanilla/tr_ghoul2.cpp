@@ -29,7 +29,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include <unordered_map>
 #include <vector>
 #include "tr_local.h"
-#include "tr_meshcloth.h"
+#include "rd-vanilla/tr_meshcloth.h"
 #include <unordered_map>
 #include "qcommon/matcomp.h"
 #include "qcommon/qcommon.h"
@@ -2831,7 +2831,7 @@ static void G2_ProcessGeneratedSurfaceBolts(CGhoul2Info& ghoul2, const mdxaBone_
 #endif
 }
 
-#include "tr_saberslice.h" // saber slice: R_SliceMetal, R_SliceResolvePlanes
+#include "rd-vanilla/tr_saberslice.h" // saber slice: R_SliceMetal, R_SliceResolvePlanes
 
 #define R_SLICE_CVAR_DESC
 constexpr float R_SLICE_SEAM_WIDTH = 1.6f;
@@ -4449,7 +4449,7 @@ static void MC_FloorUnder(const trRefEntity_t* ent, const int timeMs, mcParams_t
 			start[2] += 30.0f;
 			const float a = k * (M_PI / 4.0f);
 			VectorSet(end, start[0] + cosf(a) * 48.0f, start[1] + sinf(a) * 48.0f, start[2]);
-				ri.CM_BoxTrace(&tr, start, end, vec3_origin, vec3_origin, 0, CONTENTS_SOLID, qfalse);	// MP: world only
+			ri.CM_BoxTrace(&tr, start, end, vec3_origin, vec3_origin, 0, CONTENTS_SOLID, qfalse);	// MP: world only
 			if (tr.fraction >= 1.0f || tr.startsolid || tr.allsolid || fabsf(tr.plane.normal[2]) > 0.7f)
 			{
 				continue;
@@ -5284,7 +5284,7 @@ every triangle of the surface that crosses a cut plane is clipped against it,
 triangles on the cut away side are dropped. The game draws the glowing cut caps.
 ==============
 */
-#include "tr_saberslice.h"
+#include "rd-vanilla/tr_saberslice.h"
 
 static int G2_SliceDominantBone(const mdxmVertex_t* v, const int* piBoneReferences)
 {

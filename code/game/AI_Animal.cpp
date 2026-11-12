@@ -24,7 +24,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "g_navigator.h"
 
 #if !defined(RAVL_VEC_INC)
-#include "../Ravl/CVec.h"
+#include "Ravl/CVec.h"
 #endif
 #include "Ratl/vector_vs.h"
 

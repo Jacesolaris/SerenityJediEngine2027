@@ -17,12 +17,16 @@ Per character instance:
 ===========================================================================
 */
 
+#if !defined(_JK2EXE) && !defined(REND2_SP)	// MP renderers (vanilla and rend2)
 #define MC_MP
+#endif
 #include "qcommon/q_shared.h"
 #include "q_profile.h"
+#ifdef MC_MP
 #define MDXABONEDEF
+#endif
 #include "rd-common/mdx_format.h"
-#include "tr_meshcloth.h"
+#include "rd-vanilla/tr_meshcloth.h"
 
 #include <vector>
 #include <queue>
@@ -186,6 +190,7 @@ namespace {
 		// stops simulating until the pose, the body capsules, the wind or a blast moves it again
 		bool				asleep = false;
 		std::vector<mcCapsule_t>	capsPrev;	// last frame's body capsules (world): swept through the substeps
+		std::vector<mcCapsule_t>	scratchCaps;	// Simulate's capsule lists (5 x MC_NEAR_CAPS / MC_MAX_CAPS, 16 KB): off the stack
 		int					restSteps = 0;		// 16 ms steps the cloth has been at rest
 		std::vector<float>	restRef;			// animated pose when the rest began (3 per particle)
 		float				restCaps[8] = {};	// body capsule signature then (sums of the ends and radii, count)
@@ -2017,8 +2022,13 @@ namespace {
 			mcSub(&target[0], &in->targetPrev[0], d);
 			if (dt < 0 || dt > MC_STALE_MS || mcLen(d) > MC_TELEPORT) in->active = false;
 		}
-		mcCapsule_t nearCaps[MC_NEAR_CAPS], nearPrev[MC_NEAR_CAPS], stepFrom[MC_NEAR_CAPS], stepTo[MC_NEAR_CAPS];
-		mcCapsule_t useCaps[MC_MAX_CAPS];
+		// the capsule lists live in the instance (16 KB on the stack was too much: C6262)
+		in->scratchCaps.resize((size_t)MC_NEAR_CAPS * 4 + MC_MAX_CAPS);
+		mcCapsule_t* const nearCaps = in->scratchCaps.data();
+		mcCapsule_t* const nearPrev = nearCaps + MC_NEAR_CAPS;
+		mcCapsule_t* const stepFrom = nearPrev + MC_NEAR_CAPS;
+		mcCapsule_t* const stepTo = stepFrom + MC_NEAR_CAPS;
+		mcCapsule_t* const useCaps = stepTo + MC_NEAR_CAPS; // MC_MAX_CAPS
 		int nuse = 0;
 		for (int c = 0; c < ncaps && nuse < MC_MAX_CAPS; c++) {
 			if (caps[c].hard == 2 && !g->proxied) continue;
@@ -2046,7 +2056,7 @@ namespace {
 					o[c].b[k] = nearPrev[c].b[k] + (nearCaps[c].b[k] - nearPrev[c].b[k]) * tt;
 				}
 			}
-		};
+			};
 		// SJE: sleeping cloth (r_meshClothSleep)
 		float capSig[8];
 		CapsSignature(nearCaps, nnear, capSig);

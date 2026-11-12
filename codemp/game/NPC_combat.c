@@ -1644,7 +1644,7 @@ qboolean G_ValidEnemy(const gentity_t* self, const gentity_t* enemy)
 	{
 		return qfalse;
 	}
-	extern qboolean G_IsForceProjection(const gentity_t* ent); // w_force.c
+	extern qboolean G_IsForceProjection(const gentity_t * ent); // w_force.c
 	if (enemy->client && self->client->leader && self->client->leader->client && enemy->s.number < MAX_CLIENTS
 		&& level.gametype >= GT_TEAM && G_IsForceProjection(self) && OnSameTeam(self->client->leader, enemy))
 	{

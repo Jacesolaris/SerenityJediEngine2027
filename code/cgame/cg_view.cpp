@@ -45,6 +45,23 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "../game/g_vehicles.h"
 #include "cgame/cg_local.h"
 
+// Cutscenes always use the normal camera (DH 2026-11-12, changelog 357): a scripted camera (in_camera), a misc_camera
+// view or a script that locks the player. The saber lock, aiming and Force Grasp cameras switch off at once there, so a
+// cutscene that starts half way through a saber lock is never seen through the saber lock camera.
+extern bool in_camera;
+extern qboolean player_locked;
+
+static bool CG_InCutscene()
+{
+	if (in_camera || player_locked)
+	{
+		return true;
+	}
+	const int view_ent = cg.snap ? cg.snap->ps.viewEntity : 0;
+	return view_ent > 0 && view_ent < ENTITYNUM_WORLD && g_entities[view_ent].classname
+		&& !Q_stricmp("misc_camera", g_entities[view_ent].classname);
+}
+
 #define MASK_CAMERACLIP (MASK_SOLID)
 constexpr auto CAMERA_SIZE = 4;
 
@@ -472,7 +489,7 @@ static void CG_CalcIdealThirdPersonViewTarget()
 		VectorCopy(cameraFocusLoc, cameraIdealTarget);
 		cameraIdealTarget[2] += cg.overrides.thirdPersonVertOffset;
 	}
-	else if (cg.renderingThirdPerson && cg.predictedPlayerState.communicatingflags & (1 << CF_SABERLOCKING) && cg_saberLockCinematicCamera.integer)
+	else if (cg.renderingThirdPerson && cg.predictedPlayerState.communicatingflags & (1 << CF_SABERLOCKING) && cg_saberLockCinematicCamera.integer && !CG_InCutscene())
 	{
 		VectorCopy(cameraFocusLoc, cameraIdealTarget);
 		cameraIdealTarget[2] -= 15.5f;
@@ -1003,6 +1020,10 @@ static float CG_CameraBlendLerp(const float normal, const float cinematic, const
 
 static bool CG_SaberLockCamera()
 {
+	if (CG_InCutscene())
+	{
+		return false; // a cutscene: normal camera, even if the saber lock is still running
+	}
 	if (cg.predictedPlayerState.communicatingflags & (1 << CF_SABERLOCKING))
 	{
 		return true;
@@ -1082,6 +1103,14 @@ static void CG_UpdateCameraBlends()
 	else
 	{
 		cg_graspBlend = CG_StepCameraBlend(cg_graspBlend, can_blend && CG_GraspCamera(), step);
+	}
+
+	if (CG_InCutscene())
+	{
+		// a cutscene: straight back to the normal camera, no blend out (changelog 357)
+		cg_aimBlend = 0.0f;
+		cg_saberLockBlend = 0.0f;
+		cg_graspBlend = 0.0f;
 	}
 
 	if (cg_aimBlend <= 0.0f && cg_saberLockBlend <= 0.0f && cg_graspBlend <= 0.0f)
@@ -3123,6 +3152,13 @@ void CG_DrawActiveFrame(const int serverTime, const stereoFrame_t stereoView)
 	// -------------------------------------------------------------------------
 	// Camera / view calculation.
 	// -------------------------------------------------------------------------
+
+	if (CG_InCutscene())
+	{
+		// the scripted camera and misc_camera views skip the third person camera code, so put the camera overrides
+		// back to normal here (a cutscene that starts during a saber lock, changelog 357)
+		CG_UpdateCameraBlends();
+	}
 
 	if (in_camera)
 	{

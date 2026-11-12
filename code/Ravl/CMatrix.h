@@ -44,7 +44,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #pragma message("...including CMatrix.h")
 #endif
 #if !defined(RAVL_VEC_INC)
-#include "CVec.h"
+#include "Ravl/CVec.h"
 #endif
 //namespace ravl
 //{

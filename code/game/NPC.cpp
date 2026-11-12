@@ -1169,6 +1169,8 @@ static void NPC_HandleAIFlags()
 	}
 }
 
+extern void NPC_ObstacleClimb();
+
 static void NPC_AvoidWallsAndCliffs()
 {
 	/*
@@ -2392,6 +2394,9 @@ static void NPC_ExecuteBState(const gentity_t* self) //, int msec )
 
 	//cliff and wall avoidance
 	NPC_AvoidWallsAndCliffs();
+
+	// stuck against something on the way: climb / jump onto it or go round it (g_obstacleClimb, NPC_move.cpp)
+	NPC_ObstacleClimb();
 
 	// run the bot through the server like it was a real client
 	//=== Save the ucmd for the second no-think Pmove ============================

@@ -22,7 +22,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "cm_local.h"
-#include "cm_patch.h"
+#include "qcommon/cm_patch.h"
 #include "qcommon/qcommon.h"
 
 int	c_totalPatchBlocks;
@@ -512,7 +512,7 @@ static int CM_PointOnPlaneSide(float* p, int planeNum) {
 	return SIDE_ON;
 }
 
-static int	CM_GridPlane(int gridPlanes[MAX_GRID_SIZE][MAX_GRID_SIZE][2], int i, int j, int tri) {
+static int	CM_GridPlane(int gridPlanes[CM_MAX_GRID_SIZE][CM_MAX_GRID_SIZE][2], int i, int j, int tri) {
 	int p = gridPlanes[i][j][tri];
 	if (p != -1) {
 		return p;
@@ -533,7 +533,7 @@ static int	CM_GridPlane(int gridPlanes[MAX_GRID_SIZE][MAX_GRID_SIZE][2], int i, 
 CM_EdgePlaneNum
 ==================
 */
-static int CM_EdgePlaneNum(cGrid_t* grid, int gridPlanes[MAX_GRID_SIZE][MAX_GRID_SIZE][2], int i, int j, int k) {
+static int CM_EdgePlaneNum(cGrid_t* grid, int gridPlanes[CM_MAX_GRID_SIZE][CM_MAX_GRID_SIZE][2], int i, int j, int k) {
 	float* p1 = nullptr, * p2 = nullptr;
 	vec3_t		up;
 	int			p = 0;
@@ -609,7 +609,7 @@ static int CM_EdgePlaneNum(cGrid_t* grid, int gridPlanes[MAX_GRID_SIZE][MAX_GRID
 CM_SetBorderInward
 ===================
 */
-static void CM_SetBorderInward(facet_t* facet, cGrid_t* grid, int gridPlanes[MAX_GRID_SIZE][MAX_GRID_SIZE][2],
+static void CM_SetBorderInward(facet_t* facet, cGrid_t* grid, int gridPlanes[CM_MAX_GRID_SIZE][CM_MAX_GRID_SIZE][2],
 	int i, int j, int which) {
 	float* points[4]{};
 	int		numPoints = 0;
@@ -911,7 +911,7 @@ CM_PatchCollideFromGrid
 */
 static void CM_PatchCollideFromGrid(cGrid_t* grid, patchCollide_t* pf) {
 	int				i = 0, j = 0;
-	static int gridPlanes[MAX_GRID_SIZE][MAX_GRID_SIZE][2]; // off the stack (C6262)
+	static int gridPlanes[CM_MAX_GRID_SIZE][CM_MAX_GRID_SIZE][2]; // off the stack (C6262)
 	memset(gridPlanes, 0, sizeof(gridPlanes)); // zeroed each call, as the {} on the stack was
 	int				borders[4]{};
 	int				noAdjust[4]{};
@@ -1104,7 +1104,7 @@ patchCollide_s* CM_GeneratePatchCollide(int width, int height, vec3_t* points) {
 		Com_Error(ERR_DROP, "CM_GeneratePatchFacets: even sizes are invalid for quadratic meshes");
 	}
 
-	if (width > MAX_GRID_SIZE || height > MAX_GRID_SIZE) {
+	if (width > CM_MAX_GRID_SIZE || height > CM_MAX_GRID_SIZE) {
 		Com_Error(ERR_DROP, "CM_GeneratePatchFacets: source is > MAX_GRID_SIZE");
 	}
 

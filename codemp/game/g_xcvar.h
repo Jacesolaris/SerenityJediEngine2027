@@ -310,4 +310,5 @@ XCVAR_DEF(g_aiClipScale, "1", NULL, CVAR_ARCHIVE, qtrue) // x every bot / NPC cl
 XCVAR_DEF(g_grenadeCook, "1", NULL, CVAR_ARCHIVE, qtrue) // grenades (2026-10-31): players can cook a grenade (hold past a full throw), 0 = old
 
 XCVAR_DEF(g_lightningDrainRate, "25", NULL, CVAR_ARCHIVE, qtrue) // force points a second while force lightning is held (DH 2026-11-02); 0 = the old cost (2 / 5 / 8 points every 50 ms)
+XCVAR_DEF(g_obstacleClimb, "1", NULL, CVAR_ARCHIVE, qfalse) // NPCs and bots stuck against something on their way climb / jump onto it or go round it (DH 2026-11-12); 0 = off
 #undef XCVAR_DEF

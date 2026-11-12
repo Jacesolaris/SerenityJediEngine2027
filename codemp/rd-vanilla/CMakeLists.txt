@@ -40,7 +40,7 @@ set(MPVanillaRendererFiles
 	"${MPDir}/rd-vanilla/G2_bones.cpp"
 	"${MPDir}/rd-vanilla/G2_misc.cpp"
 	"${MPDir}/rd-vanilla/G2_surfaces.cpp"
-	"${MPDir}/rd-vanilla/tr_arb.cpp"
+	"${SharedDir}/rd-vanilla/tr_arb.cpp"
 	"${MPDir}/rd-vanilla/tr_backend.cpp"
 	"${MPDir}/rd-vanilla/tr_bsp.cpp"
 	"${MPDir}/rd-vanilla/tr_cmds.cpp"
@@ -71,8 +71,8 @@ set(MPVanillaRendererFiles
 	"${MPDir}/rd-vanilla/tr_world.cpp"
 	"${MPDir}/rd-vanilla/tr_WorldEffects.cpp"
 	"${MPDir}/rd-vanilla/tr_WorldEffects.h"
-	"${MPDir}/rd-vanilla/tr_meshcloth.cpp"
-	"${MPDir}/rd-vanilla/tr_meshcloth.h"
+	"${SharedDir}/rd-vanilla/tr_meshcloth.cpp"
+	"${SharedDir}/rd-vanilla/tr_meshcloth.h"
 	)
 source_group("renderer" FILES ${MPVanillaRendererFiles})
 
@@ -88,7 +88,7 @@ set(MPVanillaRendererRdCommonFiles
 	"${MPDir}/rd-common/mdx_format.h"
 	"${MPDir}/rd-common/tr_common.h"
 	"${MPDir}/rd-common/tr_font.cpp"
-	"${MPDir}/rd-common/tr_font.h"
+	"${SharedDir}/rd-common/tr_font.h"
 	"${SharedDir}/rd-common/tr_image_load.cpp"
 	"${MPDir}/rd-common/tr_image_jpg.cpp"
 	"${SharedDir}/rd-common/tr_image_tga.cpp"

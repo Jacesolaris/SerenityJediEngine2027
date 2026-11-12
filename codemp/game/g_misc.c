@@ -5859,3 +5859,249 @@ void SP_misc_model_cargo_small(gentity_t* ent)
 
 	ent->radius = 1.5f; // scale number of chunks spawned
 }
+/*
+============================================================================
+Missions (co-op SP campaigns): SP-only entities the JA / JO maps use (Claude 2026-11-11)
+============================================================================
+*/
+
+/*QUAKED holocron_force_push (0 0 1) (-8 -8 -8) (8 8 8)
+JO force training (yavin_trial). Picked up by any player: every player in the game gets that force power at
+"count" (default 1) if he has less, then the holocron fires its target(s) (yavin_trial opens the next area with
+them) and is gone. Also holocron_force_pull, holocron_force_speed, holocron_force_levitation.
+*/
+static void holocron_force_touch(gentity_t* self, gentity_t* other, trace_t* trace)
+{
+	if (!other || !other->client || other->s.number >= MAX_CLIENTS || other->health <= 0
+		|| other->client->sess.sessionTeam == TEAM_SPECTATOR)
+	{
+		return;
+	}
+
+	const int power = self->genericValue2;
+	const int rank = self->genericValue3;
+	for (int i = 0; i < level.maxclients; i++)
+	{
+		gentity_t* player = &g_entities[i];
+		if (!player->inuse || !player->client || player->client->pers.connected != CON_CONNECTED
+			|| player->client->sess.sessionTeam == TEAM_SPECTATOR)
+		{
+			continue;
+		}
+		player->client->ps.fd.forcePowersKnown |= 1 << power;
+		if (player->client->ps.fd.forcePowerLevel[power] < rank)
+		{
+			player->client->ps.fd.forcePowerLevel[power] = rank;
+		}
+	}
+
+	G_Sound(other, CHAN_AUTO, G_SoundIndex("sound/player/holocronpickup.wav"));
+	G_UseTargets(self, other);
+	self->touch = NULL;
+	G_FreeEntity(self);
+}
+
+static void holocron_force_spawn(gentity_t* self, const int power)
+{
+	self->genericValue2 = power;
+	self->genericValue3 = self->count > 0 ? self->count : 1;
+	if (self->genericValue3 > FORCE_LEVEL_3)
+	{
+		self->genericValue3 = FORCE_LEVEL_3;
+	}
+
+	G_SoundIndex("sound/player/holocronpickup.wav");
+	G_SetOrigin(self, self->s.origin);
+
+	// drawn as an MP holocron of that power (cgame ET_HOLOCRON), floating where the map put it
+	self->s.eType = ET_HOLOCRON;
+	self->s.modelIndex = power - 128;
+	self->s.trickedentindex4 = power;
+	self->s.trickedentindex3 = force_power_dark_light[power] == FORCE_DARKSIDE ? 1
+		: force_power_dark_light[power] == FORCE_LIGHTSIDE ? 2 : 3;
+
+	VectorSet(self->r.mins, -12, -12, -12);
+	VectorSet(self->r.maxs, 12, 12, 12);
+	self->r.contents = CONTENTS_TRIGGER;
+	self->touch = holocron_force_touch;
+	trap->LinkEntity((sharedEntity_t*)self);
+}
+
+void SP_holocron_force_push(gentity_t* self) { holocron_force_spawn(self, FP_PUSH); }
+void SP_holocron_force_pull(gentity_t* self) { holocron_force_spawn(self, FP_PULL); }
+void SP_holocron_force_speed(gentity_t* self) { holocron_force_spawn(self, FP_SPEED); }
+void SP_holocron_force_levitation(gentity_t* self) { holocron_force_spawn(self, FP_LEVITATION); }
+
+/*QUAKED misc_ion_cannon (1 0 0) (-280 -280 0) (280 280 640) START_OFF BURSTS SHIELDED
+SP's huge ion cannon (JA hoth2, JO artus_topside), for Missions (Claude 2026-11-11). Same keys as SP:
+START_OFF, BURSTS, SHIELDED; wait (1500, min 500), random (400), delay (6000, min 1000, BURSTS only), health (2000),
+splashDamage / splashRadius; targetname toggles it, target fires when destroyed, target2 with each shot.
+Only heavy weapons hurt it (and nothing when SHIELDED), as in SP. MP draws the model but not its firing animation.
+*/
+static void ion_cannon_think(gentity_t* self)
+{
+	if (self->spawnflags & 2)
+	{
+		if (self->count)
+		{
+			self->count--; // still bursts left
+		}
+		else
+		{
+			// burst over: wait delay, plus a random bit
+			self->nextthink = level.time + self->delay + Q_flrand(-1.0f, 1.0f) * self->random;
+			self->count = Q_irand(0, 5);
+			return;
+		}
+	}
+
+	if (self->genericValue5 && self->ghoul2 && self->genericValue6 >= 0)
+	{
+		mdxaBone_t boltMatrix;
+		vec3_t org, fwd;
+
+		trap->G2API_GetBoltMatrix(self->ghoul2, 0, self->genericValue6, &boltMatrix, self->r.currentAngles,
+			self->r.currentOrigin, level.time, NULL, self->modelScale);
+		BG_GiveMeVectorFromMatrix(&boltMatrix, ORIGIN, org);
+		BG_GiveMeVectorFromMatrix(&boltMatrix, POSITIVE_Y, fwd);
+		G_PlayEffectID(self->genericValue5, org, fwd);
+	}
+
+	if (self->target2)
+	{
+		G_UseTargets2(self, self, self->target2);
+	}
+	self->nextthink = level.time + self->wait + Q_flrand(-1.0f, 1.0f) * self->random;
+}
+
+static void ion_cannon_use(gentity_t* self, gentity_t* other, gentity_t* activator)
+{
+	// toggle
+	if (!self->think)
+	{
+		self->think = ion_cannon_think;
+		self->nextthink = level.time + FRAMETIME; // fires right on being used
+	}
+	else
+	{
+		self->think = NULL;
+	}
+}
+
+static void ion_cannon_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, int damage, int mod)
+{
+	vec3_t org, up = { 0, 0, 1 };
+
+	// the damaged md3 in place of the ghoul2 model
+	if (self->ghoul2)
+	{
+		trap->G2API_CleanGhoul2Models(&self->ghoul2);
+	}
+	self->s.modelGhoul2 = 0;
+	self->s.modelIndex = self->genericValue7;
+
+	self->think = NULL;
+	self->use = NULL;
+	if (self->target)
+	{
+		G_UseTargets(self, attacker);
+	}
+	self->die = NULL;
+	self->takedamage = qfalse;
+	self->health = 0;
+	self->s.loopSound = 0;
+	self->r.contents = 0;
+
+	VectorCopy(self->r.currentOrigin, org);
+	org[2] += 20;
+	G_PlayEffectID(G_EffectIndex("env/ion_cannon_explosion"), org, up);
+	if (self->splashDamage > 0 && self->splashRadius > 0)
+	{
+		g_radius_damage(self->r.currentOrigin, attacker, self->splashDamage, self->splashRadius, attacker, NULL, MOD_UNKNOWN);
+	}
+	trap->LinkEntity((sharedEntity_t*)self);
+}
+
+void SP_misc_ion_cannon(gentity_t* base)
+{
+	G_SetAngles(base, base->s.angles);
+	G_SetOrigin(base, base->s.origin);
+
+	base->s.modelIndex = G_model_index("models/map_objects/imp_mine/ion_cannon.glm");
+	base->s.modelGhoul2 = 1;
+	base->s.g2radius = 320;
+	base->s.iModelScale = 200;
+	VectorSet(base->modelScale, 2.0f, 2.0f, 2.0f);
+	trap->G2API_InitGhoul2Model(&base->ghoul2, "models/map_objects/imp_mine/ion_cannon.glm", 0, 0, 0, 0, 0);
+	base->genericValue6 = base->ghoul2 ? trap->G2API_AddBolt(base->ghoul2, 0, "*flash02") : -1;
+
+	// damaged model (MP's entityState has no modelindex2)
+	base->genericValue7 = G_model_index("models/map_objects/imp_mine/ion_cannon_damage.md3");
+
+	base->use = ion_cannon_use;
+
+	if (base->wait == 0.0f)
+	{
+		base->wait = 1500.0f;
+	}
+	else if (base->wait < 500.0f)
+	{
+		base->wait = 500.0f;
+	}
+	if (base->random == 0.0f)
+	{
+		base->random = 400.0f;
+	}
+	if (base->delay == 0)
+	{
+		base->delay = 6000;
+	}
+	else if (base->delay < 1000)
+	{
+		base->delay = 1000;
+	}
+
+	base->flags |= FL_DMG_BY_HEAVY_WEAP_ONLY;
+	if (base->spawnflags & 4)
+	{
+		base->flags |= FL_SHIELDED;
+	}
+
+	G_SpawnInt("health", "2000", &base->health);
+	base->die = ion_cannon_die;
+	base->takedamage = qtrue;
+
+	if (base->spawnflags & 1)
+	{
+		base->think = NULL; // START_OFF: waits to be used
+	}
+	else
+	{
+		base->think = ion_cannon_think;
+		base->nextthink = level.time + base->wait + Q_flrand(-1.0f, 1.0f) * base->random;
+	}
+	if (base->spawnflags & 2)
+	{
+		base->count = Q_irand(0, 5);
+	}
+
+	base->genericValue5 = G_EffectIndex("env/ion_cannon");
+	G_EffectIndex("env/ion_cannon_explosion");
+
+	base->r.contents = CONTENTS_BODY;
+	VectorSet(base->r.mins, -141.0f, -148.0f, 0.0f);
+	VectorSet(base->r.maxs, 142.0f, 135.0f, 245.0f);
+	trap->LinkEntity((sharedEntity_t*)base);
+}
+
+/*QUAKED misc_atst_drivable (1 0 0) (-40 -40 -24) (40 40 248)
+SP's drivable AT-ST (JA t2_dpred, JO yavin_canyon / yavin_swamp), for Missions: MP's atst_vehicle (ext_data/vehicles)
+stands there, for any player to climb into.
+*/
+extern void SP_NPC_Vehicle(gentity_t* self);
+void SP_misc_atst_drivable(gentity_t* self)
+{
+	self->classname = "NPC_Vehicle";
+	self->NPC_type = "atst_vehicle";
+	SP_NPC_Vehicle(self);
+}

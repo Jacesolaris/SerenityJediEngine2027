@@ -40,9 +40,9 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "tr_local.h"
 #include "../rd-common/tr_common.h"
 #include "tr_stl.h"
-#include "../rd-common/tr_font.h"
+#include "rd-common/tr_font.h"
 #include "tr_WorldEffects.h"
-#include "tr_meshcloth.h"
+#include "rd-vanilla/tr_meshcloth.h"
 
 glconfig_t	glConfig;
 glstate_t	glState;

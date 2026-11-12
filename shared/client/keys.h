@@ -22,7 +22,13 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #pragma once
-#include "keycodes.h"
+#pragma once
+
+#if defined(_JK2EXE) || defined(REND2_SP)	// SP exe and SP renderers
+#include "client/keycodes.h"
+#else
+#include "ui/keycodes.h"
+#endif
 
 using qkey_t = struct qkey_s
 {
@@ -56,6 +62,13 @@ extern field_t g_consoleField;
 extern int nextHistoryLine; // the last line in the history buffer, not masked
 extern int historyLine; // the line being displayed from history buffer will be <= nextHistoryLine
 extern field_t historyEditLines[COMMAND_HISTORY];
+
+#if !defined(_JK2EXE) && !defined(REND2_SP)
+// chat (MP)
+extern field_t chatField;
+extern qboolean chat_team;
+extern int chat_playerNum;
+#endif
 
 void Field_KeyDownEvent(field_t* edit, int key);
 void Field_CharEvent(field_t* edit, int ch);

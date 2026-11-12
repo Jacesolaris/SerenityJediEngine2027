@@ -20565,6 +20565,301 @@ static void bot_calm_movement(bot_state_t* bs, usercmd_t* ucmd)
 	}
 }
 
+/*
+==================
+bot_obstacle_climb
+
+Obstacle climb for bots (DH 2026-11-12, g_obstacleClimb 1; the NPC side is NPC_ObstacleClimb in NPC_move.c): a bot who
+is trying to get somewhere but has stood pressed against something for BOC_STUCK_TIME looks at what is in his way
+(OC_Probe):
+- a ledge he can get onto (a plain jump, higher with force jump by his level) he jumps straight up beside it, the jump
+  key held, and once his feet are over the top goes on over the edge (straight up first, so he never runs into the wall
+  in the air and starts a wall run / flip). This even in a saber fight, where he otherwise never jumps;
+- a wall too high, or a class / model that can't jump (droids, mark1...: as pmove): he steps round it to the open side,
+  or backs off, and after a few of those picks a new route.
+People in the way are left to the normal avoidance, and he only climbs toward where he is going.
+Runs after bot_calm_movement, so it has the last word on the move while it is doing something.
+==================
+*/
+#define BOC_STUCK_SPEED		60.0f	// a moving bot slower than this is pressed against something
+#define BOC_STUCK_TIME		600		// ms pressed against it before he does something about it
+#define BOC_HOP_HEIGHT		46.0f	// highest ledge a plain jump gets onto (31 up + a step)
+#define BOC_PUSH_SPEED		200.0f	// speed over the edge once his feet are above it
+#define BOC_CLIMB_TIMEOUT	1800
+
+enum
+{
+	BOC_NONE,
+	BOC_CLIMB,
+	BOC_SIDESTEP,
+	BOC_BACKOFF
+};
+
+typedef struct
+{
+	int lastSeen;
+	int stuckSince;
+	int mode;
+	int modeStart;
+	int modeEnd;
+	int nextTry;
+	int climbFails; // climbs in a row that didn't get him up
+	int roundTries; // side steps / back offs in a row
+	int lastEnd;
+	vec3_t dir;
+	float topZ;
+	qboolean pushed;
+	qboolean airborne;
+} botObstacleClimb_t;
+
+static botObstacleClimb_t bot_oc[MAX_CLIENTS];
+
+// the bot's view yaw this frame (what forwardmove / rightmove are relative to)
+static void bot_oc_axes(const playerState_t* ps, const usercmd_t* ucmd, vec3_t fwd, vec3_t right)
+{
+	vec3_t angles;
+	angles[PITCH] = 0.0f;
+	angles[YAW] = SHORT2ANGLE(ucmd->angles[YAW] + ps->delta_angles[YAW]);
+	angles[ROLL] = 0.0f;
+	AngleVectors(angles, fwd, right, NULL);
+}
+
+static void bot_oc_move(const playerState_t* ps, usercmd_t* ucmd, const vec3_t dir)
+{
+	vec3_t fwd, right;
+	bot_oc_axes(ps, ucmd, fwd, right);
+	float f = DotProduct(fwd, dir) * 127.0f;
+	float r = DotProduct(right, dir) * 127.0f;
+	if (f > 127.0f) f = 127.0f;
+	if (f < -127.0f) f = -127.0f;
+	if (r > 127.0f) r = 127.0f;
+	if (r < -127.0f) r = -127.0f;
+	ucmd->forwardmove = (signed char)f;
+	ucmd->rightmove = (signed char)r;
+	ucmd->upmove = 0;
+	ucmd->buttons &= ~BUTTON_WALKING;
+}
+
+// highest ledge (feet to top) he can get onto
+static float bot_oc_max_climb(const gentity_t* self)
+{
+	const playerState_t* ps = &self->client->ps;
+
+	if (BG_ClassCantJump(ps->botclass) || BG_AnimSetCantJump(self->localAnimIndex))
+	{
+		return 0.0f; // pmove won't let him jump at all
+	}
+	if (!(ps->fd.forcePowersKnown & 1 << FP_LEVITATION))
+	{
+		return BOC_HOP_HEIGHT;
+	}
+	switch (ps->fd.forcePowerLevel[FP_LEVITATION])
+	{
+	case FORCE_LEVEL_0:
+		return BOC_HOP_HEIGHT;
+	case FORCE_LEVEL_1:
+		return 104.0f; // force jump heights (96 / 192 / 384) + a step, less a margin
+	case FORCE_LEVEL_2:
+		return 200.0f;
+	default:
+		return 392.0f;
+	}
+}
+
+static void bot_oc_end(botObstacleClimb_t* oc)
+{
+	oc->mode = BOC_NONE;
+	oc->stuckSince = 0;
+	oc->lastEnd = level.time;
+	oc->nextTry = level.time + 300;
+}
+
+static void bot_obstacle_climb(bot_state_t* bs, usercmd_t* ucmd)
+{
+	const int client = bs->client;
+	gentity_t* self = &g_entities[client];
+
+	if (!g_obstacleClimb.integer || !self->client)
+	{
+		return;
+	}
+	botObstacleClimb_t* oc = &bot_oc[client];
+	if (!oc->lastSeen || level.time < oc->lastSeen || level.time - oc->lastSeen > 1000)
+	{
+		memset(oc, 0, sizeof(*oc)); // a new bot in this slot, or a new level
+	}
+	oc->lastSeen = level.time;
+
+	playerState_t* ps = &self->client->ps;
+	const qboolean on_ground = ps->groundEntityNum != ENTITYNUM_NONE ? qtrue : qfalse;
+
+	if (self->health <= 0 || ps->pm_type != PM_NORMAL || self->waterlevel >= 2 || self->watertype & CONTENTS_LADDER
+		|| ps->eFlags & EF_JETPACK_ACTIVE || ps->eFlags2 & (EF2_FLYING | EF2_HELD_BY_MONSTER)
+		|| ps->m_iVehicleNum || ps->emplacedIndex || ps->saberLockTime >= level.time
+		|| ps->forceHandExtend == HANDEXTEND_KNOCKDOWN || BG_InRoll(ps, ps->legsAnim))
+	{
+		oc->mode = BOC_NONE;
+		oc->stuckSince = 0;
+		return;
+	}
+
+	const float feet = ps->origin[2] + self->r.mins[2];
+
+	switch (oc->mode)
+	{
+	case BOC_CLIMB:
+		if (!on_ground)
+		{
+			oc->airborne = qtrue;
+		}
+		if (level.time - oc->modeStart > BOC_CLIMB_TIMEOUT || (on_ground && oc->airborne)
+			|| (on_ground && level.time - oc->modeStart > 400))
+		{
+			oc->climbFails = feet < oc->topZ - 4.0f ? oc->climbFails + 1 : 0; // up there, or back down where he started
+			bot_oc_end(oc);
+			return;
+		}
+		if (!oc->pushed)
+		{
+			if (feet >= oc->topZ + 1.0f)
+			{
+				// feet over the top: on over the edge
+				ps->velocity[0] = oc->dir[0] * BOC_PUSH_SPEED;
+				ps->velocity[1] = oc->dir[1] * BOC_PUSH_SPEED;
+				oc->pushed = qtrue;
+			}
+			else
+			{
+				// jump and keep the key held, straight up: no move into the wall
+				ucmd->forwardmove = 0;
+				ucmd->rightmove = 0;
+				ucmd->upmove = on_ground && ps->pm_flags & PMF_JUMP_HELD ? 0 : 127; // let go first if it was held
+				if (!on_ground)
+				{
+					ps->velocity[0] = 0.0f;
+					ps->velocity[1] = 0.0f;
+					if (ps->velocity[2] > 0.0f && ps->gravity > 0)
+					{
+						// make sure the jump gets his feet over the top (a plain jump's 31 is short of a 46 ledge)
+						const float need = sqrtf(2.0f * (float)ps->gravity * (oc->topZ + 12.0f - feet));
+						if (ps->velocity[2] < need)
+						{
+							ps->velocity[2] = need;
+						}
+					}
+				}
+				return;
+			}
+		}
+		bot_oc_move(ps, ucmd, oc->dir);
+		return;
+
+	case BOC_SIDESTEP:
+	case BOC_BACKOFF:
+		if (level.time >= oc->modeEnd)
+		{
+			bot_oc_end(oc);
+			return;
+		}
+		bot_oc_move(ps, ucmd, oc->dir);
+		return;
+
+	default:
+		break;
+	}
+
+	// pressed against something?
+	vec3_t want, fwd, right;
+	const float hspeed = sqrtf(ps->velocity[0] * ps->velocity[0] + ps->velocity[1] * ps->velocity[1]);
+	bot_oc_axes(ps, ucmd, fwd, right);
+	VectorScale(fwd, ucmd->forwardmove, want);
+	VectorMA(want, ucmd->rightmove, right, want);
+	want[2] = 0.0f;
+	if (!on_ground || hspeed >= BOC_STUCK_SPEED || !(ucmd->forwardmove || ucmd->rightmove) || VectorNormalize(want) < 0.1f)
+	{
+		oc->stuckSince = 0;
+		if (level.time - oc->lastEnd > 4000)
+		{
+			oc->climbFails = 0; // he has been moving freely a while
+			oc->roundTries = 0;
+		}
+		return;
+	}
+	if (!oc->stuckSince)
+	{
+		oc->stuckSince = level.time;
+	}
+	if (level.time - oc->stuckSince < BOC_STUCK_TIME || level.time < oc->nextTry)
+	{
+		return;
+	}
+	oc->stuckSince = 0;
+	oc->nextTry = level.time + 500;
+
+	// climb only toward where he is going, and not after two climbs that didn't get him up
+	float max_climb = oc->climbFails < 2 ? bot_oc_max_climb(self) : 0.0f;
+	if (max_climb > 0.0f)
+	{
+		vec3_t to_goal;
+		VectorSubtract(bs->goalPosition, ps->origin, to_goal);
+		to_goal[2] = 0.0f;
+		if (VectorNormalize(to_goal) > 16.0f && DotProduct(to_goal, want) < 0.3f)
+		{
+			max_climb = 0.0f;
+		}
+	}
+
+	float top_z = 0.0f;
+	const int probe = OC_Probe(self, want, max_climb, &top_z);
+	if (probe == OC_PROBE_CLEAR || probe == OC_PROBE_PERSON)
+	{
+		return;
+	}
+	if (probe == OC_PROBE_LEDGE)
+	{
+		ucmd->forwardmove = 0;
+		ucmd->rightmove = 0;
+		ucmd->upmove = ps->pm_flags & PMF_JUMP_HELD ? 0 : 127;
+		VectorCopy(want, oc->dir);
+		oc->topZ = top_z;
+		oc->pushed = qfalse;
+		oc->airborne = qfalse;
+		oc->mode = BOC_CLIMB;
+		oc->modeStart = level.time;
+		return;
+	}
+
+	// can't get over it: round it, or back off
+	vec3_t side;
+	if (OC_FindSideStep(self, want, side))
+	{
+		VectorCopy(side, oc->dir);
+		oc->mode = BOC_SIDESTEP;
+		oc->modeStart = level.time;
+		oc->modeEnd = level.time + Q_irand(500, 800);
+	}
+	else
+	{
+		vec3_t back;
+		VectorMA(ps->origin, -32.0f, want, back);
+		if (OC_GroundBelow(self, back, 48.0f))
+		{
+			VectorScale(want, -1.0f, oc->dir);
+			oc->mode = BOC_BACKOFF;
+			oc->modeStart = level.time;
+			oc->modeEnd = level.time + 400;
+		}
+	}
+	if (++oc->roundTries >= 3)
+	{
+		// he keeps ending up against it: a new route from the nearest waypoint, and leave it alone a while
+		bs->wpCurrent = NULL;
+		oc->nextTry = level.time + 3000;
+		oc->roundTries = 0;
+		oc->climbFails = 0;
+	}
+}
+
 int gUpdateVars = 0;
 
 /*
@@ -20716,6 +21011,7 @@ int bot_ai_startframe(const int time)
 		}
 
 		bot_calm_movement(bs, ucmd);
+		bot_obstacle_climb(bs, ucmd); // stuck against something on his way: climb onto it or go round it (g_obstacleClimb)
 		bot_saber_blaster(bs, ucmd); // SS_BLASTER (2026-10-24): the left hand pistol out of saber reach
 		bot_boba_flight_cmd(bs, ucmd); // Boba Fett classes: jetpack flight, flamethrower (after the jump filters)
 		G_FighterAI_BotCmd(&g_entities[bs->client], ucmd); // in a ship the fighter AI flies: its moves, not his own

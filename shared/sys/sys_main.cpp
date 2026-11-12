@@ -803,6 +803,81 @@ static void Sys_RequireLauncher(void)
 }
 #endif
 
+#if defined(_WIN32) && !defined(DEDICATED) && !defined(JK2_MODE)
+#include <process.h>
+#include <io.h>
+
+// startmp (SP exe) / startsp (MP exe): start the other SerenityJediEngine2027 exe from this exe's own folder.
+// The caller quits this one after. The other exe's name is this exe's name with "-SP." / "-MP." swapped, so the
+// architecture part stays right. The launcher token is set on this process so the child inherits it: a release
+// build started this way does not bounce back to the launcher (the launcher started this one, so it is a real start).
+qboolean Sys_StartOtherGame(const qboolean multiplayer)
+{
+	char exe[MAX_OSPATH] = { 0 };
+	char* pgm = nullptr;
+	if (_get_pgmptr(&pgm) != 0 || !pgm || !pgm[0])
+	{
+		Com_Printf(S_COLOR_RED "Could not find this exe's own path.\n");
+		return qfalse;
+	}
+	Q_strncpyz(exe, pgm, sizeof(exe));
+
+	const char* from = multiplayer ? "-SP." : "-MP.";
+	const char* to = multiplayer ? "-MP." : "-SP.";
+	char* name = strrchr(exe, '\\');
+	char* name2 = strrchr(exe, '/');
+	if (name2 > name)
+	{
+		name = name2;
+	}
+	char* swap = const_cast<char*>(Q_stristr(name ? name : exe, from));
+	if (!swap)
+	{
+		Com_Printf(S_COLOR_RED "This exe is not named SerenityJediEngine2027%sx86_64.exe, cannot find the other one.\n", from);
+		return qfalse;
+	}
+	memcpy(swap, to, strlen(to)); // same length
+
+	if (_access(exe, 0) != 0)
+	{
+		Com_Printf(S_COLOR_RED "Could not find %s\n", exe);
+		return qfalse;
+	}
+
+	_putenv_s("SJE_LAUNCHER", "sje-launcher-4b8e2d6a"); // keep the same as SJE_LAUNCHER_ENV / SJE_LAUNCHER_TOKEN above
+
+	// the same game data and home folder as this one (normally the defaults; they differ only when a test or a
+	// shortcut set them on the command line). _spawnv joins the arguments with spaces, so paths are quoted.
+	char quoted[MAX_OSPATH + 2];
+	Com_sprintf(quoted, sizeof(quoted), "\"%s\"", exe);
+	const char* forward[] = { "fs_basepath", "fs_homepath", "fs_game" };
+	char values[3][MAX_OSPATH + 2];
+	const char* argv[2 + 3 * 3 + 1];
+	int argc = 0;
+	argv[argc++] = quoted;
+	for (int i = 0; i < 3; i++)
+	{
+		const char* v = Cvar_VariableString(forward[i]);
+		if (!v || !v[0])
+		{
+			continue;
+		}
+		Com_sprintf(values[i], sizeof(values[i]), "\"%s\"", v);
+		argv[argc++] = "+set";
+		argv[argc++] = forward[i];
+		argv[argc++] = values[i];
+	}
+	argv[argc] = nullptr;
+	if (_spawnv(_P_NOWAIT, exe, argv) == -1)
+	{
+		Com_Printf(S_COLOR_RED "Could not start %s\n", exe);
+		return qfalse;
+	}
+	Com_Printf("Starting %s\n", exe);
+	return qtrue;
+}
+#endif
+
 int main(int argc, char* argv[])
 {
 	char commandLine[MAX_STRING_CHARS] = { 0 };

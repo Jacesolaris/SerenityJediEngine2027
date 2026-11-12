@@ -1788,7 +1788,6 @@ static void wp_saber_hit_sound(const gentity_t* ent, const int saberNum, const i
 	const qboolean saberInBackAttack = PM_SaberInBackAttack(static_cast<saberMoveName_t>(ent->client->ps.saberMove));
 	const qboolean saberInLungeRoll = PM_LungRollAnim(ent->client->ps.torsoAnim);
 
-
 	const int index = Q_irand(1, 15);
 	const int index_stab = Q_irand(1, 11);
 	const int index_kill = Q_irand(1, 17);
@@ -2827,7 +2826,10 @@ static qboolean WP_SaberApplyDamage(gentity_t* ent, const float base_damage, con
 				// Checked first: the parry, hit-confirm and interrupt rules below must happen once per victim
 				// per swing. They ran before this check, i.e. on every frame of contact, so the hit-confirm
 				// halved weaponTime frame after frame down to its 50 ms minimum.
-				if (WP_SwingAlreadyHit(ent, victim))
+				// not the wampa holding me: its hang attack (BOTH_HANG_ATTACK) never starts a new swing (saberMove stays
+				// LS_READY), so after the first touch every later hang attack skipped it and the wampa could not be hurt
+				if (WP_SwingAlreadyHit(ent, victim)
+					&& !(ent->client->ps.eFlags & EF_HELD_BY_WAMPA && victim == ent->activator))
 				{
 					if (!PM_SaberInKata(static_cast<saberMoveName_t>(ent->client->ps.saberMove)) &&
 						!PM_SaberInKillMove(static_cast<saberMoveName_t>(ent->client->ps.saberMove)) &&
@@ -26161,7 +26163,6 @@ void WP_DeactivateSaber(const gentity_t* self, const qboolean clear_length)
 	const qboolean is_holding_block_button_and_attack = ((self->client->ps.ManualBlockingFlags & 1 << MBF_HOLDINGBLOCKANDATTACK) != 0) ? qtrue : qfalse;
 	//Active Blocking
 
-
 	if (blocking || is_holding_block_button_and_attack)
 	{
 		return;
@@ -26198,7 +26199,6 @@ void WP_DeactivateLightSaber(const gentity_t* self)
 	//Normal Blocking
 	const qboolean is_holding_block_button_and_attack = ((self->client->ps.ManualBlockingFlags & 1 << MBF_HOLDINGBLOCKANDATTACK) != 0) ? qtrue : qfalse;
 	//Active Blocking
-
 
 	if (blocking || is_holding_block_button_and_attack)
 	{

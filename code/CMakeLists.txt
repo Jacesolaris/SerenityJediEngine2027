@@ -113,7 +113,7 @@ if(BuildSPEngine OR BuildJK2SPEngine)
 
 	# Client files
 	set(SPEngineClientFiles
-		"${SPDir}/client/keys.h"
+		"${SharedDir}/client/keys.h"
 		"${SPDir}/client/keycodes.h"
 
 		"${SPDir}/client/cl_cgame.cpp"
@@ -156,7 +156,7 @@ if(BuildSPEngine OR BuildJK2SPEngine)
 		"${SPDir}/qcommon/cm_test.cpp"
 		"${SPDir}/qcommon/cm_trace.cpp"
 		"${SPDir}/qcommon/cm_local.h"
-		"${SPDir}/qcommon/cm_patch.h"
+		"${SharedDir}/qcommon/cm_patch.h"
 		"${SharedDir}/qcommon/cm_polylib.h"
 		"${SPDir}/qcommon/cm_public.h"
 
@@ -341,7 +341,7 @@ if(BuildSPEngine OR BuildJK2SPEngine)
 
 	if(WIN32)
 		set(SPEngineWin32Files
-			"${SPDir}/win32/resource.h"
+			"${SharedDir}/win32/resource.h"
 			"${SPDir}/win32/SerenityJediEngine2027-SP.rc"
 			)
 		source_group("win32" FILES ${SPEngineWin32Files})

@@ -7161,7 +7161,9 @@ void jedi_set_enemy_info(vec3_t enemy_dest, vec3_t enemy_dir, float* enemy_dist,
 		//figure out what dir the enemy's estimated position is from me and how far from the tip of my saber he is
 		VectorSubtract(enemy_dest, NPC->currentOrigin, enemy_dir); //NPC->client->renderInfo.muzzlePoint
 		//FIXME: enemy_dist calc needs to include all blade lengths, and include distance from hand to start of blade....
-		*enemy_dist = VectorNormalize(enemy_dir) - (NPC->client->ps.SaberLengthMax() + NPC->maxs[0] * 1.5 + 16);
+		// 2026-11-11 (DH, as MD 9 item 336: NPC vs NPC saber swings stopped just short of each other): the extra 16 units
+		// are left out, so saber NPCs keep a little closer (they back off below this distance) and only swing once in reach
+		*enemy_dist = VectorNormalize(enemy_dir) - (NPC->client->ps.SaberLengthMax() + NPC->maxs[0] * 1.5);
 	}
 	//init this to false
 	enemy_in_striking_range = qfalse;
@@ -7540,6 +7542,23 @@ static void Jedi_DebounceDirectionChanges()
 	}
 }
 
+// 2026-11-11 (DH): the distance a saber NPC stops pressing in at: body contact (both body radii + 4). Holding at the
+// full saber reach (item 314) and then at half of it (item 322) still left the NPCs too far away to land their swings.
+static float Jedi_SaberHoldDistance(const gentity_t* self, const gentity_t* enemy)
+{
+	const float body_contact = self->maxs[0] + enemy->maxs[0] + 4.0f;
+	return body_contact;
+}
+
+// qtrue while the enemy is still farther away than that (flat distance)
+static qboolean Jedi_OutsideSaberHoldDistance(const gentity_t* self, const gentity_t* enemy)
+{
+	vec3_t diff;
+	VectorSubtract(enemy->currentOrigin, self->currentOrigin, diff);
+	diff[2] = 0;
+	return VectorLength(diff) > Jedi_SaberHoldDistance(self, enemy) ? qtrue : qfalse;
+}
+
 // 2026-11-10 (DH: "the npc should stop pressing forward at saberlength distance", videos: the NPC walked into the
 // player's body and the fight turned into a shoving match): once the enemy is inside the NPC's saber reach (the same
 // reach jedi_set_enemy_info uses for "in striking range": longest blade + 1.5 x body radius + 16), any movement
@@ -7573,7 +7592,7 @@ static void Jedi_HoldAtSaberReach()
 	VectorSubtract(NPC->enemy->currentOrigin, NPC->currentOrigin, to_enemy);
 	to_enemy[2] = 0;
 	const float dist = VectorNormalize(to_enemy);
-	const float reach = ps->SaberLengthMax() + NPC->maxs[0] * 1.5f + 16.0f;
+	const float reach = Jedi_SaberHoldDistance(NPC, NPC->enemy); // 2026-11-11 (DH): body contact
 
 	if (dist > reach)
 	{
@@ -7821,9 +7840,9 @@ static void Jedi_CombatTimersUpdate(const int enemy_dist)
 						}
 					}
 				}
-				else if (enemy_dist > 0)
+				else if (NPC->enemy && Jedi_OutsideSaberHoldDistance(NPC, NPC->enemy))
 				{//postpone any strafing for a while
-					// 2026-11-10 (DH): only walk in while he is still out of saber reach (enemy_dist <= 0 = in reach);
+					// 2026-11-10 (DH): only walk in while he is still farther than the hold distance (2026-11-11: body contact);
 					// this walk-in used to run at any distance, even with the NPC already in the enemy's body
 					ucmd.forwardmove = 48;
 				}

@@ -28,9 +28,11 @@ thread at the next Submit / Sync so the caller can raise it there.
 #pragma once
 
 #include <condition_variable>
+#include <cstdio>
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <system_error>
 #include <thread>
 
 #include "q_profile.h"
@@ -72,8 +74,8 @@ public:
 		m_hasError = false;
 		try {
 			m_thread = std::thread( &RenderThread::ThreadMain, this );
-		} catch ( ... ) {
-			return false;
+		} catch ( const std::system_error & ) {
+			return false;	// the OS could not start the thread (item 355: only that error is caught)
 		}
 		return true;
 	}
@@ -203,7 +205,12 @@ private:
 				} catch ( const RenderThreadError &e ) {
 					err = e;
 					failed = true;
-				} catch ( ... ) {
+				} catch ( const std::exception &e ) {
+					// exceptions cannot cross threads: hand it to the main thread as an error, with its text
+					err.level = 0;	// ERR_FATAL
+					std::snprintf( err.message, sizeof( err.message ), "render thread: %s", e.what() );
+					failed = true;
+				} catch ( ... ) {	// anything else still has to reach the main thread the same way
 					err.level = 0;	// ERR_FATAL
 					strcpy( err.message, "render thread: unknown exception" );
 					failed = true;

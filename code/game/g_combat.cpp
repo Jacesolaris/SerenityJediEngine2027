@@ -2394,7 +2394,13 @@ static qboolean G_Dismember(gentity_t* ent, vec3_t point,
 	}
 	if (rotate_bone)
 	{
-		gi.G2API_SetNewOrigin(&limb->ghoul2[0], gi.G2API_AddBolt(&limb->ghoul2[0], rotate_bone));
+		// a model without that bone (saber droid, other droids) gave bolt -1: SetNewOrigin then threw "Bad bolt index
+		// (-1) trying to SetNewOrigin" and the game stopped (DH 2026-11-12, item 354)
+		const int limb_bolt = gi.G2API_AddBolt(&limb->ghoul2[0], rotate_bone);
+		if (limb_bolt >= 0)
+		{
+			gi.G2API_SetNewOrigin(&limb->ghoul2[0], limb_bolt);
+		}
 
 		//now let's try to position the limb at the *exact* right spot
 		const int new_bolt = gi.G2API_AddBolt(&ent->ghoul2[0], rotate_bone);
@@ -2638,8 +2644,31 @@ static float G_SaberSliceSegmentDist(const vec3_t p, const vec3_t a, const vec3_
 
 // every skeleton is cut where the cut table (tr_types.h SaberSlice_Seg) knows its bones; not vehicles,
 // the AT-ST or objects (DH 2026-10-31: saber cuts for every model)
+// the wampa or rancor that died while holding a victim (player_die drops the victim before the death cut, so its count is
+// already 0 there): no saber slice for it either
+static const gentity_t* s_noSliceDying = nullptr;
+struct NoSliceDyingGuard // restores s_noSliceDying when the function that set it returns
+{
+	const gentity_t* saved;
+	explicit NoSliceDyingGuard(const gentity_t* ent) : saved(s_noSliceDying) { s_noSliceDying = ent; }
+	~NoSliceDyingGuard() { s_noSliceDying = saved; }
+	NoSliceDyingGuard(const NoSliceDyingGuard&) = delete;
+	NoSliceDyingGuard& operator=(const NoSliceDyingGuard&) = delete;
+};
+
 static qboolean G_SaberSliceExcluded(const gentity_t* ent)
 {
+	if (ent == s_noSliceDying)
+	{
+		return qtrue;
+	}
+	// no saber slice while a wampa or rancor holds someone: not the creature that holds a victim, not the one it holds;
+	// they get the classic limb cuts (DH 2026-11-11)
+	if (((ent->client->NPC_class == CLASS_WAMPA || ent->client->NPC_class == CLASS_RANCOR) && ent->count && ent->activator)
+		|| ent->client->ps.eFlags & (EF_HELD_BY_WAMPA | EF_HELD_BY_RANCOR))
+	{
+		return qtrue;
+	}
 	switch (ent->client->NPC_class)
 	{
 	case CLASS_VEHICLE: case CLASS_ATST: case CLASS_OBJECT:
@@ -2887,7 +2916,10 @@ static qboolean G_SaberSlice(gentity_t* ent, const int hit_loc)
 			gi.G2API_PauseBoneAnimIndex(&piece->ghoul2[piece->playerModel], frozen_bone, cg.time);
 		}
 	}
-	gi.G2API_SetNewOrigin(&piece->ghoul2[0], bolt);
+	if (bolt >= 0) // item 354: never a bad bolt index into SetNewOrigin
+	{
+		gi.G2API_SetNewOrigin(&piece->ghoul2[0], bolt);
+	}
 	{
 		mdxaBone_t m;
 		vec3_t pivot;
@@ -3004,6 +3036,10 @@ static qboolean G_SaberSlice(gentity_t* ent, const int hit_loc)
 }
 
 // the old limb cut, or the saber slice when it's on
+// set while a wampa that held its attacker loses its arm (G_Damage, player_die): that is always the classic arm cut,
+// never a saber slice at the last hit point (the slice cut the chest instead and the arm stayed on)
+static qboolean s_wampaArmCut = qfalse;
+
 static qboolean G_SaberSliceOrDismember(gentity_t* ent, vec3_t point,
 	const char* limb_bone, const char* rotate_bone, const char* limb_name,
 	const char* limb_cap_name, const char* stub_cap_name, const char* limb_tag_name,
@@ -3011,7 +3047,7 @@ static qboolean G_SaberSliceOrDismember(gentity_t* ent, vec3_t point,
 	const int limb_anim, const float limb_roll_base, const float limb_pitch_base,
 	const int hit_loc)
 {
-	if (G_SaberSliceCvar()->integer && ent->client && !G_SaberSliceExcluded(ent))
+	if (!s_wampaArmCut && G_SaberSliceCvar()->integer && ent->client && !G_SaberSliceExcluded(ent))
 	{
 		if (G_SaberSlice(ent, hit_loc))
 		{
@@ -5376,6 +5412,9 @@ extern void G_Shop_Died(gentity_t* victim, gentity_t* attacker);
 
 void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, const int damage, const int means_of_death, const int dflags, const int hit_loc)
 {
+	// a wampa or rancor dying with a victim in its hand: no saber slice on it in this death (s_noSliceDying, DH 2026-11-11)
+	const NoSliceDyingGuard no_slice_dying(self->client && (self->client->NPC_class == CLASS_WAMPA || self->client->NPC_class == CLASS_RANCOR)
+		&& self->count && self->activator ? self : s_noSliceDying);
 	const int gun_shot = s_die_gun_shot;
 	s_die_gun_shot = GUN_SHOT_NONE;
 	int anim = 0;
@@ -5667,7 +5706,9 @@ void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 				if (self->activator && attacker == self->activator && means_of_death == MOD_SABER)
 				{
 					self->client->dismembered = false;
+					s_wampaArmCut = qtrue;
 					G_DoDismemberment(self, self->currentOrigin, MOD_SABER, HL_ARM_RT, qtrue);
+					s_wampaArmCut = qfalse;
 				}
 				Wampa_DropVictim(self);
 			}
@@ -6527,7 +6568,9 @@ void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 	//do any dismemberment if there's any to do...
 	// an own skeleton (SBD, droids, creatures) never gets DAMAGE_DISMEMBER from the saber code (no humanoid hit
 	// surfaces), so a killing saber blow on one always goes to the saber cut (DH 2026-10-31)
-	if ((dflags & DAMAGE_DISMEMBER || (means_of_death == MOD_SABER && (!g_standard_humanoid(self) || G_SaberSliceNoHitSurfaces(self))))
+	// not a wampa / rancor that died holding a victim: it only loses the arm (G_Damage), not also the upper body here
+	if (self != s_noSliceDying
+		&& (dflags & DAMAGE_DISMEMBER || (means_of_death == MOD_SABER && (!g_standard_humanoid(self) || G_SaberSliceNoHitSurfaces(self))))
 		&& G_DoDismemberment(self, self->pos1, means_of_death, hit_loc)
 		&& !special_anim)
 	{
@@ -9316,6 +9359,9 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const 
 			!(dflags & DAMAGE_NO_PROTECTION) &&
 			!(dflags & DAMAGE_DIE_ON_IMPACT)));
 
+	// a wampa killed while it holds a victim drops him here, before it dies: no saber slice on it until this damage is done
+	const NoSliceDyingGuard no_slice_wampa(targ->client && targ->client->NPC_class == CLASS_WAMPA && targ->count && targ->activator
+		&& take >= targ->health ? targ : s_noSliceDying);
 	if (targ->client
 		&& targ->client->NPC_class == CLASS_WAMPA
 		&& targ->count
@@ -9336,7 +9382,9 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const 
 			{
 				targ->client->dismembered = false;
 				//FIXME: the limb should just disappear, cuz I ate it
+				s_wampaArmCut = qtrue;
 				G_DoDismembermentnormal(targ, targ->currentOrigin, MOD_SABER, HL_ARM_RT, qtrue);
+				s_wampaArmCut = qfalse;
 			}
 		}
 		else

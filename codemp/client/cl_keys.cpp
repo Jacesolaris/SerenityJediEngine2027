@@ -1106,7 +1106,7 @@ void Key_SetBinding(const int keynum, const char* binding)
 Key_GetBinding
 ===================
 */
-char* Key_GetBinding(const int keynum)
+const char* Key_GetBinding(const int keynum)
 {
 	if (keynum < 0 || keynum >= MAX_KEYS)
 		return "";

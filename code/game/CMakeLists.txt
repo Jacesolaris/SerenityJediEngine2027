@@ -333,7 +333,7 @@ set(SPGameRavlFiles
 	"${SPDir}/Ravl/CVec.cpp"
 	"${SPDir}/Ravl/CBounds.h"
 	"${SPDir}/Ravl/CMatrix.h"
-	"${SPDir}/Ravl/CVec.h"
+	"${SharedDir}/Ravl/CVec.h"
 	)
 source_group("ravl" FILES ${SPGameRavlFiles})
 set(SPGameFiles ${SPGameFiles} ${SPGameRavlFiles})

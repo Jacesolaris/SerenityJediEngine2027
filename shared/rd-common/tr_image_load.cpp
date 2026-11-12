@@ -40,6 +40,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <system_error>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -304,9 +305,10 @@ namespace {
 				s_dec.threads.emplace_back(PF_DecodeThread, i);
 			}
 		}
-		catch (...)
+		catch (const std::system_error&)
 		{
-			// could not start a thread: the ones that did start still work; none = decode on the main thread
+			// the OS could not start a thread (item 355: only that error is caught): the ones that did start still
+			// work; none = decode on the main thread
 		}
 		return !s_dec.threads.empty();
 	}

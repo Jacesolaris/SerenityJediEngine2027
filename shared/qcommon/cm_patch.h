@@ -21,6 +21,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 ===========================================================================
 */
 
+#pragma once
+
 //#define	CULL_BBOX
 
 /*
@@ -61,13 +63,13 @@ properly.
 constexpr auto MAX_FACETS = 4096;
 constexpr auto MAX_PATCH_PLANES = 8192;
 
-using patchPlane_t = struct
+using patchPlane_t = struct patchPlane_s
 {
 	float plane[4];
 	int signbits; // signx + (signy<<1) + (signz<<2), used as lookup during collision
 };
 
-using facet_t = struct
+using facet_t = struct facet_s
 {
 	int surfacePlane;
 	int numBorders; // 3 or four + 6 axial bevels + 4 or 3 * 4 edge bevels
@@ -87,7 +89,7 @@ using patchCollide_t = struct patchCollide_s
 
 constexpr auto CM_MAX_GRID_SIZE = 129;
 
-using cGrid_t = struct
+using cGrid_t = struct cGrid_s
 {
 	int width;
 	int height;

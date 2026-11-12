@@ -676,7 +676,6 @@ void WP_DeactivateSaber(gentity_t* self)
 	const qboolean is_holding_block_button_and_attack = ((self->client->ps.ManualBlockingFlags & 1 << MBF_HOLDINGBLOCKANDATTACK) != 0) ? qtrue : qfalse;
 	//Active Blocking
 
-
 	if (blocking || is_holding_block_button_and_attack)
 	{
 		return;
@@ -5028,7 +5027,6 @@ qboolean G_DoDodge(gentity_t* self, gentity_t* shooter, vec3_t dmg_origin, int h
 		return qfalse;
 	}
 
-
 	if (self->client->ps.stats[STAT_DODGE] < 30)
 	{
 		//Not enough dodge
@@ -5686,7 +5684,6 @@ static qboolean G_DoSaberDodge(gentity_t* dodger, gentity_t* attacker, vec3_t dm
 		//can't dodge this.
 		return qfalse;
 	}
-
 
 	//check for private duel conditions
 	if (attacker && attacker->client)

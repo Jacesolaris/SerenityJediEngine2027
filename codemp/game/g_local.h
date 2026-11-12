@@ -1443,6 +1443,10 @@ typedef struct level_locals_s
 	char rawmapname[MAX_QPATH];
 
 	int numDeathmatchSpawns;
+
+	// Missions: target_gravity_change GLOBAL (JO doom_shields) sets the gravity for the rest of this map only
+	qboolean missionGravitySet;
+	float missionGravity;
 } level_locals_t;
 
 qboolean sje_is_ally(const gentity_t* ent, const gentity_t* other);
@@ -1747,6 +1751,11 @@ void BeginIntermission(void);
 void InitBodyQue(void);
 void ClientSpawn(gentity_t* ent);
 void player_die(gentity_t* self, const gentity_t* inflictor, gentity_t* attacker, const int damage, const int means_of_death);
+// Missions downed / revive (g_target.c)
+qboolean G_MissionDownPlayer(gentity_t* targ, int mod);
+qboolean G_MissionIsDowned(int clientNum);
+void G_MissionClearDown(int clientNum);
+void G_MissionDownThink(gentity_t* ent, usercmd_t* ucmd);
 void G_DroidVanishThink(gentity_t* ent);
 // wampa / rancor players and bots grab, hold and eat like the SP AI (NPC_AI_Wampa.c)
 int G_MonsterPlayerClass(const gentity_t* ent);
@@ -2079,3 +2088,14 @@ void G_RegisterCvars(void);
 void G_UpdateCvars(void);
 
 extern gameImport_t* trap;
+
+// Obstacle climb (DH 2026-11-12, g_obstacleClimb; NPC_move.c): what blocks an NPC or a bot who is stuck on his way,
+// shared by NPC_ObstacleClimb and the bots' bot_obstacle_climb (ai_main.c)
+#define OC_PROBE_CLEAR	0	// nothing solid ahead
+#define OC_PROBE_PERSON	1	// someone in the way
+#define OC_PROBE_WALL	2	// something he can't get onto
+#define OC_PROBE_LEDGE	3	// a ledge he can get onto
+int OC_Probe(const gentity_t* ent, const vec3_t dir, float max_climb, float* top_z);
+qboolean OC_FindSideStep(const gentity_t* ent, const vec3_t dir, vec3_t out);
+qboolean OC_GroundBelow(const gentity_t* ent, const vec3_t pos, float dist);
+void NPC_ObstacleClimb(void);

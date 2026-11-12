@@ -34,7 +34,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include <cmath>
 #include <cstdio>
 #include <cfloat>
-#include "CVec.h"
+#include "Ravl/CVec.h"
 
 //using namespace ravl;
 

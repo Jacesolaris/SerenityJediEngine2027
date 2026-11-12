@@ -2033,6 +2033,9 @@ static void NPC_ExecuteBState(const gentity_t* self) //, int msec )
 	//cliff and wall avoidance
 	NPC_AvoidWallsAndCliffs();
 
+	// stuck against something on the way: climb / jump onto it or go round it (g_obstacleClimb, NPC_move.c)
+	NPC_ObstacleClimb();
+
 	// run the bot through the server like it was a real client
 	//=== Save the ucmd for the second no-think Pmove ============================
 	NPCS.ucmd.serverTime = level.time - 50;

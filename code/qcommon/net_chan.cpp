@@ -484,37 +484,58 @@ LOOPBACK BUFFERS FOR LOCAL PLAYER
 
 qboolean NET_GetLoopPacket(const netsrc_t sock, netadr_t* net_from, msg_t* net_message)
 {
-	try
+	// Plain checks instead of a catch-all (item 355; loopbacks is a pointer to two Z_Malloc'd slots, so no ARRAY_LEN): a memcpy past a buffer is not a C++ exception, so the
+	// old catch (...) never helped, and it could swallow a Com_Error on its way to Com_Frame.
+	if (!loopbacks || (sock != NS_CLIENT && sock != NS_SERVER) || !net_from || !net_message)
 	{
-		loopback_t* loop = &loopbacks[sock];
-
-		if (loop->send - loop->get > MAX_LOOPBACK)
-			loop->get = loop->send - MAX_LOOPBACK;
-
-		if (loop->get >= loop->send)
-			return qfalse;
-
-		const int i = loop->get & MAX_LOOPBACK - 1;
-		loop->get++;
-
-		Com_Memcpy(net_message->data, loop->msgs[i].data, loop->msgs[i].datalen);
-		net_message->cursize = loop->msgs[i].datalen;
-		Com_Memset(net_from, 0, sizeof * net_from);
-		net_from->type = NA_LOOPBACK;
-		return qtrue;
+		return qfalse;
 	}
-	catch (...)
+
+	loopback_t* loop = &loopbacks[sock];
+
+	if (loop->send - loop->get > MAX_LOOPBACK)
 	{
-		Com_Printf(S_COLOR_RED "ERROR: You just tried to crash the game! Shame on you!" S_COLOR_WHITE "\n");
+		loop->get = loop->send - MAX_LOOPBACK;
 	}
-	return qfalse; // SJE: catch path fell off the end of a non-void function (undefined behaviour)
+
+	if (loop->get >= loop->send)
+	{
+		return qfalse;
+	}
+
+	const int i = loop->get & (MAX_LOOPBACK - 1);
+	loop->get++;
+
+	const int length = loop->msgs[i].datalen;
+	if (length < 0 || length > net_message->maxsize)
+	{
+		Com_Printf(S_COLOR_YELLOW "NET_GetLoopPacket: dropped a %i byte packet (buffer %i)\n", length, net_message->maxsize);
+		return qfalse;
+	}
+
+	Com_Memcpy(net_message->data, loop->msgs[i].data, length);
+	net_message->cursize = length;
+	Com_Memset(net_from, 0, sizeof(*net_from));
+	net_from->type = NA_LOOPBACK;
+	return qtrue;
 }
 
 static void NET_SendLoopPacket(const netsrc_t sock, const int length, const void* data, netadr_t to)
 {
+	if (!loopbacks || (sock != NS_CLIENT && sock != NS_SERVER) || !data)
+	{
+		return;
+	}
+	if (length < 0 || length > static_cast<int>(sizeof(loopbacks[0].msgs[0].data)))
+	{
+		Com_Printf(S_COLOR_YELLOW "NET_SendLoopPacket: dropped a %i byte packet (max %i)\n", length,
+			static_cast<int>(sizeof(loopbacks[0].msgs[0].data)));
+		return;
+	}
+
 	loopback_t* loop = &loopbacks[sock ^ 1];
 
-	const int i = loop->send & MAX_LOOPBACK - 1;
+	const int i = loop->send & (MAX_LOOPBACK - 1);
 	loop->send++;
 
 	Com_Memcpy(loop->msgs[i].data, data, length);

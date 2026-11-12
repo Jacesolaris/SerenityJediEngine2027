@@ -1409,22 +1409,22 @@ static void Svcmd_Scale_f()
 	}
 	else if (gi.argc() == 2)
 	{
-		try
-		{
-			const int value = std::stoi(gi.argv(1));
+		// Whole numbers only, checked without exceptions (item 355: was std::stoi inside a catch-all).
+		const char* arg = gi.argv(1);
+		char* end = nullptr;
+		const long value = strtol(arg, &end, 10);
 
-			if (value < 30 || value > 150)
-			{
-				gi.Printf(S_COLOR_RED "ERROR: Scale must be between 30 and 150. You put %i." S_COLOR_WHITE "\n", value);
-			}
-			else
-			{
-				player->s.modelScale[0] = player->s.modelScale[1] = player->s.modelScale[2] = value / 100.0f;
-			}
-		}
-		catch (...)
+		if (end == arg || *end != '\0')
 		{
-			gi.Printf(S_COLOR_RED "ERROR: You just tried to crash the game! Shame on you!" S_COLOR_WHITE "\n");
+			gi.Printf(S_COLOR_RED "ERROR: Scale must be a whole number between 30 and 150. You put %s." S_COLOR_WHITE "\n", arg);
+		}
+		else if (value < 30 || value > 150)
+		{
+			gi.Printf(S_COLOR_RED "ERROR: Scale must be between 30 and 150. You put %ld." S_COLOR_WHITE "\n", value);
+		}
+		else if (player)
+		{
+			player->s.modelScale[0] = player->s.modelScale[1] = player->s.modelScale[2] = static_cast<float>(value) / 100.0f;
 		}
 	}
 }

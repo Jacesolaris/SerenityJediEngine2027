@@ -25,15 +25,22 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // font support
 
 // This file is shared in the single and multiplayer codebases, so be CAREFUL WHAT YOU ADD/CHANGE!!!!!
+// (one copy in shared/rd-common since 2026-11-11; SP-only / MP-only lines are under RD_FONT_SP)
 
 #pragma once
 
-#include "../qcommon/q_shared.h"
+#include "qcommon/q_shared.h"
 
-void R_ShutdownFonts(void);
-void R_InitFonts(void);
+#if defined(_JK2EXE) || defined(REND2_SP)
+#define RD_FONT_SP	// SP exe and SP renderers
+#endif
+
+void R_ShutdownFonts();
+void R_InitFonts();
 int RE_RegisterFont(const char* psName);
+#ifndef RD_FONT_SP
 float RE_Font_StrLenPixelsNew(const char* psText, int iFontHandle, float fScale = 1.0f);
+#endif
 int RE_Font_StrLenPixels(const char* psText, int iFontHandle, float fScale = 1.0f);
 int RE_Font_StrLenChars(const char* psText);
 int RE_Font_HeightPixels(int iFontHandle, float fScale = 1.0f);
@@ -45,9 +52,14 @@ void RE_Font_DrawString(int ox, int oy, const char* psText, const float* rgba, i
 //
 // so instead we have to use this messier method...
 //
+#ifdef RD_FONT_SP
+unsigned int AnyLanguage_ReadCharFromString(char* psText, int* piAdvanceCount, qboolean* pbIsTrailingPunctuation = nullptr);
+unsigned int AnyLanguage_ReadCharFromString(char** psText, qboolean* pbIsTrailingPunctuation = nullptr);
+#else
 unsigned int AnyLanguage_ReadCharFromString(const char* psText, int* piAdvanceCount, qboolean* pbIsTrailingPunctuation = nullptr);
+#endif
 
-qboolean Language_IsAsian(void);
-qboolean Language_UsesSpaces(void);
+qboolean Language_IsAsian();
+qboolean Language_UsesSpaces();
 
 // end

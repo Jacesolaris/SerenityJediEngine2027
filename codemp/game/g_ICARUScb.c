@@ -8194,7 +8194,7 @@ static void G_MissionWipeCheck(void)
 			continue;
 		}
 		inGame++;
-		if (ent->health > 0 && ent->client->ps.pm_type != PM_DEAD)
+		if (ent->health > 0 && ent->client->ps.pm_type != PM_DEAD && !G_MissionIsDowned(i)) // (a downed player is not up, g_target.c)
 		{
 			alive++;
 		}

@@ -157,6 +157,7 @@ cvar_t* g_developer;
 cvar_t* g_timescale;
 cvar_t* g_knockback;
 cvar_t* g_dismemberment;
+cvar_t* g_Bloodmist; // 1: blood effects on wampa claw hits (2026-11-11, as in MD 9 / MD 8)
 cvar_t* g_corpseRemovalTime;
 
 cvar_t* g_synchSplitAnims;
@@ -705,6 +706,7 @@ static void G_InitCvars()
 	g_spskill = gi.cvar("g_spskill", "2", CVAR_ARCHIVE | CVAR_SAVEGAME | CVAR_NORESTART);
 	g_knockback = gi.cvar("g_knockback", "1000", 0);
 	g_dismemberment = gi.cvar("g_dismemberment", "3", CVAR_ARCHIVE);
+	g_Bloodmist = gi.cvar("g_Bloodmist", "1", CVAR_ARCHIVE); // the wampa claw hit blood (AI_Wampa.cpp), as in MD 9
 	//0 = none, 1 = arms and hands, 2 = legs, 3 = waist and head
 	// for now I'm making default 10 seconds
 	g_corpseRemovalTime = gi.cvar("g_corpseRemovalTime", "10", CVAR_ARCHIVE);
@@ -883,6 +885,8 @@ static void G_InitCvars()
 	g_allowgunnerbash = gi.cvar("g_allowgunnerbash", "1", CVAR_ARCHIVE | CVAR_SAVEGAME | CVAR_NORESTART);
 	// Squad tactics: only g_squadAdvancers gunners per target push in, the others hold position (AI_Stormtrooper.cpp)
 	g_squadTactics = gi.cvar("g_squadTactics", "1", CVAR_ARCHIVE);
+	// NPCs stuck against something on the way climb / jump onto it or go round it (NPC_ObstacleClimb) (DH 2026-11-12)
+	g_obstacleClimb = gi.cvar("g_obstacleClimb", "1", CVAR_ARCHIVE);
 	g_squadAdvancers = gi.cvar("g_squadAdvancers", "2", CVAR_ARCHIVE);
 	g_squadDebug = gi.cvar("g_squadDebug", "0", 0); // 1: print each squad's roles once a second
 	g_squadCommandCooldown = gi.cvar("g_squadCommandCooldown", "60", CVAR_ARCHIVE); // seconds between two orders on the same target
@@ -2287,6 +2291,7 @@ constexpr auto CLOAK_REFUEL_RATE = 100; //seems fair;
 
 constexpr auto JETPACK_DEFUEL_RATE = 500; //approx. 50 seconds of idle use from a fully charged fuel amt;
 constexpr auto JETPACK_REFUEL_RATE = 150; //seems fair;
+constexpr auto JETPACK_RECHARGE_RATE = 40; //jetpack refill only: one fuel point every 50 ms server frame, full tank in about 5 s (was 150 = 20 s)
 
 constexpr auto SPRINT_DEFUEL_RATE = 150;
 constexpr auto ENHANCED_REFUEL_RATE = 75; //seems fair;
@@ -2459,7 +2464,7 @@ void G_RunFrame(const int levelTime)
 		}
 
 		//The player
-		if (i == 0)
+		if (i == 0 && ent->client) // the player (entity 0 always has a client; the check is for code analysis, C6011)
 		{
 			if (ent->client->ps.powerups[PW_CLOAKED])
 			{
@@ -2549,10 +2554,12 @@ void G_RunFrame(const int levelTime)
 				if (ent->client->jetPackDebReduce < level.time)
 				{
 					if ((ent->client->usercmd.forwardmove || ent->client->usercmd.upmove || ent->client->usercmd.
-						rightmove) && ent->client->jetPackOn)
+						rightmove) && ent->client->jetPackOn && !ent->client->flamethrowerOn)
 					{
 						//take more if they're thrusting (usercmd: pers.cmd is never filled in SP)
-						ent->client->ps.jetpackFuel -= 10;
+						//2, not 10: since the usercmd fix (item 307) this really applies, and 10 emptied the tank in
+						//about 5.5 s of flight. 2 = about 27 s of thrust. Flamethrower in flight keeps its 4 (below).
+						ent->client->ps.jetpackFuel -= 2;
 					}
 					else if (ent->client->flamethrowerOn && ent->client->jetPackOn)
 					{
@@ -2589,7 +2596,7 @@ void G_RunFrame(const int levelTime)
 					jetPackOn)
 				{
 					ent->client->ps.jetpackFuel++;
-					ent->client->jetPackDebRecharge = level.time + JETPACK_REFUEL_RATE;
+					ent->client->jetPackDebRecharge = level.time + JETPACK_RECHARGE_RATE;
 				}
 			}
 
@@ -2762,7 +2769,7 @@ qboolean is_outcast_map()
 		|| strcmp(s, "yavin_temple") == 0
 		|| strcmp(s, "yavin_trial") == 0
 		|| strcmp(s, "ns_streets") == 0
-		|| strcmp(s, "ns_hiedeout") == 0
+		|| strcmp(s, "ns_hideout") == 0
 		|| strcmp(s, "ns_starpad") == 0
 		|| strcmp(s, "bespin_undercity") == 0
 		|| strcmp(s, "bespin_streets") == 0

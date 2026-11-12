@@ -39,7 +39,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include <algorithm>
 #include "../rd-common/tr_common.h"
 #include "tr_WorldEffects.h"
-#include "tr_meshcloth.h"
+#include "rd-vanilla/tr_meshcloth.h"
 #include "qcommon/MiniHeap.h"
 #include "ghoul2/g2_local.h"
 

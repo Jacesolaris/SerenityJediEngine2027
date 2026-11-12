@@ -629,16 +629,9 @@ qboolean WP_LobFire(const gentity_t* self, vec3_t start, vec3_t target, vec3_t m
 	if (hit_count >= max_hits)
 	{
 		//NOTE: worst case scenario, use the one that impacted closest to the target (or just use the first try...?)
-		try
-		{
-			//assert((failCase[0] + failCase[1] + failCase[2]) > 0.0f);
-			VectorCopy(fail_case, velocity);
-			return qfalse;
-		}
-		catch (...)
-		{
-			gi.Printf(S_COLOR_RED "ERROR: You just tried to crash the game! Shame on you!" S_COLOR_WHITE "\n");
-		}
+		// (item 355: a vector copy cannot throw, so the old try / catch-all around it is gone)
+		VectorCopy(fail_case, velocity);
+		return qfalse;
 	}
 	VectorCopy(shot_vel, velocity);
 	return qtrue;

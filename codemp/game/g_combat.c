@@ -8916,6 +8916,13 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, vec3_t
 			}
 		}
 
+		// Missions: a lethal hit puts a player down instead while a teammate is up (g_target.c G_MissionDownPlayer)
+		if (targ->health <= 0 && targ->client && G_MissionDownPlayer(targ, mod))
+		{
+			targ->health = 1;
+			targ->client->ps.stats[STAT_HEALTH] = 1;
+		}
+
 		//We want to go ahead and set gPainHitLoc regardless of if we have a pain func,
 		//so we can adjust the location damage too.
 		if (targ->client && targ->ghoul2 && targ->client->g2LastSurfaceTime == level.time)

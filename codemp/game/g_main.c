@@ -509,7 +509,7 @@ void G_InitGame(int levelTime, int randomSeed, int restart)
 		Q_stricmp(sje_mapname, "artus_mine") == 0 || Q_stricmp(sje_mapname, "artus_detention") == 0 ||
 		Q_stricmp(sje_mapname, "artus_topside") == 0 || Q_stricmp(sje_mapname, "valley") == 0 ||
 		Q_stricmp(sje_mapname, "yavin_temple") == 0 || Q_stricmp(sje_mapname, "yavin_trial") == 0 ||
-		Q_stricmp(sje_mapname, "ns_streets") == 0 || Q_stricmp(sje_mapname, "ns_hiedeout") == 0 ||
+		Q_stricmp(sje_mapname, "ns_streets") == 0 || Q_stricmp(sje_mapname, "ns_hideout") == 0 ||
 		Q_stricmp(sje_mapname, "ns_starpad") == 0 || Q_stricmp(sje_mapname, "bespin_undercity") == 0 ||
 		Q_stricmp(sje_mapname, "bespin_streets") == 0 || Q_stricmp(sje_mapname, "bespin_platform") == 0 ||
 		Q_stricmp(sje_mapname, "cairn_bay") == 0 || Q_stricmp(sje_mapname, "cairn_assembly") == 0 ||
@@ -531,7 +531,7 @@ void G_InitGame(int levelTime, int randomSeed, int restart)
 		Q_stricmp(sje_mapname, "artus_mine") == 0 || Q_stricmp(sje_mapname, "artus_detention") == 0 ||
 		Q_stricmp(sje_mapname, "artus_topside") == 0 || Q_stricmp(sje_mapname, "valley") == 0 ||
 		Q_stricmp(sje_mapname, "yavin_temple") == 0 || Q_stricmp(sje_mapname, "yavin_trial") == 0 ||
-		Q_stricmp(sje_mapname, "ns_streets") == 0 || Q_stricmp(sje_mapname, "ns_hiedeout") == 0 ||
+		Q_stricmp(sje_mapname, "ns_streets") == 0 || Q_stricmp(sje_mapname, "ns_hideout") == 0 ||
 		Q_stricmp(sje_mapname, "ns_starpad") == 0 || Q_stricmp(sje_mapname, "bespin_undercity") == 0 ||
 		Q_stricmp(sje_mapname, "bespin_streets") == 0 || Q_stricmp(sje_mapname, "bespin_platform") == 0 ||
 		Q_stricmp(sje_mapname, "cairn_bay") == 0 || Q_stricmp(sje_mapname, "cairn_assembly") == 0 ||

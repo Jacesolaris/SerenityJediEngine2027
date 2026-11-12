@@ -820,3 +820,495 @@ qboolean NPC_CheckFallPositionOK(const gentity_t* NPC, vec3_t position)
 
 	return qtrue;
 }
+
+/*
+-------------------------
+NPC_ObstacleClimb
+
+Obstacle climb (DH 2026-11-12, g_obstacleClimb 1): an NPC who is trying to get somewhere but has stood pressed against
+something for OC_STUCK_TIME looks at what is in his way:
+- a ledge he can get onto (a plain hop up to OC_HOP_HEIGHT, higher with force jump, by his force jump level) he jumps
+  straight up beside it and, once his feet are over the top, on over the edge (straight up first, so he never touches
+  the wall on the way up and the wall grab / rebound never starts);
+- a wall too high, a ledge with no room or no floor on top, or a class that can't jump (droids, beasts, ATST...,
+  SCF_NO_ACROBATICS): he steps round it to the side that is open, or backs off a little for the steering to try again.
+People in the way are left to the normal avoidance, he only climbs toward where he is going (not a sideways strafe in a
+fight), and never in a cutscene, in the air, swimming, on a ladder, flying or while busy with a knockdown or roll.
+Called once a think, just before the ucmd goes to ClientThink.
+-------------------------
+*/
+cvar_t* g_obstacleClimb;
+extern bool in_camera;
+
+constexpr float OC_STEP = 18.0f; // pmove step height: anything lower he walks up
+constexpr float OC_STUCK_SPEED = 60.0f; // a moving NPC slower than this is pressed against something
+constexpr int OC_STUCK_TIME = 600; // ms pressed against it before he does something about it
+constexpr float OC_HOP_HEIGHT = 46.0f; // highest ledge a plain jump gets onto (31 up + a step)
+constexpr float OC_PROBE_DIST = 24.0f; // how far ahead he looks for what blocks him
+constexpr float OC_PUSH_SPEED = 200.0f; // speed over the edge once his feet are above it
+constexpr int OC_CLIMB_TIMEOUT = 1800;
+
+enum
+{
+	OC_NONE,
+	OC_CLIMB,
+	OC_SIDESTEP,
+	OC_BACKOFF
+};
+
+enum
+{
+	OC_PROBE_CLEAR,
+	// nothing solid ahead
+	OC_PROBE_PERSON,
+	// someone in the way
+	OC_PROBE_WALL,
+	// something he can't get onto
+	OC_PROBE_LEDGE // a ledge he can get onto
+};
+
+struct obstacleClimb_t
+{
+	int lastSeen;
+	int stuckSince;
+	int mode;
+	int modeStart;
+	int modeEnd;
+	int nextTry;
+	int climbFails; // climbs in a row that didn't get him up
+	int roundTries; // side steps / back offs in a row
+	int lastEnd;
+	vec3_t dir;
+	float topZ;
+	qboolean pushed;
+};
+
+static obstacleClimb_t oc_state[MAX_GENTITIES];
+
+static qboolean OC_ClassCanJump(const gentity_t* ent)
+{
+	switch (ent->client->NPC_class)
+	{
+	case CLASS_ATST:
+	case CLASS_FISH:
+	case CLASS_FLIER2:
+	case CLASS_GLIDER:
+	case CLASS_GONK:
+	case CLASS_RANCOR:
+	case CLASS_SAND_CREATURE:
+	case CLASS_INTERROGATOR:
+	case CLASS_LIZARD:
+	case CLASS_MARK1:
+	case CLASS_MARK2:
+	case CLASS_GALAKMECH:
+	case CLASS_MINEMONSTER:
+	case CLASS_MOUSE:
+	case CLASS_MURJJ:
+	case CLASS_PROBE:
+	case CLASS_PROTOCOL:
+	case CLASS_R2D2:
+	case CLASS_R5D2:
+	case CLASS_REMOTE:
+	case CLASS_SEEKER:
+	case CLASS_SENTRY:
+	case CLASS_SWAMP:
+	case CLASS_VEHICLE:
+	case CLASS_SBD:
+	case CLASS_BATTLEDROID:
+	case CLASS_DROIDEKA:
+	case CLASS_OBJECT:
+		return qfalse;
+	default:
+		return qtrue;
+	}
+}
+
+// highest ledge (feet to top) he can get onto
+static float OC_MaxClimb(const gentity_t* ent)
+{
+	if (!OC_ClassCanJump(ent) || !ent->NPC || (ent->NPC->scriptFlags & SCF_NO_ACROBATICS) != 0)
+	{
+		return 0.0f;
+	}
+	if ((ent->client->ps.forcePowersKnown & (1 << FP_LEVITATION)) == 0)
+	{
+		return OC_HOP_HEIGHT;
+	}
+	// force jump heights (96 / 192 / 384) + a step, less a margin
+	const int level = ent->client->ps.forcePowerLevel[FP_LEVITATION];
+	if (level >= 3)
+	{
+		return 392.0f;
+	}
+	if (level == 2)
+	{
+		return 200.0f;
+	}
+	if (level == 1)
+	{
+		return 104.0f;
+	}
+	return OC_HOP_HEIGHT;
+}
+
+static void OC_Trace(trace_t* tr, const gentity_t* ent, const vec3_t start, const vec3_t mins, const vec3_t maxs,
+	const vec3_t end, const int mask)
+{
+	gi.trace(tr, start, mins, maxs, end, ent->s.number, mask, static_cast<EG2_Collision>(0), 0);
+}
+
+// is there ground within dist below pos (so a side step or back off doesn't walk him off a cliff)?
+static qboolean OC_GroundBelow(const gentity_t* ent, const vec3_t pos, const float dist)
+{
+	trace_t tr;
+	vec3_t end;
+	VectorCopy(pos, end);
+	end[2] -= dist;
+	OC_Trace(&tr, ent, pos, ent->mins, ent->maxs, end, ent->clipmask | CONTENTS_BOTCLIP);
+	return !tr.startsolid && !tr.allsolid && tr.fraction < 1.0f ? qtrue : qfalse;
+}
+
+// what blocks him in dir; for a ledge he can get onto (no higher than max_climb) *top_z is its top (feet height)
+static int OC_Probe(const gentity_t* ent, const vec3_t dir, const float max_climb, float* top_z)
+{
+	trace_t tr;
+	vec3_t mins, start, end;
+	const float* org = ent->currentOrigin;
+	const int mask = ent->clipmask | CONTENTS_BOTCLIP; // a do-not-enter brush is a wall too
+	const float feet = org[2] + ent->mins[2];
+
+	// something above step height right in front of him?
+	VectorCopy(ent->mins, mins);
+	mins[2] += OC_STEP + 1.0f;
+	if (mins[2] >= ent->maxs[2])
+	{
+		mins[2] = ent->maxs[2] - 1.0f;
+	}
+	VectorMA(org, OC_PROBE_DIST, dir, end);
+	OC_Trace(&tr, ent, org, mins, ent->maxs, end, mask);
+	if (tr.startsolid || tr.allsolid || tr.fraction >= 1.0f)
+	{
+		return OC_PROBE_CLEAR;
+	}
+	if (tr.entityNum >= 0 && tr.entityNum < ENTITYNUM_WORLD && g_entities[tr.entityNum].client)
+	{
+		return OC_PROBE_PERSON;
+	}
+	if (max_climb <= OC_STEP)
+	{
+		return OC_PROBE_WALL;
+	}
+	const float wall_dist = tr.fraction * OC_PROBE_DIST;
+
+	// how high can he rise where he stands?
+	VectorCopy(org, end);
+	end[2] += max_climb + 4.0f;
+	OC_Trace(&tr, ent, org, ent->mins, ent->maxs, end, mask);
+	if (tr.startsolid || tr.allsolid)
+	{
+		return OC_PROBE_WALL;
+	}
+	const float rise = tr.endpos[2] - org[2];
+
+	// lowest height from which he can move across onto a floor on top
+	for (int h = 32; h <= static_cast<int>(rise); h += 24)
+	{
+		VectorCopy(org, start);
+		start[2] += static_cast<float>(h);
+		VectorMA(start, wall_dist + ent->maxs[0] + 8.0f, dir, end);
+		OC_Trace(&tr, ent, start, ent->mins, ent->maxs, end, mask);
+		if (tr.startsolid || tr.allsolid || tr.fraction < 1.0f)
+		{
+			continue; // the wall goes higher still
+		}
+		VectorCopy(end, start);
+		end[2] = org[2] + OC_STEP;
+		OC_Trace(&tr, ent, start, ent->mins, ent->maxs, end, mask);
+		if (tr.startsolid || tr.allsolid || tr.fraction >= 1.0f || tr.plane.normal[2] < 0.7f)
+		{
+			return OC_PROBE_WALL; // nothing to stand on up there (a rail with a drop behind it), or too steep
+		}
+		*top_z = tr.endpos[2] + ent->mins[2];
+		const float dz = *top_z - feet;
+		return dz > OC_STEP && dz <= max_climb ? OC_PROBE_LEDGE : OC_PROBE_WALL;
+	}
+	return OC_PROBE_WALL;
+}
+
+// an open side (left or right of dir, either first) he can step to, without a drop
+static qboolean OC_FindSideStep(const gentity_t* ent, const vec3_t dir, vec3_t out)
+{
+	trace_t tr;
+	vec3_t mins, side, end, start;
+	const float* org = ent->currentOrigin;
+	const int mask = ent->clipmask | CONTENTS_BOTCLIP;
+	const float first = Q_irand(0, 1) ? 1.0f : -1.0f;
+
+	VectorCopy(ent->mins, mins);
+	mins[2] += OC_STEP + 1.0f;
+	if (mins[2] >= ent->maxs[2])
+	{
+		mins[2] = ent->maxs[2] - 1.0f;
+	}
+	for (int i = 0; i < 2; i++)
+	{
+		const float s = i ? -first : first;
+		VectorSet(side, -dir[1] * s, dir[0] * s, 0.0f);
+		VectorMA(org, 64.0f, side, end);
+		OC_Trace(&tr, ent, org, mins, ent->maxs, end, mask);
+		if (tr.startsolid || tr.allsolid || tr.fraction < 0.5f)
+		{
+			continue;
+		}
+		VectorCopy(tr.endpos, start);
+		if (!OC_GroundBelow(ent, start, 48.0f))
+		{
+			continue;
+		}
+		VectorMA(start, 48.0f, dir, end);
+		OC_Trace(&tr, ent, start, mins, ent->maxs, end, mask);
+		if (tr.startsolid || tr.allsolid || tr.fraction < 1.0f)
+		{
+			continue;
+		}
+		VectorCopy(side, out);
+		return qtrue;
+	}
+	return qfalse;
+}
+
+static void OC_EndMode(obstacleClimb_t* oc)
+{
+	oc->mode = OC_NONE;
+	oc->stuckSince = 0;
+	oc->lastEnd = level.time;
+	oc->nextTry = level.time + 300;
+}
+
+// which way he is trying to go (flat); qfalse if he isn't trying to go anywhere
+static qboolean OC_WantDir(vec3_t out)
+{
+	const playerState_t* ps = &NPC->client->ps;
+
+	if (ps->speed > 0.0f && (ucmd.forwardmove || ucmd.rightmove)
+		&& (ps->moveDir[0] != 0.0f || ps->moveDir[1] != 0.0f))
+	{
+		VectorSet(out, ps->moveDir[0], ps->moveDir[1], 0.0f);
+	}
+	else if (ucmd.forwardmove || ucmd.rightmove)
+	{
+		vec3_t forward, right;
+		AngleVectors(NPC->currentAngles, forward, right, nullptr);
+		VectorScale(forward, ucmd.forwardmove, out);
+		VectorMA(out, ucmd.rightmove, right, out);
+		out[2] = 0.0f;
+	}
+	else if (NPCInfo->aiFlags & NPCAI_BLOCKED && NPCInfo->blockedDebounceTime
+		&& level.time - NPCInfo->blockedDebounceTime > OC_STUCK_TIME)
+	{
+		VectorSubtract(NPCInfo->blockedTargetPosition, NPC->currentOrigin, out); // the steering gave up against it
+		out[2] = 0.0f;
+	}
+	else
+	{
+		return qfalse;
+	}
+	return VectorNormalize(out) > 0.1f ? qtrue : qfalse;
+}
+
+void NPC_ObstacleClimb()
+{
+	if (!g_obstacleClimb || !g_obstacleClimb->integer || !NPC || !NPC->client || !NPCInfo)
+	{
+		return;
+	}
+	obstacleClimb_t* oc = &oc_state[NPC->s.number];
+	if (!oc->lastSeen || level.time < oc->lastSeen || level.time - oc->lastSeen > 1000)
+	{
+		memset(oc, 0, sizeof(*oc)); // new NPC in this slot, or a new level / load
+	}
+	oc->lastSeen = level.time;
+
+	playerState_t* ps = &NPC->client->ps;
+	const qboolean on_ground = ps->groundEntityNum != ENTITYNUM_NONE ? qtrue : qfalse;
+
+	if (in_camera || NPC->health <= 0 || ps->pm_type != PM_NORMAL
+		|| NPC->waterlevel >= 2 || NPC->watertype & CONTENTS_LADDER
+		|| NPC->client->moveType == MT_FLYSWIM || NPCInfo->scriptFlags & SCF_NAV_CAN_FLY || NPC_IsJetpacking(NPC)
+		|| NPC->s.m_iVehicleNum || NPC->s.eFlags & (EF_LOCKED_TO_WEAPON | EF_HELD_BY_RANCOR | EF_HELD_BY_WAMPA |
+			EF_HELD_BY_SAND_CREATURE)
+		|| PM_InKnockDown(ps) || PM_InRoll(ps)
+		|| NPCInfo->jumpTime || NPCInfo->jumpBackupTime > level.time) // his own jump code is busy
+	{
+		oc->mode = OC_NONE;
+		oc->stuckSince = 0;
+		return;
+	}
+
+	const float feet = NPC->currentOrigin[2] + NPC->mins[2];
+
+	switch (oc->mode)
+	{
+	case OC_CLIMB:
+		if (level.time - oc->modeStart > OC_CLIMB_TIMEOUT || (on_ground && level.time - oc->modeStart > 250))
+		{
+			oc->climbFails = feet < oc->topZ - 4.0f ? oc->climbFails + 1 : 0; // up there, or back down where he started
+			OC_EndMode(oc);
+			return;
+		}
+		if (!oc->pushed)
+		{
+			if (feet >= oc->topZ + 1.0f)
+			{
+				// feet over the top: on over the edge
+				ps->velocity[0] = oc->dir[0] * OC_PUSH_SPEED;
+				ps->velocity[1] = oc->dir[1] * OC_PUSH_SPEED;
+				oc->pushed = qtrue;
+			}
+			else
+			{
+				// still rising: straight up, no steering into the wall
+				ucmd.forwardmove = 0;
+				ucmd.rightmove = 0;
+				ucmd.upmove = 0;
+				VectorClear(ps->moveDir);
+				ps->velocity[0] = 0.0f;
+				ps->velocity[1] = 0.0f;
+				return;
+			}
+		}
+		{
+			vec3_t dir;
+			VectorCopy(oc->dir, dir);
+			G_UcmdMoveForDir(NPC, &ucmd, dir);
+			ucmd.upmove = 0;
+		}
+		return;
+
+	case OC_SIDESTEP:
+	case OC_BACKOFF:
+		if (level.time >= oc->modeEnd)
+		{
+			OC_EndMode(oc);
+			return;
+		}
+		{
+			vec3_t dir;
+			VectorCopy(oc->dir, dir);
+			G_UcmdMoveForDir(NPC, &ucmd, dir);
+			ucmd.upmove = 0;
+			if (ps->speed < static_cast<float>(NPCInfo->stats.walkSpeed))
+			{
+				ps->speed = static_cast<float>(NPCInfo->stats.walkSpeed);
+			}
+		}
+		return;
+
+	default:
+		break;
+	}
+
+	// pressed against something?
+	vec3_t want;
+	const float hspeed = sqrtf(ps->velocity[0] * ps->velocity[0] + ps->velocity[1] * ps->velocity[1]);
+	if (!on_ground || hspeed >= OC_STUCK_SPEED || !OC_WantDir(want))
+	{
+		oc->stuckSince = 0;
+		if (level.time - oc->lastEnd > 4000)
+		{
+			oc->climbFails = 0; // he has been moving freely a while
+			oc->roundTries = 0;
+		}
+		return;
+	}
+	if (!oc->stuckSince)
+	{
+		oc->stuckSince = level.time;
+	}
+	if (level.time - oc->stuckSince < OC_STUCK_TIME || level.time < oc->nextTry)
+	{
+		return;
+	}
+	oc->stuckSince = 0;
+	oc->nextTry = level.time + 500;
+
+	// climb only toward where he is going, and not after two climbs that didn't get him up
+	float max_climb = oc->climbFails < 2 ? OC_MaxClimb(NPC) : 0.0f;
+	if (max_climb > 0.0f && NPCInfo->goalEntity && NPCInfo->goalEntity != NPC)
+	{
+		vec3_t to_goal;
+		VectorSubtract(NPCInfo->goalEntity->currentOrigin, NPC->currentOrigin, to_goal);
+		to_goal[2] = 0.0f;
+		if (VectorNormalize(to_goal) > 1.0f && DotProduct(to_goal, want) < 0.3f)
+		{
+			max_climb = 0.0f;
+		}
+	}
+
+	float top_z = 0.0f;
+	const int probe = OC_Probe(NPC, want, max_climb, &top_z);
+	if (probe == OC_PROBE_CLEAR || probe == OC_PROBE_PERSON)
+	{
+		return;
+	}
+	if (probe == OC_PROBE_LEDGE && ps->gravity > 0)
+	{
+		// jump straight up, high enough for his feet to clear the top
+		const float apex = top_z + 12.0f - feet;
+		ps->velocity[0] = 0.0f;
+		ps->velocity[1] = 0.0f;
+		ps->velocity[2] = sqrtf(2.0f * static_cast<float>(ps->gravity) * apex);
+		ps->forceJumpZStart = NPC->currentOrigin[2];
+		ps->pm_flags |= PMF_JUMPING;
+		if (top_z - feet > OC_HOP_HEIGHT)
+		{
+			ps->forcePowersActive |= 1 << FP_LEVITATION;
+			NPC_JumpAnimation();
+			G_SoundOnEnt(NPC, CHAN_BODY, "sound/weapons/force/jump.wav");
+		}
+		else
+		{
+			NPC_SetAnim(NPC, SETANIM_BOTH, BOTH_JUMP1, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+			G_AddEvent(NPC, EV_JUMP, 0);
+		}
+		ucmd.forwardmove = 0;
+		ucmd.rightmove = 0;
+		ucmd.upmove = 0;
+		VectorClear(ps->moveDir);
+		VectorCopy(want, oc->dir);
+		oc->topZ = top_z;
+		oc->pushed = qfalse;
+		oc->mode = OC_CLIMB;
+		oc->modeStart = level.time;
+		return;
+	}
+
+	// can't get over it: round it, or back off for the steering to try again
+	vec3_t side;
+	if (OC_FindSideStep(NPC, want, side))
+	{
+		VectorCopy(side, oc->dir);
+		oc->mode = OC_SIDESTEP;
+		oc->modeStart = level.time;
+		oc->modeEnd = level.time + Q_irand(500, 800);
+	}
+	else
+	{
+		vec3_t back;
+		VectorMA(NPC->currentOrigin, -32.0f, want, back);
+		if (OC_GroundBelow(NPC, back, 48.0f))
+		{
+			VectorScale(want, -1.0f, oc->dir);
+			oc->mode = OC_BACKOFF;
+			oc->modeStart = level.time;
+			oc->modeEnd = level.time + 400;
+		}
+	}
+	if (++oc->roundTries >= 5)
+	{
+		// he keeps ending up against it: leave it to his normal navigation for a while
+		oc->nextTry = level.time + 5000;
+		oc->roundTries = 0;
+		oc->climbFails = 0;
+	}
+}

@@ -636,6 +636,25 @@ qboolean WP_SaberLockChance(const qboolean fake_lock)
 
 /////////Functions//////////////
 
+// 2026-11-11 (DH): players pay less block points for blocking saber attacks (NPCs and bots pay the full cost). Used for
+// every block point cost of the blocker in sab_beh_attack_vs_attack and sab_beh_block_vs_attack. 1.0f = as before.
+#define SABER_PLAYER_BLOCK_COST_SCALE	0.5f
+
+static void WP_SaberBlockerBlockPoints(gentity_t* blocker, const int cost)
+{
+	int final_cost = cost;
+
+	if (blocker->s.number >= 0 && blocker->s.number < MAX_CLIENTS && !(blocker->r.svFlags & SVF_BOT))
+	{
+		final_cost = (int)(cost * SABER_PLAYER_BLOCK_COST_SCALE + 0.5f);
+		if (cost > 0 && final_cost < 1)
+		{
+			final_cost = 1;
+		}
+	}
+	PM_AddBlockFatigue(&blocker->client->ps, final_cost);
+}
+
 static qboolean sab_beh_attack_vs_attack(gentity_t* attacker, gentity_t* blocker)
 {
 	//set the saber behavior for two attacking blades hitting each other
@@ -703,7 +722,7 @@ static qboolean sab_beh_attack_vs_attack(gentity_t* attacker, gentity_t* blocker
 		{
 			//Low points = bad blocks
 			G_Stagger(blocker);
-			PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_TEN, qfalse));
+			WP_SaberBlockerBlockPoints(blocker, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_TEN, qfalse));
 		}
 	}
 	else if (PM_SaberInKata(blocker->client->ps.saberMove))
@@ -813,7 +832,7 @@ qboolean WP_SaberAIFeintWanted(gentity_t* npc)
 	{
 		return qfalse;
 	}
-	if (!WP_SaberAIIsHuman(enemy) || !WP_SaberAIEnemyTurtling(enemy)
+	if (!enemy || !WP_SaberAIIsHuman(enemy) || !WP_SaberAIEnemyTurtling(enemy)
 		|| DistanceSquared(npc->r.currentOrigin, enemy->r.currentOrigin) > 128.0f * 128.0f)
 	{
 		return qfalse;
@@ -1490,7 +1509,7 @@ qboolean sab_beh_block_vs_attack(
 			else
 			{
 				g_fatigue_bp_knockaway(blocker);
-				PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_DANGER, qfalse));
+				WP_SaberBlockerBlockPoints(blocker, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_DANGER, qfalse));
 
 				if ((d_blockinfo.integer || g_DebugSaberCombat.integer) &&
 					!(blocker->r.svFlags & SVF_BOT))
@@ -1605,7 +1624,7 @@ qboolean sab_beh_block_vs_attack(
 						sab_beh_add_balance(attacker, MPCOST_MBLOCKED); //SAC Punish attacker
 					}
 
-					PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_FIVE, qfalse));
+					WP_SaberBlockerBlockPoints(blocker, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_FIVE, qfalse));
 
 					if (!(blocker->r.svFlags & SVF_BOT))
 					{
@@ -1650,7 +1669,7 @@ qboolean sab_beh_block_vs_attack(
 
 				if (!(blocker->r.svFlags & SVF_BOT))
 				{
-					PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_FIVE, qfalse));
+					WP_SaberBlockerBlockPoints(blocker, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_FIVE, qfalse));
 				} // SS_BLASTER (2026-10-14)
 
 				if (attacker->NPC && !G_ControlledByPlayer(attacker)) //NPC only
@@ -1701,7 +1720,7 @@ qboolean sab_beh_block_vs_attack(
 					{
 						heavy_cost = blocker->client->ps.fd.blockPoints <= BLOCKPOINTS_FOURTY ? BLOCKPOINTS_FAIL : BLOCKPOINTS_THREE;
 					}
-					PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, heavy_cost + 2, qfalse));
+					WP_SaberBlockerBlockPoints(blocker, WP_ClassBlockPointCost(blocker, heavy_cost + 2, qfalse));
 
 					if (d_blockinfo.integer || g_DebugSaberCombat.integer)
 					{
@@ -1720,7 +1739,7 @@ qboolean sab_beh_block_vs_attack(
 							Com_Printf(S_COLOR_CYAN "NPC Fatigued Parry\n");
 						}
 
-						PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, WP_SaberAIIsAI(blocker) ? BLOCKPOINTS_FIVE : BLOCKPOINTS_FAIL, qfalse)); // 2026-11-10: NPC / bot 5
+						WP_SaberBlockerBlockPoints(blocker, WP_ClassBlockPointCost(blocker, WP_SaberAIIsAI(blocker) ? BLOCKPOINTS_FIVE : BLOCKPOINTS_FAIL, qfalse)); // 2026-11-10: NPC / bot 5
 					}
 					else
 					{
@@ -1732,7 +1751,7 @@ qboolean sab_beh_block_vs_attack(
 							Com_Printf(S_COLOR_CYAN "NPC normal Parry\n");
 						}
 
-						PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, WP_SaberAIIsAI(blocker) ? BLOCKPOINTS_DANGER : BLOCKPOINTS_THREE, qfalse)); // 2026-11-10: NPC / bot 4
+						WP_SaberBlockerBlockPoints(blocker, WP_ClassBlockPointCost(blocker, WP_SaberAIIsAI(blocker) ? BLOCKPOINTS_DANGER : BLOCKPOINTS_THREE, qfalse)); // 2026-11-10: NPC / bot 4
 					}
 				}
 				else
@@ -1759,7 +1778,7 @@ qboolean sab_beh_block_vs_attack(
 					}
 					else
 					{
-						PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_THREE, qfalse));
+						WP_SaberBlockerBlockPoints(blocker, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_THREE, qfalse));
 					}
 				}
 
@@ -1789,7 +1808,7 @@ qboolean sab_beh_block_vs_attack(
 
 				if (!(blocker->r.svFlags & SVF_BOT))
 				{
-					PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_TEN, qfalse));
+					WP_SaberBlockerBlockPoints(blocker, WP_ClassBlockPointCost(blocker, BLOCKPOINTS_TEN, qfalse));
 				}
 
 				if ((d_blockinfo.integer || g_DebugSaberCombat.integer) &&
@@ -1803,7 +1822,7 @@ qboolean sab_beh_block_vs_attack(
 		// 2026-11-10: a blocked riposte (the counter after a perfect parry) costs the blocker 5 block points more
 		if (WP_SaberRiposteSwingActive(attacker) && (blocker->client->ps.saberEventFlags & SEF_PARRIED))
 		{
-			PM_AddBlockFatigue(&blocker->client->ps, SABER_RIPOSTE_BLOCK_BP);
+			WP_SaberBlockerBlockPoints(blocker, SABER_RIPOSTE_BLOCK_BP);
 			if (d_blockinfo.integer || g_DebugSaberCombat.integer)
 			{
 				Com_Printf(S_COLOR_CYAN"Blocked a riposte, extra cost 5\n");
@@ -1868,7 +1887,7 @@ qboolean sab_beh_block_vs_attack(
 				{
 					g_fatigue_bp_knockaway(blocker);
 				}
-				PM_AddBlockFatigue(&blocker->client->ps, WP_ClassBlockPointCost(blocker, SABER_UNBLOCKABLE_BLOCK_BP, qfalse));
+				WP_SaberBlockerBlockPoints(blocker, WP_ClassBlockPointCost(blocker, SABER_UNBLOCKABLE_BLOCK_BP, qfalse));
 				if (WP_SaberIsPlayer(blocker))
 				{
 					CGCam_BlockShakeMP(blocker->s.origin, blocker, 0.6f, 250);

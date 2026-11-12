@@ -386,6 +386,7 @@ extern cvar_t* g_ICARUSDebug;
 extern cvar_t* g_npcdebug;
 extern cvar_t* g_npc_is_smart_range;
 extern cvar_t* g_squadTactics;
+extern cvar_t* g_obstacleClimb; // NPC_move.cpp
 extern cvar_t* g_squadAdvancers;
 extern cvar_t* g_squadDebug;
 extern cvar_t* g_squadCommandCooldown;

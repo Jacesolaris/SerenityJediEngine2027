@@ -198,7 +198,7 @@ if(BuildMPEngine OR BuildMPDed)
 
 	set(MPEngineAndDedClientFiles
 		"${MPDir}/client/client.h"
-		"${MPDir}/client/keys.h"
+		"${SharedDir}/client/keys.h"
 		"${MPDir}/client/snd_public.h"
 		)
 	source_group("client" FILES ${MPEngineAndDedClientFiles})
@@ -221,7 +221,7 @@ if(BuildMPEngine OR BuildMPDed)
 		"${MPDir}/qcommon/cm_load.cpp"
 		"${MPDir}/qcommon/cm_local.h"
 		"${MPDir}/qcommon/cm_patch.cpp"
-		"${MPDir}/qcommon/cm_patch.h"
+		"${SharedDir}/qcommon/cm_patch.h"
 		"${SharedDir}/qcommon/cm_polylib.cpp"
 		"${SharedDir}/qcommon/cm_polylib.h"
 		"${MPDir}/qcommon/cm_public.h"
@@ -475,7 +475,7 @@ if(BuildMPEngine)
 	set(MPEngineFiles ${MPEngineFiles} ${MPEngineRatlFiles})
 
 	set(MPEngineRavlFiles
-		"${MPDir}/Ravl/CVec.h"
+		"${SharedDir}/Ravl/CVec.h"
 		)
 	source_group("ravl" FILES ${MPEngineRavlFiles})
 	set(MPEngineFiles ${MPEngineFiles} ${MPEngineRavlFiles})
@@ -532,7 +532,7 @@ if(BuildMPEngine)
 	if(WIN32)
 		set(MPEngineWin32Files
 			"${MPDir}/win32/SerenityJediEngine2027-MP.ico"
-			"${MPDir}/win32/resource.h"
+			"${SharedDir}/win32/resource.h"
 			"${MPDir}/win32/SerenityJediEngine2027-MP.rc"
 			)
 

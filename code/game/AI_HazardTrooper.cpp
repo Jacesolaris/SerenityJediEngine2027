@@ -39,7 +39,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "b_local.h"
 #include "g_navigator.h"
 #if !defined(RAVL_VEC_INC)
-#include "../Ravl/CVec.h"
+#include "Ravl/CVec.h"
 #endif
 #if !defined(RATL_ARRAY_VS_INC)
 #include "../Ratl/array_vs.h"

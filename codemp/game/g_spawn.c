@@ -333,6 +333,15 @@ void SP_misc_model_cargo_small(gentity_t* ent);
 void SP_misc_camera(gentity_t* self);
 void SP_misc_spotlight(gentity_t* self);
 void SP_misc_security_panel(gentity_t* self);
+// Missions: SP-only entities of the JA / JO campaign maps (g_misc.c, Claude 2026-11-11)
+void SP_item_security_key(gentity_t* self);
+void SP_target_gravity_change(gentity_t* self);
+void SP_misc_ion_cannon(gentity_t* self);
+void SP_misc_atst_drivable(gentity_t* self);
+void SP_holocron_force_push(gentity_t* self);
+void SP_holocron_force_pull(gentity_t* self);
+void SP_holocron_force_speed(gentity_t* self);
+void SP_holocron_force_levitation(gentity_t* self);
 void SP_misc_model_bomb_planted(gentity_t* ent);
 void SP_misc_model_beacon(gentity_t* ent);
 void SP_PAS(gentity_t* ent);
@@ -623,6 +632,14 @@ spawn_t spawns[] = {
 	{ "misc_camera", SP_misc_camera },
 	{ "misc_spotlight", SP_misc_spotlight },
 	{ "misc_security_panel", SP_misc_security_panel },
+	{ "item_security_key", SP_item_security_key }, // (Missions: cairn_dock1)
+	{ "target_gravity_change", SP_target_gravity_change }, // (Missions: doom_shields)
+	{ "misc_ion_cannon", SP_misc_ion_cannon }, // (Missions: hoth2, artus_topside)
+	{ "misc_atst_drivable", SP_misc_atst_drivable }, // (Missions: t2_dpred, yavin_canyon, yavin_swamp)
+	{ "holocron_force_push", SP_holocron_force_push }, // (Missions: yavin_trial force training)
+	{ "holocron_force_pull", SP_holocron_force_pull },
+	{ "holocron_force_speed", SP_holocron_force_speed },
+	{ "holocron_force_levitation", SP_holocron_force_levitation },
 	{ "misc_model_bomb_planted", SP_misc_model_bomb_planted },
 	{ "misc_model_beacon", SP_misc_model_beacon },
 	{ "misc_sentry_turret", SP_PAS },
@@ -809,6 +826,12 @@ qboolean G_CallSpawn(gentity_t* ent)
 	{
 		trap->Print("G_CallSpawn: NULL classname\n");
 		return qfalse;
+	}
+
+	// (Missions: JO's item_bacta is the bacta tank you carry, MP's item_medpac)
+	if (!Q_stricmp(ent->classname, "item_bacta"))
+	{
+		ent->classname = "item_medpac";
 	}
 
 	// check item spawn functions

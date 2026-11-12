@@ -2031,7 +2031,7 @@ static void G_MissileImpact(gentity_t* ent, trace_t* trace, const int hit_loc = 
 	}
 
 	// check for hitting a lightsaber
-	if (wp_saber_must_block(other, ent, qfalse, trace->endpos, -1, -1)
+	if (other->client && wp_saber_must_block(other, ent, qfalse, trace->endpos, -1, -1)
 		&& !WP_DoingForcedAnimationForForcePowers(other))
 	{
 		//play projectile block animation

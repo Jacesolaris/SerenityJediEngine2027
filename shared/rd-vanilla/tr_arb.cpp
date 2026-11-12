@@ -22,7 +22,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 // tr_arb.c -- this file deals with the arb shaders for dynamic glow
 
-#include "tr_local.h"
+#include "rd-vanilla/tr_local.h"
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Vertex and Pixel Shader definitions.	- AReis

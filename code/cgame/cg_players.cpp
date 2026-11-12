@@ -1415,7 +1415,7 @@ static void CG_PlayerAnimEvents(const int animFileIndex, const qboolean torso, c
 
 	if (g_entities[entNum].ghoul2.size())
 	{
-		glaIndex = gi.G2API_GetAnimIndex(&g_entities[entNum].ghoul2[0]);
+		glaIndex = gi.G2API_GetAnimIndex(&g_entities[entNum].ghoul2[0]) ? 1 : 0; // offset -> GLA slot (item 355)
 	}
 
 	if (torso)
@@ -15552,6 +15552,196 @@ static void CG_Z6SpinBarrel(centity_t* cent)
 	}
 }
 
+// Dead droid wreck fx (DH 2026-11-12, item 353, cg_droidWreckFx 1, 0 = off): a dead remote or saber droid keeps
+// smoking where it lies: a column of grey smoke puffs (particles with gfx/effects/jk_smoke5, the grass cut smoke's
+// image) that grow as they rise, thick at first and thinner later, gone after 60 s; the first 30 s it also throws
+// sparks. When the body is first seen dead it gets scorch marks (saber burn glow + burn mark, ghoul2 marks)
+// that last as long as the smoke and a bit. cg_droidWreckFx 2 also prints debug lines (class, health) to the console.
+// Called for every player/NPC body CG_Player draws (ghoul2 or not), right after G_RagDoll.
+// Cheap: only dead droids of those classes in view (and within 3000 units), 4 particles about every 0.3-0.9 s each,
+// one floor trace per puff. (2026-11-12 v2: the first version used blaster/smoke_bolton, which DH could not see.)
+constexpr int DROID_WRECK_SMOKE_TIME = 60000;
+constexpr int DROID_WRECK_SPARK_TIME = 30000; // DH 11:13: more sparks (was 10 s, one every 1.2-2.8 s)
+
+static bool CG_DroidWreckClass(const int npc_class)
+{
+	return npc_class == CLASS_REMOTE || npc_class == CLASS_SABER_DROID;
+}
+
+static void CG_DroidWreckMarks(gentity_t* gent, const vec3_t center, const float radius, const int count, const int life)
+{
+	for (int i = 0; i < count; i++)
+	{
+		// rays from above (a little off to the sides), so the marks land on the side the player sees
+		vec3_t dir = { Q_flrand(-0.6f, 0.6f), Q_flrand(-0.6f, 0.6f), 1.0f };
+		VectorNormalize(dir);
+		vec3_t hit, ray;
+		VectorMA(center, radius, dir, hit);
+		hit[0] += Q_flrand(-radius, radius) * 0.5f;
+		hit[1] += Q_flrand(-radius, radius) * 0.5f;
+		VectorScale(dir, -1.0f, ray);
+		const qhandle_t shader = i & 1 ? cgs.media.bdecal_burnmark1 : cgs.media.bdecal_saberglowmark;
+		if (!shader)
+		{
+			continue;
+		}
+		const float size = Q_flrand(0.3f, 0.45f) * radius;
+		if (cg_com_rend2.integer == 0)
+		{
+			CG_AddGhoul2Mark(shader, size, hit, ray, gent->s.number, gent->client->ps.origin,
+				gent->client->renderInfo.legsYaw, gent->ghoul2, gent->s.modelScale, life, 0, nullptr);
+		}
+		else
+		{
+			CG_AddGhoul2Mark_rend2(shader, size, hit, ray, gent->s.number, gent->client->ps.origin,
+				gent->client->renderInfo.legsYaw, gent->ghoul2, gent->s.modelScale, life, 0, nullptr);
+		}
+	}
+}
+
+static void CG_DroidWreckFx(const centity_t* cent, const vec3_t origin)
+{
+	static vmCvar_t cg_droidWreckFx;
+	static qboolean registered = qfalse;
+	static int deadSince[MAX_GENTITIES], nextSmoke[MAX_GENTITIES], nextSpark[MAX_GENTITIES], nextDark[MAX_GENTITIES];
+	static qboolean marked[MAX_GENTITIES];
+	static int reported[MAX_GENTITIES]; // cg_droidWreckFx 2: last state printed, 0 none, 1 alive, 2 dead
+	static qhandle_t smokeShader = 0;
+
+	const int num = cent->currentState.number;
+	gentity_t* gent = cent->gent;
+	if (num <= 0 || num >= MAX_GENTITIES || !gent || !gent->client)
+	{
+		return;
+	}
+	if (!registered)
+	{
+		cgi_Cvar_Register(&cg_droidWreckFx, "cg_droidWreckFx", "1", CVAR_ARCHIVE);
+		smokeShader = cgi_R_RegisterShader("gfx/effects/jk_smoke5");
+		registered = qtrue;
+	}
+	static int cvarCheck = 0;
+	if (cg.time - cvarCheck >= 500 || cg.time < cvarCheck)
+	{
+		cvarCheck = cg.time;
+		cgi_Cvar_Update(&cg_droidWreckFx);
+	}
+	const bool wreck_class = CG_DroidWreckClass(gent->client->NPC_class);
+	if (cg_droidWreckFx.integer > 1)
+	{
+		// debug: say what this body is whenever a droid of those classes, or any dead body, changes state
+		const int state = gent->health > 0 ? 1 : 2;
+		if ((wreck_class || state == 2) && reported[num] != state)
+		{
+			reported[num] = state;
+			CG_Printf("droid wreck fx: entity %d class %d health %d ghoul2 %d %s\n", num, gent->client->NPC_class,
+				gent->health, static_cast<int>(gent->ghoul2.size()), wreck_class ? "(remote/saber droid)" : "");
+		}
+	}
+	if (!wreck_class)
+	{
+		return;
+	}
+	if (gent->health > 0 || deadSince[num] > cg.time)
+	{
+		// alive (or a save loaded back in time): forget the last body in this slot
+		deadSince[num] = 0;
+		marked[num] = qfalse;
+		if (gent->health > 0)
+		{
+			return;
+		}
+	}
+	if (!cg_droidWreckFx.integer)
+	{
+		return;
+	}
+	if (!deadSince[num])
+	{
+		deadSince[num] = cg.time;
+		nextSmoke[num] = cg.time + Q_irand(100, 400);
+		nextSpark[num] = cg.time + Q_irand(300, 900);
+		nextDark[num] = cg.time + Q_irand(100, 300);
+		if (cg_droidWreckFx.integer > 1)
+		{
+			CG_Printf("droid wreck fx: entity %d starts smoking\n", num);
+		}
+	}
+	const int age = cg.time - deadSince[num];
+	if (age > DROID_WRECK_SMOKE_TIME)
+	{
+		return;
+	}
+
+	if (DistanceSquared(origin, cg.refdef.vieworg) > 3000.0f * 3000.0f)
+	{
+		return;
+	}
+	const bool remote = gent->client->NPC_class == CLASS_REMOTE;
+	const float radius = remote ? 10.0f : 24.0f;
+
+	// where it lies: the floor below the model origin, the smoke starts a little above it
+	vec3_t start, end, spot;
+	VectorCopy(origin, start);
+	start[2] += 8.0f;
+	VectorCopy(start, end);
+	end[2] -= 96.0f;
+	trace_t tr;
+	CG_Trace(&tr, start, vec3_origin, vec3_origin, end, num, MASK_SOLID);
+	VectorCopy(tr.endpos, spot);
+	spot[2] += remote ? 6.0f : 10.0f;
+
+	if (!marked[num] && gent->ghoul2.size())
+	{
+		marked[num] = qtrue;
+		CG_DroidWreckMarks(gent, spot, radius, remote ? 2 : 4, DROID_WRECK_SMOKE_TIME - age + 15000);
+	}
+
+	if (smokeShader && cg.time >= nextSmoke[num])
+	{
+		// a puff every 0.3 s at first, every 0.9 s at the end; each puff is 4 particles that rise at different
+		// speeds and grow, so together they make a soft column
+		nextSmoke[num] = cg.time + 300 + age / 100 + Q_irand(0, 150);
+		const float thick = 1.0f - 0.6f * static_cast<float>(age) / DROID_WRECK_SMOKE_TIME;
+		const float scale = remote ? 0.6f : 1.0f;
+		vec3_t puff;
+		VectorCopy(spot, puff);
+		puff[0] += Q_flrand(-0.4f, 0.4f) * radius;
+		puff[1] += Q_flrand(-0.4f, 0.4f) * radius;
+		for (int k = 0; k < 4; k++)
+		{
+			const vec3_t vel = { Q_flrand(-3.0f, 3.0f), Q_flrand(-3.0f, 3.0f), 14.0f + k * 5.0f };
+			const vec3_t accel = { 0.0f, 0.0f, 3.0f };
+			const vec3_t grey = { 0.32f, 0.31f, 0.3f };
+			FX_AddParticle(-1, puff, vel, accel, 0.0f, (4.0f + k) * scale, (16.0f + k * 4.0f) * scale, 0.0f,
+				(0.55f - k * 0.07f) * thick, 0.0f, 0.0f, grey, grey, 0.0f, Q_flrand(0.0f, 360.0f), Q_flrand(-25.0f, 25.0f),
+				vec3_origin, vec3_origin, 0.0f, 0, 0, 3000 + k * 300, smokeShader,
+				FX_ALPHA_LINEAR | FX_SIZE_LINEAR | FX_USE_ALPHA);
+		}
+	}
+	if (cg.time >= nextDark[num])
+	{
+		// darker smoke in the column (DH 2026-11-12 11:05: the grey puffs alone were hard to see): the black
+		// volumetric smoke the Deadly Sight head smoke uses, about every 1-2 s
+		nextDark[num] = cg.time + 900 + age / 60 + Q_irand(0, 300);
+		const vec3_t up = { 0.0f, 0.0f, 1.0f };
+		theFxScheduler.PlayEffect("volumetric/black_smoke", spot, up);
+	}
+	if (age < DROID_WRECK_SPARK_TIME && cg.time >= nextSpark[num])
+	{
+		// sparks every 0.3-0.8 s at first, every 0.9-1.4 s by the end, 1-3 at a time from different spots
+		nextSpark[num] = cg.time + Q_irand(300, 800) + age / 50;
+		const int count = Q_irand(1, 3);
+		for (int k = 0; k < count; k++)
+		{
+			vec3_t spark, dir = { Q_flrand(-1.0f, 1.0f), Q_flrand(-1.0f, 1.0f), Q_flrand(0.3f, 1.0f) };
+			VectorNormalize(dir);
+			VectorMA(spot, radius * Q_flrand(0.3f, 0.7f), dir, spark);
+			theFxScheduler.PlayEffect("sparks/spark_nosnd", spark, dir);
+		}
+	}
+}
+
 void CG_Player(centity_t* cent)
 {
 	clientInfo_t* ci = nullptr;
@@ -15707,6 +15897,7 @@ void CG_Player(centity_t* cent)
 	}
 
 	G_RagDoll(cent->gent, cent->lerpAngles);
+	CG_DroidWreckFx(cent, cent->lerpOrigin); // dead remote / saber droid smoke + scorch marks (item 353)
 
 	if (cent->currentState.weapon)
 	{

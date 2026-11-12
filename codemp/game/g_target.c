@@ -2030,3 +2030,396 @@ void SP_target_autosave(gentity_t* self)
 	//need classname so we can save/delete/load this entity.
 	self->classname = "target_autosave";
 }
+/*QUAKED target_gravity_change (1 0 0) (-4 -4 -4) (4 4 4) GLOBAL
+SP entity (JO doom_shields), for Missions. "gravity" - Normal = 800.
+GLOBAL - the gravity of the whole map until it ends (not g_gravity, so a mission restart or the next map are
+normal again). Without GLOBAL (no campaign map uses it) it does nothing in MP: client gravity is set every frame.
+*/
+static void target_gravity_change_use(gentity_t* self, gentity_t* other, gentity_t* activator)
+{
+	G_ActivateBehavior(self, BSET_USE);
+
+	if (self->spawnflags & 1)
+	{
+		level.missionGravitySet = qtrue;
+		level.missionGravity = self->speed;
+	}
+}
+
+void SP_target_gravity_change(gentity_t* self)
+{
+	G_SetOrigin(self, self->s.origin);
+	G_SpawnFloat("gravity", "0", &self->speed);
+	self->use = target_gravity_change_use;
+}
+
+/*
+============================================================================
+Missions: downed / revive (Claude 2026-11-11, from JACoop's design; g_missionRevive, default 1)
+
+A lethal hit puts a player down instead of killing him, while another player in the game is still up: he lies on the
+ground at 1 health, damage can't finish him, enemies leave him, he can't move or fight. A teammate who stands next to
+him and holds USE for 3 s brings him back with 40 % of his max health. Unhelped for 60 s (or holding JUMP for 2 s to
+give up) he really dies and respawns at the checkpoint as before. Falls, crushers, drowning, lava, trigger_hurt and
+suicide still kill at once. When nobody is up any more, everyone down really dies, so G_MissionWipeCheck (whole team
+down) takes the mission back to the last checkpoint as before.
+============================================================================
+*/
+#define MISSION_DOWN_BLEED		60000	// ms down before he dies
+#define MISSION_DOWN_REVIVE		3000	// ms of USE held next to him
+#define MISSION_DOWN_RANGE		96.0f	// how close the reviver must be
+#define MISSION_DOWN_GIVEUP		2000	// ms of JUMP held to give up
+
+typedef struct
+{
+	int downTime;		// level.time he went down, 0 = up
+	int reviver;		// client reviving him, -1 = none
+	int reviveStart;	// level.time that reviver started
+	int giveUpStart;	// level.time he started holding JUMP, 0 = not
+	int nextNote;		// next progress print
+	vec3_t safeOrigin;	// last ground he stood on (pit rescue)
+	float safeYaw;
+	int safeTime;		// 0 = none yet
+} missionDown_t;
+
+static missionDown_t missionDown[MAX_CLIENTS];
+static int missionDownLevel = -1;
+static vmCvar_t g_missionRevive;
+static vmCvar_t g_missionPitRescue;
+
+static void G_MissionDownInit(void)
+{
+	static qboolean registered = qfalse;
+	if (!registered)
+	{
+		trap->Cvar_Register(&g_missionRevive, "g_missionRevive", "1", CVAR_ARCHIVE);
+		trap->Cvar_Register(&g_missionPitRescue, "g_missionPitRescue", "1", CVAR_ARCHIVE);
+		registered = qtrue;
+	}
+	trap->Cvar_Update(&g_missionRevive);
+	trap->Cvar_Update(&g_missionPitRescue);
+	if (missionDownLevel != level.startTime)
+	{
+		missionDownLevel = level.startTime;
+		memset(missionDown, 0, sizeof missionDown);
+		for (int i = 0; i < MAX_CLIENTS; i++)
+		{
+			missionDown[i].reviver = -1;
+		}
+	}
+}
+
+qboolean G_MissionIsDowned(const int clientNum)
+{
+	if (level.gametype != GT_SINGLE_PLAYER || clientNum < 0 || clientNum >= MAX_CLIENTS)
+	{
+		return qfalse;
+	}
+	G_MissionDownInit();
+	return missionDown[clientNum].downTime ? qtrue : qfalse;
+}
+
+// ClientSpawn: a (re)spawned player is up
+void G_MissionClearDown(const int clientNum)
+{
+	if (clientNum < 0 || clientNum >= MAX_CLIENTS)
+	{
+		return;
+	}
+	G_MissionDownInit();
+	if (missionDown[clientNum].downTime)
+	{
+		g_entities[clientNum].flags &= ~FL_NOTARGET;
+	}
+	memset(&missionDown[clientNum], 0, sizeof missionDown[clientNum]);
+	missionDown[clientNum].reviver = -1;
+}
+
+// a player in the game who is up (alive and not down)
+static qboolean G_MissionPlayerUp(const gentity_t* ent)
+{
+	return G_MissionInGame(ent) && ent->health > 0 && ent->client->ps.pm_type != PM_DEAD
+		&& !missionDown[ent->s.number].downTime ? qtrue : qfalse;
+}
+
+static qboolean G_MissionSomeoneElseUp(const int clientNum)
+{
+	for (int i = 0; i < level.maxclients; i++)
+	{
+		if (i != clientNum && G_MissionPlayerUp(&g_entities[i]))
+		{
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+/*
+Pit rescue (JACoop's, g_missionPitRescue, default 1): where each player last stood on solid ground, alive, up and
+nearly still, so a fall into a pit (or a trigger_hurt) puts him down back there instead of killing him. The spot is
+his own and a few seconds old at most, so a teammate can walk to it and revive him.
+*/
+static qboolean G_MissionOnSolidGround(const gentity_t* ent)
+{
+	trace_t tr;
+	vec3_t end;
+
+	VectorCopy(ent->r.currentOrigin, end);
+	end[2] -= 24.0f;
+	trap->Trace(&tr, ent->r.currentOrigin, ent->r.mins, ent->r.maxs, end, ent->s.number, ent->clipmask, qfalse, 0, 0);
+	return !tr.startsolid && !tr.allsolid && tr.fraction < 1.0f && tr.plane.normal[2] >= 0.7f ? qtrue : qfalse;
+}
+
+static void G_MissionRememberSafeGround(const gentity_t* ent)
+{
+	missionDown_t* d = &missionDown[ent->s.number];
+
+	if (!G_MissionOnSolidGround(ent)
+		|| VectorLengthSquared(ent->client->ps.velocity) > 40.0f * 40.0f	// a jump, a slide: wait for him to settle
+		|| ent->watertype & (CONTENTS_LAVA | CONTENTS_SLIME)
+		|| ent->client->ps.emplacedIndex // on an emplaced gun
+		|| ent->client->ps.m_iVehicleNum)
+	{
+		return;
+	}
+	VectorCopy(ent->r.currentOrigin, d->safeOrigin);
+	d->safeYaw = ent->client->ps.viewangles[YAW];
+	d->safeTime = level.time;
+}
+
+static void G_MissionPitRescue(gentity_t* ent, const missionDown_t* d)
+{
+	trace_t tr;
+	vec3_t org, end, angles;
+
+	// on the floor under the spot
+	VectorCopy(d->safeOrigin, org);
+	VectorCopy(org, end);
+	end[2] -= 256.0f;
+	trap->Trace(&tr, org, ent->r.mins, ent->r.maxs, end, ent->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
+	if (!tr.startsolid && !tr.allsolid && tr.fraction < 1.0f)
+	{
+		VectorCopy(tr.endpos, org);
+	}
+
+	G_SetOrigin(ent, org);
+	VectorCopy(org, ent->client->ps.origin);
+	VectorClear(ent->client->ps.velocity);
+	ent->client->ps.pm_time = 0;
+	ent->client->ps.pm_flags &= ~PMF_TIME_KNOCKBACK;
+	VectorSet(angles, 0, d->safeYaw, 0);
+	SetClientViewAngle(ent, angles);
+	ent->client->ps.groundEntityNum = ENTITYNUM_WORLD;
+	ent->client->ps.eFlags ^= EF_TELEPORT_BIT; // a jump, not a slide up from the bottom of the pit
+	trap->LinkEntity((sharedEntity_t*)ent);
+}
+
+/*
+G_Damage, when a hit would kill targ (or targ is already down): qtrue = he stays down at 1 health instead.
+*/
+qboolean G_MissionDownPlayer(gentity_t* targ, const int mod)
+{
+	if (level.gametype != GT_SINGLE_PLAYER || !targ || !targ->client || targ->NPC || targ->s.number >= MAX_CLIENTS
+		|| !G_MissionInGame(targ) || targ->client->ps.pm_type == PM_DEAD)
+	{
+		return qfalse;
+	}
+	G_MissionDownInit();
+	missionDown_t* d = &missionDown[targ->s.number];
+	if (d->downTime)
+	{
+		return qtrue; // already down: damage doesn't finish him (bleeding out, giving up or a team wipe do)
+	}
+	if (!g_missionRevive.integer || targ->client->ps.m_iVehicleNum)
+	{
+		return qfalse;
+	}
+	switch (mod)
+	{
+	case MOD_WATER:
+	case MOD_SLIME:
+	case MOD_LAVA:
+	case MOD_CRUSH:
+	case MOD_TELEFRAG:
+	case MOD_SUICIDE:
+		return qfalse; // drowned, burnt, crushed, "kill": straight to death
+	default:
+		break;
+	}
+	if (!G_MissionSomeoneElseUp(targ->s.number))
+	{
+		return qfalse; // the last one up: the team is down
+	}
+
+	// a fall into a pit (or a trigger_hurt): back on the last ground he stood on, down there (pit rescue)
+	const qboolean pit = mod == MOD_TRIGGER_HURT || mod == MOD_FALLING && !G_MissionOnSolidGround(targ) ? qtrue : qfalse;
+	if (pit)
+	{
+		if (!g_missionPitRescue.integer || !d->safeTime)
+		{
+			return qfalse;
+		}
+		G_MissionPitRescue(targ, d);
+	}
+
+	d->downTime = level.time;
+	d->reviver = -1;
+	d->reviveStart = 0;
+	d->giveUpStart = 0;
+	d->nextNote = level.time + 5000;
+	targ->flags |= FL_NOTARGET;
+	targ->client->ps.fd.forcePowersActive = 0;
+	trap->SendServerCommand(-1, va("cp \"%s" S_COLOR_RED " is down!\n" S_COLOR_WHITE "Stand next to him and hold USE to revive.\n\"",
+		targ->client->pers.netname));
+	return qtrue;
+}
+
+static void G_MissionReallyDie(gentity_t* ent)
+{
+	missionDown[ent->s.number].downTime = 0;
+	missionDown[ent->s.number].reviver = -1;
+	ent->flags &= ~FL_NOTARGET;
+	ent->health = 0;
+	ent->client->ps.stats[STAT_HEALTH] = 0;
+	player_die(ent, ent, ent, 100000, MOD_SUICIDE);
+}
+
+/*
+ClientThink, every player in Missions: a downed player's controls, pose, bleed-out and give-up; a player who is up
+reviving the downed teammate he stands next to.
+*/
+void G_MissionDownThink(gentity_t* ent, usercmd_t* ucmd)
+{
+	if (level.gametype != GT_SINGLE_PLAYER || !ent->client || ent->s.number >= MAX_CLIENTS || ent->NPC)
+	{
+		return;
+	}
+	G_MissionDownInit();
+	missionDown_t* d = &missionDown[ent->s.number];
+
+	if (d->downTime)
+	{
+		if (ent->client->ps.pm_type == PM_DEAD || ent->health <= 0 || !G_MissionInGame(ent))
+		{
+			G_MissionClearDown(ent->s.number);
+			return;
+		}
+
+		const qboolean jumping = ucmd->upmove > 0 ? qtrue : qfalse;
+		if (jumping && !d->giveUpStart)
+		{
+			d->giveUpStart = level.time;
+		}
+		else if (!jumping)
+		{
+			d->giveUpStart = 0;
+		}
+
+		if (!G_MissionSomeoneElseUp(ent->s.number) || level.time - d->downTime > MISSION_DOWN_BLEED
+			|| d->giveUpStart && level.time - d->giveUpStart > MISSION_DOWN_GIVEUP)
+		{
+			G_MissionReallyDie(ent);
+			return;
+		}
+
+		// lying there: no moving, fighting or using
+		ucmd->forwardmove = 0;
+		ucmd->rightmove = 0;
+		ucmd->upmove = 0;
+		ucmd->buttons = 0;
+		ent->health = 1;
+		ent->client->ps.stats[STAT_HEALTH] = 1;
+		ent->client->ps.velocity[0] = ent->client->ps.velocity[1] = 0;
+		// on the ground: MP's knockdown (pmove holds BOTH_KNOCKDOWN1) kept going while he is down
+		ent->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
+		ent->client->ps.forceHandExtendTime = level.time + 500;
+		ent->client->ps.forceDodgeAnim = 0;
+
+		if (level.time >= d->nextNote && d->reviver < 0)
+		{
+			d->nextNote = level.time + 5000;
+			trap->SendServerCommand(ent->s.number, va("cp \"" S_COLOR_RED "You are down (%i s).\n" S_COLOR_WHITE
+				"A teammate can revive you. Hold JUMP to give up.\n\"",
+				(MISSION_DOWN_BLEED - (level.time - d->downTime) + 999) / 1000));
+		}
+		return;
+	}
+
+	// up: reviving?
+	if (!G_MissionPlayerUp(ent))
+	{
+		return;
+	}
+	G_MissionRememberSafeGround(ent);
+	int target = -1;
+	if (ucmd->buttons & BUTTON_USE)
+	{
+		float best = MISSION_DOWN_RANGE;
+		for (int i = 0; i < level.maxclients; i++)
+		{
+			const gentity_t* other = &g_entities[i];
+			if (i == ent->s.number || !missionDown[i].downTime || !G_MissionInGame(other))
+			{
+				continue;
+			}
+			const float dist = Distance(ent->client->ps.origin, other->client->ps.origin);
+			if (dist < best)
+			{
+				best = dist;
+				target = i;
+			}
+		}
+	}
+
+	// let go of anyone else this player was reviving
+	for (int i = 0; i < level.maxclients; i++)
+	{
+		if (missionDown[i].reviver == ent->s.number && i != target)
+		{
+			missionDown[i].reviver = -1;
+			missionDown[i].reviveStart = 0;
+		}
+	}
+	if (target < 0)
+	{
+		return;
+	}
+
+	missionDown_t* td = &missionDown[target];
+	gentity_t* downed = &g_entities[target];
+	if (td->reviver != ent->s.number)
+	{
+		if (td->reviver >= 0)
+		{
+			return; // someone else is on it
+		}
+		td->reviver = ent->s.number;
+		td->reviveStart = level.time;
+		td->nextNote = 0;
+	}
+	if (level.time - td->reviveStart >= MISSION_DOWN_REVIVE)
+	{
+		int health = downed->client->ps.stats[STAT_MAX_HEALTH] * 40 / 100;
+		if (health < 1)
+		{
+			health = 1;
+		}
+		G_MissionClearDown(target);
+		downed->health = health;
+		downed->client->ps.stats[STAT_HEALTH] = health;
+		// gets up (the knockdown's getup anim)
+		downed->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
+		downed->client->ps.forceDodgeAnim = 1;
+		downed->client->ps.forceHandExtendTime = level.time + 1000;
+		trap->SendServerCommand(-1, va("cp \"%s" S_COLOR_GREEN " revived %s" S_COLOR_GREEN ".\n\"",
+			ent->client->pers.netname, downed->client->pers.netname));
+		return;
+	}
+	if (level.time >= td->nextNote)
+	{
+		td->nextNote = level.time + 500;
+		const int left = (MISSION_DOWN_REVIVE - (level.time - td->reviveStart) + 999) / 1000;
+		trap->SendServerCommand(ent->s.number, va("cp \"Reviving %s" S_COLOR_WHITE "... %i\n\"", downed->client->pers.netname, left));
+		trap->SendServerCommand(target, va("cp \"%s" S_COLOR_WHITE " is reviving you... %i\n\"", ent->client->pers.netname, left));
+	}
+}

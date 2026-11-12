@@ -56,7 +56,7 @@ class CRailMover;
 #include "Ratl/vector_vs.h"
 #endif
 #if !defined(RAVL_VEC_INC)
-#include "../Ravl/CVec.h"
+#include "Ravl/CVec.h"
 #endif
 #if !defined(RUFL_HSTRING_INC)
 #include "../Rufl/hstring.h"

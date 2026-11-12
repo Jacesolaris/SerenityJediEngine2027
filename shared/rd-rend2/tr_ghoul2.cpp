@@ -20,7 +20,7 @@
 #include "tr_cache.h"
 #include "tr_weather.h"	// mesh cloth: weather wind (MC_WeatherWind)
 
-#include "../../code/rd-vanilla/tr_meshcloth.h"
+#include "rd-vanilla/tr_meshcloth.h"
 #include <vector>
 #include <unordered_map>
 #include <algorithm>
@@ -4181,11 +4181,11 @@ static void MC_FloorUnder(const trRefEntity_t* ent, const int timeMs, mcParams_t
 			start[2] += 30.0f;
 			const float a = k * (M_PI / 4.0f);
 			VectorSet(end, start[0] + cosf(a) * 48.0f, start[1] + sinf(a) * 48.0f, start[2]);
-		#ifdef REND2_SP
-				ri.SV_Trace(&tr, start, nullptr, nullptr, end, ENTITYNUM_NONE, CONTENTS_SOLID, G2_NOCOLLIDE, 0);
-		#else
-				ri.CM_BoxTrace(&tr, start, end, vec3_origin, vec3_origin, 0, CONTENTS_SOLID, qfalse);	// MP: world only
-		#endif
+#ifdef REND2_SP
+			ri.SV_Trace(&tr, start, nullptr, nullptr, end, ENTITYNUM_NONE, CONTENTS_SOLID, G2_NOCOLLIDE, 0);
+#else
+			ri.CM_BoxTrace(&tr, start, end, vec3_origin, vec3_origin, 0, CONTENTS_SOLID, qfalse);	// MP: world only
+#endif
 			if (tr.fraction >= 1.0f || tr.startsolid || tr.allsolid || fabsf(tr.plane.normal[2]) > 0.7f)
 			{
 				continue;

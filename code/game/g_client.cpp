@@ -2963,6 +2963,10 @@ void G_ChangePlayerModel(gentity_t* ent, const char* newModel)
 		G_CreateG2AttachedWeaponModel(ent, weaponData[ent->client->ps.weapon].weaponMdl, ent->handLBolt, 1);
 	}
 
+	// The armour flags belong to the old character: drop them here. Only the NPC file branch below sets them
+	// again (Boba / Mandalorian checks), so a character without armour no longer keeps the old one's bolt deflect.
+	ent->flags &= ~(FL_DINDJARIN | FL_BOBAFETT | FL_SABERDAMAGE_RESIST);
+
 	if (ent->client->ps.groundEntityNum == ENTITYNUM_NONE && PM_InLedgeMove(ent->client->ps.legsAnim))
 	{
 		ent->client->ps.pm_flags &= ~PMF_STUCK_TO_WALL;

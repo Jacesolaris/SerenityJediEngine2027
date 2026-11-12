@@ -5172,6 +5172,8 @@ static void ClientThink_real(gentity_t* ent)
 			}
 		}
 
+		G_MissionDownThink(ent, ucmd); // (Missions: a downed player lies there; a player next to one revives him, g_target.c)
+
 		if (player_locked && !G_MissionInCutscene()) // (not kept while a mission's cutscene plays out unseen)
 		{
 			//players' controls are locked, a scripting thingy
@@ -5802,7 +5804,7 @@ static void ClientThink_real(gentity_t* ent)
 				}
 				else
 				{
-					client->ps.gravity = g_gravity.value;
+					client->ps.gravity = level.missionGravitySet ? level.missionGravity : g_gravity.value; // (Missions: target_gravity_change)
 				}
 			}
 		}

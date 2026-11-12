@@ -352,7 +352,7 @@ static void R_SetupEntityAmbientCube(trRefEntity_t* ent, const vec3_t lightOrigi
 		return;
 	}
 
-	static const vec3_t axes[6] = { {1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1} };
+	static const vec3_t axes[6] = { { 1,0,0 },{ -1,0,0 },{ 0,1,0 },{ 0,-1,0 },{ 0,0,1 },{ 0,0,-1 } };
 	const float reach = 72.0f;
 	trRefEntity_t probe;
 
