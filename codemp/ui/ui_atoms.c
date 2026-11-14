@@ -105,7 +105,12 @@ Cmd_Argc() / Cmd_Argv()
 =================
 */
 qboolean UI_ConsoleCommand(int realTime) {
-	uiInfo.uiDC.frameTime = realTime - uiInfo.uiDC.realTime;
+	// as UI_Refresh: no previous time yet (realTime 0) = no frame time, and never a negative or huge one
+	uiInfo.uiDC.frameTime = uiInfo.uiDC.realTime ? realTime - uiInfo.uiDC.realTime : 0;
+	if (uiInfo.uiDC.frameTime < 0)
+		uiInfo.uiDC.frameTime = 0;
+	else if (uiInfo.uiDC.frameTime > 1000)
+		uiInfo.uiDC.frameTime = 1000;
 	uiInfo.uiDC.realTime = realTime;
 
 	if (UI_Pazaak_ConsoleCommand(UI_Argv(0)))

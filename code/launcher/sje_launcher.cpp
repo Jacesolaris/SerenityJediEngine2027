@@ -777,7 +777,7 @@ namespace
 	long long DaysFromCivil(int y, const int m, const int d)
 	{
 		y -= m <= 2;
-		const long long era = (y >= 0 ? y : y - 399) / 400;
+		const long long era = (y >= 0 ? y : static_cast<long long>(y) - 399) / 400;
 		const unsigned yoe = static_cast<unsigned>(y - era * 400);
 		const unsigned doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
 		const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;

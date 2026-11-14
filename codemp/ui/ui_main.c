@@ -1599,7 +1599,7 @@ void UI_LoadMenus(const char* menuFile, const qboolean reset)
 	Com_Printf("--------------------- Client Initialization ---------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("---------- genuine SerenityJediEngine-(Solaris Edition)MP--------\n");
-	Com_Printf("---------------------Build date 12/11/2026-----------------------\n"); // build date
+	Com_Printf("---------------------Build date 14/11/2026-----------------------\n"); // build date
 	Com_Printf("---------------------------Build 10------------------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("------------------------LightSaber-------------------------------\n");
@@ -11825,7 +11825,13 @@ static void UI_Refresh(int realtime)
 
 	UI_MissionContinueCvars(); // (Missions: the Continue buttons)
 
-	uiInfo.uiDC.frameTime = realtime - uiInfo.uiDC.realTime;
+	// the first frame after the UI starts (also after vid_restart) has no previous time: realTime is still 0 and the
+	// difference would be the whole session time, which drove the menu fades far out of range (Fade); clamp the rest
+	uiInfo.uiDC.frameTime = uiInfo.uiDC.realTime ? realtime - uiInfo.uiDC.realTime : 0;
+	if (uiInfo.uiDC.frameTime < 0)
+		uiInfo.uiDC.frameTime = 0;
+	else if (uiInfo.uiDC.frameTime > 1000)
+		uiInfo.uiDC.frameTime = 1000;
 	uiInfo.uiDC.realTime = realtime;
 
 	previousTimes[index % UI_FPS_FRAMES] = uiInfo.uiDC.frameTime;

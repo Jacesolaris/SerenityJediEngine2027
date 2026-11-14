@@ -729,16 +729,26 @@ void Fade(int* flags, float* f, const float clamp, int* nextTime, const int offs
 	{
 		if (DC->realTime > *nextTime)
 		{
-			const float tAdjust = DC->frameTime / (1000.0 / UI_TARGET_FPS);
+			// clamp: a huge first-frame frameTime after vid_restart drove alpha far below 0 (rend2 doesn't clamp colours),
+			// so the menu text never came back and rend2's HDR buffer posterised; a negative frameTime must not fade either
+			float tAdjust = DC->frameTime / (1000.0f / UI_TARGET_FPS);
+			if (tAdjust < 0.0f)
+				tAdjust = 0.0f;
+			else if (tAdjust > 4.0f)
+				tAdjust = 4.0f;
 			*nextTime = DC->realTime + offsetTime;
 			if (*flags & WINDOW_FADINGOUT)
 			{
 				*f -= fadeAmount * tAdjust;
+				if (*f < 0.0f)
+					*f = 0.0f;
 				if (bFlags && *f <= 0.0)
 					*flags &= ~(WINDOW_FADINGOUT | WINDOW_VISIBLE);
 			}
 			else
 			{
+				if (*f < 0.0f)
+					*f = 0.0f; // an alpha left below 0 starts its fade-in from 0
 				*f += fadeAmount * tAdjust;
 				if (*f >= clamp)
 				{

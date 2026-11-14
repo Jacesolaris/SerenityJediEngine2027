@@ -2042,10 +2042,12 @@ static const void* RB_SetColor(const void* data) {
 
 	cmd = (const setColorCommand_t*)data;
 
-	backEnd.color2D[0] = cmd->color[0];
-	backEnd.color2D[1] = cmd->color[1];
-	backEnd.color2D[2] = cmd->color[2];
-	backEnd.color2D[3] = cmd->color[3];
+	// 0..1 like vanilla, which can only pass bytes: an alpha below 0 or above 1 (e.g. from a menu fade) made the blend
+	// multiply what is under it, which grew to Inf/NaN in the HDR buffer (posterised MP menus after vid_restart)
+	for (int i = 0; i < 4; i++)
+	{
+		backEnd.color2D[i] = cmd->color[i] < 0.0f ? 0.0f : cmd->color[i] > 1.0f ? 1.0f : cmd->color[i];
+	}
 	// the dynamic HUD fade is applied when a 2D batch is drawn (RB_HudFadeStage), so quads with a different fade
 	// must not share a batch (it only changes when cgame starts and ends the HUD, so this flushes twice a frame at most)
 	if (cmd->hudFade != backEnd.hudFade2D && tess.numIndexes)
