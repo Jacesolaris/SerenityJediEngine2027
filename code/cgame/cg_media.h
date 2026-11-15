@@ -248,6 +248,8 @@ using cgMedia_t = struct
 	qhandle_t blueSaberCoreShader;
 	qhandle_t purpleSaberGlowShader;
 	qhandle_t purpleSaberCoreShader;
+	qhandle_t saberSolidCoreShader; // cg_saberSolidCore mask passes
+	qhandle_t saberSolidCoreHotShader;
 	qhandle_t rgbSaberGlowShader;
 	qhandle_t rgbSaberCoreShader;
 	qhandle_t rgbSaberCore2Shader;

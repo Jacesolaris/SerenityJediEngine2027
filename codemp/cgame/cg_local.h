@@ -1266,6 +1266,8 @@ typedef struct cgMedia_s {
 	qhandle_t	blueSaberCoreShader;
 	qhandle_t	purpleSaberGlowShader;
 	qhandle_t	purpleSaberCoreShader;
+	qhandle_t	saberSolidCoreShader; // cg_saberSolidCore mask passes
+	qhandle_t	saberSolidCoreHotShader;
 	qhandle_t	saberBlurShader;
 	qhandle_t	unstableBlurShader;
 	qhandle_t	swordTrailShader;
@@ -2148,6 +2150,7 @@ void CG_Trace(trace_t* result, const vec3_t start, const vec3_t mins, const vec3
 void CG_G2Trace(trace_t* result, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end,
 	int skip_number, int mask);
 void CG_PredictPlayerState(void);
+void CG_SaberTargetLock(void); // cg_draw.c, saber block target lock (g_saberTargetLock)
 void CG_LoadDeferredPlayers(void);
 
 //

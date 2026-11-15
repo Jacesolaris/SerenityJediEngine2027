@@ -8,12 +8,10 @@
 autoexec_mp.cfg
 autoexec_sp.cfg
 description.txt
-SerenityJediEngine-MP-FFA-Server.cfg
 SerenityJediEngine2027-Assets-0.pk3
 SerenityJediEngine2027-Assets-1.pk3
 SerenityJediEngine2027-Assets-2.pk3
 SerenityJediEngine2027-Assets-3.pk3
-Start SerenityJediEngine-MP-FFA-Server.bat
 
 Read Me\
 Read Me\AI Workshop Readme.txt

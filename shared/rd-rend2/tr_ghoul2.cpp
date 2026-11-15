@@ -340,6 +340,107 @@ struct SBoneCalc
 };
 
 class CBoneCache;
+// kjk Q-0080: mixing two bone matrices value by value shrinks a bone turned far between them (to nothing at
+// half a turn), so the hand tag and the blade swing wide of where the bone really points. Mix the turn as a
+// normalised quaternion instead, and keep the joint where the plain mix puts it (on its parent).
+// result = a * (1 - w) + b * w
+static void G2_ArcLerpBone(mdxaBone_t* out, const mdxaBone_t* a, const mdxaBone_t* b, const float w,
+	const mdxaHeader_t* header, const int boneIndex)
+{
+	mdxaBone_t lerped;
+	for (int i = 0; i < 3; i++)
+	{
+		for (int j = 0; j < 4; j++)
+		{
+			lerped.matrix[i][j] = a->matrix[i][j] * (1.0f - w) + b->matrix[i][j] * w;
+		}
+	}
+
+	float q[2][4];
+	const mdxaBone_t* src[2] = { a, b };
+	for (int k = 0; k < 2; k++)
+	{
+		const float(*m)[4] = src[k]->matrix;
+		const float tr = m[0][0] + m[1][1] + m[2][2];
+		float* o = q[k];
+		if (tr > 0.0f)
+		{
+			const float s = sqrtf(tr + 1.0f) * 2.0f;
+			o[3] = 0.25f * s;
+			o[0] = (m[2][1] - m[1][2]) / s;
+			o[1] = (m[0][2] - m[2][0]) / s;
+			o[2] = (m[1][0] - m[0][1]) / s;
+		}
+		else if (m[0][0] > m[1][1] && m[0][0] > m[2][2])
+		{
+			const float s = sqrtf(1.0f + m[0][0] - m[1][1] - m[2][2]) * 2.0f;
+			o[3] = (m[2][1] - m[1][2]) / s;
+			o[0] = 0.25f * s;
+			o[1] = (m[0][1] + m[1][0]) / s;
+			o[2] = (m[0][2] + m[2][0]) / s;
+		}
+		else if (m[1][1] > m[2][2])
+		{
+			const float s = sqrtf(1.0f + m[1][1] - m[0][0] - m[2][2]) * 2.0f;
+			o[3] = (m[0][2] - m[2][0]) / s;
+			o[0] = (m[0][1] + m[1][0]) / s;
+			o[1] = 0.25f * s;
+			o[2] = (m[1][2] + m[2][1]) / s;
+		}
+		else
+		{
+			const float s = sqrtf(1.0f + m[2][2] - m[0][0] - m[1][1]) * 2.0f;
+			o[3] = (m[1][0] - m[0][1]) / s;
+			o[0] = (m[0][2] + m[2][0]) / s;
+			o[1] = (m[1][2] + m[2][1]) / s;
+			o[2] = 0.25f * s;
+		}
+	}
+
+	float dot = q[0][0] * q[1][0] + q[0][1] * q[1][1] + q[0][2] * q[1][2] + q[0][3] * q[1][3];
+	const float sb = dot < 0.0f ? -1.0f : 1.0f;
+	dot *= sb;
+	if (dot > 0.9995f || w <= 0.0f || w >= 1.0f)
+	{
+		*out = lerped; // under ~4 degrees apart the plain mix loses well under 0.1% of the length
+		return;
+	}
+
+	float r[4];
+	float len = 0.0f;
+	for (int k = 0; k < 4; k++)
+	{
+		r[k] = q[0][k] * (1.0f - w) + sb * q[1][k] * w;
+		len += r[k] * r[k];
+	}
+	if (len < 1e-8f)
+	{
+		*out = lerped;
+		return;
+	}
+	len = 1.0f / sqrtf(len);
+	const float x = r[0] * len, y = r[1] * len, z = r[2] * len, qw = r[3] * len;
+
+	const float rot[3][3] = {
+		{ 1.0f - 2.0f * (y * y + z * z), 2.0f * (x * y - z * qw), 2.0f * (x * z + y * qw) },
+		{ 2.0f * (x * y + z * qw), 1.0f - 2.0f * (x * x + z * z), 2.0f * (y * z - x * qw) },
+		{ 2.0f * (x * z - y * qw), 2.0f * (y * z + x * qw), 1.0f - 2.0f * (x * x + y * y) } };
+
+	// the joint, in the base pose, and where the plain mix puts it
+	const mdxaSkelOffsets_t* offs = reinterpret_cast<const mdxaSkelOffsets_t*>(reinterpret_cast<const byte*>(header) + sizeof(mdxaHeader_t));
+	const mdxaSkel_t* sk = reinterpret_cast<const mdxaSkel_t*>(reinterpret_cast<const byte*>(header) + sizeof(mdxaHeader_t) + offs->offsets[boneIndex]);
+	const float p[3] = { sk->BasePoseMat.matrix[0][3], sk->BasePoseMat.matrix[1][3], sk->BasePoseMat.matrix[2][3] };
+
+	for (int i = 0; i < 3; i++)
+	{
+		const float joint = lerped.matrix[i][0] * p[0] + lerped.matrix[i][1] * p[1] + lerped.matrix[i][2] * p[2] + lerped.matrix[i][3];
+		out->matrix[i][0] = rot[i][0];
+		out->matrix[i][1] = rot[i][1];
+		out->matrix[i][2] = rot[i][2];
+		out->matrix[i][3] = joint - (rot[i][0] * p[0] + rot[i][1] * p[1] + rot[i][2] * p[2]);
+	}
+}
+
 static void G2_TransformBone(int index, CBoneCache& CB);
 
 class CBoneCache
@@ -1278,7 +1379,11 @@ void G2_TimingModel(
 		}
 	}
 
-	if (bone.endFrame < 0 || bone.endFrame >= numFramesInFile)
+	// endFrame is one past the last frame, so endFrame == numFramesInFile is valid: an anim that ends on the
+	// file's last frame. Clamping it to numFramesInFile - 1 (2026-11-15, DH) cut that frame off and changed the
+	// bone's stored end, so the game no longer saw the anim as playing and restarted it every frame (the protocol
+	// droid's walk, the last frames of protocol.gla, stood frozen on its first frame on rend2).
+	if (bone.endFrame < 0 || bone.endFrame > numFramesInFile)
 	{
 		if (bone.endFrame < 0)
 		{
@@ -1286,7 +1391,7 @@ void G2_TimingModel(
 		}
 		else
 		{
-			bone.endFrame = numFramesInFile - 1;
+			bone.endFrame = numFramesInFile;
 		}
 	}
 
@@ -1876,7 +1981,7 @@ static void G2_TransformBone(int child, CBoneCache& BC)
 		mdxaBone_t currentFrameBone{};
 		UnCompressBone(newFrameBone.matrix, child, BC.header, TB.newFrame);
 		UnCompressBone(currentFrameBone.matrix, child, BC.header, TB.currentFrame);
-		Mat3x4_Lerp(&currentBone, &newFrameBone, &currentFrameBone, TB.backlerp);
+		G2_ArcLerpBone(&currentBone, &currentFrameBone, &newFrameBone, TB.backlerp, BC.header, child);
 	}
 
 	// are we blending with another frame of anim?
@@ -1890,8 +1995,8 @@ static void G2_TransformBone(int child, CBoneCache& BC)
 
 		const float backlerp = TB.blendFrame - (int)TB.blendFrame;
 		mdxaBone_t lerpFrameBone;
-		Mat3x4_Lerp(&lerpFrameBone, &blendFrameBone, &blendOldFrameBone, backlerp);
-		Mat3x4_Lerp(&currentBone, &currentBone, &lerpFrameBone, TB.blendLerp);
+		Mat3x4_Lerp(&lerpFrameBone, &blendFrameBone, &blendOldFrameBone, 1.0f - backlerp); // kjk Q-0004: fraction goes on the later frame
+		G2_ArcLerpBone(&currentBone, &lerpFrameBone, &currentBone, TB.blendLerp, BC.header, child);
 	}
 
 	if (!child)

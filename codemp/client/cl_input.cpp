@@ -1657,9 +1657,13 @@ static void CL_FinishMove(usercmd_t* cmd)
 
 	if (cl.cgameViewAngleForceTime > cl.serverTime)
 	{
+		// keep this frame's own mouse / stick yaw on top of the forced yaw: the saber block target lock (cgame
+		// g_saberTargetLock) turns the view every frame without eating the player's turning (2026-11-15)
+		const float yaw_input = AngleSubtract(cl.viewangles[YAW], cl_lastViewAngles[YAW]);
+
 		cl.cgameViewAngleForce[YAW] -= SHORT2ANGLE(cl.snap.ps.delta_angles[YAW]);
 
-		cl.viewangles[YAW] = cl.cgameViewAngleForce[YAW];
+		cl.viewangles[YAW] = cl.cgameViewAngleForce[YAW] + yaw_input;
 		cl.cgameViewAngleForceTime = 0;
 	}
 

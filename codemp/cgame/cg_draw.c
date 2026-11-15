@@ -7758,6 +7758,376 @@ static void CG_LerpCrosshairPos(float* x, float* y)
 vec3_t cg_crosshairPos = { 0, 0, 0 };
 extern qboolean in_camera;
 
+/*
+=====================
+Saber block target lock (g_saberTargetLock, 2026-11-15, off by default)
+
+While the player holds block with a saber, the view turns smoothly (yaw only, pitch stays free) towards the enemy
+nearest the crosshair: inside a 20 degree cone and 256 units of the camera (where the crosshair names show), in sight, alive, not a team mate, ally NPC or neutral.
+Releasing block frees it. The lock breaks on the target's death, 750 ms out of sight, past 272 units from the camera, or a fast turn
+of the player's own (mouse or stick, 40 degrees in 250 ms); 300 ms after such a flick the enemy nearest the
+crosshair is taken again, so a flick switches targets. Turning away from the target (stick held against the lock) stops the pull at once and lets go after 1 s; that target is not taken again until block is released. No lock in cutscenes, saberlocks, vehicles, on an emplaced
+gun or while following someone, and no turning while sprinting. It only aims (client side, through the engine's
+forced view yaw, which keeps the frame's own mouse turn on top since this change): no block, parry or block point
+rule changes. The crosshair turns red and red brackets are drawn around it. Same rules as SP g_active.cpp.
+=====================
+*/
+int cg_saberTargetLockEnt = ENTITYNUM_NONE;
+
+#define TARGETLOCK_RANGE		256.0f	// from the camera: as far as the crosshair names show
+#define TARGETLOCK_BREAK_RANGE	272.0f	// from the camera (the brackets have faded out at 256, as the names)
+#define TARGETLOCK_CONE			20.0f	// degrees off the crosshair
+#define TARGETLOCK_TURN_RATE	10.0f	// per second: about 63% of the angle left is turned in 100 ms
+#define TARGETLOCK_MAX_TURN		540.0f	// degrees per second
+#define TARGETLOCK_DEADZONE		1.5f	// degrees: the pull fades in over this many degrees (a hard edge pulsed)
+#define TARGETLOCK_FLICK		40.0f	// degrees of the player's own turning...
+#define TARGETLOCK_FLICK_MS		250		// ...inside this time breaks the lock
+#define TARGETLOCK_LOS_MS		750
+#define TARGETLOCK_RETRY_MS		300
+#define TARGETLOCK_TURNAWAY_RATE	15.0f	// degrees a second of the player's own turn away from the target...
+#define TARGETLOCK_TURNAWAY_MS	1000	// ...this long lets the lock go (DH: holding the stick against it shook the view)
+#define TARGETLOCK_TURNAWAY_GRACE	150	// input gaps shorter than this still count as turning away
+#define TARGETLOCK_AIM_SMOOTH	12.0f	// per second: the aim point follows the target smoothly (DH: a target moving sideways shook)
+
+static void CG_TargetLockCenter(const centity_t* cent, vec3_t center)
+{
+	VectorCopy(cent->lerpOrigin, center);
+	center[2] += 8.0f;
+}
+
+static qboolean CG_TargetLockValid(const int num)
+{
+	const int me = cg.snap->ps.clientNum;
+
+	if (num < 0 || num >= ENTITYNUM_WORLD || num == me)
+	{
+		return qfalse;
+	}
+
+	const centity_t* cent = &cg_entities[num];
+
+	if (!cent->currentValid)
+	{
+		return qfalse;
+	}
+	if (cent->currentState.eFlags & (EF_DEAD | EF_NODRAW))
+	{
+		return qfalse;
+	}
+
+	if (cent->currentState.eType == ET_PLAYER && num < MAX_CLIENTS)
+	{
+		const clientInfo_t* ci = &cgs.clientinfo[num];
+
+		if (!ci->infoValid || ci->team == TEAM_SPECTATOR)
+		{
+			return qfalse;
+		}
+		if (cgs.gametype >= GT_TEAM && ci->team == cg.predictedPlayerState.persistant[PERS_TEAM])
+		{
+			//team mate
+			return qfalse;
+		}
+		return qtrue;
+	}
+
+	if (cent->currentState.eType == ET_NPC)
+	{
+		const int pl_team = cgs.gametype == GT_SIEGE ? cg.predictedPlayerState.persistant[PERS_TEAM] : NPCTEAM_PLAYER;
+
+		if (cent->currentState.NPC_class == CLASS_VEHICLE || cent->currentState.owner == me)
+		{
+			return qfalse;
+		}
+		if (cent->currentState.teamowner == pl_team || cent->currentState.teamowner == NPCTEAM_NEUTRAL)
+		{
+			//ally or neutral
+			return qfalse;
+		}
+		return qtrue;
+	}
+	return qfalse;
+}
+
+static qboolean CG_TargetLockLOS(const vec3_t eye, const int num, const vec3_t center)
+{
+	trace_t tr;
+	CG_Trace(&tr, eye, NULL, NULL, center, cg.snap->ps.clientNum, CONTENTS_SOLID | CONTENTS_TERRAIN);
+	return tr.fraction >= 1.0f || tr.entityNum == num ? qtrue : qfalse;
+}
+
+static int CG_TargetLockAcquire(const vec3_t eye, const int skip)
+{
+	vec3_t forward;
+	const float min_dot = cos(DEG2RAD(TARGETLOCK_CONE));
+	float best_dot = min_dot;
+	int best = ENTITYNUM_NONE;
+
+	AngleVectors(cg.predictedPlayerState.viewangles, forward, NULL, NULL);
+
+	for (int i = 0; i < cg.snap->numEntities; i++)
+	{
+		const int num = cg.snap->entities[i].number;
+		vec3_t center, dir;
+
+		if (!CG_TargetLockValid(num) || num == skip)
+		{
+			continue;
+		}
+		CG_TargetLockCenter(&cg_entities[num], center);
+		if (Distance(cg.refdef.vieworg, center) > TARGETLOCK_RANGE)
+		{
+			continue;
+		}
+		VectorSubtract(center, eye, dir);
+		if (VectorNormalize(dir) < 1.0f)
+		{
+			continue;
+		}
+		const float dot = DotProduct(dir, forward);
+		if (dot < best_dot)
+		{
+			continue;
+		}
+		if (!CG_TargetLockLOS(eye, num, center))
+		{
+			continue;
+		}
+		best = num;
+		best_dot = dot;
+	}
+	return best;
+}
+
+void CG_SaberTargetLock(void)
+{
+	static float last_yaw = 0.0f;
+	static float last_step = 0.0f;
+	static int flick_start = 0;
+	static float flick_sum = 0.0f;
+	static int lost_los_time = 0;
+	static int retry_time = 0;
+	static int turn_away_ms = 0;
+	static int turn_away_last = 0;
+	static int turn_away_skip = ENTITYNUM_NONE; // let go by turning away: not taken again until block is released
+	static float smooth_yaw = 0.0f;
+	static int smooth_ent = ENTITYNUM_NONE;
+
+	const playerState_t* ps = &cg.predictedPlayerState;
+	usercmd_t cmd;
+
+	memset(&cmd, 0, sizeof cmd);
+	trap->GetUserCmd(trap->GetCurrentCmdNumber(), &cmd);
+
+	//the player's own turn since last frame: the yaw change less the lock's own step
+	const float own_turn = AngleSubtract(ps->viewangles[YAW], last_yaw) - last_step;
+	last_yaw = ps->viewangles[YAW];
+	last_step = 0.0f;
+
+	const qboolean want = g_saberTargetLock.integer
+		&& !cg.demoPlayback
+		&& !(cg.snap->ps.pm_flags & PMF_FOLLOW)
+		&& ps->persistant[PERS_TEAM] != TEAM_SPECTATOR
+		&& ps->pm_type == PM_NORMAL
+		&& ps->stats[STAT_HEALTH] > 0
+		&& ps->weapon == WP_SABER
+		&& ps->ManualBlockingFlags & 1 << MBF_HOLDINGBLOCK
+		&& cmd.buttons & BUTTON_BLOCK
+		&& !in_camera
+		&& ps->saberLockTime < cg.time
+		&& !(ps->communicatingflags & 1 << CF_SABERLOCKING)
+		&& !ps->m_iVehicleNum
+		&& !ps->emplacedIndex
+		? qtrue : qfalse;
+
+	if (!want)
+	{
+		cg_saberTargetLockEnt = ENTITYNUM_NONE;
+		retry_time = 0;
+		flick_sum = 0.0f;
+		turn_away_ms = 0;
+		turn_away_skip = ENTITYNUM_NONE;
+		smooth_ent = ENTITYNUM_NONE;
+		return;
+	}
+
+	vec3_t eye, center;
+	VectorCopy(ps->origin, eye);
+	eye[2] += ps->viewheight;
+
+	if (cg_saberTargetLockEnt != ENTITYNUM_NONE)
+	{
+		//a fast turn of the player's own breaks the lock
+		if (cg.time - flick_start > TARGETLOCK_FLICK_MS)
+		{
+			flick_start = cg.time;
+			flick_sum = 0.0f;
+		}
+		flick_sum += own_turn;
+
+		qboolean keep = CG_TargetLockValid(cg_saberTargetLockEnt);
+
+		if (keep)
+		{
+			CG_TargetLockCenter(&cg_entities[cg_saberTargetLockEnt], center);
+			if (Distance(cg.refdef.vieworg, center) > TARGETLOCK_BREAK_RANGE)
+			{
+				keep = qfalse;
+			}
+			else if (!CG_TargetLockLOS(eye, cg_saberTargetLockEnt, center))
+			{
+				if (!lost_los_time)
+				{
+					lost_los_time = cg.time;
+				}
+				else if (cg.time - lost_los_time > TARGETLOCK_LOS_MS)
+				{
+					keep = qfalse;
+				}
+			}
+			else
+			{
+				lost_los_time = 0;
+			}
+		}
+
+		if (fabs(flick_sum) > TARGETLOCK_FLICK)
+		{
+			keep = qfalse;
+			retry_time = cg.time + TARGETLOCK_RETRY_MS;
+		}
+
+		if (!keep)
+		{
+			cg_saberTargetLockEnt = ENTITYNUM_NONE;
+		}
+	}
+
+	if (cg_saberTargetLockEnt == ENTITYNUM_NONE && cg.time >= retry_time)
+	{
+		cg_saberTargetLockEnt = CG_TargetLockAcquire(eye, turn_away_skip);
+		if (cg_saberTargetLockEnt != ENTITYNUM_NONE)
+		{
+			lost_los_time = 0;
+			flick_start = cg.time;
+			flick_sum = 0.0f;
+		}
+	}
+
+	if (cg_saberTargetLockEnt == ENTITYNUM_NONE || ps->PlayerEffectFlags & 1 << PEF_SPRINTING || cg.frametime <= 0)
+	{
+		return;
+	}
+
+	//turn smoothly towards it: a smoothed aim point, so a target moving sideways is followed without shaking
+	vec3_t dir, angles;
+	CG_TargetLockCenter(&cg_entities[cg_saberTargetLockEnt], center);
+	VectorSubtract(center, eye, dir);
+	const float aim_yaw = vectoyaw(dir);
+	if (smooth_ent != cg_saberTargetLockEnt)
+	{
+		smooth_ent = cg_saberTargetLockEnt;
+		smooth_yaw = aim_yaw;
+	}
+	else
+	{
+		smooth_yaw = AngleNormalize360(smooth_yaw + AngleSubtract(aim_yaw, smooth_yaw) * (1.0f - exp(-TARGETLOCK_AIM_SMOOTH * (cg.frametime > 100 ? 100 : cg.frametime) * 0.001f)));
+	}
+	const float diff = AngleSubtract(smooth_yaw, ps->viewangles[YAW]);
+
+	// the player turning away from the target: no pull while he does (pulling against the stick shook the view), and
+	// after TARGETLOCK_TURNAWAY_MS the lock lets go of this target until block is released
+	const float own_rate = fabs(own_turn) * 1000.0f / cg.frametime;
+	if (fabs(diff) > TARGETLOCK_DEADZONE && own_turn * diff < 0.0f && own_rate > TARGETLOCK_TURNAWAY_RATE)
+	{
+		if (!turn_away_ms)
+		{
+			turn_away_ms = cg.time; // when the turning away started
+		}
+		turn_away_last = cg.time;
+	}
+	else if (cg.time - turn_away_last > TARGETLOCK_TURNAWAY_GRACE)
+	{
+		turn_away_ms = 0;
+	}
+	if (turn_away_ms > 0)
+	{
+		if (cg.time - turn_away_ms > TARGETLOCK_TURNAWAY_MS)
+		{
+			turn_away_skip = cg_saberTargetLockEnt;
+			cg_saberTargetLockEnt = ENTITYNUM_NONE;
+			turn_away_ms = 0;
+		}
+		return;
+	}
+
+	{
+		const float secs = (cg.frametime > 100 ? 100 : cg.frametime) * 0.001f;
+		float step = diff * (1.0f - exp(-TARGETLOCK_TURN_RATE * secs));
+		const float max_step = TARGETLOCK_MAX_TURN * secs;
+		if (step > max_step)
+		{
+			step = max_step;
+		}
+		else if (step < -max_step)
+		{
+			step = -max_step;
+		}
+		// soft dead zone: the pull fades in over the first TARGETLOCK_DEADZONE degrees instead of switching on and off
+		float weight = fabs(diff) / TARGETLOCK_DEADZONE;
+		weight = weight > 1.0f ? 1.0f : weight;
+		step *= weight * weight * (3.0f - 2.0f * weight);
+		VectorCopy(ps->viewangles, angles);
+		angles[YAW] = AngleNormalize360(angles[YAW] + step);
+		trap->SetClientForceAngle(cg.time + 1000, angles);
+		last_step = step;
+	}
+}
+
+/*
+=====================
+CG_DrawSaberTargetLock
+
+Faint grey corner brackets around the crosshair while the saber block target lock holds an enemy.
+=====================
+*/
+static void CG_DrawSaberTargetLock(const float cx, const float cy, const float cw, const float ch)
+{
+	// faint grey corner brackets around the crosshair (DH: around the crosshair, not the target) while the saber block
+	// target lock holds an enemy; called from CG_DrawCrosshair with the crosshair's screen box
+	if (cg_saberTargetLockEnt == ENTITYNUM_NONE || in_camera || !CG_TargetLockValid(cg_saberTargetLockEnt))
+	{
+		return;
+	}
+
+	// fades out over the last fifth of the crosshair name range, as the names do
+	const float alpha = CG_OverheadFade(Distance(cg_entities[cg_saberTargetLockEnt].lerpOrigin, cg.refdef.vieworg), 256.0f);
+	if (alpha <= 0.0f)
+	{
+		return;
+	}
+
+	const float pad = 0.0f; // the crosshair box itself: the ring inside it fills ~85%, so the brackets almost touch it (DH: discreet)
+	const float x = cx - pad;
+	const float y = cy - pad;
+	const float w = cw + pad * 2.0f;
+	const float h = ch + pad * 2.0f;
+	const float line_length = w * 0.2f > 2.0f ? w * 0.2f : 2.0f;
+	const vec4_t grey = { 0.7f, 0.7f, 0.7f, alpha * 0.45f }; // faint grey (DH)
+
+	trap->R_SetColor(grey);
+	CG_DrawPic(x, y, line_length, 1, cgs.media.whiteShader);
+	CG_DrawPic(x, y, 1, line_length, cgs.media.whiteShader);
+	CG_DrawPic(x + w - line_length, y, line_length, 1, cgs.media.whiteShader);
+	CG_DrawPic(x + w - 1, y, 1, line_length, cgs.media.whiteShader);
+	CG_DrawPic(x, y + h - 1, line_length, 1, cgs.media.whiteShader);
+	CG_DrawPic(x, y + h - line_length, 1, line_length, cgs.media.whiteShader);
+	CG_DrawPic(x + w - line_length, y + h - 1, line_length, 1, cgs.media.whiteShader);
+	CG_DrawPic(x + w - 1, y + h - line_length, 1, line_length, cgs.media.whiteShader);
+	trap->R_SetColor(NULL);
+}
+
+
 // SS_BLASTER (Jace 2026-10-31): the adaptive crosshair shows while the left hand pistol is aimed - walk + dash held
 // (a shot about to go, or charging) or a shot's arm still out
 static qboolean CG_SaberBlasterAiming(void)
@@ -8132,6 +8502,12 @@ static void CG_DrawCrosshair(vec3_t world_point, const int ch_ent_valid)
 		}
 	}
 
+	if (cg_saberTargetLockEnt != ENTITYNUM_NONE)
+	{
+		//the saber block target lock holds an enemy (g_saberTargetLock)
+		trap->R_SetColor(g_color_table[ColorIndex(COLOR_RED)]);
+	}
+
 	if (cg.predictedPlayerState.m_iVehicleNum)
 	{
 		//I'm in a vehicle
@@ -8245,6 +8621,7 @@ static void CG_DrawCrosshair(vec3_t world_point, const int ch_ent_valid)
 	const float chX = x + cg.refdef.x + 0.5f * (640 - w);
 	float chY = y + cg.refdef.y + 0.5f * (480 - h);
 	trap->R_DrawStretchPic(chX, chY, w, h, 0, 0, 1, 1, hShader);
+	CG_DrawSaberTargetLock(chX, chY, w, h); // saber block target lock brackets
 
 	//draw a health bar directly under the crosshair if we're looking at something
 	//that takes damage
@@ -12235,6 +12612,7 @@ static void CG_Draw2D(void)
 			CG_DrawAmmoWarning();
 
 			CG_DrawCrosshairNames();
+
 
 			CG_DrawCrosshairItem();
 

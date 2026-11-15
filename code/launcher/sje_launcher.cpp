@@ -6,8 +6,9 @@ SerenityJediEngine2027 launcher
 A window like the Jedi Academy launcher, in the SerenityJediEngine blue: SINGLEPLAYER, MULTIPLAYER, SETTINGS and EXIT,
 with UPDATES / MODDB / YOUTUBE below the version at the bottom left.
 - MULTIPLAYER opens its own list: START MULTIPLAYER, START SERVER and BACK. START SERVER runs
-  "Start SerenityJediEngine-MP-FFA-Server.bat" from the SerenityJediEngine2027 mod folder in its own console window and
-  the launcher stays open (so the game can be started next, to join the server).
+  "Launcher-Server.bat" in its own console window. The bat is built into the launcher (texts/Launcher-Server.bat,
+  written to %TEMP% and run from the game folder) and execs Launcher-Server.cfg from SerenityJediEngine2027-Assets-1.pk3,
+  so players do not see either file. The launcher stays open (so the game can be started next, to join the server).
 - SETTINGS: graphic mode, display, resolution and controller (written into the game's configs and passed as "+set"
   values on the command line), the launcher's music and its update check, and the installation check.
 - UPDATES: this build's date against the newest download on the SerenityJediEngine ModDB page (read in the background
@@ -94,11 +95,13 @@ namespace
 
 	const wchar_t* const kSPExe = L"SerenityJediEngine2027-SP.x86_64.exe";
 	const wchar_t* const kMPExe = L"SerenityJediEngine2027-MP.x86_64.exe";
+	const wchar_t* const kDedExe = L"SerenityJediEngine2027-DED.x86_64.exe";
 	const wchar_t* const kIniName = L"SerenityJediEngine2027-Launcher.ini";
-	// the mod folder (fs_game) next to the exes, and the dedicated server batch file in it (it does "cd .." itself, so it
-	// runs from the mod folder)
+	// the mod folder (fs_game) next to the exes
 	const wchar_t* const kModFolder = L"SerenityJediEngine2027";
-	const wchar_t* const kServerBat = L"Start SerenityJediEngine-MP-FFA-Server.bat";
+	// the dedicated server batch file: built into the launcher (IDR_SERVER_BAT), written to %TEMP% under this name and
+	// run from the game folder
+	const wchar_t* const kServerBat = L"Launcher-Server.bat";
 	// Release builds of the game only start when this is set on their process (shared/sys/sys_main.cpp
 	// Sys_RequireLauncher: SJE_LAUNCHER_ENV / SJE_LAUNCHER_TOKEN); keep the two the same.
 	const wchar_t* const kLauncherEnv = L"SJE_LAUNCHER";
@@ -159,7 +162,7 @@ namespace
 
 	struct Settings
 	{
-		bool rend2 = false;
+		bool rend2 = true; // rend2 is the default renderer (DH 2026-11-15)
 		bool windowed = false;
 		bool controller = true;     // in_joystick: gamepad / joystick input (the game default is on)
 		bool music = true;          // launcher background music (speaker button)
@@ -420,7 +423,7 @@ namespace
 	void LoadSettings()
 	{
 		const std::wstring ini = IniPath();
-		g_launcher.settings.rend2 = GetPrivateProfileIntW(L"Options", L"Rend2", 0, ini.c_str()) != 0;
+		g_launcher.settings.rend2 = GetPrivateProfileIntW(L"Options", L"Rend2", 1, ini.c_str()) != 0;
 		g_launcher.settings.windowed = GetPrivateProfileIntW(L"Options", L"Windowed", 0, ini.c_str()) != 0;
 		g_launcher.settings.controller = GetPrivateProfileIntW(L"Options", L"Controller", 1, ini.c_str()) != 0;
 		g_launcher.settings.music = GetPrivateProfileIntW(L"Options", L"Music", 1, ini.c_str()) != 0;
@@ -1945,16 +1948,22 @@ namespace
 		return true;
 	}
 
-	// Runs the FFA dedicated server batch file from the mod folder in a console window of its own. The batch file
-	// restarts the server when it crashes; closing its window stops it.
+	// Runs the dedicated server batch file in a console window of its own. The batch file is built into the launcher
+	// (IDR_SERVER_BAT, texts/Launcher-Server.bat) so players do not see or edit it: it is written to %TEMP% and run with
+	// the game folder as the current folder. It restarts the server when it crashes; closing its window stops it.
 	bool StartServer(const HWND hwnd)
 	{
-		const std::wstring mod = ModFolderPath();
-		const std::wstring bat = mod + L"\\" + kServerBat;
-		if (!PathFileExistsW(bat.c_str()))
+		const std::wstring dedExe = g_launcher.folder + L"\\" + kDedExe;
+		if (!PathFileExistsW(dedExe.c_str()))
 		{
-			const std::wstring msg = L"Could not find " + bat + L"\n\nThe launcher must be in the SerenityJediEngine2027 game folder.";
+			const std::wstring msg = L"Could not find " + dedExe + L"\n\nThe launcher must be in the SerenityJediEngine2027 game folder.";
 			MessageBoxW(hwnd, msg.c_str(), L"SerenityJediEngine2027", MB_OK | MB_ICONERROR);
+			return false;
+		}
+		const std::wstring bat = WriteResourceToTemp(IDR_SERVER_BAT, kServerBat);
+		if (bat.empty())
+		{
+			MessageBoxW(hwnd, L"Could not write the server batch file to the temp folder.", L"SerenityJediEngine2027", MB_OK | MB_ICONERROR);
 			return false;
 		}
 
@@ -1971,9 +1980,9 @@ namespace
 
 		STARTUPINFOW si = { sizeof(si) };
 		PROCESS_INFORMATION pi = {};
-		if (!CreateProcessW(comspec, &cmd[0], nullptr, nullptr, FALSE, CREATE_NEW_CONSOLE, nullptr, mod.c_str(), &si, &pi))
+		if (!CreateProcessW(comspec, &cmd[0], nullptr, nullptr, FALSE, CREATE_NEW_CONSOLE, nullptr, g_launcher.folder.c_str(), &si, &pi))
 		{
-			MessageBoxW(hwnd, (L"Could not start " + bat).c_str(), L"SerenityJediEngine2027", MB_OK | MB_ICONERROR);
+			MessageBoxW(hwnd, (L"Could not start the server (" + bat + L")").c_str(), L"SerenityJediEngine2027", MB_OK | MB_ICONERROR);
 			return false;
 		}
 		CloseHandle(pi.hThread);

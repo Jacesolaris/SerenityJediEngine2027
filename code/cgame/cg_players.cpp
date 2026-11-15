@@ -42,10 +42,31 @@ constexpr auto CG_SWINGSPEED = 0.3f;
 // saber-only light (DH 2026-10-27): cg_saberLightRadius / cg_saberLightIntensity scale only lightsaber light, on top of r_dlightRadius / r_dlightIntensity.
 // In rend2 with r_hdr 1 a light colour above 1 is cut back to 1, so cg_saberLightIntensity stops getting
 // brighter at about 1.5 there (the blade colour is already scaled to 0.66)
+extern vmCvar_t cg_saberLightClassic;
+
 static void CG_AddSaberLight(const vec3_t org, const float radius, const vec3_t rgb)
 {
-	const float radiusScale = cg_saberLightRadius.value > 0.0f ? cg_saberLightRadius.value : 1.0f;
-	const float intensity = cg_saberLightIntensity.value > 0.0f ? cg_saberLightIntensity.value : 1.0f;
+	float radiusScale = cg_saberLightRadius.value > 0.0f ? cg_saberLightRadius.value : 1.0f;
+	float intensity = cg_saberLightIntensity.value > 0.0f ? cg_saberLightIntensity.value : 1.0f;
+	// cg_saberLightClassic (changelog 375): saber light ignores the global rend2 boosts r_dlightIntensity / r_dlightRadius
+	// (2.5 / 2 by default since 2026-10-26), so the blade light is as strong as in SJE2026 / MD Build 7 and does not
+	// flood the blade and the body; shots and explosions keep the boost. Vanilla renderer: those cvars do nothing anyway.
+	if (cg_saberLightClassic.integer && strstr(cg_saberSliceRenderer.string, "rend2"))
+	{
+		char buf[32];
+		gi.Cvar_VariableStringBuffer("r_dlightIntensity", buf, sizeof buf);
+		const float globalIntensity = static_cast<float>(atof(buf));
+		gi.Cvar_VariableStringBuffer("r_dlightRadius", buf, sizeof buf);
+		const float globalRadius = static_cast<float>(atof(buf));
+		if (globalIntensity > 0.0f)
+		{
+			intensity /= globalIntensity;
+		}
+		if (globalRadius > 0.0f)
+		{
+			radiusScale /= globalRadius;
+		}
+	}
 	cgi_R_AddLightToScene(org, radius * radiusScale, rgb[0] * intensity, rgb[1] * intensity, rgb[2] * intensity);
 }
 
@@ -8418,6 +8439,36 @@ static void CG_DoSaberLight(const saberInfo_t* saber)
 // set by CG_AddSaberBladeGo for the blade it is drawing: no ignition flare (a thrown saber stuck in a wall or body)
 static qboolean cg_saberNoIgniteFlare = qfalse;
 
+// cg_saberSolidCore: the blade core shaders are additive (GL_ONE GL_ONE), so against a bright background
+// (sky, fog, HDR / tonemap) the core takes on what is behind it and looks see-through. This adds a mask
+// pass on the same core line, sorted before the core ("sort banner"), that blocks out the background
+// behind the core: 1 = background blocked, core keeps its own colour; 2 = also a white-hot centre.
+// Black blades and cloaked sabers are left as they were.
+extern vmCvar_t cg_saberSolidCore;
+
+#define SABER_SOLIDCORE_MIN_GLOW 0.6f
+
+static void CG_AddSaberSolidCore(const refEntity_t* core, const saber_colors_t color)
+{
+	refEntity_t mask;
+
+	if (cg_saberSolidCore.integer <= 0 || color == SABER_BLACK)
+	{
+		return;
+	}
+
+	mask = *core;
+	mask.customShader = cg_saberSolidCore.integer >= 2 ? cgs.media.saberSolidCoreHotShader : cgs.media.saberSolidCoreShader;
+
+	if (!mask.customShader)
+	{
+		return;
+	}
+
+	mask.shaderRGBA[0] = mask.shaderRGBA[1] = mask.shaderRGBA[2] = mask.shaderRGBA[3] = 0xff;
+	cgi_R_AddRefEntityToScene(&mask);
+}
+
 static void CG_DoTFASaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, vec3_t trail_muz, float length_max,
 	float radius, saber_colors_t color, int rfx, qboolean do_light)
 {
@@ -8584,6 +8635,8 @@ static void CG_DoTFASaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 			angle_scale = 0.2f;
 
 		effectalpha *= angle_scale;
+		if (cg_saberSolidCore.integer > 0 && effectalpha < SABER_SOLIDCORE_MIN_GLOW) // cg_saberSolidCore: glow never fades to nothing (still / pointing at the camera)
+			effectalpha = SABER_SOLIDCORE_MIN_GLOW;
 
 		angle_scale += 0.3f;
 
@@ -8651,6 +8704,7 @@ static void CG_DoTFASaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	{
@@ -8691,6 +8745,7 @@ static void CG_DoTFASaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	VectorMA(blade_muz, blade_len - 0.5, blade_dir, blade_tip);
@@ -8736,6 +8791,7 @@ static void CG_DoTFASaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	if (end_len > 1)
@@ -9068,6 +9124,8 @@ static void CG_DoBattlefrontSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t tra
 			angle_scale = 0.2f;
 
 		effectalpha *= angle_scale;
+		if (cg_saberSolidCore.integer > 0 && effectalpha < SABER_SOLIDCORE_MIN_GLOW) // cg_saberSolidCore: glow never fades to nothing (still / pointing at the camera)
+			effectalpha = SABER_SOLIDCORE_MIN_GLOW;
 
 		angle_scale += 0.3f;
 
@@ -9135,6 +9193,7 @@ static void CG_DoBattlefrontSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t tra
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	{
@@ -9175,6 +9234,7 @@ static void CG_DoBattlefrontSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t tra
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	VectorMA(blade_muz, blade_len - 0.5, blade_dir, blade_tip);
@@ -9220,6 +9280,7 @@ static void CG_DoBattlefrontSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t tra
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	if (end_len > 1)
@@ -9552,6 +9613,8 @@ static void CG_DoEp1Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 			angle_scale = 0.2f;
 
 		effectalpha *= angle_scale;
+		if (cg_saberSolidCore.integer > 0 && effectalpha < SABER_SOLIDCORE_MIN_GLOW) // cg_saberSolidCore: glow never fades to nothing (still / pointing at the camera)
+			effectalpha = SABER_SOLIDCORE_MIN_GLOW;
 
 		angle_scale += 0.3f;
 
@@ -9619,6 +9682,7 @@ static void CG_DoEp1Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	{
@@ -9659,6 +9723,7 @@ static void CG_DoEp1Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	VectorMA(blade_muz, blade_len - 0.5, blade_dir, blade_tip);
@@ -9704,6 +9769,7 @@ static void CG_DoEp1Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	if (end_len > 1)
@@ -10036,6 +10102,8 @@ static void CG_DoEp2Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 			angle_scale = 0.2f;
 
 		effectalpha *= angle_scale;
+		if (cg_saberSolidCore.integer > 0 && effectalpha < SABER_SOLIDCORE_MIN_GLOW) // cg_saberSolidCore: glow never fades to nothing (still / pointing at the camera)
+			effectalpha = SABER_SOLIDCORE_MIN_GLOW;
 
 		angle_scale += 0.3f;
 
@@ -10103,6 +10171,7 @@ static void CG_DoEp2Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	{
@@ -10143,6 +10212,7 @@ static void CG_DoEp2Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	VectorMA(blade_muz, blade_len - 0.5, blade_dir, blade_tip);
@@ -10188,6 +10258,7 @@ static void CG_DoEp2Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	if (end_len > 1)
@@ -10520,6 +10591,8 @@ static void CG_DoEp3Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 			angle_scale = 0.2f;
 
 		effectalpha *= angle_scale;
+		if (cg_saberSolidCore.integer > 0 && effectalpha < SABER_SOLIDCORE_MIN_GLOW) // cg_saberSolidCore: glow never fades to nothing (still / pointing at the camera)
+			effectalpha = SABER_SOLIDCORE_MIN_GLOW;
 
 		angle_scale += 0.3f;
 
@@ -10587,6 +10660,7 @@ static void CG_DoEp3Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	{
@@ -10627,6 +10701,7 @@ static void CG_DoEp3Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	VectorMA(blade_muz, blade_len - 0.5, blade_dir, blade_tip);
@@ -10672,6 +10747,7 @@ static void CG_DoEp3Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	if (end_len > 1)
@@ -11004,6 +11080,8 @@ static void CG_DoSFXSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 			angle_scale = 0.2f;
 
 		effectalpha *= angle_scale;
+		if (cg_saberSolidCore.integer > 0 && effectalpha < SABER_SOLIDCORE_MIN_GLOW) // cg_saberSolidCore: glow never fades to nothing (still / pointing at the camera)
+			effectalpha = SABER_SOLIDCORE_MIN_GLOW;
 
 		angle_scale += 0.3f;
 
@@ -11071,6 +11149,7 @@ static void CG_DoSFXSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	{
@@ -11111,6 +11190,7 @@ static void CG_DoSFXSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	VectorMA(blade_muz, blade_len - 0.5, blade_dir, blade_tip);
@@ -11156,6 +11236,7 @@ static void CG_DoSFXSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	if (end_len > 1)
@@ -11493,6 +11574,8 @@ static void CG_DoOTSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, v
 			angle_scale = 0.2f;
 
 		effectalpha *= angle_scale;
+		if (cg_saberSolidCore.integer > 0 && effectalpha < SABER_SOLIDCORE_MIN_GLOW) // cg_saberSolidCore: glow never fades to nothing (still / pointing at the camera)
+			effectalpha = SABER_SOLIDCORE_MIN_GLOW;
 
 		angle_scale += 0.3f;
 
@@ -11569,6 +11652,7 @@ static void CG_DoOTSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, v
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	//Trail Edge
@@ -11619,6 +11703,7 @@ static void CG_DoOTSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, v
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	VectorMA(blade_muz, blade_len - 0.5, blade_dir, blade_tip);
@@ -11671,6 +11756,7 @@ static void CG_DoOTSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, v
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	//Fan Top
@@ -12002,6 +12088,8 @@ static void CG_DoCustomSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_ti
 			angle_scale = 0.2f;
 
 		effectalpha *= angle_scale;
+		if (cg_saberSolidCore.integer > 0 && effectalpha < SABER_SOLIDCORE_MIN_GLOW) // cg_saberSolidCore: glow never fades to nothing (still / pointing at the camera)
+			effectalpha = SABER_SOLIDCORE_MIN_GLOW;
 
 		angle_scale += 0.3f;
 
@@ -12069,6 +12157,7 @@ static void CG_DoCustomSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_ti
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	{
@@ -12109,6 +12198,7 @@ static void CG_DoCustomSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_ti
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	VectorMA(blade_muz, blade_len - 0.5, blade_dir, blade_tip);
@@ -12154,6 +12244,7 @@ static void CG_DoCustomSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_ti
 		saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 		cgi_R_AddRefEntityToScene(&saber);
+		CG_AddSaberSolidCore(&saber, color);
 	}
 
 	if (end_len > 1)
@@ -12494,6 +12585,8 @@ static void CG_DoCloakedSaber(vec3_t origin, vec3_t dir, float length, float len
 			angle_scale = 0.2f;
 
 		effectalpha *= angle_scale;
+		if (cg_saberSolidCore.integer > 0 && effectalpha < SABER_SOLIDCORE_MIN_GLOW) // cg_saberSolidCore: glow never fades to nothing (still / pointing at the camera)
+			effectalpha = SABER_SOLIDCORE_MIN_GLOW;
 
 		angle_scale += 0.3f;
 
@@ -12790,6 +12883,7 @@ static void CG_DoSaber(vec3_t origin, vec3_t dir, float length, float length_max
 	saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 	cgi_R_AddRefEntityToScene(&saber);
+	CG_AddSaberSolidCore(&saber, color);
 
 	// Ignition flare
 	if (length <= ignite_len && !cg_saberNoIgniteFlare)
@@ -13006,6 +13100,7 @@ static void CG_DoSaberUnstable(vec3_t origin, vec3_t dir, float length, float le
 	saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
 
 	cgi_R_AddRefEntityToScene(&saber);
+	CG_AddSaberSolidCore(&saber, color);
 
 	//Ignition Flare
 	if (length <= ignite_len && !cg_saberNoIgniteFlare)

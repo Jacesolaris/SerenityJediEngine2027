@@ -2659,6 +2659,10 @@ static void Jedi_AdjustSaberAnimLevel(const gentity_t* self, int new_level)
 	{
 		return;
 	}
+	if (G_SaberBlasterAIKeep(self))
+	{//a Kyle NPC stays in SS_BLASTER (g_saberAIBlaster, item 371): pistol out of saber reach, saber close up
+		return;
+	}
 	//override stance with special saber style if we're using special sabers
 	if (self->client->saber[0].model[0] && self->client->saber[1].model[0]
 		&& !G_ValidSaberStyle(self, SS_DUAL))
@@ -7625,6 +7629,11 @@ static void Jedi_HoldAtSaberReach(void)
 		return;
 	}
 
+	if (!TIMER_Done(npc, "stabDownGo"))
+	{//going in for a ground stab on a downed enemy (item 367)
+		return;
+	}
+
 	ps = &npc->client->ps;
 	eps = &npc->enemy->client->ps;
 
@@ -9278,6 +9287,429 @@ void RT_CheckJump(void)
 	}
 }
 
+// 2026-11-15 (DH, item 367, g_saberAIStabDown 1, port of the SP change): a saber NPC whose enemy is knocked down goes
+// in for the ground stab (LS_STABDOWN*) instead of standing over him. MP only gives the stab for an attack with
+// forward and no sideways move while a knocked-down body is up to 164 units in front (PM_CheckStabDown), and NPCs
+// mostly took the random quadrant attack instead (bg_saber.c), so it almost never came. A new knockdown is noticed
+// after a short reaction time (easiest 0.9 s .. hardest 0.25 s, + 0-0.2 s), one try, then 1.5 - 2.5 s before the next.
+static qboolean Jedi_EnemyLyingDown(const playerState_t* eps)
+{
+	switch (eps->legsAnim)
+	{
+	case BOTH_KNOCKDOWN1:
+	case BOTH_KNOCKDOWN2:
+	case BOTH_KNOCKDOWN3:
+	case BOTH_KNOCKDOWN4:
+	case BOTH_KNOCKDOWN5:
+	case BOTH_SLAPDOWNRIGHT:
+	case BOTH_SLAPDOWNLEFT:
+	case BOTH_RELEASED:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+// qtrue while this NPC is going for a ground stab: bg_saber.c then gives him the movement attack (the stab), not the
+// random quadrant one, and Jedi_HoldAtSaberReach lets him step up to the body
+extern qboolean Bot_StabDownWanted(const int client); // ai_main.c, item 368
+
+qboolean Jedi_StabDownWanted(gentity_t* self)
+{
+	if (self && self->r.svFlags & SVF_BOT)
+	{// saber bots too (item 368)
+		return Bot_StabDownWanted(self->s.number);
+	}
+	if (!g_saberAIStabDown.integer || !self || !self->NPC || !self->client)
+	{
+		return qfalse;
+	}
+	return TIMER_Done(self, "stabDownGo") ? qfalse : qtrue;
+}
+
+static qboolean Jedi_TryStabDownEnemy(void)
+{
+	gentity_t* npc = NPCS.NPC;
+	gentity_t* enemy;
+	playerState_t* ps;
+	vec3_t to_enemy, fwd, yaw_angles;
+	float z_diff, edge_dist;
+	static const int react_time[4] = { 900, 600, 400, 250 };
+	int skill;
+
+	if (!g_saberAIStabDown.integer || !npc || !npc->client || !NPCS.NPCInfo)
+	{
+		return qfalse;
+	}
+
+	enemy = npc->enemy;
+	ps = &npc->client->ps;
+
+	if (!enemy || !enemy->client || enemy->health <= 0
+		|| !Jedi_EnemyLyingDown(&enemy->client->ps)
+		|| ps->weapon != WP_SABER || ps->saberHolstered == 2 || ps->saberInFlight
+		|| (npc->client->saber[0].saberFlags & SFL_NO_STABDOWN)
+		|| (npc->client->saber[1].model[0] && (npc->client->saber[1].saberFlags & SFL_NO_STABDOWN))
+		|| jedi_in_camera
+		|| (NPCS.NPCInfo->scriptFlags & SCF_DONT_FIRE)
+		|| ps->groundEntityNum == ENTITYNUM_NONE
+		|| PM_InKnockDown(ps) || PM_InGetUp(ps) || PM_InRoll(ps)
+		|| ps->saberLockTime > level.time
+		|| Jedi_CultistDestroyer(npc))
+	{
+		TIMER_Set(npc, "stabDownGo", -level.time);
+		return qfalse;
+	}
+
+	// he has to lie about on my level and not too far away
+	z_diff = enemy->r.currentOrigin[2] - npc->r.currentOrigin[2];
+	VectorSubtract(enemy->r.currentOrigin, npc->r.currentOrigin, to_enemy);
+	to_enemy[2] = 0;
+	edge_dist = VectorNormalize(to_enemy) - (npc->r.maxs[0] + enemy->r.maxs[0]);
+
+	if (z_diff > 20.0f || z_diff < -48.0f || edge_dist > 256.0f)
+	{
+		TIMER_Set(npc, "stabDownGo", -level.time);
+		return qfalse;
+	}
+
+	// a new knockdown: react after a moment (stabDownSeen runs out 0.3 s after he was last seen down)
+	if (TIMER_Done(npc, "stabDownSeen"))
+	{
+		skill = g_npcspskill.integer < 0 ? 0 : g_npcspskill.integer > 3 ? 3 : g_npcspskill.integer;
+		TIMER_Set(npc, "stabDownReact", react_time[skill] + Q_irand(0, 200));
+	}
+	TIMER_Set(npc, "stabDownSeen", 300);
+
+	if (!TIMER_Done(npc, "stabDownReact") || !TIMER_Done(npc, "stabDownCooldown"))
+	{
+		return qfalse;
+	}
+
+	TIMER_Set(npc, "stabDownGo", 500);
+
+	// Jedi_Combat returns right after this, so keep the enemy's last seen spot current here
+	VectorCopy(enemy->r.currentOrigin, NPCS.NPCInfo->enemyLastSeenLocation);
+	NPCS.NPCInfo->enemyLastSeenTime = level.time;
+
+	// face him and close in: no strafing, no jumping, no block stance
+	Jedi_FaceEnemy(qtrue);
+	NPC_UpdateAngles(qtrue, qtrue);
+	VectorClear(ps->moveDir);
+	ps->ManualBlockingFlags &= ~(1 << MBF_NPCBLOCKSTANCE);
+	NPCS.ucmd.buttons &= ~(BUTTON_BLOCK | BUTTON_ALT_ATTACK);
+	NPCS.ucmd.rightmove = 0;
+	NPCS.ucmd.upmove = 0;
+	NPCS.ucmd.forwardmove = 127; // the stab needs a forward attack (bg_saber.c PM_SaberAttackForMovement)
+	if (edge_dist > 96.0f)
+	{
+		NPCS.ucmd.buttons &= ~BUTTON_WALKING;
+	}
+	else
+	{
+		NPCS.ucmd.buttons |= BUTTON_WALKING;
+	}
+
+	VectorSet(yaw_angles, 0, ps->viewangles[YAW], 0);
+	AngleVectors(yaw_angles, fwd, NULL, NULL);
+
+	if (edge_dist <= 64.0f
+		&& DotProduct(fwd, to_enemy) > 0.8f
+		&& ps->weaponTime <= 0
+		&& !PM_SaberInAttack(ps->saberMove)
+		&& !PM_SaberInStart(ps->saberMove))
+	{//in reach and facing him: stab down
+		NPCS.ucmd.buttons |= BUTTON_ATTACK;
+		TIMER_Set(npc, "stabDownCooldown", Q_irand(1500, 2500));
+
+		if (d_JediAI.integer || g_DebugSaberCombat.integer)
+		{
+			Com_Printf(S_COLOR_GREEN"%s: enemy is down, stab down (%.0f away)\n", npc->NPC_type, edge_dist);
+		}
+	}
+	return qtrue;
+}
+
+// 2026-11-15 (DH, item 369, g_saberAIDFA 1, port of the SP change): saber NPCs and bots use the death-from-above jump
+// attacks (strong / desann / blaster leap slash LS_A_JUMP_T__B_, medium flip slash, fast / tavion flip stab) with
+// thought instead of by chance. Before, they came from random jumps with an attack held, the random kill-move table and
+// a "jump-in" from 350+ units with no jump at all. Now only at the right distance (16 - 112 units edge to edge, same
+// level, clear path) when the enemy is open: guard broken, staggered, his swing bounced, recovering from his swing, worn
+// down (block points under 30), worn out from swing spam, back turned, or no saber. Never into his swing or wind-up,
+// never at a fresh blocker holding guard. A new opening is noticed after a reaction time, then one roll by opening
+// quality x rank (bots: bot skill) x skill; a failed roll waits 1.5 - 2.5 s, a DFA 4 - 12 s. A missed DFA keeps its
+// long landing recovery, the punish window. bg_saber.c PM_NPCSmartDFAMove gives the DFA for the style.
+extern qboolean PM_StaggerAnim(int anim);
+extern qboolean PM_SaberInTransitionAny(int move);
+extern qboolean Bot_DFAWanted(const int client); // ai_main.c, item 369
+
+qboolean Jedi_SmartDFAOn(void)
+{
+	return g_saberAIDFA.integer ? qtrue : qfalse;
+}
+
+// qtrue while this NPC / bot commits to a DFA
+qboolean Jedi_DFAWanted(gentity_t* self)
+{
+	if (!g_saberAIDFA.integer || !self || !self->client)
+	{
+		return qfalse;
+	}
+	if (self->r.svFlags & SVF_BOT)
+	{
+		return Bot_DFAWanted(self->s.number);
+	}
+	if (!self->NPC)
+	{
+		return qfalse;
+	}
+	return TIMER_Done(self, "dfaGo") ? qfalse : qtrue;
+}
+
+// does this saber user's style have an overhead DFA (single saber, strong / desann / blaster / medium / fast / tavion)
+qboolean Jedi_DFAStyle(const gentity_t* self)
+{
+	int style;
+
+	if (!self || !self->client || self->client->saber[1].model[0])
+	{
+		return qfalse;
+	}
+	style = self->client->ps.fd.saberAnimLevel;
+	return style == SS_STRONG || style == SS_DESANN || style == SS_BLASTER
+		|| style == SS_MEDIUM || style == SS_FAST || style == SS_TAVION ? qtrue : qfalse;
+}
+
+// how good a DFA chance the enemy gives "self" right now: 0 none, 1 slight, 2 good, 3 wide open (NPCs and bots)
+int Jedi_DFAEnemyOpening(gentity_t* self, gentity_t* enemy, const char** why)
+{
+	playerState_t* eps = &enemy->client->ps;
+	vec3_t enemy_angles;
+
+	if (eps->weapon != WP_SABER || eps->saberHolstered == 2 || eps->saberInFlight)
+	{//can't parry a saber coming down on him
+		*why = "no saber up";
+		return 1;
+	}
+	if (PM_SaberInBrokenParry(eps->saberMove))
+	{
+		*why = "guard broken";
+		return 3;
+	}
+	if (PM_StaggerAnim(eps->torsoAnim) || PM_StaggerAnim(eps->legsAnim))
+	{
+		*why = "staggered";
+		return 3;
+	}
+	if (PM_SaberInStart(eps->saberMove) || PM_SaberInAttack(eps->saberMove)
+		|| PM_SaberInSpecialAttack(eps->torsoAnim))
+	{//never leap into his swing
+		return 0;
+	}
+	if (PM_SaberInBounce(eps->saberMove))
+	{
+		*why = "his swing bounced";
+		return 3;
+	}
+	if (eps->fd.blockPoints < BLOCKPOINTS_THIRTY)
+	{
+		*why = "low block points";
+		return 2;
+	}
+	if (eps->saberFatigueChainCount >= MISHAPLEVEL_HUDFLASH)
+	{//a swing spammer: make him pay
+		*why = "worn out";
+		return 2;
+	}
+	if (WP_SaberAIEnemyTurtling(enemy))
+	{//a fresh blocker holding his guard: a DFA would just be blocked
+		return 0;
+	}
+	VectorSet(enemy_angles, 0, eps->viewangles[YAW], 0);
+	if (!InFront(self->r.currentOrigin, enemy->r.currentOrigin, enemy_angles, -0.2f))
+	{
+		*why = "back turned";
+		return 2;
+	}
+	if (PM_SaberInReturn(eps->saberMove))
+	{
+		*why = "recovering from his swing";
+		return 1;
+	}
+	return 0;
+}
+
+// a clear path for the leap: nothing between us at jump height, room above me
+qboolean Jedi_DFAPathClear(gentity_t* self, const gentity_t* enemy)
+{
+	trace_t trace;
+	vec3_t start, end;
+
+	VectorCopy(self->r.currentOrigin, start);
+	start[2] += 24.0f;
+	VectorCopy(enemy->r.currentOrigin, end);
+	end[2] += 24.0f;
+	trap->Trace(&trace, start, self->r.mins, self->r.maxs, end, self->s.number, self->clipmask, qfalse, 0, 0);
+	if (trace.allsolid || trace.startsolid || (trace.fraction < 1.0f && trace.entityNum != enemy->s.number))
+	{
+		return qfalse;
+	}
+	VectorCopy(self->r.currentOrigin, end);
+	end[2] += 64.0f;
+	trap->Trace(&trace, self->r.currentOrigin, self->r.mins, self->r.maxs, end, self->s.number, self->clipmask, qfalse, 0, 0);
+	return trace.fraction < 1.0f ? qfalse : qtrue;
+}
+
+static qboolean Jedi_TryDFA(void)
+{
+	gentity_t* npc = NPCS.NPC;
+	gentity_t* enemy;
+	playerState_t* ps;
+	vec3_t to_enemy, fwd, yaw_angles;
+	float z_diff, edge_dist;
+	const char* why = "";
+	int opening, skill, rank_pct, chance;
+	static const int react_time[4] = { 700, 500, 350, 250 };
+	static const int skill_pct[4] = { 50, 75, 100, 115 };
+	static const int opening_pct[4] = { 0, 30, 60, 90 };
+	static const int cooldown_min[4] = { 9000, 7000, 5000, 4000 };
+
+	if (!g_saberAIDFA.integer || !npc || !npc->client || !NPCS.NPCInfo)
+	{
+		return qfalse;
+	}
+
+	enemy = npc->enemy;
+	ps = &npc->client->ps;
+
+	if (!Jedi_DFAStyle(npc)
+		|| !enemy || !enemy->client || enemy->health <= 0
+		|| enemy->client->ps.groundEntityNum == ENTITYNUM_NONE //he's in the air
+		|| PM_InKnockDown(&enemy->client->ps) || PM_InRoll(&enemy->client->ps) //the ground stab (item 367) is for that
+		|| enemy->r.maxs[2] <= 12 //too low to leap at
+		|| ps->weapon != WP_SABER || ps->saberHolstered == 2 || ps->saberInFlight
+		|| npc->client->saber[0].jumpAtkFwdMove == LS_NONE //this saber cancels the jump attack
+		|| ps->fd.forcePowerLevel[FP_LEVITATION] <= FORCE_LEVEL_1 //can't force jump
+		|| ps->fd.forceRageRecoveryTime > level.time
+		|| NPCS.NPCInfo->rank == RANK_CIVILIAN || NPCS.NPCInfo->rank == RANK_ENSIGN //never did specials
+		|| jedi_in_camera
+		|| (NPCS.NPCInfo->scriptFlags & SCF_DONT_FIRE)
+		|| ps->groundEntityNum == ENTITYNUM_NONE
+		|| PM_InKnockDown(ps) || PM_InGetUp(ps) || PM_InRoll(ps)
+		|| PM_StaggerAnim(ps->torsoAnim) || PM_SaberInBrokenParry(ps->saberMove)
+		|| ps->saberLockTime > level.time
+		|| Jedi_CultistDestroyer(npc)
+		|| Jedi_WaitForBlockCycle())
+	{
+		TIMER_Set(npc, "dfaGo", -level.time);
+		return qfalse;
+	}
+
+	if (!TIMER_Done(npc, "dfaGo"))
+	{//committed last frame: the jump is on its way
+		return qfalse;
+	}
+
+	// distance edge to edge, same level
+	z_diff = enemy->r.currentOrigin[2] - npc->r.currentOrigin[2];
+	VectorSubtract(enemy->r.currentOrigin, npc->r.currentOrigin, to_enemy);
+	to_enemy[2] = 0;
+	edge_dist = VectorNormalize(to_enemy) - (npc->r.maxs[0] + enemy->r.maxs[0]);
+
+	opening = edge_dist >= 16.0f && edge_dist <= 112.0f && z_diff <= 32.0f && z_diff >= -24.0f
+		? Jedi_DFAEnemyOpening(npc, enemy, &why) : 0;
+
+	if (!opening)
+	{
+		return qfalse;
+	}
+
+	// a new opening: react after a moment (dfaSeen runs out 0.3 s after it was last seen)
+	skill = g_npcspskill.integer < 0 ? 0 : g_npcspskill.integer > 3 ? 3 : g_npcspskill.integer;
+	if (TIMER_Done(npc, "dfaSeen"))
+	{
+		TIMER_Set(npc, "dfaReact", react_time[skill] + Q_irand(0, 150));
+		TIMER_Set(npc, "dfaArmed", -level.time);
+	}
+	TIMER_Set(npc, "dfaSeen", 300);
+
+	if (!TIMER_Done(npc, "dfaReact") || !TIMER_Done(npc, "dfaCooldown"))
+	{
+		return qfalse;
+	}
+
+	// one roll per opening: quality x rank x skill
+	switch (NPCS.NPCInfo->rank)
+	{
+	case RANK_CREWMAN: rank_pct = 80; break; //acrobats
+	case RANK_LT_JG: rank_pct = 35; break;
+	case RANK_LT: rank_pct = 50; break;
+	case RANK_LT_COMM: rank_pct = 65; break;
+	case RANK_COMMANDER: rank_pct = 80; break;
+	case RANK_CAPTAIN: rank_pct = 100; break;
+	default: rank_pct = 0; break;
+	}
+	chance = opening_pct[opening] * rank_pct / 100 * skill_pct[skill] / 100;
+
+	if (TIMER_Done(npc, "dfaArmed"))
+	{//not decided yet
+		if (!TIMER_Done(npc, "dfaRolled"))
+		{
+			return qfalse;
+		}
+		if (Q_irand(1, 100) > chance)
+		{
+			TIMER_Set(npc, "dfaRolled", Q_irand(1500, 2500));
+			return qfalse;
+		}
+		TIMER_Set(npc, "dfaArmed", 800); //decided: leap as soon as I'm ready, while the opening lasts
+	}
+
+	if (!Jedi_DFAPathClear(npc, enemy))
+	{
+		TIMER_Set(npc, "dfaArmed", -level.time);
+		TIMER_Set(npc, "dfaRolled", Q_irand(1500, 2500));
+		return qfalse;
+	}
+
+	// must face him for the leap: turn now, leap on a later frame
+	Jedi_FaceEnemy(qtrue);
+	NPC_UpdateAngles(qtrue, qtrue);
+
+	VectorSet(yaw_angles, 0, ps->viewangles[YAW], 0);
+	AngleVectors(yaw_angles, fwd, NULL, NULL);
+
+	if (DotProduct(fwd, to_enemy) < 0.85f
+		|| ps->weaponTime > 0
+		|| PM_SaberInAttack(ps->saberMove) || PM_SaberInStart(ps->saberMove)
+		|| PM_SaberInTransitionAny(ps->saberMove) || PM_SaberInSpecialAttack(ps->torsoAnim)
+		|| PM_InSpecialJump(ps->legsAnim))
+	{//not ready yet: the decision stands while the opening lasts (dfaArmed)
+		return qfalse;
+	}
+
+	// leap: attack with forward and nothing else, bg_saber.c PM_NPCSmartDFAMove does the jump
+	TIMER_Set(npc, "dfaGo", 300);
+	TIMER_Set(npc, "dfaArmed", -level.time);
+	TIMER_Set(npc, "dfaCooldown", Q_irand(cooldown_min[skill], cooldown_min[skill] + 3000));
+
+	VectorCopy(enemy->r.currentOrigin, NPCS.NPCInfo->enemyLastSeenLocation);
+	NPCS.NPCInfo->enemyLastSeenTime = level.time;
+	VectorClear(ps->moveDir);
+	ps->ManualBlockingFlags &= ~(1 << MBF_NPCBLOCKSTANCE);
+	NPCS.ucmd.buttons &= ~(BUTTON_BLOCK | BUTTON_ALT_ATTACK | BUTTON_WALKING);
+	NPCS.ucmd.buttons |= BUTTON_ATTACK;
+	NPCS.ucmd.forwardmove = 127;
+	NPCS.ucmd.rightmove = 0;
+	NPCS.ucmd.upmove = 0;
+
+	if (d_JediAI.integer || g_DebugSaberCombat.integer)
+	{
+		Com_Printf(S_COLOR_GREEN"%s: DFA, enemy %s (%.0f away, %d%%)\n", npc->NPC_type, why, edge_dist, chance);
+	}
+	return qtrue;
+}
+
 static void Jedi_Combat(void)
 {
 	vec3_t enemy_dir, enemy_movedir, enemy_dest;
@@ -9285,6 +9717,16 @@ static void Jedi_Combat(void)
 
 	// See where enemy will be 300 ms from now
 	jedi_set_enemy_info(enemy_dest, enemy_dir, &enemy_dist, enemy_movedir, &enemy_movespeed, 300);
+
+	if (Jedi_TryStabDownEnemy())
+	{//enemy is down: going in for the ground stab (item 367)
+		return;
+	}
+
+	if (Jedi_TryDFA())
+	{//the enemy is open and in leaping range: death from above (item 369)
+		return;
+	}
 
 	// ----------------------------------------------------------------------
 	// GLOBAL BLOCK STANCE OVERRIDE
@@ -10732,7 +11174,7 @@ static void JediHandleSpacing(gentity_t* self)
 							switch (Q_irand(0, 2))
 							{
 							case 0:
-								self->client->ps.saberMove = LS_A_JUMP_T__B_; // DFA
+								self->client->ps.saberMove = Jedi_SmartDFAOn() ? LS_A_LUNGE : LS_A_JUMP_T__B_; // DFA (item 369: with g_saberAIDFA the AI picks its DFAs in Jedi_TryDFA; this one had no jump and came from 350+ units)
 								break;
 							case 1:
 								self->client->ps.saberMove = LS_A_LUNGE;      // Lunge
@@ -11183,6 +11625,10 @@ static void JediExecuteCombo(gentity_t* self, const saberCombo_t* combo)
 			break;
 		}
 
+		if (Jedi_SmartDFAOn() && (move == LS_A_FLIP_STAB || move == LS_A_FLIP_SLASH || move == LS_A_JUMP_T__B_))
+		{//item 369: no DFA out of a canned combo (no jump, no opening check), Jedi_TryDFA picks them
+			move = LS_A_T2B;
+		}
 		self->client->ps.saberMove = move;
 		JediPressAttack();
 	}
@@ -11198,7 +11644,7 @@ static void JediExecuteCombo(gentity_t* self, const saberCombo_t* combo)
 	}
 
 	// Apply cooldown so we don't spam combos
-	JediSetAttackCooldown(self, Q_irand(40000, 90000));
+	JediSetAttackCooldown(self, Q_irand(40, 90) * 1000); // 2026-11-14: was Q_irand(40000, 90000), over the irand range limit (QRAND_MAX)
 }
 
 // =====================
@@ -11966,7 +12412,7 @@ static void Jedi_Attack(void)
 		// =====================
 		// Cinematic Mode
 		// =====================
-		if (cinematicAllowed && JediShouldAttack(NPCS.NPC))
+		if (cinematicAllowed && JediShouldAttack(NPCS.NPC) && TIMER_Done(NPCS.NPC, "stabDownGo")) // not while going for a ground stab
 		{
 			JediHandleSpacing(NPCS.NPC);
 			JediHandleCounterattacks(NPCS.NPC);

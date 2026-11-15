@@ -408,6 +408,8 @@ vmCvar_t cg_drawStaminaBar;
 vmCvar_t cg_SFXSabers;
 vmCvar_t cg_SFXSabersGlowSize;
 vmCvar_t cg_SFXSabersCoreSize;
+vmCvar_t cg_saberSolidCore;
+vmCvar_t cg_saberLightClassic;
 
 vmCvar_t cg_SFXSabersGlowSizeBF2;
 vmCvar_t cg_SFXSabersCoreSizeBF2;
@@ -659,6 +661,8 @@ static cvarTable_t cvarTable[] = {
 	{ &cg_SFXSabers, "cg_SFXSabers", "3", CVAR_ARCHIVE },
 	{ &cg_SFXSabersGlowSize, "cg_SFXSabersGlowSize", "0.6f", CVAR_ARCHIVE },
 	{ &cg_SFXSabersCoreSize, "cg_SFXSabersCoreSize", "0.5f", CVAR_ARCHIVE },
+	{ &cg_saberSolidCore, "cg_saberSolidCore", "0", CVAR_ARCHIVE }, // 0 = additive core as before, 1 = solid core, 2 = solid + white-hot centre
+	{ &cg_saberLightClassic, "cg_saberLightClassic", "1", CVAR_ARCHIVE }, // 1 = saber light ignores r_dlightIntensity / r_dlightRadius (as SJE2026), 0 = boosted
 
 	{ &cg_SFXSabersGlowSizeBF2, "cg_SFXSabersGlowSizeBF2", "1.0f", CVAR_ARCHIVE },
 	{ &cg_SFXSabersCoreSizeBF2, "cg_SFXSabersCoreSizeBF2", "0.5f", CVAR_ARCHIVE },

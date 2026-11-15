@@ -12,3 +12,6 @@
 
 // the files a release may have in the SerenityJediEngine2027 mod folder (the installation check)
 #define IDR_ALLOWED_FILES   401
+
+// the dedicated server batch file (START SERVER writes it to %TEMP% and runs it; it is not in the mod folder)
+#define IDR_SERVER_BAT      402

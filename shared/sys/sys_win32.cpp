@@ -844,3 +844,191 @@ void Sys_Sleep(int msec)
 	Sleep(msec);
 #endif
 }
+
+/*
+==============================================================
+Bug report (2026-11-15, after kjk's F12 report)
+
+"bugreport <what went wrong>" (bound to F12 when F12 is free) writes
+<fs_homepath>/bugreports/<time>/ with note.txt (your words), system.txt (build, map, renderer and video
+settings, CPU, memory), console.txt (the console so far) and the newest crash-*.txt if there is one,
+and takes screenshots/bugreport_<time>.png. Your Windows user name and computer name are taken out of
+the text files. Nothing is uploaded: zip the folder and send it yourself.
+==============================================================
+*/
+static void Sys_BugReportScrub(char* text)
+{
+	char names[2][256] = {};
+	DWORD n = sizeof names[0];
+	GetUserNameA(names[0], &n);
+	n = sizeof names[1];
+	GetComputerNameA(names[1], &n);
+	static const char* const repl[2] = { "<user>", "<pc>" };
+	for (int k = 0; k < 2; k++)
+	{
+		const size_t len = strlen(names[k]);
+		if (len < 2)
+		{
+			continue;
+		}
+		for (char* p = text; *p; p++)
+		{
+			if (!Q_stricmpn(p, names[k], static_cast<int>(len)))
+			{
+				const size_t rl = strlen(repl[k]);
+				if (rl <= len)
+				{
+					memcpy(p, repl[k], rl);
+					memmove(p + rl, p + len, strlen(p + len) + 1);
+					p += rl - 1;
+				}
+				else
+				{
+					memset(p, '*', len);
+					p += len - 1;
+				}
+			}
+		}
+	}
+}
+
+static void Sys_BugReportWriteScrubbed(const char* path, char* text)
+{
+	Sys_BugReportScrub(text);
+	FILE* fp = fopen(path, "wb");
+	if (fp)
+	{
+		fwrite(text, 1, strlen(text), fp);
+		fclose(fp);
+	}
+}
+
+void Sys_BugReport_f(void)
+{
+	char stamp[32] = {};
+	const time_t rawtime = time(nullptr);
+	strftime(stamp, sizeof stamp, "%Y-%m-%d_%H-%M-%S", localtime(&rawtime));
+
+	const char* home = Cvar_VariableString("fs_homepath");
+	if (!home || !*home)
+	{
+		home = Sys_DefaultHomePath();
+	}
+	if (!home || !*home)
+	{
+		home = ".";
+	}
+	char dir[MAX_OSPATH], path[MAX_OSPATH];
+	Com_sprintf(dir, sizeof dir, "%s%cbugreports", home, PATH_SEP);
+	CreateDirectoryA(home, nullptr);
+	CreateDirectoryA(dir, nullptr);
+	Com_sprintf(dir, sizeof dir, "%s%cbugreports%c%s", home, PATH_SEP, PATH_SEP, stamp);
+	if (!CreateDirectoryA(dir, nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
+	{
+		Com_Printf(S_COLOR_RED "bugreport: could not make %s\n", dir);
+		return;
+	}
+
+	// note.txt
+	{
+		char note[MAX_STRING_CHARS];
+		Q_strncpyz(note, Cmd_Args(), sizeof note);
+		if (!note[0])
+		{
+			Q_strncpyz(note, "(no note given: type  bugreport <what went wrong>  in the console next time)", sizeof note);
+		}
+		Q_strcat(note, sizeof note, "\r\n");
+		Com_sprintf(path, sizeof path, "%s%cnote.txt", dir, PATH_SEP);
+		Sys_BugReportWriteScrubbed(path, note);
+	}
+
+	// system.txt
+	{
+		static char sys[8192];
+		sys[0] = 0;
+		static const char* const cvars[] = {
+			"version", "arch", "fs_game", "mapname", "sv_mapname", "cl_renderer", "r_mode", "r_customwidth",
+			"r_customheight", "r_fullscreen", "r_noborder", "com_maxfps", "r_swapInterval", "r_threads", "r_smp",
+			"g_SerenityJediEngineMode", "g_char_model", "sv_running", "cl_running", "fs_homepath", "fs_basepath" };
+		Q_strcat(sys, sizeof sys, va("Bug report %s\r\nscreenshot: screenshots/bugreport_%s.png in your game folder\r\n\r\n", stamp, stamp));
+		for (const char* name : cvars)
+		{
+			Q_strcat(sys, sizeof sys, va("%s: %s\r\n", name, Cvar_VariableString(name)));
+		}
+
+		char cpu[256] = "?";
+		DWORD cpuSize = sizeof cpu;
+		RegGetValueA(HKEY_LOCAL_MACHINE, "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0", "ProcessorNameString",
+			RRF_RT_REG_SZ, nullptr, cpu, &cpuSize);
+		SYSTEM_INFO si = {};
+		GetNativeSystemInfo(&si);
+		MEMORYSTATUSEX ms = {};
+		ms.dwLength = sizeof ms;
+		GlobalMemoryStatusEx(&ms);
+		Q_strcat(sys, sizeof sys, va("\r\nCPU: %s (%lu threads)\r\nmemory: %llu MB total, %llu MB free\r\n", cpu,
+			static_cast<unsigned long>(si.dwNumberOfProcessors), ms.ullTotalPhys / (1024ull * 1024ull),
+			ms.ullAvailPhys / (1024ull * 1024ull)));
+		Com_sprintf(path, sizeof path, "%s%csystem.txt", dir, PATH_SEP);
+		Sys_BugReportWriteScrubbed(path, sys);
+	}
+
+	// console.txt
+	{
+		Com_sprintf(path, sizeof path, "%s%cconsole.txt", dir, PATH_SEP);
+		FILE* fp = fopen(path, "w+b");
+		if (fp)
+		{
+			ConsoleLogWriteOut(fp);
+			const long size = ftell(fp);
+			if (size > 0)
+			{
+				char* text = static_cast<char*>(malloc(size + 1));
+				if (text)
+				{
+					fseek(fp, 0, SEEK_SET);
+					const size_t got = fread(text, 1, size, fp);
+					text[got] = 0;
+					fclose(fp);
+					fp = nullptr;
+					Sys_BugReportWriteScrubbed(path, text);
+					free(text);
+				}
+			}
+			if (fp)
+			{
+				fclose(fp);
+			}
+		}
+	}
+
+	// the newest crash report, if any
+	{
+		WIN32_FIND_DATAA fd;
+		char pattern[MAX_OSPATH], newest[MAX_PATH] = {};
+		FILETIME newestTime = {};
+		Com_sprintf(pattern, sizeof pattern, "%s%ccrash-*.txt", home, PATH_SEP);
+		const HANDLE h = FindFirstFileA(pattern, &fd);
+		if (h != INVALID_HANDLE_VALUE)
+		{
+			do
+			{
+				if (CompareFileTime(&fd.ftLastWriteTime, &newestTime) > 0)
+				{
+					newestTime = fd.ftLastWriteTime;
+					Q_strncpyz(newest, fd.cFileName, sizeof newest);
+				}
+			} while (FindNextFileA(h, &fd));
+			FindClose(h);
+		}
+		if (newest[0])
+		{
+			char from[MAX_OSPATH];
+			Com_sprintf(from, sizeof from, "%s%c%s", home, PATH_SEP, newest);
+			Com_sprintf(path, sizeof path, "%s%c%s", dir, PATH_SEP, newest);
+			CopyFileA(from, path, FALSE);
+		}
+	}
+
+	Cbuf_ExecuteText(EXEC_INSERT, va("screenshot_png bugreport_%s\n", stamp)); // runs next, before anything already queued
+	Com_Printf("Bug report saved in %s\nZip that folder and send it with your report. Nothing was uploaded.\n", dir);
+}

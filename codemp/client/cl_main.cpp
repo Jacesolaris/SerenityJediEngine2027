@@ -2537,8 +2537,8 @@ static IHeapAllocator* GetG2VertSpaceServer(void)
 	return G2VertSpaceServer;
 }
 
-#define DEFAULT_RENDER_LIBRARY "SerenityJediEngine2027-rdmp"
-//#define DEFAULT_RENDER_LIBRARY "SerenityJediEngine2027-rdmp-rend2"
+#define DEFAULT_RENDER_LIBRARY "SerenityJediEngine2027-rdmp-rend2"	// rend2 is the default (DH 2026-11-15)
+#define VANILLA_RENDER_LIBRARY "SerenityJediEngine2027-rdmp"	// used when the default renderer DLL is missing
 
 void CL_InitRef(void)
 {
@@ -2557,6 +2557,15 @@ void CL_InitRef(void)
 		Cvar_ForceReset("cl_renderer");
 
 		Com_sprintf(dllName, sizeof dllName, DEFAULT_RENDER_LIBRARY "_" ARCH_STRING DLL_EXT);
+		rendererLib = Sys_LoadDll(dllName, qfalse);
+	}
+
+	if (!rendererLib && strcmp(cl_renderer->string, VANILLA_RENDER_LIBRARY) != 0)
+	{
+		Com_Printf("failed: trying to load the vanilla renderer\n");
+		Cvar_Set2("cl_renderer", VANILLA_RENDER_LIBRARY, 0, qtrue);
+
+		Com_sprintf(dllName, sizeof dllName, VANILLA_RENDER_LIBRARY "_" ARCH_STRING DLL_EXT);
 		rendererLib = Sys_LoadDll(dllName, qfalse);
 	}
 
@@ -2852,6 +2861,8 @@ static void CL_GenerateQKey(void)
 CL_Init
 ====================
 */
+void Sys_BugReport_f(void); // shared/sys/sys_win32.cpp (2026-11-15)
+
 void CL_Init(void)
 {
 	Com_Printf("----- Client Initialization -----\n");
@@ -3006,6 +3017,15 @@ void CL_Init(void)
 	Cmd_AddCommand("clientinfo", CL_Clientinfo_f, "Prints the userinfo variables");
 	Cmd_AddCommand("snd_restart", CL_Snd_Restart_f, "Restart sound");
 	Cmd_AddCommand("vid_restart", CL_Vid_Restart_f, "Restart the renderer - or change the resolution");
+	Cmd_AddCommand("bugreport", Sys_BugReport_f, "Save a bug report folder: bugreport <what went wrong>");
+	{
+		// F12 makes a bug report when nothing else is bound to it
+		const char* f12 = Key_GetBinding(A_F12);
+		if (!f12 || !*f12)
+		{
+			Key_SetBinding(A_F12, "bugreport");
+		}
+	}
 	Cmd_AddCommand("disconnect", CL_Disconnect_f, "Disconnect from current server");
 	Cmd_AddCommand("cinematic", CL_PlayCinematic_f, "Play a cinematic video");
 	Cmd_AddCommand("connect", CL_Connect_f, "Connect to a server");

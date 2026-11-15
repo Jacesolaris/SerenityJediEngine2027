@@ -384,6 +384,8 @@ static vec3_t cameramaxs = { CAMERA_SIZE, CAMERA_SIZE, CAMERA_SIZE };
 vec3_t camerafwd, cameraup;
 
 vec3_t cameraFocusAngles, cameraFocusLoc;
+// kjk Q-0016: how far the aim point was pulled in by a wall or ceiling this frame
+static vec3_t cameraTargetClip;
 vec3_t cameraIdealTarget, cameraIdealLoc;
 vec3_t cameraCurTarget = { 0, 0, 0 }, cameraCurLoc = { 0, 0, 0 };
 vec3_t cameraOldLoc = { 0, 0, 0 }, cameraNewLoc = { 0, 0, 0 };
@@ -856,9 +858,11 @@ static void CG_UpdateThirdPersonTargetDamp(void)
 	// Now we trace to see if the new location is cool or not.
 
 	// First thing we do is trace from the first person viewpoint out to the new target location.
+	VectorClear(cameraTargetClip);
 	CG_Trace(&trace, cameraFocusLoc, cameramins, cameramaxs, cameraCurTarget, cg.snap->ps.clientNum, MASK_CAMERACLIP);
 	if (trace.fraction < 1.0)
 	{
+		VectorSubtract(trace.endpos, cameraCurTarget, cameraTargetClip);
 		VectorCopy(trace.endpos, cameraCurTarget);
 	}
 
@@ -877,6 +881,9 @@ static void CG_UpdateThirdPersonCameraDamp(void)
 
 	// Set the cameraIdealLoc
 	CG_CalcIdealThirdPersonViewLocation();
+	// kjk Q-0016: back off from the aim point as it is (under a low ceiling), not from where it would be
+	// with nothing in the way, so the camera stays behind the player instead of being pulled into the back.
+	VectorAdd(cameraIdealLoc, cameraTargetClip, cameraIdealLoc);
 
 	// First thing we do is calculate the appropriate damping factor for the camera.
 	float dampfactor = 0.0;
@@ -3461,6 +3468,9 @@ void CG_DrawActiveFrame(const int serverTime, const stereoFrame_t stereoView, co
 
 	// update cg.predictedPlayerState
 	CG_PredictPlayerState();
+
+	// saber block target lock: turns the view to the locked enemy while block is held (g_saberTargetLock)
+	CG_SaberTargetLock();
 
 	// decide on third person view
 	cg.renderingThirdPerson = cg_thirdPerson.integer || cg.snap->ps.stats[STAT_HEALTH] <= 0;

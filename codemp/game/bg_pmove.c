@@ -19027,7 +19027,9 @@ void BG_G2PlayerAngles(void* ghoul2, const int motionBolt, entityState_t* cent, 
 	}
 	else
 	{
-		BG_SwingAngles(legsAngles[YAW], /*40*/0, 90, 0.65f, lYawAngle, lYawing, frametime);
+		// kjk Q-0013: a strafe reversal moves the legs' aim 120 degrees at once; a 90 clamp snapped them 30
+		// degrees in one frame. 130 lets them swing the whole way.
+		BG_SwingAngles(legsAngles[YAW], /*40*/0, 130, 0.65f, lYawAngle, lYawing, frametime);
 	}
 	legsAngles[YAW] = *lYawAngle;
 

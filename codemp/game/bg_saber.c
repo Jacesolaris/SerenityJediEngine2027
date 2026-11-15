@@ -101,6 +101,7 @@ qboolean PM_Can_Do_Kill_Lunge(void);
 qboolean PM_Can_Do_Kill_Lunge_back(void);
 int PM_SaberBackflipAttackMove(void);
 saberMoveName_t PM_NPC_Force_Leap_Attack(void);
+qboolean PM_NPCRandomDFAAllowed(void); // item 369
 extern qboolean PM_SaberInnonblockableAttack(int anim);
 extern qboolean PM_SaberInSmashdown(saberMoveName_t saberMove);
 
@@ -839,7 +840,7 @@ static saberMoveName_t PM_NPCSaberAttackFromQuad(const int quad)
 					switch (choice)
 					{
 					case 0:
-						newmove = PM_NPC_Force_Leap_Attack();
+						newmove = pm->ps->fd.saberAnimLevel == SS_DUAL || pm->ps->fd.saberAnimLevel == SS_STAFF || PM_NPCRandomDFAAllowed() ? PM_NPC_Force_Leap_Attack() : LS_A_T2B; // item 369: DFAs only when the AI chose one
 						if (d_attackinfo.integer)
 							Com_Printf(S_COLOR_MAGENTA "Next_Kill_Attack_Move_Check 1\n");
 						break;
@@ -891,7 +892,7 @@ static saberMoveName_t PM_NPCSaberAttackFromQuad(const int quad)
 						}
 						else
 						{
-							newmove = LS_A_JUMP_T__B_;
+							newmove = PM_NPCRandomDFAAllowed() ? LS_A_JUMP_T__B_ : LS_A_T2B; // item 369
 						}
 
 						if (d_attackinfo.integer)
@@ -1204,6 +1205,10 @@ saberMoveName_t PM_SaberAnimTransitionMove(const saberMoveName_t curmove, const 
 }
 
 extern qboolean BG_InKnockDown(int anim);
+
+#ifdef _GAME
+extern qboolean Jedi_StabDownWanted(gentity_t* self); // NPC_AI_Jedi.c, item 367
+#endif
 
 static saberMoveName_t PM_CheckStabDown(void)
 {
@@ -2956,6 +2961,80 @@ saberMoveName_t PM_SaberJumpForwardAttackMove(void)
 	return LS_A_JUMP_T__B_;
 }
 
+// 2026-11-15 (DH, item 369, g_saberAIDFA 1): NPC and bot DFAs (overhead slash / flip slash / flip stab) come from the
+// AI's decision (NPC_AI_Jedi.c Jedi_TryDFA, ai_main.c Bot_TryDFA -> Jedi_DFAWanted) instead of random jumps with an
+// attack held and the random kill-move table. Players are untouched.
+#ifdef _GAME
+extern qboolean Jedi_SmartDFAOn(void);
+extern qboolean Jedi_DFAWanted(gentity_t* self);
+extern qboolean Jedi_DFAStyle(const gentity_t* self);
+#endif
+
+// may this NPC / bot take a DFA from the old random paths? With g_saberAIDFA on, only while the AI wants one.
+qboolean PM_NPCRandomDFAAllowed(void)
+{
+#ifdef _GAME
+	gentity_t* self = &g_entities[pm->ps->clientNum];
+
+	if (!Jedi_SmartDFAOn() || (!(self->r.svFlags & SVF_BOT) && self->s.eType != ET_NPC))
+	{
+		return qtrue;
+	}
+	return Jedi_DFAWanted(self);
+#else
+	return qtrue;
+#endif
+}
+
+#ifdef _GAME
+// the AI committed to a DFA and can do one now (on the ground, single saber, a style with a DFA)
+static qboolean PM_NPCSmartDFAWanted(void)
+{
+	gentity_t* self = &g_entities[pm->ps->clientNum];
+
+	if (!Jedi_SmartDFAOn() || (!(self->r.svFlags & SVF_BOT) && self->s.eType != ET_NPC)
+		|| pm->ps->groundEntityNum == ENTITYNUM_NONE
+		|| !Jedi_DFAStyle(self)
+		|| !Jedi_DFAWanted(self))
+	{
+		return qfalse;
+	}
+	return qtrue;
+}
+
+// the DFA for the style: strong / desann / blaster leap into the overhead slash (LS_A_JUMP_T__B_, LS_A_JUMP_PALP_ for
+// yoda / palpatine sabers), medium flip slash, fast / tavion flip stab. Both set their own jump. Only after
+// PM_NPCSmartDFAWanted; falls back to the plain overhead slash when the DFA can't be done (power, saber cancels it).
+static saberMoveName_t PM_NPCSmartDFAMove(void)
+{
+	saberMoveName_t move = LS_NONE;
+
+	switch (pm->ps->fd.saberAnimLevel)
+	{
+	case SS_STRONG:
+	case SS_DESANN:
+	case SS_BLASTER:
+		if (PM_Can_Do_Kill_Move())
+		{
+			move = PM_SaberJumpForwardAttackMove();
+			WP_ForcePowerDrain(pm->ps, FP_SABER_OFFENSE, SABER_ALT_ATTACK_POWER_FB);
+		}
+		break;
+	default: //medium, fast, tavion
+		if (BG_EnoughForcePowerForMove(FATIGUE_JUMPATTACK, qfalse))
+		{
+			move = PM_SaberFlipOverAttackMove();
+			if (move != LS_A_T2B && move != LS_NONE)
+			{
+				WP_ForcePowerDrain(pm->ps, FP_GRIP, FATIGUE_JUMPATTACK);
+			}
+		}
+		break;
+	}
+	return move == LS_NONE ? LS_A_T2B : move;
+}
+#endif
+
 saberMoveName_t PM_NPC_Force_Leap_Attack(void)
 {
 	vec3_t fwdAngles, jumpFwd;
@@ -3498,7 +3577,8 @@ static saberMoveName_t PM_SaberAttackForMovement(const int curmove)
 				PM_GroundDistance() < 32 &&
 				!PM_InSpecialJump(pm->ps->legsAnim) &&
 				!PM_SaberInSpecialAttack(pm->ps->torsoAnim) &&
-				BG_EnoughForcePowerForMove(FATIGUE_JUMPATTACK, isPlayer))
+				BG_EnoughForcePowerForMove(FATIGUE_JUMPATTACK, isPlayer) &&
+				PM_NPCRandomDFAAllowed()) // item 369: NPCs / bots only when the AI chose it
 			{
 				//FLIP AND DOWNWARD ATTACK
 				newmove = PM_SaberFlipOverAttackMove();
@@ -3514,7 +3594,8 @@ static saberMoveName_t PM_SaberAttackForMovement(const int curmove)
 				PM_GroundDistance() < 32 &&
 				!PM_InSpecialJump(pm->ps->legsAnim) &&
 				!PM_SaberInSpecialAttack(pm->ps->torsoAnim) &&
-				PM_Can_Do_Kill_Move())
+				PM_Can_Do_Kill_Move() &&
+				PM_NPCRandomDFAAllowed()) // item 369: NPCs / bots only when the AI chose it
 			{
 				//DFA
 				newmove = PM_SaberJumpForwardAttackMove();
@@ -5868,6 +5949,23 @@ void PM_WeaponLightsaber(void)
 				pm->ps->saberMove > LS_PUTAWAY)
 			{
 				// Always return to ready when attack is released...
+				// 2026-11-15 (DH, item 372): this early return also skipped the weaponTime countdown further down, so a
+				// bot / NPC not holding attack kept its weaponTime (and WEAPON_RAISING) frozen: a force pull (the hand
+				// extend's weapon raise adds 250 ms each time), a landing, kick or bounce left it at 250 - 3000+ ms, and
+				// it only ran down in the frames attack was held. Meanwhile it stood in the ready pose and couldn't
+				// swing (and the AI's weaponTime checks, the SS_BLASTER pistol, the DFA and stab-down waited too).
+				if (pm->ps->weaponTime > 0)
+				{
+					pm->ps->weaponTime -= pml.msec;
+					if (pm->ps->weaponTime < 0)
+					{
+						pm->ps->weaponTime = 0;
+					}
+				}
+				if (pm->ps->weaponTime <= 0 && pm->ps->weaponstate == WEAPON_RAISING)
+				{
+					pm->ps->weaponstate = WEAPON_READY;
+				}
 				PM_SetSaberMove(LS_READY);
 				return;
 			}
@@ -6898,8 +6996,13 @@ weapChecks:
 				{
 					// 5. Get attack move from movement command and bot/NPC logic.
 #ifdef _GAME
-					if (((g_entities[pm->ps->clientNum].r.svFlags & SVF_BOT) ||
+					if (PM_NPCSmartDFAWanted())
+					{// the AI chose a DFA (g_saberAIDFA, item 369)
+						newmove = PM_NPCSmartDFAMove();
+					}
+					else if (((g_entities[pm->ps->clientNum].r.svFlags & SVF_BOT) ||
 						(pm_entSelf->s.eType == ET_NPC)) &&
+						!Jedi_StabDownWanted(&g_entities[pm->ps->clientNum]) && // going for a ground stab: movement attack (item 367)
 						(Q_irand(0, pm->ps->fd.forcePowerLevel[FP_SABER_OFFENSE] - 1) ||
 							(pm->ps->saberAnimLevel == SS_FAST && Q_irand(0, 1))))
 					{

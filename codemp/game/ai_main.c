@@ -2124,6 +2124,9 @@ static void bot_droid_input(const bot_state_t* bs, bot_input_t* bi)
 
 extern qboolean WP_SaberBotBlockedWait(const gentity_t* bot); // w_saberblocking.c (2026-11-10)
 
+qboolean Bot_StabDownWanted(const int client); // item 368, below
+qboolean Bot_DFAWanted(const int client); // item 369, below
+
 static void bot_update_input(bot_state_t* bs, const int time, const int elapsed_time)
 {
 	bot_input_t bi;
@@ -2249,6 +2252,17 @@ static void bot_update_input(bot_state_t* bs, const int time, const int elapsed_
 		bi.actionflags &= ~ACTION_ATTACK;
 	}
 
+	if (Bot_StabDownWanted(client))
+	{// going for a ground stab (item 368): no kick, shove, block or alt attack
+		bi.actionflags &= ~(ACTION_KICK | ACTION_BLOCK | ACTION_ALT_ATTACK);
+	}
+
+	if (Bot_DFAWanted(client))
+	{// leaping into a DFA (item 369): attack only, no kick, shove, block or alt attack
+		bi.actionflags &= ~(ACTION_KICK | ACTION_BLOCK | ACTION_ALT_ATTACK);
+		bi.actionflags |= ACTION_ATTACK;
+	}
+
 	// Force selection
 	bi.forcesel = level.clients[bs->client].ps.fd.forcePowerSelected;
 	if (bot_is_droid(bs))
@@ -2258,6 +2272,20 @@ static void bot_update_input(bot_state_t* bs, const int time, const int elapsed_
 
 	// Convert to usercmd
 	BotInputToUserCommand(bs, &bi, &bs->lastucmd, bs->cur_ps.delta_angles, time, bs->noUseTime);
+
+	if (Bot_StabDownWanted(client))
+	{// the stab needs forward and no sideways move (bg_saber.c PM_SaberAttackForMovement), item 368
+		bs->lastucmd.forwardmove = 127;
+		bs->lastucmd.rightmove = 0;
+		bs->lastucmd.upmove = 0;
+	}
+
+	if (Bot_DFAWanted(client))
+	{// the DFA needs attack with forward and nothing else (PM_Can_Do_Kill_Move), item 369
+		bs->lastucmd.forwardmove = 127;
+		bs->lastucmd.rightmove = 0;
+		bs->lastucmd.upmove = 0;
+	}
 
 	// Unapply delta angles
 	bot_unapply_delta_angles(bs);
@@ -10732,6 +10760,287 @@ static qboolean bot_behave_check_use_crouch_attack(bot_state_t* bs)
 	return qtrue;
 }
 
+// 2026-11-15 (DH, item 368, g_saberAIStabDown 1): saber bots go in for the ground stab on a knocked-down enemy, as the
+// saber NPCs do since item 367 (NPC_AI_Jedi.c Jedi_TryStabDownEnemy). A new knockdown is noticed after a reaction time
+// by bot skill (1-2: 0.9 s, 3: 0.6 s, 4: 0.4 s, 5: 0.25 s, + 0-0.2 s); the bot walks straight at him and, within 64
+// units and facing him, attacks with forward held and no sideways move (bot_update_input), which bg_saber.c turns into
+// the stab (Jedi_StabDownWanted -> Bot_StabDownWanted skips the random quadrant attack). One try, then 1.5 - 2.5 s.
+extern qboolean PM_InGetUp(const playerState_t* ps);
+
+static int s_botStabDownGo[MAX_CLIENTS];
+static int s_botStabDownSeen[MAX_CLIENTS];
+static int s_botStabDownReact[MAX_CLIENTS];
+static int s_botStabDownCooldown[MAX_CLIENTS];
+
+qboolean Bot_StabDownWanted(const int client)
+{
+	if (!g_saberAIStabDown.integer || client < 0 || client >= MAX_CLIENTS)
+	{
+		return qfalse;
+	}
+	return s_botStabDownGo[client] > level.time ? qtrue : qfalse;
+}
+
+static qboolean Bot_EnemyLyingDown(const playerState_t* eps)
+{
+	switch (eps->legsAnim)
+	{
+	case BOTH_KNOCKDOWN1:
+	case BOTH_KNOCKDOWN2:
+	case BOTH_KNOCKDOWN3:
+	case BOTH_KNOCKDOWN4:
+	case BOTH_KNOCKDOWN5:
+	case BOTH_SLAPDOWNRIGHT:
+	case BOTH_SLAPDOWNLEFT:
+	case BOTH_RELEASED:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+static qboolean Bot_TryStabDown(bot_state_t* bs, const gentity_t* target)
+{
+	const int c = bs->client;
+	const playerState_t* ps = &bs->cur_ps;
+	const gentity_t* self = &g_entities[c];
+	vec3_t to_enemy, fwd, yaw_angles;
+	float z_diff, edge_dist;
+	int react;
+
+	// left over from an earlier map
+	if (s_botStabDownGo[c] > level.time + 1000) s_botStabDownGo[c] = 0;
+	if (s_botStabDownSeen[c] > level.time + 1000) s_botStabDownSeen[c] = 0;
+	if (s_botStabDownReact[c] > level.time + 2000) s_botStabDownReact[c] = 0;
+	if (s_botStabDownCooldown[c] > level.time + 5000) s_botStabDownCooldown[c] = 0;
+
+	if (!g_saberAIStabDown.integer || !target || !target->client || target->health <= 0 || !self->client
+		|| !Bot_EnemyLyingDown(&target->client->ps)
+		|| ps->weapon != WP_SABER || ps->saberHolstered == 2 || ps->saberInFlight
+		|| (self->client->saber[0].saberFlags & SFL_NO_STABDOWN)
+		|| (self->client->saber[1].model[0] && (self->client->saber[1].saberFlags & SFL_NO_STABDOWN))
+		|| ps->groundEntityNum == ENTITYNUM_NONE
+		|| PM_InKnockDown(ps) || PM_InGetUp(ps) || PM_InRoll(ps)
+		|| ps->saberLockTime > level.time)
+	{
+		s_botStabDownGo[c] = 0;
+		return qfalse;
+	}
+
+	// he has to lie about on my level and not too far away
+	z_diff = target->r.currentOrigin[2] - ps->origin[2];
+	VectorSubtract(target->r.currentOrigin, ps->origin, to_enemy);
+	to_enemy[2] = 0;
+	edge_dist = VectorNormalize(to_enemy) - (self->r.maxs[0] + target->r.maxs[0]);
+
+	if (z_diff > 20.0f || z_diff < -48.0f || edge_dist > 256.0f)
+	{
+		s_botStabDownGo[c] = 0;
+		return qfalse;
+	}
+
+	// a new knockdown: react after a moment (seen runs out 0.3 s after he was last seen down)
+	if (s_botStabDownSeen[c] <= level.time)
+	{
+		react = bs->settings.skill <= 2 ? 900 : bs->settings.skill <= 3 ? 600 : bs->settings.skill <= 4 ? 400 : 250;
+		s_botStabDownReact[c] = level.time + react + Q_irand(0, 200);
+	}
+	s_botStabDownSeen[c] = level.time + 300;
+
+	if (s_botStabDownReact[c] > level.time || s_botStabDownCooldown[c] > level.time)
+	{
+		return qfalse;
+	}
+
+	s_botStabDownGo[c] = level.time + 500;
+
+	// straight at him (bot_update_input keeps it forward only)
+	trap->EA_Move(c, to_enemy, 5000);
+
+	VectorSet(yaw_angles, 0, bs->viewangles[YAW], 0);
+	AngleVectors(yaw_angles, fwd, NULL, NULL);
+
+	if (edge_dist <= 64.0f
+		&& DotProduct(fwd, to_enemy) > 0.8f
+		&& ps->weaponTime <= 0
+		&& !PM_SaberInAttack(ps->saberMove)
+		&& !PM_SaberInStart(ps->saberMove))
+	{//in reach and facing him: stab down
+		trap->EA_Attack(c);
+		s_botStabDownCooldown[c] = level.time + Q_irand(1500, 2500);
+
+		if (g_DebugSaberCombat.integer)
+		{
+			Com_Printf(S_COLOR_GREEN"%s: enemy is down, stab down (%.0f away)\n", self->client->pers.netname, edge_dist);
+		}
+	}
+	return qtrue;
+}
+
+// 2026-11-15 (DH, item 369, g_saberAIDFA 1): saber bots use the DFA jump attacks (overhead slash / flip slash / flip
+// stab) at good moments, as the saber NPCs do (NPC_AI_Jedi.c Jedi_TryDFA): 16 - 112 units edge to edge, same level,
+// clear path, and the enemy open (Jedi_DFAEnemyOpening: guard broken, staggered, swing bounced, low block points,
+// worn out, back turned, recovering, no saber; never into his swing, never at a fresh blocker). A new opening is
+// noticed after a reaction time by bot skill (1: 0.7 s .. 5: 0.25 s, + 0-0.15 s), then one roll by opening quality x
+// bot skill; a failed roll waits 1.5 - 2.5 s, a DFA 4 - 12 s. The bot attacks with forward held and nothing else
+// (bot_update_input) and bg_saber.c PM_NPCSmartDFAMove gives the DFA for its style.
+extern qboolean PM_StaggerAnim(int anim);
+extern qboolean PM_SaberInTransitionAny(int move);
+extern qboolean PM_SaberInBrokenParry(int move);
+extern qboolean Jedi_DFAStyle(const gentity_t* self); // NPC_AI_Jedi.c
+extern int Jedi_DFAEnemyOpening(gentity_t* self, gentity_t* enemy, const char** why); // NPC_AI_Jedi.c
+extern qboolean Jedi_DFAPathClear(gentity_t* self, const gentity_t* enemy); // NPC_AI_Jedi.c
+
+static int s_botDFAGo[MAX_CLIENTS];
+static int s_botDFASeen[MAX_CLIENTS];
+static int s_botDFAReact[MAX_CLIENTS];
+static int s_botDFAArmed[MAX_CLIENTS];
+static int s_botDFARolled[MAX_CLIENTS];
+static int s_botDFACooldown[MAX_CLIENTS];
+
+qboolean Bot_DFAWanted(const int client)
+{
+	if (!g_saberAIDFA.integer || client < 0 || client >= MAX_CLIENTS)
+	{
+		return qfalse;
+	}
+	return s_botDFAGo[client] > level.time ? qtrue : qfalse;
+}
+
+static qboolean Bot_TryDFA(bot_state_t* bs, const gentity_t* target)
+{
+	const int c = bs->client;
+	const playerState_t* ps = &bs->cur_ps;
+	gentity_t* self = &g_entities[c];
+	gentity_t* enemy;
+	vec3_t to_enemy, fwd, yaw_angles;
+	float z_diff, edge_dist;
+	const char* why = "";
+	int opening, skill, chance;
+	static const int react_time[6] = { 700, 700, 550, 400, 300, 250 };
+	static const int skill_pct[6] = { 30, 30, 50, 70, 85, 100 };
+	static const int opening_pct[4] = { 0, 30, 60, 90 };
+	static const int cooldown_min[6] = { 9000, 9000, 8000, 6500, 5000, 4000 };
+
+	// left over from an earlier map
+	if (s_botDFAGo[c] > level.time + 1000) s_botDFAGo[c] = 0;
+	if (s_botDFASeen[c] > level.time + 1000) s_botDFASeen[c] = 0;
+	if (s_botDFAReact[c] > level.time + 2000) s_botDFAReact[c] = 0;
+	if (s_botDFAArmed[c] > level.time + 2000) s_botDFAArmed[c] = 0;
+	if (s_botDFARolled[c] > level.time + 5000) s_botDFARolled[c] = 0;
+	if (s_botDFACooldown[c] > level.time + 15000) s_botDFACooldown[c] = 0;
+
+	if (!g_saberAIDFA.integer || !target || !target->client || target->health <= 0 || !self->client)
+	{
+		s_botDFAGo[c] = 0;
+		return qfalse;
+	}
+	enemy = &g_entities[target->s.number];
+
+	if (!Jedi_DFAStyle(self)
+		|| enemy->client->ps.groundEntityNum == ENTITYNUM_NONE //he's in the air
+		|| PM_InKnockDown(&enemy->client->ps) || PM_InRoll(&enemy->client->ps) //the ground stab (item 368) is for that
+		|| enemy->r.maxs[2] <= 12 //too low to leap at
+		|| ps->weapon != WP_SABER || ps->saberHolstered == 2 || ps->saberInFlight
+		|| self->client->saber[0].jumpAtkFwdMove == LS_NONE //this saber cancels the jump attack
+		|| ps->fd.forcePowerLevel[FP_LEVITATION] <= FORCE_LEVEL_1 //can't force jump
+		|| ps->fd.forceRageRecoveryTime > level.time
+		|| ps->groundEntityNum == ENTITYNUM_NONE
+		|| PM_InKnockDown(ps) || PM_InGetUp(ps) || PM_InRoll(ps)
+		|| PM_StaggerAnim(ps->torsoAnim) || PM_SaberInBrokenParry(ps->saberMove)
+		|| ps->saberLockTime > level.time
+		|| WP_SaberBotBlockedWait(self)) //my blocked swing waits for his block cycle (item 315)
+	{
+		s_botDFAGo[c] = 0;
+		return qfalse;
+	}
+
+	if (s_botDFAGo[c] > level.time)
+	{//committed: keep the attack held until the jump is on its way
+		trap->EA_Attack(c);
+		return qtrue;
+	}
+
+	// distance edge to edge, same level
+	z_diff = enemy->r.currentOrigin[2] - ps->origin[2];
+	VectorSubtract(enemy->r.currentOrigin, ps->origin, to_enemy);
+	to_enemy[2] = 0;
+	edge_dist = VectorNormalize(to_enemy) - (self->r.maxs[0] + enemy->r.maxs[0]);
+
+	opening = edge_dist >= 16.0f && edge_dist <= 112.0f && z_diff <= 32.0f && z_diff >= -24.0f
+		? Jedi_DFAEnemyOpening(self, enemy, &why) : 0;
+
+	if (!opening)
+	{
+		return qfalse;
+	}
+
+	skill = (int)bs->settings.skill;
+	skill = skill < 1 ? 1 : skill > 5 ? 5 : skill;
+
+	// a new opening: react after a moment (seen runs out 0.3 s after it was last seen)
+	if (s_botDFASeen[c] <= level.time)
+	{
+		s_botDFAReact[c] = level.time + react_time[skill] + Q_irand(0, 150);
+		s_botDFAArmed[c] = 0;
+	}
+	s_botDFASeen[c] = level.time + 300;
+
+	if (s_botDFAReact[c] > level.time || s_botDFACooldown[c] > level.time)
+	{
+		return qfalse;
+	}
+
+	// one roll per opening: quality x bot skill
+	chance = opening_pct[opening] * skill_pct[skill] / 100;
+
+	if (s_botDFAArmed[c] <= level.time)
+	{//not decided yet
+		if (s_botDFARolled[c] > level.time)
+		{
+			return qfalse;
+		}
+		if (Q_irand(1, 100) > chance)
+		{
+			s_botDFARolled[c] = level.time + Q_irand(1500, 2500);
+			return qfalse;
+		}
+		s_botDFAArmed[c] = level.time + 800; //decided: leap as soon as I'm ready, while the opening lasts
+	}
+
+	if (!Jedi_DFAPathClear(self, enemy))
+	{
+		s_botDFAArmed[c] = 0;
+		s_botDFARolled[c] = level.time + Q_irand(1500, 2500);
+		return qfalse;
+	}
+
+	// face him (goalAngles is set by the caller), leap once facing
+	VectorSet(yaw_angles, 0, bs->viewangles[YAW], 0);
+	AngleVectors(yaw_angles, fwd, NULL, NULL);
+
+	if (DotProduct(fwd, to_enemy) < 0.85f
+		|| ps->weaponTime > 0
+		|| PM_SaberInAttack(ps->saberMove) || PM_SaberInStart(ps->saberMove)
+		|| PM_SaberInTransitionAny(ps->saberMove) || PM_SaberInSpecialAttack(ps->torsoAnim)
+		|| PM_InSpecialJump(ps->legsAnim))
+	{//not ready yet: the decision stands while the opening lasts
+		return qfalse;
+	}
+
+	// leap: attack with forward held and nothing else (bot_update_input)
+	s_botDFAGo[c] = level.time + 300;
+	s_botDFAArmed[c] = 0;
+	s_botDFACooldown[c] = level.time + Q_irand(cooldown_min[skill], cooldown_min[skill] + 3000);
+	trap->EA_Attack(c);
+
+	if (g_DebugSaberCombat.integer)
+	{
+		Com_Printf(S_COLOR_GREEN"%s: DFA, enemy %s (%.0f away, %d%%)\n", self->client->pers.netname, why, edge_dist, chance);
+	}
+	return qtrue;
+}
+
 void bot_behave_attack_basic(bot_state_t* bs, const gentity_t* target)
 {
 	vec3_t enemy_origin, view_dir, ang, moveDir;
@@ -10751,6 +11060,16 @@ void bot_behave_attack_basic(bot_state_t* bs, const gentity_t* target)
 	ang[PITCH] = 0;
 	ang[ROLL] = 0;
 	VectorCopy(ang, bs->goalAngles);
+
+	if (bs->cur_ps.weapon == WP_SABER && Bot_TryStabDown(bs, target))
+	{//enemy is down: going in for the ground stab (item 368)
+		return;
+	}
+
+	if (bs->cur_ps.weapon == WP_SABER && Bot_TryDFA(bs, target))
+	{//the enemy is open and in leaping range: death from above (item 369)
+		return;
+	}
 
 	//check to see if there's a detpack in the immediate area of the target.
 	if (BG_HasWeapon(bs->cur_ps.stats, WP_DET_PACK))
@@ -15527,7 +15846,7 @@ void standard_bot_ai(bot_state_t* bs)
 				}
 
 				// Set cooldown AFTER buying
-				bs->nextBuyTime = level.time + Q_irand(120000, 180000);
+				bs->nextBuyTime = level.time + Q_irand(120, 180) * 1000; // 2026-11-14: was Q_irand(120000, 180000), over the irand range limit (QRAND_MAX)
 			}
 		}
 	}
@@ -15573,7 +15892,7 @@ void standard_bot_ai(bot_state_t* bs)
 			}
 
 			// Set cooldown AFTER buying
-			bs->nextBuyTime = level.time + Q_irand(120000, 180000);
+			bs->nextBuyTime = level.time + Q_irand(120, 180) * 1000; // 2026-11-14: was Q_irand(120000, 180000), over the irand range limit (QRAND_MAX)
 		}
 		else
 		{
@@ -17745,7 +18064,7 @@ void Enhanced_bot_ai(bot_state_t* bs)
 				}
 
 				// Set cooldown AFTER buying
-				bs->nextBuyTime = level.time + Q_irand(120000, 180000);
+				bs->nextBuyTime = level.time + Q_irand(120, 180) * 1000; // 2026-11-14: was Q_irand(120000, 180000), over the irand range limit (QRAND_MAX)
 			}
 		}
 	}
@@ -17791,7 +18110,7 @@ void Enhanced_bot_ai(bot_state_t* bs)
 			}
 
 			// Set cooldown AFTER buying
-			bs->nextBuyTime = level.time + Q_irand(120000, 180000);
+			bs->nextBuyTime = level.time + Q_irand(120, 180) * 1000; // 2026-11-14: was Q_irand(120000, 180000), over the irand range limit (QRAND_MAX)
 		}
 		else
 		{
@@ -20415,6 +20734,15 @@ static void bot_saber_blaster(const bot_state_t* bs, usercmd_t* ucmd)
 {
 	const int client = bs->client;
 	const playerState_t* ps = &g_entities[client].client->ps;
+
+	if (G_SaberBlasterAIKeep(&g_entities[client]))
+	{//a Kyle bot (g_saberAIBlaster, 2026-11-15, item 371): pistol out of saber reach, saber close up, with a reaction
+		// time and a gap between the two distances (g_weapon.c G_SaberBlasterAI); bot skill 1..5 -> 0..3
+		const int skill = bs->settings.skill <= 1.0f ? 0 : bs->settings.skill <= 2.0f ? 1 : bs->settings.skill <= 3.0f ? 2 : 3;
+		bot_blaster_burst_end[client] = 0;
+		G_SaberBlasterAI(&g_entities[client], bs->currentEnemy, skill, ucmd);
+		return;
+	}
 
 	if (g_saberBlasterAIFire.integer <= 0 || ps->weapon != WP_SABER || ps->fd.saberAnimLevel != SS_BLASTER
 		|| ps->saberInFlight || ps->saberLockTime >= level.time)

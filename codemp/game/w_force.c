@@ -2816,6 +2816,9 @@ int IsPressingDashButton(const gentity_t* self)
 		&& (!(self->client->buttons & BUTTON_KICK))
 		&& (!(self->client->buttons & BUTTON_USE))
 		&& (self->client->buttons & BUTTON_DASH)
+		// item 371: a bot / NPC Kyle's walk + dash is his SS_BLASTER pistol, never a dash
+		&& !(((self->r.svFlags & SVF_BOT) || self->s.eType == ET_NPC) && self->client->ps.fd.saberAnimLevel == SS_BLASTER
+			&& (self->client->buttons & BUTTON_WALKING))
 		/*&& (self->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE] > FORCE_LEVEL_0)*/) // ground dash: any saber user (Saber Offense 1+); gunners with no saber skill cannot
 	{
 		return qtrue;

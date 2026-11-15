@@ -3671,7 +3671,9 @@ qboolean G_SaberBlasterKyleModel(const gentity_t* ent)
 		Q_strncpyz(model, ent->client->modelname, sizeof model);
 	}
 	Q_strlwr(model);
-	return strstr(model, "kyle") ? qtrue : qfalse;
+	// Cal Kestis too (item 373, DH 2026-11-15): cal_kestis*, cal_survivor, cal_inquisitor, cal_jacket, jedi_cal
+	return strstr(model, "kyle") || strstr(model, "kestis") || strstr(model, "jedi_cal")
+		|| !Q_strncmp(model, "cal_", 4) || strstr(model, "/cal_") ? qtrue : qfalse;
 }
 
 qboolean G_ValidSaberStyle(const gentity_t* ent, const int saber_style)
@@ -3767,6 +3769,11 @@ void Cmd_SaberAttackCycle_f(gentity_t* ent)
 
 	if (ent->client->ps.weapon != WP_SABER)
 	{
+		return;
+	}
+
+	if (G_SaberBlasterAIKeep(ent))
+	{//a bot / NPC Kyle stays in SS_BLASTER (g_saberAIBlaster, 2026-11-15, item 371)
 		return;
 	}
 

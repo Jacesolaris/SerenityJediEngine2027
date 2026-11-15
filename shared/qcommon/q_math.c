@@ -247,13 +247,19 @@ int irand(int min, int max)
 		min = tmp;
 	}
 
-	// Safety: prevent overflow of the RNG math
-	if (max - min >= QRAND_MAX)
+	// Wide ranges (QRAND_MAX or more apart). One draw only gives 15 random bits, so this used to
+	// clamp max to min + QRAND_MAX - 1 and print a warning: irand(120000, 180000) never went past 152767.
+	// 2026-11-14: combine two draws into 30 bits and scale with 64-bit math, so the whole range is used.
+	// Ranges below QRAND_MAX keep Raven's original single-draw logic below, unchanged.
+	if ((int64_t)max - (int64_t)min >= QRAND_MAX)
 	{
-#ifdef _DEBUG
-		printf("WARNING: irand() range too large (%d to %d). Clamping to QRAND_MAX.\n", min, max);
-#endif
-		max = min + QRAND_MAX - 1;
+		holdrand = holdrand * 214013L + 2531011L;
+		const uint64_t hi = holdrand >> 17;
+		holdrand = holdrand * 214013L + 2531011L;
+		const uint64_t lo = holdrand >> 17;
+		const uint64_t bits30 = (hi << 15) | lo; // 0 .. 2^30 - 1
+		const uint64_t span = (uint64_t)((int64_t)max - (int64_t)min + 1);
+		return (int)((int64_t)min + (int64_t)(bits30 * span >> 30));
 	}
 
 	// Raven's original logic

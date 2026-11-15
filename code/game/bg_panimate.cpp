@@ -133,6 +133,7 @@ qboolean PM_SuperBreakLoseAnim(int anim);
 qboolean PM_LockedAnim(int anim);
 saberMoveName_t PM_SaberFlipOverAttackMove();
 qboolean PM_CheckFlipOverAttackMove(qboolean checkEnemy);
+qboolean PM_NPCRandomDFAAllowed(); // item 369, below
 saberMoveName_t PM_SaberLungeAttackMove(qboolean fallback_to_normal_lunge);
 qboolean PM_CheckLungeAttackMove();
 extern qboolean PM_SpinningSaberAnim(int anim);
@@ -3048,6 +3049,8 @@ static saberMoveName_t PM_PickBackStab()
 	return LS_A_BACKSTAB;
 }
 
+extern qboolean Jedi_StabDownWanted(gentity_t* self); // AI_Jedi.cpp, item 367
+
 static saberMoveName_t PM_CheckStabDown()
 {
 	if (!pm->gent || !pm->gent->enemy || !pm->gent->enemy->client)
@@ -3110,7 +3113,8 @@ static saberMoveName_t PM_CheckStabDown()
 			//wtf???
 			return LS_NONE;
 		}
-		if (Q_irand(0, RANK_CAPTAIN) > pm->gent->NPC->rank)
+		if (!Jedi_StabDownWanted(pm->gent) // the AI went in for the stab on purpose (g_saberAIStabDown, item 367)
+			&& Q_irand(0, RANK_CAPTAIN) > pm->gent->NPC->rank)
 		{
 			//lower ranks do this less often
 			return LS_NONE;
@@ -3990,6 +3994,7 @@ static qboolean PM_CheckJumpForwardAttackMove()
 					{
 						if (pm->gent
 							&& pm->gent->NPC
+							&& PM_NPCRandomDFAAllowed() // item 369: with g_saberAIDFA only when the AI chose it
 							&& (pm->gent->NPC->rank == RANK_CREWMAN || pm->gent->NPC->rank >= RANK_LT))
 						{
 							//only acrobat or boss and higher can do this
@@ -4224,6 +4229,7 @@ qboolean PM_CheckFlipOverAttackMove(const qboolean checkEnemy)
 				//flip over-forward down-attack
 				if (pm->gent->NPC
 					&& (pm->gent->NPC->rank == RANK_CREWMAN || pm->gent->NPC->rank >= RANK_LT)
+					&& PM_NPCRandomDFAAllowed() // item 369: with g_saberAIDFA only when the AI chose it
 					&& !Q_irand(0, 2)) //NPC who can do this, 33% chance
 				{
 					//only player or acrobat or boss and higher can do this
@@ -4279,6 +4285,65 @@ qboolean PM_CheckFlipOverAttackMove(const qboolean checkEnemy)
 		}
 	}
 	return qfalse;
+}
+
+// 2026-11-15 (DH, item 369, g_saberAIDFA 1): NPC DFAs (overhead slash / flip slash / flip stab) come from the AI's
+// decision (AI_Jedi.cpp Jedi_TryDFA -> Jedi_DFAWanted) instead of random jumps and the random kill-move table.
+extern cvar_t* g_saberAIDFA;
+extern qboolean Jedi_DFAWanted(gentity_t* self);
+
+static qboolean PM_SmartDFAOn()
+{
+	if (!g_saberAIDFA || !g_saberAIDFA->integer)
+	{
+		return qfalse;
+	}
+	return qtrue;
+}
+
+// may this NPC take a DFA from the old random paths? With g_saberAIDFA on, only while the AI wants one.
+qboolean PM_NPCRandomDFAAllowed()
+{
+	if (!PM_SmartDFAOn() || !pm->gent)
+	{
+		return qtrue;
+	}
+	return Jedi_DFAWanted(pm->gent);
+}
+
+// the DFA for the NPC's style when the AI committed to one, else LS_NONE: strong / desann / blaster leap into the
+// overhead slash (LS_A_JUMP_T__B_, LS_A_JUMP_PALP_ for yoda / palpatine sabers), medium flip slash, fast / tavion
+// flip stab (PM_SaberFlipOverAttackMove). Both set their own jump.
+saberMoveName_t PM_NPCSmartDFAMove()
+{
+	if (!PM_SmartDFAOn()
+		|| pm->ps->clientNum < MAX_CLIENTS || PM_ControlledByPlayer()
+		|| !pm->gent || !pm->gent->client || !Jedi_DFAWanted(pm->gent)
+		|| pm->ps->dualSabers
+		|| pm->ps->groundEntityNum == ENTITYNUM_NONE)
+	{
+		return LS_NONE;
+	}
+
+	saberMoveName_t move = LS_NONE;
+
+	switch (pm->ps->saberAnimLevel)
+	{
+	case SS_STRONG:
+	case SS_DESANN:
+	case SS_BLASTER:
+		move = PM_SaberJumpForwardAttackMove();
+		break;
+	case SS_MEDIUM:
+	case SS_FAST:
+	case SS_TAVION:
+		move = PM_SaberFlipOverAttackMove();
+		break;
+	default:
+		break;
+	}
+
+	return move;
 }
 
 saberMoveName_t PM_SaberBackflipAttackMove()
@@ -6689,6 +6754,20 @@ void PM_SetAnimFinal(int* torso_anim, int* legs_anim, const int setAnimParts, in
 		{
 			anim_current = body_current;
 		}
+		// 2026-11-15 (DH): going from one walk / run cycle to another keeps the step it was at. A new cycle always
+		// started on its first frame, so when walk and run swapped every few frames (holding walk on a controller)
+		// the legs restarted over and over and stood frozen while the character moved (protocol droid player).
+		else if (!anim_restart && !anim_pace && !body_match_tors_frame && body_animating && anim_foot_move
+			&& cur_anim.loopFrames != -1 && body_anim != anim && (PM_WalkingAnim(body_anim) || PM_RunningAnim(body_anim))
+			&& body_end - body_start > 1 && anim_end - anim_start > 1)
+		{
+			float cycle = (body_current - static_cast<float>(body_start)) / static_cast<float>(body_end - body_start);
+			if (cycle < 0.0f || cycle >= 1.0f)
+			{
+				cycle = 0.0f;
+			}
+			anim_current = static_cast<float>(anim_start) + cycle * static_cast<float>(anim_end - anim_start);
+		}
 
 		gi.G2API_SetAnimIndex(&gent->ghoul2[gent->playerModel],
 			G_AnimGLAOffset(gent->client->clientInfo.animFileIndex, cur_anim.glaIndex)); // item 355
@@ -6715,8 +6794,36 @@ void PM_SetAnimFinal(int* torso_anim, int* legs_anim, const int setAnimParts, in
 	//==========================================
 }
 
-void PM_SetAnim(const pmove_t* pm, int setAnimParts, const int anim, const int setAnimFlags, const int blendTime)
+// 2026-11-15 (DH): a walk / run cycle this model doesn't have becomes its plain one. Models with a skeleton of their
+// own (the protocol droid: WALK1 / RUN1 and few others) were given saber, staff, dual, pistol... walk and run anims
+// they lack; PM_SetAnimFinal skips those, so the old anim stayed (a protocol droid player with the saber out slid
+// along in the stand pose). Only walk / run anims change, and only when missing.
+static int PM_MoveAnimFallback(const gentity_t* ent, const int anim)
 {
+	if (!ent || !ent->client || anim < 0 || anim >= MAX_ANIMATIONS
+		|| !(PM_WalkingAnim(anim) || PM_RunningAnim(anim)) || PM_HasAnimation(ent, anim))
+	{
+		return anim;
+	}
+	const bool back = strstr(animTable[anim].name, "BACK") != nullptr;
+	const int walk[] = { back ? BOTH_WALKBACK1 : BOTH_WALK1, BOTH_WALK1 };
+	const int run[] = { back ? BOTH_RUNBACK1 : BOTH_RUN1, BOTH_RUN1, BOTH_WALK1 };
+	const int* list = PM_RunningAnim(anim) ? run : walk;
+	const int count = PM_RunningAnim(anim) ? 3 : 2;
+	for (int i = 0; i < count; i++)
+	{
+		if (PM_HasAnimation(ent, list[i]))
+		{
+			return list[i];
+		}
+	}
+	return anim;
+}
+
+void PM_SetAnim(const pmove_t* pm, int setAnimParts, int anim, const int setAnimFlags, const int blendTime)
+{
+	anim = PM_MoveAnimFallback(pm->gent, anim);
+
 	if (pm->ps->pm_type >= PM_DEAD)
 	{
 		//FIXME: sometimes we'll want to set anims when your dead... twitches, impacts, etc.

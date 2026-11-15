@@ -595,6 +595,18 @@ qboolean G2_Set_Bone_Angles_Matrix(const CGhoul2Info* ghlInfo, boneInfo_v& blist
 
 #define DEBUG_G2_TIMING (0)
 
+// kjk Q-0017: a new blend set while the last blend is still under half done keeps blending from
+// that older pose (still most of what is on screen) instead of popping to the barely started anim.
+static bool G2_KeepBlendSource(const boneInfo_t& bone, const int currentTime)
+{
+	if (!(bone.flags & BONE_ANIM_BLEND) || bone.blendTime <= 0)
+	{
+		return false;
+	}
+	const int elapsed = currentTime - bone.blendStart;
+	return elapsed > 0 && elapsed * 2 < bone.blendTime;
+}
+
 // given a model, bone name, a bonelist, a start/end frame number, a anim speed and some anim flags, set up or modify an existing bone entry for a new set of anims
 qboolean G2_Set_Bone_Anim_Index(
 	boneInfo_v& blist,
@@ -669,6 +681,11 @@ qboolean G2_Set_Bone_Anim_Index(
 			if (blist[index].blendStart == currentTime)
 			{
 				blist[index].blendTime = blendTime;
+			}
+			else if (G2_KeepBlendSource(blist[index], currentTime))
+			{
+				blist[index].blendTime = blendTime;
+				blist[index].blendStart = currentTime;
 			}
 			else
 			{

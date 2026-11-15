@@ -15797,6 +15797,8 @@ static int saberBlasterFireTime[MAX_GENTITIES];
 // saberBlasterChargeSound = the charge sound has played for this hold
 static int saberBlasterComboStart[MAX_GENTITIES];
 static qboolean saberBlasterChargeSound[MAX_GENTITIES];
+// Kyle NPC pistol AI (2026-11-15, item 371): who the AI's burst is aimed at (entity number + 1, 0 = nobody)
+static int saberBlasterAITarget[MAX_GENTITIES];
 
 // the level of a shot held this long (0 = a normal shot), no more than the clip has left to pay for it
 static int WP_SaberBlasterChargeLevel(const int held, const int clip_used)
@@ -15935,6 +15937,37 @@ static gentity_t* WP_SaberBlasterFindTarget(const gentity_t* ent, const vec3_t e
 	return best;
 }
 
+// Kyle NPC pistol AI (2026-11-15, item 371): the auto aim arc is made for the player's crosshair; an NPC whose burst
+// was aimed at an enemy shoots him when he is roughly in front of him (60 degrees) with a clear line of fire
+static gentity_t* WP_SaberBlasterAITargetFallback(const gentity_t* ent, const vec3_t eye, const vec3_t fwd)
+{
+	const int target_num = saberBlasterAITarget[ent->s.number] - 1;
+
+	if (!ent->NPC || target_num < 0 || target_num >= ENTITYNUM_WORLD)
+	{
+		return nullptr;
+	}
+	gentity_t* other = &g_entities[target_num];
+	if (!other->inuse || !other->client || other->health <= 0)
+	{
+		return nullptr;
+	}
+	vec3_t spot, dir;
+	CalcEntitySpot(other, SPOT_CHEST, spot);
+	VectorSubtract(spot, eye, dir);
+	if (VectorNormalize(dir) > g_saberBlasterAimRange->value || DotProduct(dir, fwd) < 0.5f)
+	{
+		return nullptr;
+	}
+	trace_t tr;
+	gi.trace(&tr, eye, nullptr, nullptr, spot, ent->s.number, MASK_SHOT, static_cast<EG2_Collision>(0), 0);
+	if (tr.fraction < 1.0f && tr.entityNum != other->s.number)
+	{
+		return nullptr;
+	}
+	return other;
+}
+
 // charge: 0 = a normal shot, 1 .. SABERBLASTER_CHARGE_LEVELS = a charged one (2026-10-31; the saberlock shot is the
 // full charge): base damage x (1 + charge) ... x 5 at full, as before for the lock shot
 static void WP_SaberBlasterFire(gentity_t* ent, const int charge, gentity_t* target)
@@ -15950,6 +15983,10 @@ static void WP_SaberBlasterFire(gentity_t* ent, const int charge, gentity_t* tar
 	if (!target)
 	{
 		target = WP_SaberBlasterFindTarget(ent, eye, fwd);
+	}
+	if (!target)
+	{
+		target = WP_SaberBlasterAITargetFallback(ent, eye, fwd); // Kyle NPC pistol AI (item 371)
 	}
 	if (target)
 	{
@@ -16010,7 +16047,9 @@ static qboolean WP_SaberBlasterKyleModel(const gentity_t* ent)
 	char path[MAX_QPATH];
 	Q_strncpyz(path, ent->ghoul2[ent->playerModel].mFileName, sizeof path);
 	Q_strlwr(path);
-	return strstr(path, "kyle") ? qtrue : qfalse;
+	// Cal Kestis too (item 373, DH 2026-11-15): cal_kestis*, cal_survivor, cal_inquisitor, cal_jacket, jedi_cal
+	return strstr(path, "kyle") || strstr(path, "kestis") || strstr(path, "jedi_cal")
+		|| !Q_strncmp(path, "cal_", 4) || strstr(path, "/cal_") ? qtrue : qfalse;
 }
 
 // any other character loses the style, however he got it (NPC file, give all, setforceall, style cycle), and
@@ -16103,6 +16142,255 @@ void WP_SaberBlasterCinematicThink(gentity_t* ent)
 	WP_SaberBlasterUpdatePistolModel(ent);
 }
 
+// 2026-11-15 (DH, item 371, g_saberAIBlaster 1): Kyle Katarn NPCs fight in SS_BLASTER and use it with thought.
+// While the enemy is too far for the saber (more than 224 units edge to edge, or far above / below him) Kyle shoots
+// the left hand pistol in short bursts, from far away now and then a charged shot, and reloads while nobody is near;
+// once the enemy is close (under 144 units) he fights with the saber. The gap between the two distances keeps him
+// from flickering between them, a change waits for a reaction time (easy 0.7 s .. hard 0.25 s) and he keeps a mode at
+// least 1.2 s; an enemy who rushes in (under 72 units) ends the pistol at once. Pauses between bursts:
+// g_saberBlasterAIFire (ms on average; shorter on harder skill). The pistol goes through the player's own fire path
+// (walk + dash: auto aim, clip, anims, charge). The player is never given SS_BLASTER (learned only, DH 2026-10-24),
+// and Kyle still uses another style in cutscenes (WP_SaberBlasterCinematic).
+extern cvar_t* g_saberAIBlaster;
+
+constexpr float SABERBLASTER_AI_GUN_DIST = 224.0f; // farther than this (edge to edge): out of saber reach, the pistol
+constexpr float SABERBLASTER_AI_SABER_DIST = 144.0f; // nearer than this: back to the saber
+constexpr float SABERBLASTER_AI_DANGER_DIST = 72.0f; // nearer than this: the pistol stops at once
+constexpr float SABERBLASTER_AI_HEIGHT = 96.0f; // more height difference than this: out of saber reach too
+constexpr float SABERBLASTER_AI_CHARGE_DIST = 384.0f; // charged shots only from this far
+constexpr int SABERBLASTER_AI_MODE_TIME = 1200; // ms he keeps a mode before he changes again
+constexpr int SABERBLASTER_AI_LOST_SIGHT = 1000; // ms the pistol waits for a lost enemy to show again
+constexpr int SABERBLASTER_AI_TAP = 150; // ms walk + dash are held for a normal shot
+
+static qboolean saberBlasterAIGun[MAX_GENTITIES]; // qtrue = pistol mode, qfalse = saber mode
+static int saberBlasterAIModeTime[MAX_GENTITIES]; // when the mode last changed
+static int saberBlasterAIWantSince[MAX_GENTITIES]; // since when the other mode has been wanted (0 = it isn't)
+static int saberBlasterAISeenTime[MAX_GENTITIES]; // when he last had a clear line to the enemy
+static int saberBlasterAIBurstEnd[MAX_GENTITIES]; // walk + dash held until then
+static int saberBlasterAINextBurst[MAX_GENTITIES]; // no new burst before then
+
+// an AI Kyle Katarn with one single-bladed saber: he gets SS_BLASTER and keeps it (AI_Jedi.cpp leaves his style alone)
+qboolean WP_SaberBlasterAIKeep(const gentity_t* ent)
+{
+	if (!g_saberAIBlaster || !g_saberAIBlaster->integer
+		|| !ent || !ent->client || !ent->NPC || ent->health <= 0
+		|| ent->s.number < MAX_CLIENTS || G_ControlledByPlayer(ent))
+	{
+		return qfalse;
+	}
+	const playerState_t* ps = &ent->client->ps;
+	if (ps->weapon != WP_SABER || ps->dualSabers || ps->saber[0].numBlades != 1)
+	{
+		return qfalse;
+	}
+	return WP_SaberBlasterKyleModel(ent);
+}
+
+static void WP_SaberBlasterAIStyle(gentity_t* ent)
+{
+	if (in_camera || !WP_SaberBlasterAIKeep(ent))
+	{
+		return;
+	}
+	playerState_t* ps = &ent->client->ps;
+	ps->saberStylesKnown |= 1 << SS_BLASTER;
+	if (ps->saberAnimLevel != SS_BLASTER
+		&& ps->weaponTime <= 0
+		&& ps->saberLockTime < level.time
+		&& !PM_SaberInAttack(ps->saberMove)
+		&& !PM_SaberInStart(ps->saberMove)
+		&& !PM_SaberInTransition(ps->saberMove))
+	{
+		ps->saberAnimLevel = SS_BLASTER;
+	}
+}
+
+static void WP_SaberBlasterAIReset(const int ent_num)
+{
+	saberBlasterAIGun[ent_num] = qfalse;
+	saberBlasterAIWantSince[ent_num] = 0;
+	saberBlasterAIBurstEnd[ent_num] = 0;
+	saberBlasterAITarget[ent_num] = 0;
+}
+
+static void WP_SaberBlasterAIDebug(const gentity_t* ent, const char* what, const float dist)
+{
+	if (d_JediAI->integer || g_DebugSaberCombat->integer)
+	{
+		gi.Printf(S_COLOR_CYAN"%s: %s (%.0f away)\n", ent->NPC_type, what, dist);
+	}
+}
+
+// picks pistol or saber for an AI Kyle and holds walk + dash for his bursts (before WP_SaberBlasterThink reads them)
+static void WP_SaberBlasterAI(gentity_t* ent, usercmd_t* ucmd)
+{
+	const int ent_num = ent->s.number;
+
+	if (!WP_SaberBlasterAIKeep(ent))
+	{
+		if (saberBlasterAIGun[ent_num] || saberBlasterAIBurstEnd[ent_num] || saberBlasterAITarget[ent_num])
+		{
+			WP_SaberBlasterAIReset(ent_num);
+		}
+		return;
+	}
+	playerState_t* ps = &ent->client->ps;
+	gentity_t* enemy = ent->enemy;
+
+	if (!WP_SaberBlasterActive(ent)
+		|| g_saberBlasterAIFire->integer <= 0
+		|| in_camera
+		|| !enemy || !enemy->inuse || !enemy->client || enemy->health <= 0
+		|| ps->saberLockTime >= level.time
+		|| ps->saberInFlight
+		|| PM_InKnockDown(ps)
+		|| (ent->NPC->scriptFlags & SCF_DONT_FIRE)
+		|| (ent->flags & FL_LOCK_PLAYER_WEAPONS))
+	{
+		WP_SaberBlasterAIReset(ent_num);
+		return;
+	}
+
+	vec3_t eye, spot, to_enemy;
+	VectorCopy(ent->client->renderInfo.eyePoint, eye);
+	CalcEntitySpot(enemy, SPOT_CHEST, spot);
+	VectorSubtract(enemy->currentOrigin, ent->currentOrigin, to_enemy);
+	const qboolean high = fabs(to_enemy[2]) > SABERBLASTER_AI_HEIGHT ? qtrue : qfalse;
+	to_enemy[2] = 0;
+	const float edge_dist = VectorLength(to_enemy) - (ent->maxs[0] + enemy->maxs[0]);
+
+	trace_t tr;
+	gi.trace(&tr, eye, nullptr, nullptr, spot, ent_num, MASK_SHOT, static_cast<EG2_Collision>(0), 0);
+	const qboolean visible = tr.fraction >= 1.0f || tr.entityNum == enemy->s.number ? qtrue : qfalse;
+	if (visible)
+	{
+		saberBlasterAISeenTime[ent_num] = level.time;
+	}
+
+	if (edge_dist < SABERBLASTER_AI_DANGER_DIST && !high)
+	{//he rushed in: the saber, now
+		if (saberBlasterAIGun[ent_num])
+		{
+			WP_SaberBlasterAIReset(ent_num);
+			saberBlasterAIModeTime[ent_num] = level.time;
+			WP_SaberBlasterAIDebug(ent, "saber, enemy rushed in", edge_dist);
+		}
+		saberBlasterAIWantSince[ent_num] = 0;
+		return;
+	}
+
+	const int skill = g_spskill->integer < 0 ? 0 : g_spskill->integer > 3 ? 3 : g_spskill->integer;
+	const float range = g_saberBlasterAimRange->value;
+	qboolean want_gun;
+	if (saberBlasterAIGun[ent_num])
+	{//keep shooting until he is close, or gone from sight a while
+		want_gun = (edge_dist >= SABERBLASTER_AI_SABER_DIST || high)
+			&& edge_dist <= range
+			&& level.time - saberBlasterAISeenTime[ent_num] < SABERBLASTER_AI_LOST_SIGHT
+			? qtrue : qfalse;
+	}
+	else
+	{//start shooting once he is out of saber reach and in sight
+		want_gun = visible
+			&& edge_dist <= range
+			&& (edge_dist > SABERBLASTER_AI_GUN_DIST || high)
+			? qtrue : qfalse;
+	}
+
+	if (want_gun != saberBlasterAIGun[ent_num])
+	{
+		static constexpr int react_time[4] = { 700, 500, 350, 250 };
+		if (!saberBlasterAIWantSince[ent_num])
+		{
+			saberBlasterAIWantSince[ent_num] = level.time;
+		}
+		if (level.time - saberBlasterAIWantSince[ent_num] >= react_time[skill]
+			&& level.time - saberBlasterAIModeTime[ent_num] >= SABERBLASTER_AI_MODE_TIME)
+		{
+			if (want_gun)
+			{
+				saberBlasterAIGun[ent_num] = qtrue;
+				saberBlasterAIWantSince[ent_num] = 0;
+				saberBlasterAINextBurst[ent_num] = level.time + Q_irand(0, 300);
+				WP_SaberBlasterAIDebug(ent, "pistol", edge_dist);
+			}
+			else
+			{
+				WP_SaberBlasterAIReset(ent_num); // a charge being held goes as walk + dash go up
+				WP_SaberBlasterAIDebug(ent, "saber", edge_dist);
+			}
+			saberBlasterAIModeTime[ent_num] = level.time;
+		}
+	}
+	else
+	{
+		saberBlasterAIWantSince[ent_num] = 0;
+	}
+
+	if (!saberBlasterAIGun[ent_num])
+	{
+		return;
+	}
+
+	if (ps->ammo[SABERBLASTER_CLIP_SLOT] >= SABERBLASTER_CLIP_SIZE)
+	{//empty clip: reload (nobody is near in pistol mode)
+		saberBlasterAIBurstEnd[ent_num] = 0;
+		if (ps->weaponTime <= 0)
+		{
+			ucmd->buttons |= BUTTON_WALKING | BUTTON_DASH | BUTTON_ATTACK;
+		}
+		return;
+	}
+
+	if (level.time >= saberBlasterAIBurstEnd[ent_num] && level.time >= saberBlasterAINextBurst[ent_num])
+	{
+		if (!visible
+			|| ps->weaponTime > 0
+			|| ps->groundEntityNum == ENTITYNUM_NONE
+			|| PM_SaberInAttack(ps->saberMove)
+			|| PM_SaberInStart(ps->saberMove))
+		{
+			return;
+		}
+		vec3_t fwd, dir;
+		AngleVectors(ps->viewangles, fwd, nullptr, nullptr);
+		VectorSubtract(spot, eye, dir);
+		VectorNormalize(dir);
+		if (DotProduct(fwd, dir) < 0.9f)
+		{//not facing him yet
+			return;
+		}
+		static constexpr int pause_pct[4] = { 150, 115, 85, 60 };
+		static constexpr int charge_pct[4] = { 10, 20, 30, 40 };
+		const int pause = g_saberBlasterAIFire->integer * pause_pct[skill] / 100;
+		int chance = charge_pct[skill];
+		if (ent->NPC->rank >= RANK_CAPTAIN)
+		{
+			chance = chance * 3 / 2;
+		}
+		else if (ent->NPC->rank >= RANK_COMMANDER)
+		{
+			chance = chance * 5 / 4;
+		}
+		int burst = SABERBLASTER_AI_TAP;
+		if (SABERBLASTER_CLIP_SIZE - ps->ammo[SABERBLASTER_CLIP_SLOT] > SABERBLASTER_CHARGE_LEVELS
+			&& edge_dist >= SABERBLASTER_AI_CHARGE_DIST
+			&& Q_irand(1, 100) <= chance)
+		{
+			burst = SABERBLASTER_CHARGE_FULL + 100; // a charged shot
+		}
+		saberBlasterAIBurstEnd[ent_num] = level.time + burst;
+		saberBlasterAINextBurst[ent_num] = saberBlasterAIBurstEnd[ent_num] + Q_irand(pause / 2, pause * 3 / 2);
+		saberBlasterAITarget[ent_num] = enemy->s.number + 1;
+	}
+
+	if (level.time < saberBlasterAIBurstEnd[ent_num])
+	{
+		ucmd->buttons |= BUTTON_WALKING | BUTTON_DASH;
+		ucmd->buttons &= ~(BUTTON_ATTACK | BUTTON_ALT_ATTACK); // attack held too would reload instead
+	}
+}
+
 void WP_SaberBlasterThink(gentity_t* ent, usercmd_t* ucmd)
 {
 	if (!ent || !ent->client)
@@ -16114,8 +16402,10 @@ void WP_SaberBlasterThink(gentity_t* ent, usercmd_t* ucmd)
 
 	WP_SaberBlasterKyleOnly(ent);
 	WP_SaberBlasterCinematic(ent);
+	WP_SaberBlasterAIStyle(ent); // Kyle NPCs keep SS_BLASTER (item 371)
 	WP_SaberBlasterUpdatePistolModel(ent);
 	saberBlasterAltHeld[ent_num] = qfalse;
+	WP_SaberBlasterAI(ent, ucmd); // Kyle NPCs: pistol out of saber reach, saber close up (item 371)
 
 	// a shot started below goes now, its arm fully out - unless he was knocked down / killed / the anim was cut
 	if (saberBlasterFireTime[ent_num] && saberBlasterFireTime[ent_num] <= level.time)
@@ -20657,6 +20947,8 @@ int IsPressingDashButton(const gentity_t* self)
 		&& (!(self->client->buttons & BUTTON_KICK))
 		&& (!(self->client->buttons & BUTTON_USE))
 		&& (self->client->buttons & BUTTON_DASH)
+		// item 371: an AI Kyle's walk + dash is his SS_BLASTER pistol, never a dash
+		&& !(self->s.number >= MAX_CLIENTS && self->client->ps.saberAnimLevel == SS_BLASTER && (self->client->buttons & BUTTON_WALKING))
 		/*&& (self->client->ps.forcePowerLevel[FP_SABER_OFFENSE] > FORCE_LEVEL_0)*/) // ground dash: any saber user (Saber Offense 1+); gunners with no saber skill cannot
 	{
 		return qtrue;

@@ -1398,7 +1398,7 @@ void main()
 	vec2 windowTex = gl_FragCoord.xy / r_FBufScale;
 	AO = texture(u_SSAOMap, windowTex).r;
 	#endif
-	const float screenAO = AO;	// SSAO only (not the material AO below)
+	float screenAO = AO;	// SSAO only (not the material AO below); not const: AO is a runtime texture value (NVIDIA C1059)
 
 	vec4 specular = vec4(1.0);
 	float roughness = 0.99;

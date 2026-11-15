@@ -11,3 +11,7 @@ IDR_MUSIC           RCDATA  "sound/MainMenuTheme.mp3"
 
 // the SerenityJediEngine2027 mod folder of a release: the installation check allows exactly these files
 IDR_ALLOWED_FILES   RCDATA  "texts/AllowedFiles.txt"
+
+// the dedicated server batch file: built in so players do not see or edit it (its Launcher-Server.cfg is in
+// SerenityJediEngine2027-Assets-1.pk3)
+IDR_SERVER_BAT      RCDATA  "texts/Launcher-Server.bat"

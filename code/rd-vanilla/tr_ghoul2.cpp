@@ -138,6 +138,107 @@ struct SBoneCalc
 };
 
 class CBoneCache;
+// kjk Q-0080: mixing two bone matrices value by value shrinks a bone turned far between them (to nothing at
+// half a turn), so the hand tag and the blade swing wide of where the bone really points. Mix the turn as a
+// normalised quaternion instead, and keep the joint where the plain mix puts it (on its parent).
+// result = a * (1 - w) + b * w
+static void G2_ArcLerpBone(mdxaBone_t* out, const mdxaBone_t* a, const mdxaBone_t* b, const float w,
+	const mdxaHeader_t* header, const int boneIndex)
+{
+	mdxaBone_t lerped;
+	for (int i = 0; i < 3; i++)
+	{
+		for (int j = 0; j < 4; j++)
+		{
+			lerped.matrix[i][j] = a->matrix[i][j] * (1.0f - w) + b->matrix[i][j] * w;
+		}
+	}
+
+	float q[2][4];
+	const mdxaBone_t* src[2] = { a, b };
+	for (int k = 0; k < 2; k++)
+	{
+		const float(*m)[4] = src[k]->matrix;
+		const float tr = m[0][0] + m[1][1] + m[2][2];
+		float* o = q[k];
+		if (tr > 0.0f)
+		{
+			const float s = sqrtf(tr + 1.0f) * 2.0f;
+			o[3] = 0.25f * s;
+			o[0] = (m[2][1] - m[1][2]) / s;
+			o[1] = (m[0][2] - m[2][0]) / s;
+			o[2] = (m[1][0] - m[0][1]) / s;
+		}
+		else if (m[0][0] > m[1][1] && m[0][0] > m[2][2])
+		{
+			const float s = sqrtf(1.0f + m[0][0] - m[1][1] - m[2][2]) * 2.0f;
+			o[3] = (m[2][1] - m[1][2]) / s;
+			o[0] = 0.25f * s;
+			o[1] = (m[0][1] + m[1][0]) / s;
+			o[2] = (m[0][2] + m[2][0]) / s;
+		}
+		else if (m[1][1] > m[2][2])
+		{
+			const float s = sqrtf(1.0f + m[1][1] - m[0][0] - m[2][2]) * 2.0f;
+			o[3] = (m[0][2] - m[2][0]) / s;
+			o[0] = (m[0][1] + m[1][0]) / s;
+			o[1] = 0.25f * s;
+			o[2] = (m[1][2] + m[2][1]) / s;
+		}
+		else
+		{
+			const float s = sqrtf(1.0f + m[2][2] - m[0][0] - m[1][1]) * 2.0f;
+			o[3] = (m[1][0] - m[0][1]) / s;
+			o[0] = (m[0][2] + m[2][0]) / s;
+			o[1] = (m[1][2] + m[2][1]) / s;
+			o[2] = 0.25f * s;
+		}
+	}
+
+	float dot = q[0][0] * q[1][0] + q[0][1] * q[1][1] + q[0][2] * q[1][2] + q[0][3] * q[1][3];
+	const float sb = dot < 0.0f ? -1.0f : 1.0f;
+	dot *= sb;
+	if (dot > 0.9995f || w <= 0.0f || w >= 1.0f)
+	{
+		*out = lerped; // under ~4 degrees apart the plain mix loses well under 0.1% of the length
+		return;
+	}
+
+	float r[4];
+	float len = 0.0f;
+	for (int k = 0; k < 4; k++)
+	{
+		r[k] = q[0][k] * (1.0f - w) + sb * q[1][k] * w;
+		len += r[k] * r[k];
+	}
+	if (len < 1e-8f)
+	{
+		*out = lerped;
+		return;
+	}
+	len = 1.0f / sqrtf(len);
+	const float x = r[0] * len, y = r[1] * len, z = r[2] * len, qw = r[3] * len;
+
+	const float rot[3][3] = {
+		{ 1.0f - 2.0f * (y * y + z * z), 2.0f * (x * y - z * qw), 2.0f * (x * z + y * qw) },
+		{ 2.0f * (x * y + z * qw), 1.0f - 2.0f * (x * x + z * z), 2.0f * (y * z - x * qw) },
+		{ 2.0f * (x * z - y * qw), 2.0f * (y * z + x * qw), 1.0f - 2.0f * (x * x + y * y) } };
+
+	// the joint, in the base pose, and where the plain mix puts it
+	const mdxaSkelOffsets_t* offs = reinterpret_cast<const mdxaSkelOffsets_t*>(reinterpret_cast<const byte*>(header) + sizeof(mdxaHeader_t));
+	const mdxaSkel_t* sk = reinterpret_cast<const mdxaSkel_t*>(reinterpret_cast<const byte*>(header) + sizeof(mdxaHeader_t) + offs->offsets[boneIndex]);
+	const float p[3] = { sk->BasePoseMat.matrix[0][3], sk->BasePoseMat.matrix[1][3], sk->BasePoseMat.matrix[2][3] };
+
+	for (int i = 0; i < 3; i++)
+	{
+		const float joint = lerped.matrix[i][0] * p[0] + lerped.matrix[i][1] * p[1] + lerped.matrix[i][2] * p[2] + lerped.matrix[i][3];
+		out->matrix[i][0] = rot[i][0];
+		out->matrix[i][1] = rot[i][1];
+		out->matrix[i][2] = rot[i][2];
+		out->matrix[i][3] = joint - (rot[i][0] * p[0] + rot[i][1] * p[1] + rot[i][2] * p[2]);
+	}
+}
+
 void G2_TransformBone(int index, const CBoneCache& cb);
 
 class CBoneCache
@@ -1807,8 +1908,8 @@ void G2_TransformBone(const int index, const CBoneCache& cb)
 
 		for (j = 0; j < 12; j++)
 		{
-			reinterpret_cast<float*>(&tbone[5])[j] = backlerp * reinterpret_cast<float*>(&tbone[3])[j]
-				+ frontlerp * reinterpret_cast<float*>(&tbone[4])[j];
+			reinterpret_cast<float*>(&tbone[5])[j] = frontlerp * reinterpret_cast<float*>(&tbone[3])[j] // kjk Q-0004: fraction goes on the later frame
+				+ backlerp * reinterpret_cast<float*>(&tbone[4])[j];
 		}
 	}
 
@@ -1823,12 +1924,7 @@ void G2_TransformBone(const int index, const CBoneCache& cb)
 		// blend in the other frame if we need to
 		if (TB.blendMode)
 		{
-			const float blendFrontlerp = 1.0 - TB.blendLerp;
-			for (j = 0; j < 12; j++)
-			{
-				reinterpret_cast<float*>(&tbone[2])[j] = TB.blendLerp * reinterpret_cast<float*>(&tbone[2])[j]
-					+ blendFrontlerp * reinterpret_cast<float*>(&tbone[5])[j];
-			}
+			G2_ArcLerpBone(&tbone[2], &tbone[5], &tbone[2], TB.blendLerp, cb.header, index);
 		}
 
 		if (!index)
@@ -1839,27 +1935,17 @@ void G2_TransformBone(const int index, const CBoneCache& cb)
 	}
 	else
 	{
-		const float frontlerp = 1.0 - TB.backlerp;
 		// 		MC_UnCompress(tbone[0].matrix,compBonePointer[aFrame->boneIndexes[child]].Comp);
 		//		MC_UnCompress(tbone[1].matrix,compBonePointer[aoldFrame->boneIndexes[child]].Comp);
 		UnCompressBone(tbone[0].matrix, index, cb.header, TB.newFrame);
 		UnCompressBone(tbone[1].matrix, index, cb.header, TB.currentFrame);
 
-		for (j = 0; j < 12; j++)
-		{
-			reinterpret_cast<float*>(&tbone[2])[j] = TB.backlerp * reinterpret_cast<float*>(&tbone[0])[j]
-				+ frontlerp * reinterpret_cast<float*>(&tbone[1])[j];
-		}
+		G2_ArcLerpBone(&tbone[2], &tbone[1], &tbone[0], TB.backlerp, cb.header, index);
 
 		// blend in the other frame if we need to
 		if (TB.blendMode)
 		{
-			const float blendFrontlerp = 1.0 - TB.blendLerp;
-			for (j = 0; j < 12; j++)
-			{
-				reinterpret_cast<float*>(&tbone[2])[j] = TB.blendLerp * reinterpret_cast<float*>(&tbone[2])[j]
-					+ blendFrontlerp * reinterpret_cast<float*>(&tbone[5])[j];
-			}
+			G2_ArcLerpBone(&tbone[2], &tbone[5], &tbone[2], TB.blendLerp, cb.header, index);
 		}
 
 		if (!index)

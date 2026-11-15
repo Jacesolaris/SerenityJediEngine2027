@@ -14583,12 +14583,18 @@ extern qboolean PM_Can_Do_Kill_Lunge_back(void);
 int Next_Kill_Attack_Move_Check[MAX_GENTITIES]; // Next special move check. Indexed by NPC entity number: was [MAX_CLIENTS] (= 1 in SP), so every NPC wrote past the end (overwrote pm -> crash).
 saberMoveName_t PM_DoAI_Fake(const int curmove);
 
+extern qboolean Jedi_StabDownWanted(gentity_t* self); // AI_Jedi.cpp, item 367
+
+extern qboolean PM_NPCRandomDFAAllowed(); // bg_panimate.cpp, item 369
+extern saberMoveName_t PM_NPCSmartDFAMove(); // bg_panimate.cpp, item 369
+
 saberMoveName_t PM_NPCSaberAttackFromQuad(const int quad)
 {
 	saberMoveName_t auto_move = LS_NONE;
 
 	if (pm->gent &&
 		(pm->gent->NPC && pm->gent->NPC->rank != RANK_ENSIGN && pm->gent->NPC->rank != RANK_CIVILIAN
+			|| Jedi_StabDownWanted(pm->gent) // going for a ground stab on purpose (item 367)
 			|| pm->gent->client && (pm->gent->client->NPC_class == CLASS_TAVION || pm->gent->client->NPC_class == CLASS_ALORA)))
 	{
 		auto_move = PM_AttackForEnemyPos(qtrue, qtrue);
@@ -14761,7 +14767,7 @@ saberMoveName_t PM_NPCSaberAttackFromQuad(const int quad)
 						switch (choice)
 						{
 						case 0:
-							newmove = PM_NPC_Force_Leap_Attack();
+							newmove = pm->ps->saberAnimLevel == SS_DUAL || pm->ps->saberAnimLevel == SS_STAFF || PM_NPCRandomDFAAllowed() ? PM_NPC_Force_Leap_Attack() : LS_A_T2B; // item 369: DFAs only when the AI chose one
 
 							if (d_attackinfo->integer)
 							{
@@ -14827,7 +14833,7 @@ saberMoveName_t PM_NPCSaberAttackFromQuad(const int quad)
 							}
 							else
 							{
-								newmove = LS_A_JUMP_T__B_;
+								newmove = PM_NPCRandomDFAAllowed() ? LS_A_JUMP_T__B_ : LS_A_T2B; // item 369
 							}
 
 							if (d_attackinfo->integer)
@@ -14855,7 +14861,7 @@ saberMoveName_t PM_NPCSaberAttackFromQuad(const int quad)
 							}
 							break;
 						default:
-							newmove = PM_SaberFlipOverAttackMove();
+							newmove = PM_NPCRandomDFAAllowed() ? PM_SaberFlipOverAttackMove() : LS_A_T2B; // item 369
 
 							if (d_attackinfo->integer)
 							{
@@ -19875,7 +19881,12 @@ static void PM_WeaponLightsaber(void)
 					// ------------------------------------------------------------------
 					// Get attack move from movement command and NPC/player logic.
 					// ------------------------------------------------------------------
-					if (pm->ps->clientNum >= MAX_CLIENTS && !PM_ControlledByPlayer() &&
+					const saberMoveName_t smart_dfa = PM_NPCSmartDFAMove(); // the AI chose a DFA (g_saberAIDFA, item 369)
+					if (smart_dfa != LS_NONE)
+					{
+						newmove = smart_dfa;
+					}
+					else if (pm->ps->clientNum >= MAX_CLIENTS && !PM_ControlledByPlayer() &&
 						(Q_irand(0, pm->ps->forcePowerLevel[FP_SABER_OFFENSE] - 1) ||
 							(pm->gent && pm->gent->enemy && pm->gent->enemy->client &&
 								PM_InKnockDownOnGround(&pm->gent->enemy->client->ps)) ||

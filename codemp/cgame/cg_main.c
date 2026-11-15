@@ -794,6 +794,8 @@ static void CG_RegisterSounds(void)
 	cgs.media.blueSaberCoreShader = trap->R_RegisterShader("gfx/effects/sabers/blue_line");
 	cgs.media.purpleSaberGlowShader = trap->R_RegisterShader("gfx/effects/sabers/purple_glow");
 	cgs.media.purpleSaberCoreShader = trap->R_RegisterShader("gfx/effects/sabers/purple_line");
+	cgs.media.saberSolidCoreShader = trap->R_RegisterShader("gfx/effects/sabers/solidcore_mask");
+	cgs.media.saberSolidCoreHotShader = trap->R_RegisterShader("gfx/effects/sabers/solidcore_hot");
 	cgs.media.saberBlurShader = trap->R_RegisterShader("gfx/effects/sabers/saberBlur");
 	cgs.media.unstableBlurShader = trap->R_RegisterShader("gfx/effects/TFASabers/trail_unstable");
 	cgs.media.swordTrailShader = trap->R_RegisterShader("gfx/effects/sabers/swordTrail");

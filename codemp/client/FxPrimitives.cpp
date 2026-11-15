@@ -23,6 +23,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "client.h"
 #include "cl_cgameapi.h"
 #include "FxScheduler.h"
+#include "qcommon/cm_public.h"
 
 extern int drawnFx;
 
@@ -228,7 +229,9 @@ bool CParticle::UpdateOrigin(void)
 	// Only perform physics if this object is tagged to do so
 	if (mFlags & FX_APPLY_PHYSICS && !(mFlags & FX_PLAYER_VIEW))
 	{
-		if (mFlags & FX_EXPENSIVE_PHYSICS)
+		// kjk Q-0076: usePhysics alone never collided in MP (blood sparks fell through floors); check the
+		// point like SP does and trace when it lands in something solid.
+		if (mFlags & FX_EXPENSIVE_PHYSICS || (CM_PointContents(new_origin, 0) & MASK_SOLID))
 		{
 			trace_t trace;
 

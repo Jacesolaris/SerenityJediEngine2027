@@ -334,6 +334,14 @@ void CL_GenericMenu_f()
 {
 	const char* arg = Cmd_Argv(1);
 
+	// A "uimenu" key (character menu, wheels, load/save...) pressed while a level is still loading
+	// opened the in-game menu over the loading screen and paused the load until Escape.
+	// Only open it once the level is running (or from the main menu / a cinematic, as before).
+	if (cls.state > CA_DISCONNECTED && cls.state < CA_ACTIVE)
+	{
+		return;
+	}
+
 	if (cls.uiStarted)
 	{
 		if (cl_com_outcast && cl_com_outcast->integer == 0)//academy version

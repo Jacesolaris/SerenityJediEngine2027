@@ -86,6 +86,7 @@ XCVAR_DEF(cg_drawTimer, "0", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(cg_drawVehLeadIndicator, "1", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(cg_dynamicCrosshair, "1", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(cg_adaptiveCrosshair, "1", NULL, CVAR_ARCHIVE)
+XCVAR_DEF(g_saberTargetLock, "0", NULL, CVAR_ARCHIVE) // hold block with a saber: the view turns to the enemy nearest the crosshair (cg_draw.c CG_SaberTargetLock)
 XCVAR_DEF(cg_dynamicCrosshairPrecision, "1", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(cg_debugAnim, "0", NULL, CVAR_CHEAT)
 XCVAR_DEF(cg_debugGun, "0", NULL, CVAR_CHEAT)
@@ -249,6 +250,8 @@ XCVAR_DEF(cg_centerfailTime, "20", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(cg_awardsounds, "0", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(cg_SFXSabersGlowSize, "0.6f", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(cg_SFXSabersCoreSize, "0.5f", NULL, CVAR_ARCHIVE)
+XCVAR_DEF(cg_saberSolidCore, "0", NULL, CVAR_ARCHIVE) // 0 = additive core as before, 1 = solid core, 2 = solid + white-hot centre
+XCVAR_DEF(cg_saberLightClassic, "1", NULL, CVAR_ARCHIVE) // 1 = saber light ignores r_dlightIntensity / r_dlightRadius (as SJE2026), 0 = boosted
 
 XCVAR_DEF(cg_SFXSabersGlowSizeBF2, "1.0f", NULL, CVAR_ARCHIVE)
 XCVAR_DEF(cg_SFXSabersCoreSizeBF2, "0.5f", NULL, CVAR_ARCHIVE)

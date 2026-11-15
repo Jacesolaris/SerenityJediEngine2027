@@ -98,6 +98,8 @@ extern qboolean PM_CanRollFromSoulCal(const playerState_t* ps);
 extern qboolean BG_FullBodyTauntAnim(int anim);
 extern qboolean FlyingCreature(const gentity_t* ent);
 extern Vehicle_t* G_IsRidingVehicle(const gentity_t* pEnt);
+extern void CG_TargetLockViewOrg(vec3_t out); // cg_draw.cpp: the camera position (cg.refdef.vieworg)
+extern qboolean CG_TargetLockEntOrigin(int num, vec3_t out); // cg_draw.cpp: the interpolated origin (cg_entities lerpOrigin)
 extern void G_AttachToVehicle(gentity_t* ent, usercmd_t** ucmd);
 extern void G_GetBoltPosition(gentity_t* self, int boltIndex, vec3_t pos, int modelIndex = 0);
 extern void G_UpdateEmplacedWeaponData(gentity_t* ent);
@@ -7755,6 +7757,335 @@ extern qboolean droideka_npc(const gentity_t* ent);
 
 extern void WP_SaberWearThink(gentity_t* ent, int msec);
 
+// ---------------------------------------------------------------------------------------------------------------
+// Saber block target lock (g_saberTargetLock, 2026-11-15, off by default)
+// While the player holds block with a saber, the view turns smoothly (yaw only, pitch stays free) towards the
+// enemy nearest the crosshair: inside a 20 degree cone and 256 units of the camera (where the crosshair names show), in sight, alive, not an ally or neutral.
+// Releasing block frees it. The lock breaks on the target's death, 750 ms out of sight, past 272 units from the camera, or a fast
+// turn of the player's own (mouse or stick, 40 degrees in 250 ms); 300 ms after such a flick the enemy nearest the
+// crosshair is taken again, so a flick switches targets. Turning away from the target (stick held against the lock) stops the pull at once and lets go after 1 s; that target is not taken again until block is released. No lock in cutscenes, saberlocks, vehicles, or while
+// controlling another entity, and no turning while sprinting. It only aims: no block, parry or block point rule
+// changes. cg_draw.cpp turns the crosshair red and draws red brackets around it.
+// ---------------------------------------------------------------------------------------------------------------
+int g_saberTargetLockEnt = ENTITYNUM_NONE;
+
+constexpr float TARGETLOCK_RANGE = 256.0f; // from the camera: the distance the crosshair names show at (cg_draw.cpp)
+constexpr float TARGETLOCK_BREAK_RANGE = 272.0f; // from the camera (the brackets have faded out at 256, as the names)
+constexpr float TARGETLOCK_CONE = 20.0f; // degrees off the crosshair
+constexpr float TARGETLOCK_TURN_RATE = 10.0f; // per second: about 63% of the angle left is turned in 100 ms
+constexpr float TARGETLOCK_MAX_TURN = 540.0f; // degrees per second
+constexpr float TARGETLOCK_DEADZONE = 1.5f; // degrees: the pull fades in over this many degrees (a hard edge pulsed)
+constexpr float TARGETLOCK_FLICK = 40.0f; // degrees of the player's own turning...
+constexpr int TARGETLOCK_FLICK_MS = 250; // ...inside this time breaks the lock
+constexpr int TARGETLOCK_LOS_MS = 750;
+constexpr int TARGETLOCK_RETRY_MS = 300;
+constexpr float TARGETLOCK_TURNAWAY_RATE = 15.0f; // degrees a second of the player's own turn away from the target...
+constexpr int TARGETLOCK_TURNAWAY_MS = 1000; // ...this long lets the lock go (DH: holding the stick against it shook the view)
+constexpr int TARGETLOCK_TURNAWAY_GRACE = 150; // input gaps shorter than this still count as turning away
+constexpr float TARGETLOCK_AIM_SMOOTH = 12.0f; // per second: the aim point follows the target smoothly (DH: a target moving sideways shook)
+
+extern Vehicle_t* G_IsRidingVehicle(const gentity_t* pEnt);
+
+static void G_TargetLockEye(const gentity_t* self, vec3_t eye)
+{
+	VectorCopy(self->currentOrigin, eye);
+	eye[2] += self->client->ps.viewheight;
+}
+
+static void G_TargetLockCenter(const gentity_t* ent, vec3_t center)
+{
+	VectorCopy(ent->currentOrigin, center);
+	center[2] += (ent->mins[2] + ent->maxs[2]) * 0.5f;
+}
+
+static qboolean G_TargetLockValid(const gentity_t* self, const gentity_t* ent)
+{
+	if (!ent || !ent->inuse || ent == self || !ent->client || ent->health <= 0)
+	{
+		return qfalse;
+	}
+	if (ent->flags & FL_NOTARGET || ent->svFlags & SVF_NOCLIENT || ent->s.eFlags & EF_NODRAW)
+	{
+		return qfalse;
+	}
+	if (ent->client->NPC_class == CLASS_VEHICLE)
+	{
+		return qfalse;
+	}
+	if (ent->client->playerTeam == self->client->playerTeam)
+	{
+		//allies
+		return qfalse;
+	}
+	if (ent->client->playerTeam == TEAM_NEUTRAL && ent->enemy != self)
+	{
+		//neutrals only when they are after us
+		return qfalse;
+	}
+	return qtrue;
+}
+
+static gentity_t* G_TargetLockAcquire(gentity_t* self, const int skip)
+{
+	static gentity_t* entity_list[MAX_GENTITIES];
+	vec3_t eye, view, forward, mins{}, maxs{};
+
+	G_TargetLockEye(self, eye);
+	CG_TargetLockViewOrg(view);
+	AngleVectors(self->client->ps.viewangles, forward, nullptr, nullptr);
+
+	for (int i = 0; i < 3; i++)
+	{
+		mins[i] = view[i] - TARGETLOCK_RANGE;
+		maxs[i] = view[i] + TARGETLOCK_RANGE;
+	}
+
+	const int num = gi.EntitiesInBox(mins, maxs, entity_list, MAX_GENTITIES);
+	const float min_dot = cosf(DEG2RAD(TARGETLOCK_CONE));
+	gentity_t* best = nullptr;
+	float best_dot = min_dot;
+
+	for (int e = 0; e < num; e++)
+	{
+		gentity_t* ent = entity_list[e];
+
+		if (!G_TargetLockValid(self, ent) || ent->s.number == skip)
+		{
+			continue;
+		}
+
+		vec3_t center, dir;
+		G_TargetLockCenter(ent, center);
+		if (Distance(view, center) > TARGETLOCK_RANGE)
+		{
+			continue;
+		}
+		VectorSubtract(center, eye, dir);
+		if (VectorNormalize(dir) < 1.0f)
+		{
+			continue;
+		}
+		const float dot = DotProduct(dir, forward);
+		if (dot < best_dot)
+		{
+			continue;
+		}
+		if (!G_ClearLOS(self, eye, ent))
+		{
+			continue;
+		}
+		best = ent;
+		best_dot = dot;
+	}
+	return best;
+}
+
+static void G_SaberTargetLock(gentity_t* ent, const usercmd_t* ucmd)
+{
+	static int last_cmd_time = 0;
+	static int last_cmd_yaw = 0;
+	static int flick_start = 0;
+	static float flick_sum = 0.0f;
+	static int lost_los_time = 0;
+	static int retry_time = 0;
+	static int debug_time = 0;
+	static int turn_away_ms = 0;
+	static int turn_away_last = 0;
+	static int turn_away_skip = ENTITYNUM_NONE; // let go by turning away: not taken again until block is released
+	static float smooth_yaw = 0.0f;
+	static int smooth_ent = ENTITYNUM_NONE;
+	static float yaw_rest = 0.0f;
+
+	gclient_t* client = ent->client;
+
+	int dt = ucmd->serverTime - last_cmd_time;
+	if (dt < 0 || dt > 100)
+	{
+		dt = dt < 0 ? 0 : 100;
+	}
+	const float own_turn = AngleSubtract(SHORT2ANGLE(ucmd->angles[YAW]), SHORT2ANGLE(last_cmd_yaw));
+	last_cmd_time = ucmd->serverTime;
+	last_cmd_yaw = ucmd->angles[YAW];
+
+	const qboolean want = g_saberTargetLock && g_saberTargetLock->integer
+		&& ent->s.number == 0 && ent->health > 0
+		&& client->ps.weapon == WP_SABER
+		&& client->ps.ManualBlockingFlags & 1 << MBF_HOLDINGBLOCK
+		&& ucmd->buttons & BUTTON_BLOCK
+		&& !in_camera
+		&& client->ps.saberLockTime < level.time
+		&& !(client->ps.communicatingflags & 1 << CF_SABERLOCKING)
+		&& !G_IsRidingVehicle(ent)
+		&& (client->ps.viewEntity <= 0 || client->ps.viewEntity >= ENTITYNUM_WORLD)
+		? qtrue : qfalse;
+
+	if (g_saberTargetLock && g_saberTargetLock->integer > 1 && level.time >= debug_time)
+	{
+		//g_saberTargetLock 2: twice a second, why the lock is on or off
+		debug_time = level.time + 500;
+		gi.Printf("TARGETLOCK want %d saber %d holdblock %d button %d camera %d saberlock %d target %d turnaway %d turn %.2f\n", want,
+			client->ps.weapon == WP_SABER, (client->ps.ManualBlockingFlags & 1 << MBF_HOLDINGBLOCK) != 0,
+			(ucmd->buttons & BUTTON_BLOCK) != 0, in_camera ? 1 : 0, client->ps.saberLockTime >= level.time,
+			g_saberTargetLockEnt, turn_away_ms, own_turn);
+	}
+
+	if (!want)
+	{
+		g_saberTargetLockEnt = ENTITYNUM_NONE;
+		retry_time = 0;
+		flick_sum = 0.0f;
+		turn_away_ms = 0;
+		turn_away_skip = ENTITYNUM_NONE;
+		smooth_ent = ENTITYNUM_NONE;
+		return;
+	}
+
+	gentity_t* target = g_saberTargetLockEnt < ENTITYNUM_WORLD ? &g_entities[g_saberTargetLockEnt] : nullptr;
+	vec3_t eye, center;
+	G_TargetLockEye(ent, eye);
+
+	if (target)
+	{
+		//a fast turn of the player's own breaks the lock
+		if (ucmd->serverTime - flick_start > TARGETLOCK_FLICK_MS)
+		{
+			flick_start = ucmd->serverTime;
+			flick_sum = 0.0f;
+		}
+		flick_sum += own_turn;
+
+		qboolean keep = G_TargetLockValid(ent, target);
+
+		if (keep)
+		{
+			G_TargetLockCenter(target, center);
+			vec3_t view;
+			CG_TargetLockViewOrg(view);
+			if (Distance(view, center) > TARGETLOCK_BREAK_RANGE)
+			{
+				keep = qfalse;
+			}
+			else if (!G_ClearLOS(ent, eye, target))
+			{
+				if (!lost_los_time)
+				{
+					lost_los_time = level.time;
+				}
+				else if (level.time - lost_los_time > TARGETLOCK_LOS_MS)
+				{
+					keep = qfalse;
+				}
+			}
+			else
+			{
+				lost_los_time = 0;
+			}
+		}
+
+		if (fabsf(flick_sum) > TARGETLOCK_FLICK)
+		{
+			keep = qfalse;
+			retry_time = level.time + TARGETLOCK_RETRY_MS;
+		}
+
+		if (!keep)
+		{
+			target = nullptr;
+			g_saberTargetLockEnt = ENTITYNUM_NONE;
+		}
+	}
+
+	if (!target && level.time >= retry_time)
+	{
+		target = G_TargetLockAcquire(ent, turn_away_skip);
+		if (target)
+		{
+			g_saberTargetLockEnt = target->s.number;
+			lost_los_time = 0;
+			flick_start = ucmd->serverTime;
+			flick_sum = 0.0f;
+		}
+	}
+
+	if (!target || client->ps.PlayerEffectFlags & 1 << PEF_SPRINTING)
+	{
+		return;
+	}
+
+	//turn smoothly towards it: the interpolated position (game frames move NPCs in steps) and a smoothed aim point,
+	//so a target moving sideways is followed without shaking
+	vec3_t dir, lerp_org;
+	G_TargetLockCenter(target, center);
+	if (CG_TargetLockEntOrigin(target->s.number, lerp_org))
+	{
+		center[0] += lerp_org[0] - target->currentOrigin[0];
+		center[1] += lerp_org[1] - target->currentOrigin[1];
+	}
+	VectorSubtract(center, eye, dir);
+	const float aim_yaw = vectoyaw(dir);
+	if (smooth_ent != target->s.number)
+	{
+		smooth_ent = target->s.number;
+		smooth_yaw = aim_yaw;
+		yaw_rest = 0.0f;
+	}
+	else if (dt > 0)
+	{
+		smooth_yaw = AngleNormalize360(smooth_yaw + AngleSubtract(aim_yaw, smooth_yaw) * (1.0f - expf(-TARGETLOCK_AIM_SMOOTH * dt * 0.001f)));
+	}
+	const float diff = AngleSubtract(smooth_yaw, client->ps.viewangles[YAW]);
+
+	// the player turning away from the target: no pull while he does (pulling against the stick shook the view), and
+	// after TARGETLOCK_TURNAWAY_MS the lock lets go of this target until block is released
+	const float own_rate = dt > 0 ? fabsf(own_turn) * 1000.0f / dt : 0.0f;
+	if (fabsf(diff) > TARGETLOCK_DEADZONE && own_turn * diff < 0.0f && own_rate > TARGETLOCK_TURNAWAY_RATE)
+	{
+		if (!turn_away_ms)
+		{
+			turn_away_ms = level.time; // when the turning away started
+		}
+		turn_away_last = level.time;
+	}
+	else if (level.time - turn_away_last > TARGETLOCK_TURNAWAY_GRACE)
+	{
+		turn_away_ms = 0;
+	}
+	if (turn_away_ms > 0)
+	{
+		if (level.time - turn_away_ms > TARGETLOCK_TURNAWAY_MS)
+		{
+			turn_away_skip = target->s.number;
+			g_saberTargetLockEnt = ENTITYNUM_NONE;
+			turn_away_ms = 0;
+		}
+		return;
+	}
+
+	if (dt > 0)
+	{
+		const float secs = dt * 0.001f;
+		float step = diff * (1.0f - expf(-TARGETLOCK_TURN_RATE * secs));
+		const float max_step = TARGETLOCK_MAX_TURN * secs;
+		if (step > max_step)
+		{
+			step = max_step;
+		}
+		else if (step < -max_step)
+		{
+			step = -max_step;
+		}
+		// soft dead zone: the pull fades in over the first TARGETLOCK_DEADZONE degrees instead of switching on and off
+		float weight = fabsf(diff) / TARGETLOCK_DEADZONE;
+		weight = weight > 1.0f ? 1.0f : weight;
+		step *= weight * weight * (3.0f - 2.0f * weight);
+		// whole delta_angles units, the rest carried to the next frame (tiny steps were cut off towards 0)
+		const float total = step + yaw_rest;
+		const int units = static_cast<int>(floorf(total * (65536.0f / 360.0f) + 0.5f));
+		yaw_rest = total - units * (360.0f / 65536.0f);
+		client->ps.delta_angles[YAW] = (client->ps.delta_angles[YAW] + units) & 65535;
+	}
+}
+
 static void ClientThink_real(gentity_t* ent, usercmd_t* ucmd)
 {
 	gclient_t* client = nullptr;
@@ -9091,6 +9422,11 @@ static void ClientThink_real(gentity_t* ent, usercmd_t* ucmd)
 
 	//play/stop any looping sounds tied to controlled movement
 	G_CheckMovingLoopingSounds(ent, ucmd);
+
+	if (ent->s.number == 0)
+	{
+		G_SaberTargetLock(ent, ucmd); // g_saberTargetLock: turns the view to the locked enemy while block is held
+	}
 
 	//remember your last angles
 	VectorCopy(client->ps.viewangles, ent->lastAngles);

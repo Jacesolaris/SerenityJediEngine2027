@@ -351,6 +351,8 @@ static vec3_t cameramaxs = { CAMERA_SIZE, CAMERA_SIZE, CAMERA_SIZE };
 vec3_t camerafwd, cameraup, camerahorizdir;
 
 vec3_t cameraFocusAngles, cameraFocusLoc;
+// kjk Q-0016: how far the aim point was pulled in by a wall or ceiling this frame
+static vec3_t cameraTargetClip;
 vec3_t cameraIdealTarget, cameraIdealLoc;
 vec3_t cameraCurTarget = { 0, 0, 0 }, cameraCurLoc = { 0, 0, 0 };
 vec3_t cameraOldLoc = { 0, 0, 0 }, cameraNewLoc = { 0, 0, 0 };
@@ -783,6 +785,7 @@ static void CG_UpdateThirdPersonTargetDamp()
 	// Now we trace to see if the new location is cool or not.
 
 	// First thing we do is trace from the first person viewpoint out to the new target location.
+	VectorClear(cameraTargetClip);
 	if (cg.snap
 		&& cg.snap->ps.eFlags & EF_HELD_BY_SAND_CREATURE
 		&& cg_entities[cg.snap->ps.clientNum].gent->activator)
@@ -798,6 +801,7 @@ static void CG_UpdateThirdPersonTargetDamp()
 	}
 	if (trace.fraction < 1.0)
 	{
+		VectorSubtract(trace.endpos, cameraCurTarget, cameraTargetClip);
 		VectorCopy(trace.endpos, cameraCurTarget);
 	}
 
@@ -816,6 +820,9 @@ static void CG_UpdateThirdPersonCameraDamp()
 
 	// Set the cameraIdealLoc
 	CG_CalcIdealThirdPersonViewLocation();
+	// kjk Q-0016: back off from the aim point as it is (under a low ceiling), not from where it would be
+	// with nothing in the way, so the camera stays behind the player instead of being pulled into the back.
+	VectorAdd(cameraIdealLoc, cameraTargetClip, cameraIdealLoc);
 
 	// First thing we do is calculate the appropriate damping factor for the camera.
 	float dampfactor = 0.0f;

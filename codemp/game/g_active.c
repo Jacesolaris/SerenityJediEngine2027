@@ -5116,6 +5116,17 @@ static void ClientThink_real(gentity_t* ent)
 		client->saberStylesKnown &= ~(1 << SS_BLASTER);
 	}
 
+	// Kyle bots / NPCs keep SS_BLASTER: the pistol out of saber reach, the saber close up (g_saberAIBlaster, 2026-11-15,
+	// item 371). Bots pick pistol / saber in ai_main.c bot_saber_blaster, NPCs here (their ucmd, before Pmove)
+	if (client && !isFollowing)
+	{
+		G_SaberBlasterAIStyle(ent);
+		if (isNPC)
+		{
+			G_SaberBlasterAI(ent, ent->enemy, g_npcspskill.integer, ucmd);
+		}
+	}
+
 	if (client && !isFollowing && client->ps.eFlags2 & EF2_HELD_BY_MONSTER)
 	{
 		G_HeldByMonster(ent, ucmd);

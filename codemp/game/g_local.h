@@ -1857,6 +1857,9 @@ void G_WeatherCommand_f(const gentity_t* ent);
 // g_team.c
 //
 qboolean OnSameTeam(const gentity_t* ent1, const gentity_t* ent2);
+qboolean G_SaberBlasterAIKeep(const gentity_t* ent); // g_weapon.c (2026-11-15, item 371): a bot / NPC Kyle keeps SS_BLASTER (g_saberAIBlaster)
+void G_SaberBlasterAIStyle(gentity_t* ent); // g_weapon.c (item 371): puts an AI Kyle on SS_BLASTER, before Pmove
+void G_SaberBlasterAI(gentity_t* ent, gentity_t* enemy, int skill, usercmd_t* ucmd); // g_weapon.c (item 371): pistol out of saber reach, saber close up
 void G_SaberBlasterFire(gentity_t* ent, int charge, gentity_t* target); // SS_BLASTER (2026-10-14); charge 0 = normal, 1 .. SABERBLASTER_CHARGE_LEVELS (2026-10-31)
 void Team_CheckDroppedItem(const gentity_t* dropped);
 

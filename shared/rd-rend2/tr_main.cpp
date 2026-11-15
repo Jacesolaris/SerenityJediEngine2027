@@ -3168,9 +3168,10 @@ void R_GatherFrameViews(trRefdef_t* refdef)
 				Com_Memcpy(&tr.cachedViewParms[tr.numCachedViewParms], &tr.viewParms, sizeof(viewParms_t));
 				tr.numCachedViewParms++;
 			}
-#ifndef REND2_SP
+			// SP too (was #ifndef REND2_SP since the shared renderer, item 244): without this flag lightall never
+			// darkens the shadowed side (u_EnableTextures.z = 0), so SP had no sun shadows at all. 2D draws are
+			// kept out in tr_shade.cpp (projection2D), so the goggles / binoculars stay correct.
 			mainFlags |= VPF_USESUNLIGHT;
-#endif
 		}
 	}
 
