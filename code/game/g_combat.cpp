@@ -6701,6 +6701,18 @@ void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 
 	// Start any necessary death fx for this entity
 	DeathFX(self);
+
+	// SJE probe wreck: the probe's own body goes behind its explosion, its burnt wreck model lies on the floor
+	// (DH 2026-11-16: the intact body stayed floating above its wreck while the player looked at it). Hidden and
+	// not solid now; DeadThink frees a hidden body once no death script runs. A probe that holds a key stays.
+	if (self->client->NPC_class == CLASS_PROBE && !self->message)
+	{
+		self->takedamage = qfalse;
+		self->client->ps.eFlags |= EF_NODRAW;
+		self->s.eFlags |= EF_NODRAW;
+		self->contents = 0;
+		gi.linkentity(self);
+	}
 }
 
 qboolean G_CheckForStrongAttackMomentum(const gentity_t* self)
@@ -8064,6 +8076,8 @@ dflags		these flags are used to control how T_Damage works
 ============
 */
 extern void G_SetOnFire(gentity_t* self, gentity_t* attacker); // wp_saber.cpp (burning)
+extern void G_WeaponVariantHitFreeze(gentity_t* targ, const gentity_t* inflictor); // wp_thermal.cpp (carbonite, 2026-11-16)
+extern int G_PersonalShieldAbsorb(gentity_t* targ, const gentity_t* inflictor, int mod, int take, int dflags, const vec3_t dir); // g_weapon.cpp (2026-11-16)
 
 // Impact-driven deaths (Jace 2026-11-04): the killing blow throws the body along the hit, as hard as the weapon hits.
 // Explosions throw it high and far, heavy shots and kicks knock it back; plain blaster bolts and the saber don't
@@ -9421,6 +9435,14 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, const 
 	if (take > 0 && mod == MOD_BURNING && inflictor != targ && targ->client && targ->health > 0)
 	{
 		G_SetOnFire(targ, attacker);
+	}
+	// personal shields (2026-11-16, g_weapon.cpp): a worn shield takes gun / explosion damage first
+	take = G_PersonalShieldAbsorb(targ, inflictor, mod, take, dflags, dir);
+
+	// carbonite (2026-11-16, wp_thermal.cpp): a "hitfreeze" gun (the carbonite rifle) freezes whoever it hurts
+	if (take > 0 && inflictor && inflictor != targ && targ->client && targ->health > 0)
+	{
+		G_WeaponVariantHitFreeze(targ, inflictor);
 	}
 
 	if (take || dflags & DAMAGE_NO_DAMAGE)

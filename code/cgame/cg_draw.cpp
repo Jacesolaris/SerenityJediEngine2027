@@ -3682,6 +3682,134 @@ static void CG_DrawSaberBlasterClip(const centity_t* cent)
 	}
 }
 
+// Personal shields (2026-11-16, JKG; DH: like the SS_BLASTER meter, on the right): the worn shield's charge
+static void CG_DrawPersonalShield(void)
+{
+	const gentity_t* player = &g_entities[0];
+	int type, charge;
+
+	if (!player->client || player->health <= 0 || player->shieldType <= 0 || player->shieldType >= bgNumPersonalShields)
+	{
+		return;
+	}
+	type = player->shieldType;
+	charge = player->shieldCharge;
+	{
+		// the same capsule as the SS_BLASTER clip meter (CG_DrawSaberBlasterClip), mirrored to the right of the screen:
+		// ten cells for the shield's charge (lit, half lit for a part cell, dark when spent; from the bottom up), the
+		// shield icon below; the frame pulses red while the shield is down, the top lit cell pulses while it recharges
+		const personalShield_t* sh = &bgPersonalShields[type];
+		const qhandle_t frame = cgi_R_RegisterShaderNoMip("gfx/hud/saberblaster_frame");
+		const qhandle_t cell = cgi_R_RegisterShaderNoMip("gfx/hud/saberblaster_cell");
+		const qhandle_t icon = cgi_R_RegisterShaderNoMip("gfx/hud/claude_shield_icon");
+		const float hr = cg_hudRatio.integer ? cgs.widthRatioCoef : 1.0f;
+		const float w = 20.0f * hr, x = 640.0f - 8.0f * hr - w, y = 254.0f, h = 136.0f;
+		const float cellsTop = y + 8.0f, cellsBottom = y + h - 30.0f;
+		const int cells = 10;
+		const float cellH = (cellsBottom - cellsTop) / (float)cells;
+		const float fill = sh->capacity > 0 ? (float)charge * (float)cells / (float)sh->capacity : 0.0f;
+		const int recharging = charge > 0 && charge < sh->capacity;
+		vec4_t frameColor = { 1.0f, 1.0f, 1.0f, 0.9f };
+		static vec4_t frameBack = { 0.05f, 0.07f, 0.1f, 0.65f };
+		static vec4_t lit = { 0.25f, 0.65f, 1.0f, 1.0f };
+		static vec4_t half = { 0.25f, 0.65f, 1.0f, 0.45f };
+		static vec4_t spent = { 0.35f, 0.35f, 0.38f, 0.55f };
+		vec4_t top = { 0.25f, 0.65f, 1.0f, 1.0f };
+		int i;
+
+		if (charge <= 0)
+		{
+			const float pulse = 0.5f + 0.5f * sinf((float)cg.time * 0.008f);
+			frameColor[1] = frameColor[2] = 0.3f + 0.3f * pulse;
+			frameColor[3] = 0.95f;
+		}
+		top[3] = 0.55f + 0.45f * sinf((float)cg.time * 0.012f);
+		if (frame)
+		{
+			cgi_R_SetColor(frameColor);
+			CG_DrawPic(x, y, w, h, frame);
+		}
+		else
+		{
+			CG_FillRect(x, y, w, h, frameBack);
+		}
+		for (i = 0; i < cells; i++)
+		{
+			const float* color = fill >= (float)(i + 1) ? lit : fill > (float)i ? half : spent;
+			const float cy = cellsBottom - (float)(i + 1) * cellH + 1.0f;
+
+			if (recharging && fill > (float)i && fill <= (float)(i + 1))
+			{
+				color = top; // the cell that is filling up
+			}
+			if (cell)
+			{
+				cgi_R_SetColor(color);
+				CG_DrawPic(x + 4.0f * hr, cy, w - 8.0f * hr, cellH - 2.0f, cell);
+			}
+			else
+			{
+				CG_FillRect(x + 4.0f * hr, cy, w - 8.0f * hr, cellH - 2.0f, color);
+			}
+		}
+		cgi_R_SetColor(nullptr);
+		if (icon)
+		{
+			CG_DrawPic(x + (w - 14.0f * hr) * 0.5f, y + h - 24.0f, 14.0f * hr, 14.0f, icon);
+		}
+	}
+}
+
+extern cvar_t* g_grenadeCook;
+// Grenade cooking (2026-11-16, DH; after JKG's "Detonation time" bar): while the player cooks a grenade, a bar under
+// the crosshair shows the fuse left: orange, red and pulsing for the last stretch (the warning beep), gone when thrown
+static void CG_DrawGrenadeCook(void)
+{
+	const gentity_t* player = &g_entities[0];
+	const int fuse = TD_TIME + 800; // + GRENADE_WARN_TIME (wp_thermal.cpp)
+	const int warn = 800;
+	int cook;
+
+	if (!g_grenadeCook || !g_grenadeCook->integer || !player->client || player->health <= 0)
+	{
+		return;
+	}
+	const playerState_t* ps = &player->client->ps;
+	if (ps->weapon != WP_THERMAL || (ps->weaponstate != WEAPON_CHARGING && ps->weaponstate != WEAPON_CHARGING_ALT)
+		|| ps->weaponChargeTime <= 0)
+	{
+		return;
+	}
+	cook = level.time - ps->weaponChargeTime - TD_VELOCITY; // past a full wind-up the fuse burns (G_GrenadeCookTime)
+	if (cook <= 0)
+	{
+		return;
+	}
+	{
+		const float left = (float)(fuse - cook) / (float)fuse;
+		const float w = 110.0f, h = 7.0f, x = 320.0f - w * 0.5f, y = 268.0f;
+		vec4_t back = { 0.05f, 0.07f, 0.1f, 0.7f };
+		vec4_t edge = { 1.0f, 1.0f, 1.0f, 0.8f };
+		vec4_t fill = { 1.0f, 0.6f, 0.15f, 0.95f };
+
+		if (fuse - cook <= warn)
+		{
+			const float pulse = 0.5f + 0.5f * sinf((float)cg.time * 0.03f);
+			fill[0] = 1.0f;
+			fill[1] = 0.15f + 0.2f * pulse;
+			fill[2] = 0.1f;
+			edge[1] = edge[2] = 0.3f + 0.4f * pulse;
+		}
+		CG_FillRect(x - 1.0f, y - 1.0f, w + 2.0f, h + 2.0f, edge);
+		CG_FillRect(x, y, w, h, back);
+		if (left > 0.0f)
+		{
+			CG_FillRect(x + 1.0f, y + 1.0f, (w - 2.0f) * (left > 1.0f ? 1.0f : left), h - 2.0f, fill);
+		}
+		cgi_R_SetColor(nullptr);
+	}
+}
+
 static void CG_DrawHUD(const centity_t* cent)
 {
 	int section_x_pos = 0, section_y_pos = 0, section_width = 0, section_height = 0;
@@ -4825,6 +4953,8 @@ static void CG_DrawStats()
 	if (draw_hud && cg_drawHUD.integer)
 	{
 		CG_DrawHUD(cent);
+		CG_DrawPersonalShield();
+		CG_DrawGrenadeCook();
 	}
 }
 

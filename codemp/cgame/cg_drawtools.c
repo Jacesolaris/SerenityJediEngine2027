@@ -38,7 +38,9 @@ void CG_DrawRect(const float x, const float y, const float width, const float he
 	trap->R_SetColor(color);
 
 	CG_DrawTopBottom(x, y, width, height, size);
-	CG_DrawSides(x, y, width, height, size);
+	// the sides only between the top and bottom lines: the corners were drawn twice, so see-through boxes had darker
+	// corners (2026-11-16, fix from Jedi Knight Galaxies)
+	CG_DrawSides(x, y + size * cgs.screenYScale, width, height - 2 * size * cgs.screenYScale, size);
 
 	trap->R_SetColor(NULL);
 }

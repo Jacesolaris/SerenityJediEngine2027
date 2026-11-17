@@ -2561,7 +2561,7 @@ static void RB_SurfaceVBOMDVMesh(srfVBOMDVMesh_t * surface)
 	mergeForward = -1;
 	mergeBack = -1;
 	firstIndexOffset = BUFFER_OFFSET(surface->indexOffset * sizeof(glIndex_t));
-	lastIndexOffset = BUFFER_OFFSET(surface->numIndexes * sizeof(glIndex_t));
+	lastIndexOffset = BUFFER_OFFSET((surface->indexOffset + surface->numIndexes) * sizeof(glIndex_t)); // end of THIS range (was numIndexes only: missed / false merges)
 
 	if (r_mergeMultidraws->integer)
 	{

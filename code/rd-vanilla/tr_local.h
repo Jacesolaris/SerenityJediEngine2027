@@ -917,7 +917,9 @@ using backEndState_t = struct {
 ** but may read fields that aren't dynamically modified
 ** by the frontend.
 */
-#define NUM_SCRATCH_IMAGES 16
+// one per cinematic handle: must match MAX_VIDEO_HANDLES (cl_cin.cpp, 32) as rend2 and MP vanilla do. With 16, handles
+// 16 and 17 uploaded their video frames into fogImage and dlightImage (the next members), and every dlight became a streak.
+#define NUM_SCRATCH_IMAGES 32
 
 using trGlobals_t = struct {
 	qboolean				registered;		// cleared at shutdown, set at beginRegistration

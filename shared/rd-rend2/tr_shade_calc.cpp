@@ -124,26 +124,30 @@ static void RB_CalcDeformVertexes(const deformStage_t* ds)
 	vec3_t	offset;
 	float	scale = 0.0f;
 	auto* xyz = reinterpret_cast<float*>(tess.xyz);
-	auto* normal = reinterpret_cast<float*>(tess.normal);
+	// tess.normal holds one packed normal (R_VboPackNormal) per vertex, not four floats. Read as floats the wave moved
+	// each vertex along a bit pattern - and, stepping four at a time, along other vertices' normals and old buffer
+	// contents - instead of along its normal: a deformVertexes wave that needs the CPU path (a second deform, e.g.
+	// textures/plasma_mustafar/lava: wave + normal) sank through the floor and popped back.
+	const uint32_t* normal = tess.normal;
 
 	if (ds->deformationWave.frequency == 0)
 	{
 		scale = EvalWaveForm(&ds->deformationWave);
 
-		for (i = 0; i < tess.numVertexes; i++, xyz += 4, normal += 4)
+		for (i = 0; i < tess.numVertexes; i++, xyz += 4, normal++)
 		{
-			VectorScale(normal, scale, offset);
+			R_VboUnpackNormal(offset, *normal);
 
-			xyz[0] += offset[0];
-			xyz[1] += offset[1];
-			xyz[2] += offset[2];
+			xyz[0] += offset[0] * scale;
+			xyz[1] += offset[1] * scale;
+			xyz[2] += offset[2] * scale;
 		}
 	}
 	else
 	{
 		const float* table = TableForFunc(ds->deformationWave.func);
 
-		for (i = 0; i < tess.numVertexes; i++, xyz += 4, normal += 4)
+		for (i = 0; i < tess.numVertexes; i++, xyz += 4, normal++)
 		{
 			const float off = (xyz[0] + xyz[1] + xyz[2]) * ds->deformationSpread;
 
@@ -152,11 +156,11 @@ static void RB_CalcDeformVertexes(const deformStage_t* ds)
 				ds->deformationWave.phase + off,
 				ds->deformationWave.frequency);
 
-			VectorScale(normal, scale, offset);
+			R_VboUnpackNormal(offset, *normal);
 
-			xyz[0] += offset[0];
-			xyz[1] += offset[1];
-			xyz[2] += offset[2];
+			xyz[0] += offset[0] * scale;
+			xyz[1] += offset[1] * scale;
+			xyz[2] += offset[2] * scale;
 		}
 	}
 }

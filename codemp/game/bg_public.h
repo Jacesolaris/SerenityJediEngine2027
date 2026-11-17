@@ -81,7 +81,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define DEFAULT_REDTEAM_NAME	"Empire"
 #define DEFAULT_BLUETEAM_NAME	"Rebellion"
 
-#define CURRENT_SJE_CLIENTVERSION		"Day-15,Month-11,Year-26,BuildNum-10" // build date
+#define CURRENT_SJE_CLIENTVERSION		"Day-17,Month-11,Year-26,BuildNum-11" // build date
 
 #define	STEPSIZE		18
 
@@ -706,7 +706,8 @@ typedef enum {
 	STAT_AMMOPOOL,
 	STAT_SABER_WEAR,		//breakable saber staffs: 0-100 wear (101: broken by a heavy hit), the HUD tints the saber style icon by it
 	STAT_AIR,				// air left under water for the breath bar: 0 = breathing, else 1 + tenths of seconds (0..120) (DH 2026-10-25)
-	STAT_WEAPONS2 = 14		// owned weapons 32-63 (msg.cpp sends it in 32 bits like STAT_WEAPONS), see BG_HasWeapon
+	STAT_WEAPONS2 = 14,		// owned weapons 32-63 (msg.cpp sends it in 32 bits like STAT_WEAPONS), see BG_HasWeapon
+	STAT_SHIELD = 15		// personal shield (2026-11-16): (bgPersonalShields index << 10) | charge, 0 = none
 } statIndex_t;
 
 // playerState_t->persistant[] indexes
@@ -1894,6 +1895,12 @@ typedef enum saber_styles_e {
 #define SABERBLASTER_CHARGE_FULL	1500		// ms held to full charge
 #define SABERBLASTER_CHARGE_LEVELS	3
 int BG_SaberBlasterChargeLevel(int held, int clip_used);
+// the gun arm (2026-11-16, item 404): the shot / charge anims (BOTH_FORCELIGHTNING(_RELEASE), BOTH_FORCEGRIP_HOLD while
+// charging) only time and network the shot now; the body plays its legs anim there (server + cgame) and the cgame
+// puts the left arm in BOTH_ATTACK_DUAL's pistol pose (CG_SaberBlasterArmPose)
+#define SABERBLASTER_AIM_RAISE		120			// ms the gun arm takes to go out; the shot waits for it
+qboolean BG_SaberBlasterAimAnim(int torso_anim, int weapon, int saber_anim_level, int charge_start);
+int BG_SaberBlasterTorsoAnim(int torso_anim, int legs_anim, int weapon, int saber_anim_level, int charge_start);
 
 typedef enum
 {
@@ -2146,6 +2153,7 @@ qboolean BG_ClassSkeletonOk(int botclass, int skelFlags);	// may a model with th
 qboolean BG_ClassHasNoFists(int botclass);			// gets no melee either (R2/R5: stun only; gonk, protocol: nothing), as the SP NPC files
 qboolean BG_ClassCantJump(int botclass);			// SP PM_GentCantJump droids
 qboolean BG_AnimSetCantJump(int animIndex);			// own skeleton without a real jump anim (galak_mech, mark1...)
+qboolean BG_AnimSetCantCrouch(int animIndex);		// own skeleton without a real crouch anim (protocol, R2/R5, gonk...)
 qboolean BG_ClassIsWholeBody(int botclass);			// every anim drives the whole body (no separate torso/weapon anims)
 qboolean BG_ClassCreatureSize(int botclass, float* halfWidth, int* standheight, int* crouchheight); // SP .npc width/height
 int		BG_ClassCreatureScale(int botclass);		// SP .npc scale (percent), 0 = not a creature class

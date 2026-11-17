@@ -161,6 +161,8 @@ using thinkFunc_t = enum
 	thinkF_WP_SaberBallisticsThink,
 
 	thinkF_G_VehicleSpawn, // an MP map's ship spawner replacing a lost ship after its "delay" (NPC_VehicleSpawnUse)
+
+	thinkF_G_GrenadeAreaThink, // 2026-11-16: a poison / fire / cryo grenade's lingering area (wp_thermal.cpp)
 };
 
 // THINK functions...
@@ -168,6 +170,7 @@ using thinkFunc_t = enum
 extern void teleporter_think(gentity_t* ent);
 extern void funcBBrushDieGo(gentity_t* ent);
 extern void G_VehicleSpawn(gentity_t* self);
+extern void G_GrenadeAreaThink(gentity_t* self);
 extern void ExplodeDeath(gentity_t* self);
 extern void RespawnItem(gentity_t* ent);
 extern void G_FreeEntity(gentity_t* ed);

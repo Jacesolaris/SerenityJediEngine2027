@@ -734,6 +734,44 @@ void G_PortalifyEntities(gentity_t* ent)
 	ent->nextthink = level.time;
 }
 
+// 3D skybox parallax as in MP (MP does it in its cgame from misc_skyportal_orient; SP had no orient at all):
+// the orient point and modelscale go on the end of CS_SKYBOXORG as " ori x y z scale", and CG_DrawSkyBoxPortal
+// moves the portal camera by (view - orient) * scale
+static void G_AppendSkyboxOrient(const vec3_t pos, const float scale)
+{
+	char cs[MAX_STRING_CHARS];
+
+	gi.GetConfigstring(CS_SKYBOXORG, cs, sizeof cs);
+	if (!cs[0] || strstr(cs, " ori ") || scale == 0.0f)
+	{
+		return;
+	}
+	gi.SetConfigstring(CS_SKYBOXORG, va("%s ori %.2f %.2f %.2f %.4f", cs, pos[0], pos[1], pos[2], scale));
+}
+
+/*QUAKED misc_skyportal_orient (.6 .7 .7) (-8 -8 0) (8 8 16)
+point from which to orient the sky portal cam in relation
+to the regular view position.
+
+"modelscale"			the scale at which to scale positions
+*/
+void SP_misc_skyportal_orient(gentity_t* ent)
+{
+	float scale = 0.0f;
+	char cs[MAX_STRING_CHARS];
+
+	G_SpawnFloat("modelscale", "0", &scale);
+	gi.GetConfigstring(CS_SKYBOXORG, cs, sizeof cs);
+	if (cs[0])
+	{
+		// misc_skyportal already spawned
+		G_AppendSkyboxOrient(ent->s.origin, scale);
+		G_FreeEntity(ent);
+		return;
+	}
+	ent->speed = scale; // SP_misc_skyportal finds this entity, reads it and frees it
+}
+
 /*QUAKED misc_skyportal (.6 .7 .7) (-8 -8 0) (8 8 16)
 To have the portal sky fogged, enter any of the following values:
 "fogcolor" (r g b) (values 0.0-1.0)
@@ -755,6 +793,14 @@ void SP_misc_skyportal(gentity_t* ent)
 
 	gi.SetConfigstring(CS_SKYBOXORG, va("%.2f %.2f %.2f %i %.2f %.2f %.2f %i %i", ent->s.origin[0], ent->s.origin[1],
 		ent->s.origin[2], isfog, fogv[0], fogv[1], fogv[2], fogn, fogf));
+
+	// a misc_skyportal_orient that spawned before us waits for the configstring
+	gentity_t* ori = G_Find(nullptr, FOFS(classname), "misc_skyportal_orient");
+	if (ori)
+	{
+		G_AppendSkyboxOrient(ori->s.origin, ori->speed);
+		G_FreeEntity(ori);
+	}
 
 	ent->e_ThinkFunc = thinkF_G_PortalifyEntities;
 	ent->nextthink = level.time + 1050; //give it some time first so that all other entities are spawned.

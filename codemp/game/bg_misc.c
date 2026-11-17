@@ -2441,6 +2441,28 @@ Only in One Flag CTF games
 	"" // description
 },
 
+/*QUAKED item_battery (.3 .3 1) (-8 -8 0) (8 8 16) suspended
+SP maps' battery (2026-11-16, DH: "item_battery doesn't have a spawn function" on doom_comm): charges the batteries
+(ps.batteryCharge), as SP's ext_data/items.dat item_battery (count 1000). Kept last, the other items keep their index.
+*/
+{
+	"item_battery",
+	"sound/player/pickupenergy.wav",
+	{
+		"models/items/battery.md3",
+		0, 0, 0
+	},
+	/* view */ NULL,
+	/* icon */ "gfx/hud/i_icon_battery",
+	/* pickup */ //	"Battery",
+	1000,
+	IT_BATTERY,
+	0,
+	/* precache */ "",
+	/* sounds */ "",
+	"" // description
+},
+
 // end of list marker
 { NULL }
 };
@@ -3156,6 +3178,9 @@ qboolean BG_CanItemBeGrabbed(const int gametype, const entityState_t* ent, const
 			return qfalse;
 		}
 		return qtrue;
+
+	case IT_BATTERY: // (item_battery, 2026-11-16)
+		return ps->batteryCharge < MAX_BATTERIES ? qtrue : qfalse;
 
 	case IT_BAD:
 		Com_Error(ERR_DROP, "BG_CanItemBeGrabbed: IT_BAD");

@@ -621,6 +621,26 @@ qboolean PC_String_Parse(const int handle, const char** out)
 PC_Script_Parse
 =================
 */
+// The precompiler splits an unquoted path (play sound/interface/sub_select) into "sound" / "interface" / "sub_select",
+// which ran as "unknown UI script interface" and so on and played nothing: put such paths back together (2026-11-16)
+static void PC_Script_GluePaths(char* s)
+{
+	char* r = s;
+	char* w = s;
+
+	while (*r)
+	{
+		if (r[0] == '"' && r[1] == ' ' && r[2] == '/' && r[3] == ' ' && r[4] == '"')
+		{
+			*w++ = '/';
+			r += 5;
+			continue;
+		}
+		*w++ = *r++;
+	}
+	*w = 0;
+}
+
 qboolean PC_Script_Parse(const int handle, const char** out)
 {
 	char script[2048];
@@ -644,6 +664,7 @@ qboolean PC_Script_Parse(const int handle, const char** out)
 
 		if (Q_stricmp(token.string, "}") == 0)
 		{
+			PC_Script_GluePaths(script);
 			*out = String_Alloc(script);
 			return qtrue;
 		}
@@ -665,7 +686,8 @@ qboolean PC_Script_Parse(const int handle, const char** out)
 
 			if (Q_stricmp(token.string, "}") == 0)
 			{
-				*out = String_Alloc(script);
+				PC_Script_GluePaths(script);
+			*out = String_Alloc(script);
 				return qtrue;
 			}
 		}

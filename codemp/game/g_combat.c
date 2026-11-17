@@ -7266,6 +7266,8 @@ vec3_t gPainPoint;
 extern void AnimateStun(gentity_t* self, gentity_t* inflictor, vec3_t impact);
 
 extern void G_SetOnFire(gentity_t* self, gentity_t* attacker); // w_saber.c (burning)
+extern void G_WeaponVariantHitFreeze(gentity_t* targ, const gentity_t* inflictor); // g_weapon.c (carbonite, 2026-11-16)
+extern int G_PersonalShieldAbsorb(gentity_t* targ, const gentity_t* inflictor, int mod, int take, int dflags, const vec3_t dir); // g_weapon.c (2026-11-16)
 
 // as SP's G_ImmuneToGas: whoever holds the noghri stick (its own gas), droids, machines and the armoured or masked
 static qboolean G_ImmuneToGas(const gentity_t* ent)
@@ -8879,6 +8881,14 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, vec3_t
 		if (take > 0 && mod == MOD_BURNING && inflictor != targ && targ->client && targ->health > 0)
 		{
 			G_SetOnFire(targ, attacker);
+		}
+		// personal shields (2026-11-16, g_weapon.c): a worn shield takes gun / explosion damage first
+		take = G_PersonalShieldAbsorb(targ, inflictor, mod, take, dflags, dir);
+
+		// carbonite (2026-11-16, g_weapon.c): a "hitfreeze" gun (the carbonite rifle) freezes whoever it hurts
+		if (take > 0 && inflictor && inflictor != targ && targ->client && targ->health > 0)
+		{
+			G_WeaponVariantHitFreeze(targ, inflictor);
 		}
 
 		targ->health = targ->health - take;

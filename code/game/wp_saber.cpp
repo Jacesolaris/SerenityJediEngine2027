@@ -15786,12 +15786,11 @@ static void WP_SetSaberMove(const gentity_t* self, const short blocked)
 // ends the lock. Transient per-entity state (not saved): alt held this frame, saberlock charge start.
 static qboolean saberBlasterAltHeld[MAX_GENTITIES];
 static int saberBlasterChargeStart[MAX_GENTITIES];
-// the shot leaves the pistol at the arm's full reach: SABERBLASTER_FIRE_FRAME of BOTH_FORCELIGHTNING (the 6th frame),
-// not as the anim starts (2026-10-15); saberBlasterFireTime = when the pending shot goes (0 = none)
-constexpr int SABERBLASTER_FIRE_FRAME = 5;
+// the shot leaves the pistol once the gun arm is out (2026-10-15; item 404: SABERBLASTER_AIM_RAISE, was the 6th frame of
+// BOTH_FORCELIGHTNING); saberBlasterFireTime = when the pending shot goes (0 = none)
 static int saberBlasterFireTime[MAX_GENTITIES];
 // the charged shot (Jace 2026-10-31, replaces the 2026-10-30 arm delay): walk + dash fire on release - a tap a normal
-// shot; held past SABERBLASTER_CHARGE_START the left arm holds out (BOTH_FORCEGRIP_HOLD) and the shot charges
+// shot; held past SABERBLASTER_CHARGE_START the left arm holds out (the gun arm, item 404) and the shot charges
 // (bryar glow + charge sound), full at SABERBLASTER_CHARGE_FULL; attack while they are held reloads and drops the shot.
 // saberBlasterComboStart = when walk + dash went down (0 = not held, -1 = dropped until they go up),
 // saberBlasterChargeSound = the charge sound has played for this hold
@@ -15799,6 +15798,18 @@ static int saberBlasterComboStart[MAX_GENTITIES];
 static qboolean saberBlasterChargeSound[MAX_GENTITIES];
 // Kyle NPC pistol AI (2026-11-15, item 371): who the AI's burst is aimed at (entity number + 1, 0 = nobody)
 static int saberBlasterAITarget[MAX_GENTITIES];
+// the gun arm (2026-11-16, item 404): the saber anims hold the left hand open, so the pistol sat sideways and the shot
+// played the force lightning cast. Now the left arm takes BOTH_ATTACK_DUAL's left arm (a pistol held straight out,
+// made for a gun in the left hand) on its lhumerus bone, lowered in front of him (an lhumerus angle) when he is not
+// shooting; the body keeps its saber anims. saberBlasterAimUntil = the arm is out until then (a shot, a charge),
+// saberBlasterArmState = the pose last set (0 none, 1 low, 2 aim), saberBlasterArmTime = when it was last set
+constexpr int SABERBLASTER_AIM_RAISE = 120; // the arm goes out this fast; a shot from the low pose waits for it
+constexpr int SABERBLASTER_AIM_HOLD = 1500; // the arm stays out this long after a shot (DH: 1-2 s)
+constexpr int SABERBLASTER_ARM_RELEASE = 400; // ms the arm blends back down / into the body's anim
+constexpr float SABERBLASTER_ARM_LOW = 50.0f; // lhumerus angle of the low pose (the arm down in front of him)
+static int saberBlasterAimUntil[MAX_GENTITIES];
+static int saberBlasterArmState[MAX_GENTITIES];
+static int saberBlasterArmTime[MAX_GENTITIES];
 
 // the level of a shot held this long (0 = a normal shot), no more than the clip has left to pay for it
 static int WP_SaberBlasterChargeLevel(const int held, const int clip_used)
@@ -15869,8 +15880,137 @@ static void WP_SaberBlasterUpdatePistolModel(gentity_t* ent)
 	}
 }
 
+// a bone that had its own pose blends into the torso's anim: the lower_lumbar anim copied onto it, frame for frame
+// (item 404), so freeing the bone afterwards does not show
+static void WP_SaberBlasterBoneToTorso(CGhoul2Info* g2, const char* bone, const int blend)
+{
+	float current_frame = 0.0f;
+	float anim_speed = 1.0f;
+	int start_frame = 0;
+	int end_frame = 0;
+	int flags = 0;
+
+	if (gi.G2API_GetBoneAnim(g2, "lower_lumbar", level.time, &current_frame, &start_frame, &end_frame, &flags, &anim_speed,
+		nullptr) && end_frame > start_frame)
+	{
+		gi.G2API_SetBoneAnim(g2, bone, start_frame, end_frame, flags | BONE_ANIM_BLEND, anim_speed, level.time, current_frame,
+			blend);
+	}
+	else
+	{
+		gi.G2API_StopBoneAnim(g2, bone);
+	}
+}
+
+// the gun arm pose (item 404, see saberBlasterAimUntil): none while the body's own anim needs the left arm
+static void WP_SaberBlasterArmPose(gentity_t* ent)
+{
+	const int ent_num = ent->s.number;
+	const playerState_t* ps = &ent->client->ps;
+	int state = 0;
+	int frame = 0;
+
+	if (ent->playerModel >= 0
+		&& ent->playerModel < static_cast<int>(ent->ghoul2.size())
+		&& ent->health > 0
+		&& WP_SaberBlasterActive(ent)
+		&& WP_SaberBlasterIsPistolModel(ent)
+		&& ValidAnimFileIndex(ent->client->clientInfo.animFileIndex)
+		&& ps->saberLockTime < level.time
+		&& ps->torsoAnim != BOTH_RELOAD
+		&& !(ps->forcePowersActive & (1 << FP_GRIP | 1 << FP_LIGHTNING | 1 << FP_DRAIN))
+		&& !PM_InKnockDown(ps)
+		&& !PM_InGetUp(ps)
+		&& !PM_InRoll(ps)
+		&& !PM_FlippingAnim(ps->legsAnim)
+		&& ps->saberMove <= LS_READY // swings, parries, blocks: the body's own anims, the arm only idle or shooting (DH)
+		&& ps->saberBlocked == BLOCKED_NONE
+		&& !(ps->ManualBlockingFlags & 1 << MBF_HOLDINGBLOCK))
+	{
+		const animation_t& anim = level.knownAnimFileSets[ent->client->clientInfo.animFileIndex].animations[BOTH_ATTACK_DUAL];
+		if (anim.numFrames > 0)
+		{
+			frame = anim.firstFrame + anim.numFrames / 2;
+			state = level.time < saberBlasterAimUntil[ent_num] ? 2 : 1;
+			if (state == 1 && ps->torsoAnim == BOTH_STAND1)
+			{
+				state = 0; // standing idle: plain BOTH_STAND1 like the other styles (DH)
+			}
+		}
+	}
+
+	if (!state)
+	{
+		saberBlasterAimUntil[ent_num] = 0; // a swing / knockdown cuts the aim short
+	}
+	if (saberBlasterArmState[ent_num] == 3 && (!state || ent->playerModel < 0))
+	{
+		// blending back to the body's anim (DH: no snap): the bone goes once the blend is done
+		if (level.time >= saberBlasterArmTime[ent_num] + SABERBLASTER_ARM_RELEASE)
+		{
+			saberBlasterArmState[ent_num] = 0;
+			if (ent->playerModel >= 0 && ent->playerModel < static_cast<int>(ent->ghoul2.size()))
+			{
+				CGhoul2Info* g2 = &ent->ghoul2[ent->playerModel];
+				gi.G2API_StopBoneAnim(g2, "lhumerus");
+				gi.G2API_SetBoneAngles(g2, "lhumerus", vec3_origin, BONE_ANGLES_POSTMULT, POSITIVE_X, NEGATIVE_Y, NEGATIVE_Z,
+					nullptr, 0, level.time);
+			}
+		}
+		return;
+	}
+	if (state == saberBlasterArmState[ent_num] && (state == 0 || level.time - saberBlasterArmTime[ent_num] < 1000))
+	{
+		return; // set already (it is set again now and then: the ghoul2 model can be made anew)
+	}
+	const int old_state = saberBlasterArmState[ent_num] == 3 ? 0 : saberBlasterArmState[ent_num];
+	saberBlasterArmState[ent_num] = state;
+	saberBlasterArmTime[ent_num] = level.time;
+	if (ent->playerModel < 0 || ent->playerModel >= static_cast<int>(ent->ghoul2.size()))
+	{
+		saberBlasterArmState[ent_num] = 0;
+		return;
+	}
+	CGhoul2Info* g2 = &ent->ghoul2[ent->playerModel];
+	if (!state)
+	{
+		// the arm blends into the torso's own anim (a copy of it on lhumerus), then the bone is freed (state 3)
+		WP_SaberBlasterBoneToTorso(g2, "lhumerus", SABERBLASTER_ARM_RELEASE);
+		gi.G2API_SetBoneAngles(g2, "lhumerus", vec3_origin, BONE_ANGLES_POSTMULT, POSITIVE_X, NEGATIVE_Y, NEGATIVE_Z,
+			nullptr, SABERBLASTER_ARM_RELEASE, level.time);
+		saberBlasterArmState[ent_num] = 3;
+		return;
+	}
+	const int blend = state == 2 ? SABERBLASTER_AIM_RAISE : SABERBLASTER_ARM_RELEASE;
+	const vec3_t angles = { 0.0f, 0.0f, state == 2 ? 0.0f : SABERBLASTER_ARM_LOW };
+	if (!old_state || state == old_state)
+	{
+		gi.G2API_SetBoneAnim(g2, "lhumerus", frame, frame + 1, BONE_ANIM_OVERRIDE_FREEZE | BONE_ANIM_BLEND, 1.0f, level.time,
+			static_cast<float>(frame), blend);
+	}
+	gi.G2API_SetBoneAngles(g2, "lhumerus", angles, BONE_ANGLES_POSTMULT, POSITIVE_X, NEGATIVE_Y, NEGATIVE_Z, nullptr,
+		state == old_state ? 0 : blend, level.time);
+}
+
 static void WP_SaberBlasterMuzzle(gentity_t* ent, vec3_t muzzle_point)
 {
+	if (WP_SaberBlasterIsPistolModel(ent))
+	{
+		// the pistol's own muzzle (item 404, DH: the flash came from the hand)
+		const int flash_bolt = gi.G2API_AddBolt(&ent->ghoul2[ent->weaponModel[1]], "*flash");
+		if (flash_bolt >= 0)
+		{
+			mdxaBone_t bolt_matrix;
+			vec3_t flash_origin;
+			const vec3_t yaw_only_angles = { 0, ent->currentAngles[YAW], 0 };
+
+			gi.G2API_GetBoltMatrix(ent->ghoul2, ent->weaponModel[1], flash_bolt, &bolt_matrix, yaw_only_angles,
+				ent->currentOrigin, cg.time ? cg.time : level.time, nullptr, ent->s.modelScale);
+			gi.G2API_GiveMeVectorFromMatrix(bolt_matrix, ORIGIN, flash_origin);
+			VectorCopy(flash_origin, muzzle_point);
+			return;
+		}
+	}
 	if (ent->playerModel >= 0 && ent->handLBolt >= 0 && ent->ghoul2.size())
 	{
 		mdxaBone_t bolt_matrix;
@@ -16032,7 +16172,16 @@ static void WP_SaberBlasterFire(gentity_t* ent, const int charge, gentity_t* tar
 	missile->bounceCount = 8;
 
 	G_SoundOnEnt(ent, CHAN_WEAPON, charged ? "sound/weapons/bryar/alt_fire.wav" : "sound/weapons/bryar/fire.wav");
-	G_PlayEffect("bryar/muzzle_flash", start, dir);
+	if (WP_SaberBlasterIsPistolModel(ent))
+	{
+		// on the pistol's muzzle bolt, so it moves with the gun (item 404, DH: it stayed behind while strafing)
+		G_PlayEffect(G_EffectIndex("bryar/muzzle_flash"), ent->weaponModel[1],
+			gi.G2API_AddBolt(&ent->ghoul2[ent->weaponModel[1]], "*flash"), ent->s.number, start, 0, qtrue);
+	}
+	else
+	{
+		G_PlayEffect("bryar/muzzle_flash", start, dir);
+	}
 	ent->client->ps.persistant[PERS_ACCURACY_SHOTS]++;
 }
 
@@ -16140,6 +16289,7 @@ void WP_SaberBlasterCinematicThink(gentity_t* ent)
 	}
 	WP_SaberBlasterCinematic(ent);
 	WP_SaberBlasterUpdatePistolModel(ent);
+	WP_SaberBlasterArmPose(ent); // item 404
 }
 
 // 2026-11-15 (DH, item 371, g_saberAIBlaster 1): Kyle Katarn NPCs fight in SS_BLASTER and use it with thought.
@@ -16404,6 +16554,7 @@ void WP_SaberBlasterThink(gentity_t* ent, usercmd_t* ucmd)
 	WP_SaberBlasterCinematic(ent);
 	WP_SaberBlasterAIStyle(ent); // Kyle NPCs keep SS_BLASTER (item 371)
 	WP_SaberBlasterUpdatePistolModel(ent);
+	WP_SaberBlasterArmPose(ent); // the gun arm (item 404)
 	saberBlasterAltHeld[ent_num] = qfalse;
 	WP_SaberBlasterAI(ent, ucmd); // Kyle NPCs: pistol out of saber reach, saber close up (item 371)
 
@@ -16413,7 +16564,7 @@ void WP_SaberBlasterThink(gentity_t* ent, usercmd_t* ucmd)
 		saberBlasterFireTime[ent_num] = 0;
 		if (WP_SaberBlasterActive(ent)
 			&& ent->health > 0
-			&& ent->client->ps.torsoAnim == BOTH_FORCELIGHTNING
+			&& saberBlasterArmState[ent_num] == 2 // the arm is still out (item 404)
 			&& !PM_InKnockDown(&ent->client->ps))
 		{
 			WP_SaberBlasterFire(ent, 0, nullptr);
@@ -16503,8 +16654,7 @@ void WP_SaberBlasterThink(gentity_t* ent, usercmd_t* ucmd)
 				saberBlasterChargeSound[ent_num] = qtrue;
 				G_SoundOnEnt(ent, CHAN_WEAPON, "sound/weapons/bryar/altcharge.wav"); // the charge starts
 			}
-			NPC_SetAnim(ent, SETANIM_TORSO, BOTH_FORCEGRIP_HOLD, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-			ps->torsoAnimTimer = 150;
+			saberBlasterAimUntil[ent_num] = level.time + SABERBLASTER_AIM_HOLD; // the gun arm, not the grip anim (item 404)
 		}
 		return;
 	}
@@ -16531,26 +16681,20 @@ void WP_SaberBlasterThink(gentity_t* ent, usercmd_t* ucmd)
 		{
 			ps->ammo[SABERBLASTER_CLIP_SLOT] = SABERBLASTER_CLIP_SIZE;
 		}
-		NPC_SetAnim(ent, SETANIM_TORSO, BOTH_FORCELIGHTNING_RELEASE, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART);
 		ps->weaponTime = weaponData[WP_BRYAR_PISTOL].fireTime;
-		ps->torsoAnimTimer = ps->weaponTime;
+		saberBlasterAimUntil[ent_num] = level.time + SABERBLASTER_AIM_HOLD; // item 404: the gun arm, no lightning anim
 		saberBlasterFireTime[ent_num] = 0;
 		WP_SaberBlasterFire(ent, release, nullptr);
 		return;
 	}
 
 	ps->ammo[SABERBLASTER_CLIP_SLOT]++;
-	NPC_SetAnim(ent, SETANIM_TORSO, BOTH_FORCELIGHTNING, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART);
 	ps->weaponTime = weaponData[WP_BRYAR_PISTOL].fireTime;
-	ps->torsoAnimTimer = ps->weaponTime;
 
-	// fire at the anim's SABERBLASTER_FIRE_FRAME (the left arm fully out), within the shot's weaponTime
-	int fire_delay = SABERBLASTER_FIRE_FRAME * 50;
-	const int anim_file = ent->client->clientInfo.animFileIndex;
-	if (ValidAnimFileIndex(anim_file))
-	{
-		fire_delay = abs(level.knownAnimFileSets[anim_file].animations[BOTH_FORCELIGHTNING].frameLerp) * SABERBLASTER_FIRE_FRAME;
-	}
+	// item 404: the gun arm goes out (no torso anim, the body keeps its saber anims); the shot waits until it is out,
+	// at once when it still is from the last shot
+	int fire_delay = saberBlasterArmState[ent_num] == 2 ? 0 : SABERBLASTER_AIM_RAISE;
+	saberBlasterAimUntil[ent_num] = level.time + SABERBLASTER_AIM_HOLD;
 	if (fire_delay > ps->weaponTime - 50)
 	{
 		fire_delay = ps->weaponTime - 50;

@@ -1896,10 +1896,113 @@ static void WV_ParseKey(weaponVariant_t* wv, const char* key, const char* value,
 	{
 		wv->effectTime = atoi(value) < 0 ? 0 : atoi(value) > 30000 ? 30000 : atoi(value);
 	}
+	else if (!Q_stricmp(key, "viewmodel"))
+	{
+		Q_strncpyz(wv->viewModel, value, sizeof wv->viewModel);
+	}
+	else if (!Q_stricmp(key, "viewdigits"))
+	{
+		wv->viewDigits = atoi(value) < 0 ? 0 : atoi(value) > 3 ? 3 : atoi(value);
+	}
+	else if (!Q_stricmp(key, "hitfreeze"))
+	{
+		wv->hitFreeze = atoi(value) < 0 ? 0 : atoi(value) > 10000 ? 10000 : atoi(value);
+	}
+	else if (!Q_stricmp(key, "gunposition"))
+	{
+		sscanf(value, "%f %f %f", &wv->gunPosition[0], &wv->gunPosition[1], &wv->gunPosition[2]);
+	}
 	else if (!Q_stricmp(key, "price"))
 	{
 		wv->price = atoi(value) < 0 ? 0 : atoi(value) > 30000 ? 30000 : atoi(value);
 	}
+}
+
+// Personal shields (2026-11-16): the shield table, loaded with the weapon variants
+personalShield_t bgPersonalShields[MAX_PERSONAL_SHIELDS];
+int bgNumPersonalShields = 1;
+
+int BG_PersonalShieldByName(const char* name)
+{
+	int i;
+
+	if (!name || !name[0])
+	{
+		return 0;
+	}
+	for (i = 1; i < bgNumPersonalShields; i++)
+	{
+		if (!Q_stricmp(bgPersonalShields[i].name, name))
+		{
+			return i;
+		}
+	}
+	return 0;
+}
+
+void BG_LoadPersonalShields(void)
+{
+	char* buf = nullptr;
+	const char* p;
+	int len;
+
+	memset(bgPersonalShields, 0, sizeof bgPersonalShields);
+	bgNumPersonalShields = 1;
+
+	len = gi.FS_ReadFile(PERSONAL_SHIELD_FILE, reinterpret_cast<void**>(&buf));
+	if (len <= 0 || !buf)
+	{
+		return;
+	}
+	p = buf;
+	COM_BeginParseSession(PERSONAL_SHIELD_FILE);
+	while (p)
+	{
+		personalShield_t* sh;
+		const char* token = COM_ParseExt(&p, qtrue);
+
+		if (!token[0])
+		{
+			break;
+		}
+		if (bgNumPersonalShields >= MAX_PERSONAL_SHIELDS)
+		{
+			break;
+		}
+		sh = &bgPersonalShields[bgNumPersonalShields];
+		Q_strncpyz(sh->name, token, sizeof sh->name);
+		Q_strncpyz(sh->displayName, token, sizeof sh->displayName);
+		sh->capacity = 25;
+		sh->cooldown = 5000;
+		sh->regen = 200;
+		token = COM_ParseExt(&p, qtrue);
+		if (Q_stricmp(token, "{"))
+		{
+			break;
+		}
+		while (1)
+		{
+			char key[64];
+
+			token = COM_ParseExt(&p, qtrue);
+			if (!token[0] || !Q_stricmp(token, "}"))
+			{
+				break;
+			}
+			Q_strncpyz(key, token, sizeof key);
+			token = COM_ParseExt(&p, qfalse);
+			if (!Q_stricmp(key, "name")) Q_strncpyz(sh->displayName, token, sizeof sh->displayName);
+			else if (!Q_stricmp(key, "capacity")) sh->capacity = atoi(token) < 1 ? 1 : atoi(token) > 1023 ? 1023 : atoi(token);
+			else if (!Q_stricmp(key, "cooldown")) sh->cooldown = atoi(token) < 0 ? 0 : atoi(token);
+			else if (!Q_stricmp(key, "regen")) sh->regen = atoi(token) < 10 ? 10 : atoi(token);
+			else if (!Q_stricmp(key, "rechargesound")) Q_strncpyz(sh->rechargeSound, token, sizeof sh->rechargeSound);
+			else if (!Q_stricmp(key, "brokensound")) Q_strncpyz(sh->brokenSound, token, sizeof sh->brokenSound);
+			else if (!Q_stricmp(key, "equipsound")) Q_strncpyz(sh->equipSound, token, sizeof sh->equipSound);
+			else if (!Q_stricmp(key, "chargedsound")) Q_strncpyz(sh->chargedSound, token, sizeof sh->chargedSound);
+		}
+		bgNumPersonalShields++;
+	}
+	gi.FS_FreeFile(buf);
 }
 
 void BG_LoadWeaponVariants(void)

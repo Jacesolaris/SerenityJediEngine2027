@@ -720,7 +720,10 @@ extern vmCvar_t cg_smoothPlayerPlatAccel;
 extern vmCvar_t cg_smoothCamera;
 extern vmCvar_t cg_speedTrail;
 extern vmCvar_t cg_precacheWeaponVariants;
+extern vmCvar_t cg_variantViewModels;
+extern vmCvar_t cg_gunCounters;
 void CG_PrecacheWeaponVariants();
+void CG_ClearWeaponVariantMedia();
 extern vmCvar_t cg_fovViewmodel;
 extern vmCvar_t cg_fovViewmodelAdjust;
 

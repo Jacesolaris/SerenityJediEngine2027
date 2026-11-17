@@ -44,6 +44,8 @@ bool gServerSkinHack = false;
 
 shader_t* R_FindServerShader(const char* name, const int* lightmapIndexes, const byte* styles);
 static char* CommaParse(char** data_p);
+#define MAX_SKINNAME_LONG 256 // a multi-part skin name may be this long (2026-11-16)
+
 /*
 ===============
 RE_SplitSkins
@@ -56,8 +58,8 @@ static bool RE_SplitSkins(const char* INname, char* skinhead, char* skintorso, c
 {	//INname= "models/players/jedi_tf/|head01_skin1|torso01|lower01";
 	if (strchr(INname, '|'))
 	{
-		char name[MAX_QPATH];
-		strcpy(name, INname);
+		char name[MAX_SKINNAME_LONG];
+		Q_strncpyz(name, INname, sizeof name);
 		char* p = strchr(name, '|');
 		*p = 0;
 		p++;
@@ -235,6 +237,53 @@ static qhandle_t RE_RegisterIndividualSkin(const char* name, const qhandle_t hSk
 	return hSkin;
 }
 
+// (2026-11-16, DH) a multi-part skin name ("models/players/<folder>/|head|torso|lower") may be longer than MAX_QPATH
+// when the character's folder name is long (omicron_iridonian_nohood): each part file must still fit in MAX_QPATH,
+// and the skin table keeps a short key for the long name (its start plus a hash)
+static qboolean RE_LongSkinNameOk(const char* name)
+{
+	const char* bar = strchr(name, '|');
+	if (!bar)
+	{
+		return qtrue;
+	}
+	const int base = static_cast<int>(bar - name);
+	const char* p = bar + 1;
+	while (*p)
+	{
+		const char* end = strchr(p, '|');
+		const int len = end ? static_cast<int>(end - p) : static_cast<int>(strlen(p));
+		if (base + len + 5 >= MAX_QPATH)
+		{
+			return qfalse;
+		}
+		if (!end)
+		{
+			break;
+		}
+		p = end + 1;
+	}
+	return qtrue;
+}
+
+static const char* RE_SkinKey(const char* name)
+{
+	static char key[MAX_QPATH];
+	const size_t len = strlen(name);
+	if (len < MAX_QPATH)
+	{
+		return name;
+	}
+	unsigned int h = 2166136261u;
+	for (size_t i = 0; i < len; i++)
+	{
+		h ^= static_cast<unsigned char>(tolower(static_cast<unsigned char>(name[i])));
+		h *= 16777619u;
+	}
+	Com_sprintf(key, sizeof key, "%.48s#%08x", name, h);
+	return key;
+}
+
 qhandle_t RE_RegisterSkin(const char* name)
 {
 	qhandle_t hSkin = 0;
@@ -245,7 +294,7 @@ qhandle_t RE_RegisterSkin(const char* name)
 		return 0;
 	}
 
-	if (strlen(name) >= MAX_QPATH)
+	if (strlen(name) >= (strchr(name, '|') ? MAX_SKINNAME_LONG : MAX_QPATH) || !RE_LongSkinNameOk(name))
 	{
 		ri.Printf(PRINT_ALL, "Skin name exceeds MAX_QPATH\n");
 		return 0;
@@ -255,7 +304,7 @@ qhandle_t RE_RegisterSkin(const char* name)
 	for (hSkin = 1; hSkin < tr.numSkins; hSkin++)
 	{
 		skin = tr.skins[hSkin];
-		if (!Q_stricmp(skin->name, name))
+		if (!Q_stricmp(skin->name, RE_SkinKey(name)))
 		{
 			if (skin->numSurfaces == 0)
 			{
@@ -274,7 +323,7 @@ qhandle_t RE_RegisterSkin(const char* name)
 	tr.numSkins++;
 	skin = static_cast<skin_s*>(Hunk_Alloc(sizeof(skin_t), h_low));
 	tr.skins[hSkin] = skin;
-	Q_strncpyz(skin->name, name, sizeof skin->name);
+	Q_strncpyz(skin->name, RE_SkinKey(name), sizeof skin->name);
 	skin->numSurfaces = 0;
 
 	// make sure the render thread is stopped

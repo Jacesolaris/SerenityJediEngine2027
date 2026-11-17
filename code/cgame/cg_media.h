@@ -326,6 +326,10 @@ using cgMedia_t = struct
 	qhandle_t solidWhiteShader;
 	qhandle_t electricBodyShader;
 	qhandle_t electricBody2Shader;
+	// status looks (2026-11-16, the Jedi Knight Galaxies body overlays, shaders/claude_jkg_overlays.shader)
+	qhandle_t overlayIceShader;
+	qhandle_t overlayCarboniteShader;
+	qhandle_t overlayStunShader;
 	qhandle_t refractShader;
 	qhandle_t boltShader;
 

@@ -61,6 +61,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 //bot states
 bot_state_t* botstates[MAX_CLIENTS];
+void bot_social_think(bot_state_t* bs); // bot talk and taunts (2026-11-16, below)
 
 // bot_calm_movement: until when a jump is allowed because something is in the way, since when a bot is stuck,
 // whether the jump he is in was an allowed one
@@ -3356,6 +3357,7 @@ static int bot_ai(const int client, const float thinktime)
 	{
 		Enhanced_bot_ai(bs);
 	}
+	bot_social_think(bs); // bot talk and taunts (2026-11-16): every bot frame, whatever the AI above did
 
 	// Jedi fall save (Warzone port): force leap back from a deadly fall
 	bot_fall_save(bs);
@@ -14896,6 +14898,7 @@ static void bot_boba_flight_cmd(bot_state_t* bs, usercmd_t* ucmd)
 
 extern saberInfo_t* BG_MySaber(int clientNum, int saberNum);
 void bot_check_speak(gentity_t* self, const qboolean moving);
+void bot_social_think(bot_state_t* bs);
 extern void AngleClamp(vec3_t ang);
 //the main AI loop.
 //please don't be too frightened.
@@ -20102,6 +20105,223 @@ void trace_move(bot_state_t* bs, vec3_t moveDir, const int target_num)
 
 	// If we reach here, no movement direction worked.
 	// Caller will decide what to do next.
+}
+
+
+//---------------------------------------------------------------------------------------------------------------------
+// Bot talk and taunts (2026-11-16, DH): bots use the NPC chatter (NPC.c, after Jedi Knight Galaxies) and taunt enemy bots.
+// - Two bots on the same side (in FFA: any two) with no enemy in sight, close together (384 units, in view: bots seldom
+//   stand still), talk: they take turns every 3.5-6 s with the talk anims, one or two exchanges. A bot whose class has a
+//   chatter voice set (stormtroopers, Rodians...) says those lines; any other bot its own character's MP voice command
+//   lines: the first asks (req_assist, tac_follow, spot_troops...), the other answers (reply_yes, reply_go...).
+//   A bot whose voice has neither only gestures along (two such bots don't talk). 40-60 s rest afterwards.
+// - A bot that sees an enemy bot 300-1500 units away taunts it now and then (G_SetTauntAnim: taunt, flourish or gloat,
+//   with the character's taunt sound), and the other one taunts back a moment later. 25-45 s between taunts.
+// g_botChatter 1 (0 = off). Humans are never picked.
+//---------------------------------------------------------------------------------------------------------------------
+extern void G_SetTauntAnim(gentity_t* ent, int taunt);
+extern qboolean NPC_ChatterRandomLine(gentity_t* ent, char* out, int out_size);
+
+static qboolean bot_social_idle(const gentity_t* ent)
+{
+	const bot_state_t* b;
+
+	if (!ent || !ent->inuse || !ent->client || !(ent->r.svFlags & SVF_BOT) || ent->health <= 0
+		|| ent->client->sess.sessionTeam == TEAM_SPECTATOR)
+	{
+		return qfalse;
+	}
+	b = botstates[ent->s.number];
+	return b && !(b->currentEnemy && b->enemySeenTime >= level.time - 3000) ? qtrue : qfalse;
+}
+
+// the bot's character voice folder (sound/chars/<model>/misc) when it has the MP voice command lines, "" = none
+static const char* bot_social_voice(gentity_t* ent)
+{
+	if (!ent->botVoiceChecked)
+	{
+		char info[MAX_INFO_STRING];
+		char model[MAX_QPATH];
+		char* slash;
+		fileHandle_t f = 0;
+
+		ent->botVoiceChecked = 1;
+		ent->botVoice[0] = 0;
+		trap->GetUserinfo(ent->s.number, info, sizeof info);
+		Q_strncpyz(model, Info_ValueForKey(info, "model"), sizeof model);
+		slash = strchr(model, '/');
+		if (slash)
+		{
+			*slash = 0;
+		}
+		if (model[0] && trap->FS_Open(va("sound/chars/%s/misc/reply_yes.mp3", model), &f, FS_READ) > 0)
+		{
+			Q_strncpyz(ent->botVoice, model, sizeof ent->botVoice);
+		}
+		if (f)
+		{
+			trap->FS_Close(f);
+		}
+	}
+	return ent->botVoice;
+}
+
+// can this bot say anything (a chatter voice set or the voice command lines)
+static qboolean bot_social_can_talk(gentity_t* ent)
+{
+	char file[MAX_QPATH];
+	return NPC_ChatterRandomLine(ent, file, sizeof file) || bot_social_voice(ent)[0] ? qtrue : qfalse;
+}
+
+// a line: the chatter set's (troopers, aliens...), else a team voice command - the leader asks, the other answers
+static void bot_social_say(gentity_t* speaker, const qboolean reply)
+{
+	char file[MAX_QPATH];
+	static const char* const asks[] = { "req_assist", "tac_follow", "tac_together", "tac_split", "tac_hold", "tac_cover",
+		"spot_troops", "att_attack", "def_position", "tac_fallback" };
+	static const char* const replies[] = { "reply_yes", "reply_go", "reply_coming", "reply_stay", "reply_yes", "reply_no" };
+
+	if (!NPC_ChatterRandomLine(speaker, file, sizeof file))
+	{
+		const char* voice = bot_social_voice(speaker);
+		if (!voice[0])
+		{
+			// no lines for this voice: he only gestures along
+			if (!speaker->client->ps.torsoTimer)
+			{
+				G_SetAnim(speaker, NULL, SETANIM_TORSO, Q_irand(0, 1) ? BOTH_TALK1 : BOTH_TALK2, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
+			}
+			return;
+		}
+		Q_strncpyz(file, va("sound/chars/%s/misc/%s.mp3", voice,
+			reply ? replies[Q_irand(0, (int)ARRAY_LEN(replies) - 1)] : asks[Q_irand(0, (int)ARRAY_LEN(asks) - 1)]), sizeof file);
+	}
+	G_SoundOnEnt(speaker, CHAN_VOICE_ATTEN, file);
+	if (g_botChatter.integer > 1)
+	{
+		Com_Printf("bot chatter: %s says %s\n", speaker->client->pers.netname, file);
+	}
+	if (!speaker->client->ps.torsoTimer)
+	{
+		G_SetAnim(speaker, NULL, SETANIM_TORSO, Q_irand(0, 1) ? BOTH_TALK1 : BOTH_TALK2, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD, 0);
+	}
+}
+
+static void bot_social_taunt(gentity_t* ent)
+{
+	static const int taunts[] = { 0, 3, 4 }; // TAUNT_TAUNT, TAUNT_FLOURISH, TAUNT_GLOAT (g_cmds.c tauntTypes_t)
+
+	G_SetTauntAnim(ent, taunts[Q_irand(0, 2)]);
+	if (g_botChatter.integer > 1)
+	{
+		Com_Printf("bot taunt: %s\n", ent->client->pers.netname);
+	}
+}
+
+void bot_social_think(bot_state_t* bs)
+{
+	gentity_t* self = &g_entities[bs->client];
+	gentity_t* other;
+	int i;
+
+	if (!g_botChatter.integer || !self->client || self->health <= 0)
+	{
+		return;
+	}
+
+	// a taunt reply that is due
+	if (self->botTauntReply && level.time >= self->botTauntReply)
+	{
+		self->botTauntReply = 0;
+		bot_social_taunt(self);
+	}
+
+	// taunting an enemy bot in sight, not too close
+	if (bs->currentEnemy && bs->enemySeenTime >= level.time && level.time >= self->botTauntNext)
+	{
+		gentity_t* enemy = bs->currentEnemy;
+
+		self->botTauntNext = level.time + Q_irand(2000, 5000); // look again soon if not now
+		if (enemy->inuse && enemy->client && enemy->r.svFlags & SVF_BOT && enemy->health > 0
+			&& !OnSameTeam(self, enemy))
+		{
+			const float dist = Distance(self->r.currentOrigin, enemy->r.currentOrigin);
+			if (dist > 200.0f && dist < 1500.0f)
+			{
+				bot_social_taunt(self);
+				self->botTauntNext = level.time + Q_irand(25000, 45000);
+				if (!enemy->botTauntReply && level.time >= enemy->botTauntNext)
+				{
+					enemy->botTauntReply = level.time + Q_irand(1000, 1800); // he answers
+					enemy->botTauntNext = level.time + Q_irand(25000, 45000);
+				}
+			}
+		}
+	}
+
+	// talking
+	if (self->botChatPartner > 0)
+	{
+		other = &g_entities[self->botChatPartner - 1];
+		if (!bot_social_idle(self) || !bot_social_idle(other) || other->botChatPartner != self->s.number + 1
+			|| DistanceSquared(self->r.currentOrigin, other->r.currentOrigin) > 640.0f * 640.0f)
+		{
+			if (other->botChatPartner == self->s.number + 1)
+			{
+				other->botChatPartner = 0;
+				other->botChatNext = level.time + Q_irand(40000, 60000);
+			}
+			self->botChatPartner = 0;
+			self->botChatNext = level.time + Q_irand(40000, 60000);
+			return;
+		}
+		if (self->botChatLead && level.time >= self->botChatTime)
+		{
+			if (self->botChatLine >= self->botChatLines)
+			{
+				other->botChatPartner = 0;
+				other->botChatNext = level.time + Q_irand(40000, 60000);
+				self->botChatPartner = 0;
+				self->botChatNext = level.time + Q_irand(40000, 60000);
+				return;
+			}
+			bot_social_say(self->botChatLine & 1 ? other : self, self->botChatLine & 1 ? qtrue : qfalse);
+			self->botChatLine++;
+			self->botChatTime = level.time + Q_irand(3500, 6000);
+		}
+		return;
+	}
+
+	// looking for a bot to talk to, every few seconds
+	if (level.time < self->botChatNext)
+	{
+		return;
+	}
+	self->botChatNext = level.time + Q_irand(4000, 7000);
+	if (!bot_social_idle(self))
+	{
+		return;
+	}
+	for (i = 0; i < level.maxclients; i++)
+	{
+		other = &g_entities[i];
+		if (other == self || !bot_social_idle(other) || other->botChatPartner > 0 || other->botChatNext > level.time + 60000
+			|| (!bot_social_can_talk(self) && !bot_social_can_talk(other))
+			|| DistanceSquared(self->r.currentOrigin, other->r.currentOrigin) > 384.0f * 384.0f
+			|| !trap->InPVS(self->r.currentOrigin, other->r.currentOrigin)
+			|| (level.gametype >= GT_TEAM && !OnSameTeam(self, other)))
+		{
+			continue;
+		}
+		self->botChatPartner = other->s.number + 1;
+		other->botChatPartner = self->s.number + 1;
+		self->botChatLead = 1;
+		other->botChatLead = 0;
+		self->botChatLine = 0;
+		self->botChatLines = Q_irand(1, 2) * 2; // one or two asks, each answered
+		self->botChatTime = level.time + 500;
+		return;
+	}
 }
 
 extern void npc_conversation_animation();

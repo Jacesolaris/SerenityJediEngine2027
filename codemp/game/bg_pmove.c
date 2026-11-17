@@ -20101,10 +20101,9 @@ static void PM_RepulseHover(void)
 // attack reloads, no saber throw / kata. The server spawns the bolt on EV_SABERBLASTER (g_active.c ClientEvents).
 qboolean pm_saberBlasterAlt = qfalse; // walk + dash held this pmove (not a reload), read by PM_SaberLocked (bg_saber.c)
 static qboolean pm_saberBlasterReload = qfalse;
-// the shot leaves the pistol at the arm's full reach: SABERBLASTER_FIRE_FRAME of BOTH_FORCELIGHTNING (the 6th frame),
-// not as the anim starts (2026-10-15). Predicted: SBE_FIRE goes out on the pmove where weaponTime (set to the bryar's
+// the shot leaves the pistol once the gun arm is out (SABERBLASTER_AIM_RAISE, item 404; was the 6th frame of
+// BOTH_FORCELIGHTNING), not as the anim starts (2026-10-15). Predicted: SBE_FIRE goes out on the pmove where weaponTime (set to the bryar's
 // fireTime as the shot starts) passes fireTime - the delay; pm_saberBlasterPrevWeaponTime = weaponTime as this pmove began
-#define SABERBLASTER_FIRE_FRAME	5
 static int pm_saberBlasterPrevWeaponTime = 0;
 // the charged shot (Jace 2026-10-31, replaces the 2026-10-30 arm delay): walk + dash fire on release - a tap a normal
 // shot; held past SABERBLASTER_CHARGE_START the left arm holds out (BOTH_FORCEGRIP_HOLD) and the shot charges
@@ -20135,15 +20134,28 @@ int BG_SaberBlasterChargeLevel(const int held, const int clip_used)
 	return level > 0 ? level : 0;
 }
 
+// item 404: a shot / charge anim of SS_BLASTER (see SABERBLASTER_AIM_RAISE); charge_start = ps weaponChargeTime /
+// entityState constantLight
+qboolean BG_SaberBlasterAimAnim(const int torso_anim, const int weapon, const int saber_anim_level, const int charge_start)
+{
+	return weapon == WP_SABER && saber_anim_level == SS_BLASTER
+		&& (torso_anim == BOTH_FORCELIGHTNING || torso_anim == BOTH_FORCELIGHTNING_RELEASE
+			|| torso_anim == BOTH_FORCEGRIP_HOLD && charge_start > 0)
+		? qtrue
+		: qfalse;
+}
+
+// the anim the torso shows: its legs anim in place of a shot / charge anim (item 404)
+int BG_SaberBlasterTorsoAnim(const int torso_anim, const int legs_anim, const int weapon, const int saber_anim_level,
+	const int charge_start)
+{
+	return BG_SaberBlasterAimAnim(torso_anim, weapon, saber_anim_level, charge_start) ? legs_anim : torso_anim;
+}
+
 static int PM_SaberBlasterFireDelay(void)
 {
-	int delay = SABERBLASTER_FIRE_FRAME * 50;
+	int delay = SABERBLASTER_AIM_RAISE; // item 404: the gun arm out (was the 6th frame of BOTH_FORCELIGHTNING)
 
-	if (pm_entSelf && pm_entSelf->localAnimIndex >= 0 && pm_entSelf->localAnimIndex < MAX_ANIM_FILES
-		&& bgAllAnims[pm_entSelf->localAnimIndex].anims)
-	{
-		delay = abs(bgAllAnims[pm_entSelf->localAnimIndex].anims[BOTH_FORCELIGHTNING].frameLerp) * SABERBLASTER_FIRE_FRAME;
-	}
 	if (delay > weaponData[WP_BRYAR_PISTOL].fireTime - 50)
 	{
 		delay = weaponData[WP_BRYAR_PISTOL].fireTime - 50;
@@ -20333,7 +20345,7 @@ static void WP_SaberBlasterThink(void)
 	{
 		PM_AddEventWithParm(EV_SABERBLASTER, SBE_FIRE);
 	}
-	// else: SBE_FIRE at the anim's SABERBLASTER_FIRE_FRAME (top of this function, a later pmove)
+	// else: SBE_FIRE once the gun arm is out (PM_SaberBlasterFireDelay) (top of this function, a later pmove)
 }
 
 // BOTH_WIND, as SP (bg_panimate.cpp TorsoAgainstWindTest): a client standing still outside in a strong gust,
@@ -21236,6 +21248,17 @@ static void PmoveSingle(pmove_t* pmove)
 	// set watertype, and waterlevel
 	PM_SetWaterLevel();
 	pml.previous_waterlevel = pmove->waterlevel;
+
+	if (pm->cmd.upmove < 0
+		&& pm->ps->clientNum < MAX_CLIENTS
+		&& pm->ps->pm_type == PM_NORMAL
+		&& pm->waterlevel < 2
+		&& BG_AnimSetCantCrouch(pm_entSelf->localAnimIndex))
+	{
+		// no crouch anim on this skeleton (protocol droid, R2/R5, gonk...): players and bots stay standing at full
+		// height; a player's press plays a taunt (G_NoJumpTaunt). Swimming down still works.
+		pm->cmd.upmove = 0;
+	}
 
 	// set minimum_mins, maximum_maxs, and viewheight
 	PM_CheckDuck();

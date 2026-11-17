@@ -101,14 +101,18 @@ extern qboolean BG_WeaponSprintAnim(int anim);
 extern void Sphereshield_On(gentity_t* self);
 extern void Sphereshield_Off(gentity_t* self);
 extern qboolean PM_PainAnim(int anim);
-static qboolean ClientCinematicThink(gclient_t* client, const usercmd_t* ucmd);
 extern qboolean in_camera;
 extern qboolean player_locked;
 extern char cinematicSkipScript[1024];
 extern qboolean skippingCutscene;
+extern int g_cameraStartTime;
+extern void G_CameraSkip(gentity_t* ent);
+extern void G_CameraSkipThink(void);
+extern qboolean G_CameraSkipped(void);
 extern qboolean inGameCinematic;
 extern qboolean G_MissionSkipsCutscenes(void);
 extern void G_MissionCutsceneSkip(void);
+extern qboolean G_IsMission(void);
 extern qboolean G_MissionInCutscene(void);
 extern void G_MissionGatherThink(void);
 extern qboolean IsSurrendering(const gentity_t* self);
@@ -3120,6 +3124,8 @@ static void BotDelayedTauntReply(gentity_t* bot)
 	bot->nextthink = 0;
 }
 
+static void G_TauntEvent(gentity_t* ent, int taunt, qboolean any_line);
+
 void G_SetTauntAnim(gentity_t* ent, int taunt)
 {
 	const saberInfo_t* saber1 = BG_MySaber(ent->clientNum, 0);
@@ -3175,7 +3181,7 @@ void G_SetTauntAnim(gentity_t* ent, int taunt)
 
 	if (ent->client->ps.weapon == WP_MELEE && taunt != TAUNT_MEDITATE) // as SP: meditate works with melee too
 	{
-		G_AddEvent(ent, EV_TAUNT, taunt);
+		G_TauntEvent(ent, taunt, qfalse);
 		return;
 	}
 
@@ -3210,7 +3216,7 @@ void G_SetTauntAnim(gentity_t* ent, int taunt)
 		switch (taunt)
 		{
 		case TAUNT_TAUNT:
-			G_AddEvent(ent, EV_TAUNT, taunt);
+			G_TauntEvent(ent, taunt, qfalse);
 
 			if (ent->client->ps.weapon == WP_SABER)
 			{
@@ -3425,7 +3431,7 @@ void G_SetTauntAnim(gentity_t* ent, int taunt)
 			}
 			break;
 		case TAUNT_FLOURISH:
-			G_AddEvent(ent, EV_TAUNT, taunt);
+			G_TauntEvent(ent, taunt, qfalse);
 			if (ent->client->ps.weapon != WP_SABER) //MP
 			{
 				// 2026-11-10 (audit): "if (PM_WalkingAnim(ent->client->ps.legsAnim) || PM_RunningAnim(ent->client->ps.legsAnim))" had the same code in both branches; kept one
@@ -3539,7 +3545,7 @@ void G_SetTauntAnim(gentity_t* ent, int taunt)
 			}
 			break;
 		case TAUNT_GLOAT:
-			G_AddEvent(ent, EV_TAUNT, taunt);
+			G_TauntEvent(ent, taunt, qfalse);
 			if (ent->client->ps.weapon != WP_SABER) //MP
 			{
 				// 2026-11-10 (audit): "if (PM_WalkingAnim(ent->client->ps.legsAnim) || PM_RunningAnim(ent->client->ps.legsAnim))" had the same code in both branches; kept one
@@ -3698,7 +3704,7 @@ void G_SetTauntAnim(gentity_t* ent, int taunt)
 			}
 			break;
 		case TAUNT_SURRENDER:
-			G_AddEvent(ent, EV_TAUNT, taunt);
+			G_TauntEvent(ent, taunt, qfalse);
 			if (ent->client->ps.weapon != WP_SABER) //MP
 			{
 				if (PM_WalkingAnim(ent->client->ps.legsAnim) || PM_RunningAnim(ent->client->ps.legsAnim))
@@ -4832,25 +4838,92 @@ extern void WP_SaberWearThink(gentity_t* ent, int msec);
 
 #define NOJUMP_TAUNT_COOLDOWN 3000
 
+// The taunt sound of a taunt (G_TauntSound / G_SetTauntAnim) and of G_NoJumpTaunt: the droids have no taunt sounds, so
+// they play their own chatter: the protocol droid one of its JK2 "use" conversation lines (sound/chars/protocol/misc/
+// 30proNNN, base assets), a different set for taunt / flourish / gloat (any_line: any of them, for the jump / crouch
+// taunt); R2, R5, gonk and mouse their beeps. Everyone else the model's taunt sound (EV_TAUNT).
+static void G_TauntEvent(gentity_t* ent, const int taunt, const qboolean any_line)
+{
+	static const int taunt_lines[] = { 3, 5, 6, 7, 8 };
+	static const int flourish_lines[] = { 9, 10, 11, 12 };
+	static const int gloat_lines[] = { 13, 15, 16 };
+	static const int any_lines[] = { 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16 };
+	const char* sound = NULL;
+
+	switch (ent->client->ps.botclass)
+	{
+	case BCLASS_PROTOCOL:
+		if (!any_line && taunt == TAUNT_TAUNT)
+		{
+			sound = va("sound/chars/protocol/misc/30pro%03d.mp3", taunt_lines[Q_irand(0, (int)ARRAY_LEN(taunt_lines) - 1)]);
+		}
+		else if (!any_line && taunt == TAUNT_FLOURISH)
+		{
+			sound = va("sound/chars/protocol/misc/30pro%03d.mp3", flourish_lines[Q_irand(0, (int)ARRAY_LEN(flourish_lines) - 1)]);
+		}
+		else if (!any_line && taunt == TAUNT_GLOAT)
+		{
+			sound = va("sound/chars/protocol/misc/30pro%03d.mp3", gloat_lines[Q_irand(0, (int)ARRAY_LEN(gloat_lines) - 1)]);
+		}
+		else
+		{
+			sound = va("sound/chars/protocol/misc/30pro%03d.mp3", any_lines[Q_irand(0, (int)ARRAY_LEN(any_lines) - 1)]);
+		}
+		break;
+	case BCLASS_R2D2:
+		sound = va("sound/chars/r2d2/misc/r2d2talk0%d.wav", Q_irand(1, 3));
+		break;
+	case BCLASS_R5D2:
+		sound = va("sound/chars/r5d2/misc/r5talk%d.wav", Q_irand(1, 4));
+		break;
+	case BCLASS_GONK:
+		sound = va("sound/chars/gonk/misc/gonktalk%d.wav", Q_irand(1, 2));
+		break;
+	case BCLASS_MOUSE:
+		sound = va("sound/chars/mouse/misc/mousego%d.wav", Q_irand(1, 3));
+		break;
+	default:
+		break;
+	}
+	if (sound)
+	{
+		G_Sound(ent, CHAN_VOICE, G_SoundIndex(sound));
+	}
+	else
+	{
+		G_AddEvent(ent, EV_TAUNT, taunt);
+	}
+}
+
 // The jump key of a model that can't jump (no jump anim on its skeleton, or a droid class SP never lets jump) plays a
 // taunt instead: the model's own taunt-like anim when its skeleton has one, and its taunt sound (EV_TAUNT falls back
 // through *taunt / *anger / *victory...). Human players only (bots press jump all the time), at most every
-// NOJUMP_TAUNT_COOLDOWN ms.
+// NOJUMP_TAUNT_COOLDOWN ms. The crouch key of a model with no crouch anim (BG_AnimSetCantCrouch: protocol droid, R2/R5,
+// gonk...; pmove keeps it standing) plays the same taunt, with the same cooldown.
 static void G_NoJumpTaunt(gentity_t* ent, const usercmd_t* ucmd)
 {
-	static const int taunt_anims[] = { BOTH_ENGAGETAUNT, BOTH_GESTURE1, TORSO_HANDSIGNAL4, BOTH_ALERT1, BOTH_STAND1TO2 };
+	// BOTH_TALK1: the protocol droid's gesturing (its only taunt-like anim; long, so on the torso only)
+	static const int taunt_anims[] = { BOTH_ENGAGETAUNT, BOTH_GESTURE1, TORSO_HANDSIGNAL4, BOTH_ALERT1, BOTH_STAND1TO2, BOTH_TALK1 };
 	gclient_t* client = ent->client;
-	const qboolean pressed = ucmd->upmove > 0 ? qtrue : qfalse;
-	const qboolean was_held = client->noJumpTauntHeld;
+	const qboolean jump_pressed = ucmd->upmove > 0 ? qtrue : qfalse;
+	const qboolean crouch_pressed = ucmd->upmove < 0 ? qtrue : qfalse;
+	const qboolean jump_new = jump_pressed && !client->noJumpTauntHeld ? qtrue : qfalse;
+	const qboolean crouch_new = crouch_pressed && !client->noCrouchTauntHeld ? qtrue : qfalse;
 
-	client->noJumpTauntHeld = pressed;
+	client->noJumpTauntHeld = jump_pressed;
+	client->noCrouchTauntHeld = crouch_pressed;
 
-	if (!pressed || was_held || ent->r.svFlags & SVF_BOT)
+	if ((!jump_new && !crouch_new) || ent->r.svFlags & SVF_BOT || ent->s.eType == ET_NPC)
 	{
 		return;
 	}
-	if (!BG_AnimSetCantJump(ent->localAnimIndex)
+	if (jump_new
+		&& !BG_AnimSetCantJump(ent->localAnimIndex)
 		&& !(level.gametype != GT_SIEGE && BG_ClassCantJump(client->ps.botclass)))
+	{
+		return;
+	}
+	if (crouch_new && (ent->waterlevel >= 2 || !BG_AnimSetCantCrouch(ent->localAnimIndex)))
 	{
 		return;
 	}
@@ -4870,12 +4943,12 @@ static void G_NoJumpTaunt(gentity_t* ent, const usercmd_t* ucmd)
 		{
 			const qboolean standing = client->ps.velocity[0] * client->ps.velocity[0]
 				+ client->ps.velocity[1] * client->ps.velocity[1] < 100.0f ? qtrue : qfalse;
-			NPC_SetAnim(ent, standing ? SETANIM_BOTH : SETANIM_TORSO, taunt_anims[i],
+			NPC_SetAnim(ent, standing && taunt_anims[i] != BOTH_TALK1 ? SETANIM_BOTH : SETANIM_TORSO, taunt_anims[i],
 				SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 			break;
 		}
 	}
-	G_AddEvent(ent, EV_TAUNT, TAUNT_TAUNT);
+	G_TauntEvent(ent, TAUNT_TAUNT, qtrue);
 	client->noJumpTauntTime = level.time + NOJUMP_TAUNT_COOLDOWN;
 }
 
@@ -5141,7 +5214,7 @@ static void ClientThink_real(gentity_t* ent)
 	if (client && client->ps.clientNum < MAX_CLIENTS)
 	{
 		//player stuff
-		if (G_MissionSkipsCutscenes())
+		if (G_IsMission())
 		{
 			G_MissionGatherThink(); // the players come along with the lead after a cutscene / a script's move
 		}
@@ -5150,42 +5223,46 @@ static void ClientThink_real(gentity_t* ent)
 			// a mission's cutscene plays out unseen while the players go on (g_ICARUScb.c G_MissionCutsceneSkip)
 			G_MissionCutsceneSkip();
 		}
+		// a cutscene is skipped by any newly pressed key (BUTTON_ANY: every key, also the weapon / force keys and
+		// the mouse buttons), not only use; not in its first half second (2026-11-16, DH)
+		qboolean cine_pressed;
+		{
+			static int cine_prev_buttons[MAX_CLIENTS];
+			const int now = ucmd->buttons & ~BUTTON_TALK;
+			cine_pressed = now & ~cine_prev_buttons[client->ps.clientNum] && level.time - g_cameraStartTime >= 500
+				? qtrue : qfalse;
+			cine_prev_buttons[client->ps.clientNum] = now;
+		}
 		if (in_camera)
 		{
-			// watch the code here, you MUST "return" within this IF(), *unless* you're stopping the cinematic skip.
-			//skip cutscene code
-			if (!skippingCutscene && (g_skipcutscenes.integer == 1
-				|| g_skipcutscenes.integer == 2 || ClientCinematicThink(ent->client, &ent->client->pers.cmd)))
+			// any player's key press skips the cutscene for everyone (g_ICARUScb.c G_CameraSkip; 2026-11-16, DH). The
+			// old automatic skip (g_skipcutscenes 1, the default, and 2) is gone: its skip script never ran, so it only
+			// kept the key from working, and g_missionCutscenes 1 asks for the cutscenes to be watched
+			if (!skippingCutscene && cine_pressed)
 			{
-				//order the system to accelerate the cutscene
-				if (cinematicSkipScript[0])
-				{
-					//there's a skip script for this cutscene
-					trap->ICARUS_RunScript((sharedEntity_t*)&g_entities[client->ps.clientNum], cinematicSkipScript);
-					cinematicSkipScript[0] = 0;
-				}
-
+				G_CameraSkip(ent);
 				skippingCutscene = qtrue;
-				if (g_skipcutscenes.integer == 2 || g_skipcutscenes.integer == 4)
-				{
-					//use time accell
-					trap->Cvar_Set("timescale", "100");
-				}
 				return;
 			}
-			if (skippingCutscene && (g_skipcutscenes.integer == 0
-				|| (g_skipcutscenes.integer == 3 || g_skipcutscenes.integer == 4)
-				&& ClientCinematicThink(ent->client, &ent->client->pers.cmd)))
-			{
-				//stopping a skip already in progress
-				skippingCutscene = qfalse;
-				trap->Cvar_Set("timescale", "1");
-			}
+			G_CameraSkipThink();
+		}
+
+		if (in_camera)
+		{
+			// nothing but the skip works while the camera runs (2026-11-16, DH): no fire, force, use, item, style
+			// change, moves or weapon change
+			client->ps.eFlags &= ~EF_FIRING;
+			ucmd->buttons = 0;
+			ucmd->forwardmove = 0;
+			ucmd->rightmove = 0;
+			ucmd->upmove = 0;
+			ucmd->generic_cmd = 0;
+			ucmd->weapon = (byte)client->ps.weapon;
 		}
 
 		G_MissionDownThink(ent, ucmd); // (Missions: a downed player lies there; a player next to one revives him, g_target.c)
 
-		if (player_locked && !G_MissionInCutscene()) // (not kept while a mission's cutscene plays out unseen)
+		if (player_locked && !G_MissionInCutscene() && !G_CameraSkipped()) // (nor while a skipped one goes on) // (not kept while a mission's cutscene plays out unseen)
 		{
 			//players' controls are locked, a scripting thingy
 			ucmd->forwardmove = 0;
@@ -5679,6 +5756,8 @@ static void ClientThink_real(gentity_t* ent)
 				if (!(ent->r.svFlags & SVF_BOT))
 				{
 					if (client->NPC_class == CLASS_VADER) sprintMul *= 1.15f;
+					else if (client->NPC_class == CLASS_PROTOCOL) sprintMul *= 1.10f;
+					else if (client->NPC_class == CLASS_GONK) sprintMul *= 1.10f;
 					else if (client->NPC_class == CLASS_YODA) sprintMul *= 1.65f;
 					else sprintMul *= 1.60f;
 				}
@@ -5690,6 +5769,8 @@ static void ClientThink_real(gentity_t* ent)
 				if (!(ent->r.svFlags & SVF_BOT))
 				{
 					if (client->NPC_class == CLASS_VADER) sprintMul *= 1.10f;
+					else if (client->NPC_class == CLASS_PROTOCOL) sprintMul *= 1.10f;
+					else if (client->NPC_class == CLASS_GONK) sprintMul *= 1.10f;
 					else if (client->NPC_class == CLASS_YODA) sprintMul *= 1.60f;
 					else sprintMul *= 1.50f;
 				}
@@ -8173,19 +8254,6 @@ void ClientEndFrame(gentity_t* ent)
 ClientIntermissionThink
 ====================
 */
-static qboolean ClientCinematicThink(gclient_t* client, const usercmd_t* ucmd)
-{
-	client->ps.eFlags &= ~EF_FIRING;
-
-	// swap button actions
-	client->oldbuttons = client->buttons;
-	client->buttons = ucmd->buttons;
-	if (client->buttons & BUTTON_USE & (client->oldbuttons ^ client->buttons))
-	{
-		return qtrue;
-	}
-	return qfalse;
-}
 
 qboolean NPC_IsNotHavingEnoughForceSight(const gentity_t* self)
 {

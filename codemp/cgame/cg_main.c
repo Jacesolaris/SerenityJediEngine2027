@@ -1778,6 +1778,9 @@ static void CG_RegisterGraphics(void)
 	// doing one shader just makes it look like a shell.  By using two shaders with different bulge offsets and different texture scales, it has a much more chaotic look
 	cgs.media.electricBodyShader = trap->R_RegisterShader("gfx/misc/electric");
 	cgs.media.electricBody2Shader = trap->R_RegisterShader("gfx/misc/fullbodyelectric2");
+	cgs.media.overlayIceShader = trap->R_RegisterShader("gfx/PlayerOverlays/ice");
+	cgs.media.overlayCarboniteShader = trap->R_RegisterShader("gfx/PlayerOverlays/carbonite");
+	cgs.media.overlayStunShader = trap->R_RegisterShader("gfx/PlayerOverlays/stun");
 
 	cgs.media.fsrMarkShader = trap->R_RegisterShader("footstep_r");
 	cgs.media.fslMarkShader = trap->R_RegisterShader("footstep_l");
@@ -2952,6 +2955,7 @@ void CG_Init(const int serverMessageNum, const int serverCommandSequence, const 
 	//Load external vehicle data
 	BG_VehicleLoadParms();
 	BG_LoadWeaponVariants(); // weapon variants (2026-10-31): the SJE guns (same file as the game, same order)
+	BG_LoadPersonalShields(); // personal shields (2026-11-16): the HUD bar needs the capacities
 
 	CG_Init_CGents();
 	CG_Init_CG();

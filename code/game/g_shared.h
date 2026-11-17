@@ -1600,6 +1600,25 @@ struct gentity_s
 	int grenadeDotNext = 0; // the next damage tick
 	int grenadeDotAttacker = 0; // entity number of the thrower
 	int grenadeDotDamage = 0; // damage per tick
+	// status looks (2026-11-16, JKG body overlays): SL_* (weapons.h) drawn over the body until statusLookTime; not saved
+	int statusLook = 0;
+	int statusLookTime = 0;
+	// personal shields (2026-11-16, JKG; g_weapon.cpp): the worn shield (bgPersonalShields index, 0 = none) and its state; not saved
+	int shieldType = 0;
+	int shieldCharge = 0;
+	int shieldLastHit = 0;
+	int shieldNextRegen = 0;
+	int shieldRecharging = 0;
+	int shieldChecked = 0; // NPCs: g_npcShields rolled
+	// NPC chatter (2026-11-16, NPC.cpp): partner entity + 1, role (1 leads), voice set + 1 (-1 none), dialog, line, timers; not saved
+	int chatPartner = 0;
+	int chatRole = 0;
+	int chatSet = 0;
+	int chatDialog = 0;
+	int chatLine = 0;
+	int chatLines = 0;
+	int chatTime = 0;
+	int chatNext = 0;
 	int weaponfiredelaytime = 0;
 	int TimeOfWeaponDrop = 0;
 

@@ -6189,6 +6189,28 @@ qboolean BG_AnimSetCantJump(const int animIndex)
 		&& anims[BOTH_JUMP1].numFrames == anims[BOTH_STAND1].numFrames ? qtrue : qfalse;
 }
 
+// a model on its own (not humanoid) skeleton with no real crouch anim: no BOTH_CROUCH1IDLE, or one that only repeats the
+// stand pose (protocol droid, R2/R5, gonk, saber droid, the creatures). Players and bots on it don't crouch (full
+// height, PmoveSingle); the crouch key plays a taunt (G_NoJumpTaunt)
+qboolean BG_AnimSetCantCrouch(const int animIndex)
+{
+	if (animIndex <= 0 || animIndex >= MAX_ANIM_FILES || animIndex >= bgNumAllAnims || BG_AnimSetIsHumanoidLike(animIndex))
+	{
+		return qfalse;
+	}
+	const animation_t* anims = bgAllAnims[animIndex].anims;
+	if (!anims)
+	{
+		return qfalse;
+	}
+	if (anims[BOTH_CROUCH1IDLE].numFrames <= 0)
+	{
+		return qtrue;
+	}
+	return anims[BOTH_CROUCH1IDLE].firstFrame == anims[BOTH_STAND1].firstFrame
+		&& anims[BOTH_CROUCH1IDLE].numFrames == anims[BOTH_STAND1].numFrames ? qtrue : qfalse;
+}
+
 // classes whose anims always move the whole body (beasts and the weaponless / handless droids): the cgame drives
 // lower_lumbar with the legs anim, and their attacks are whole-body anims
 qboolean BG_ClassIsWholeBody(const int botclass)

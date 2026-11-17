@@ -1554,6 +1554,9 @@ typedef struct siegePers_s
 #define FLAG_TALKHINT		25	// the NPC / bot he faces can be talked to (pazaak / shop, g_pazaak.c): the use icon
 #define FLAG_RIPOSTEREADY	26	// riposte window after a perfect parry (g_saberPerfectParry): the next attack is the riposte (2026-11-09)
 #define FLAG_RIPOSTE		27	// the riposte swing is playing: 15% faster, can't be perfect-parried (PM_SetSaberMove, 2026-11-09)
+#define FLAG_ICELOOK		28	// status looks (2026-11-16, JKG body overlays): frozen by the cryoban grenade / its cloud: ice
+#define FLAG_CARBONITE		29	// frozen by a "hitfreeze" gun (the carbonite rifle): carbonite
+#define FLAG_STUNLOOK		30	// stunned by a stun grenade: the blue stun glow
 
 #define DODGE_BOLTBLOCK			1	//standard DP cost to block a missile bolt
 #define DODGE_BOWCASTERBLOCK	2

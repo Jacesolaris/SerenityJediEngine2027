@@ -71,6 +71,8 @@ static void CG_AddSaberLight(const vec3_t org, const float radius, const vec3_t 
 }
 
 extern qboolean WP_SaberBlasterChargeState(gentity_t* ent, vec3_t muzzle, float* frac, int* cost); // SS_BLASTER (2026-10-31)
+static vec3_t cg_saberBlasterMuzzle[MAX_GENTITIES]; // SS_BLASTER pistol muzzle as drawn (item 404), set in CG_Player
+static int cg_saberBlasterMuzzleTime[MAX_GENTITIES]; // cg.time it was set (0 = not this frame)
 extern qboolean WP_SaberBladeUseSecondBladeStyle(const saberInfo_t* saber, int bladeNum);
 extern void WP_SaberSwingSound(const gentity_t* ent, int saberNum, swingType_t swing_type);
 extern qboolean PM_InKataAnim(const int anim);
@@ -7422,6 +7424,23 @@ void CG_AddRefEntityWithPowerups(refEntity_t* ent, int powerups, centity_t* cent
 		cgi_R_AddRefEntityToScene(ent);
 	}
 
+	// status looks (2026-11-16, DH; the Jedi Knight Galaxies body overlays): ice (cryoban grenade / cloud), carbonite
+	// (a hitfreeze gun) instead of the stasis shell below, the blue stun glow (stun grenades)
+	const int status_look = cent->gent->statusLookTime > cg.time ? cent->gent->statusLook : SL_NONE;
+	if (status_look != SL_NONE)
+	{
+		refEntity_t shell = *ent;
+
+		shell.renderfx &= ~(RF_RGB_TINT | RF_ALPHA_FADE);
+		shell.shaderRGBA[0] = shell.shaderRGBA[1] = shell.shaderRGBA[2] = shell.shaderRGBA[3] = 255;
+		shell.customShader = status_look == SL_ICE ? cgs.media.overlayIceShader
+			: status_look == SL_CARBONITE ? cgs.media.overlayCarboniteShader : cgs.media.overlayStunShader;
+		if (shell.customShader)
+		{
+			cgi_R_AddRefEntityToScene(&shell);
+		}
+	}
+
 	if (cent->gent->client->ps.darkStasisTime > (cg.time ? cg.time : level.time))
 	{
 		//dark stasis is represented by red..
@@ -7435,7 +7454,7 @@ void CG_AddRefEntityWithPowerups(refEntity_t* ent, int powerups, centity_t* cent
 
 		cgi_R_AddRefEntityToScene(ent);
 	}
-	else 	if (cent->gent->client->ps.stasisTime > (cg.time ? cg.time : level.time))
+	else if (cent->gent->client->ps.stasisTime > (cg.time ? cg.time : level.time) && status_look != SL_ICE && status_look != SL_CARBONITE)
 	{
 		//stasis is represented by grey..
 		ent->shaderRGBA[0] = 10;
@@ -16377,6 +16396,23 @@ void CG_Player(centity_t* cent)
 		VectorCopy(ent.origin, cent->gent->client->renderInfo.torsoPoint);
 		VectorCopy(cent->lerpAngles, cent->gent->client->renderInfo.torsoAngles);
 		VectorCopy(ent.origin, cent->gent->client->renderInfo.crotchPoint);
+		// SS_BLASTER pistol muzzle as drawn this frame (item 404): the charge glow follows the gun while he moves (the
+		// game's own bolt position is a game frame behind and uses another yaw)
+		cg_saberBlasterMuzzleTime[cent->currentState.number] = 0;
+		if (cent->gent->client->ps.saberAnimLevel == SS_BLASTER
+			&& cent->gent->weaponModel[1] > 0 && cent->gent->weaponModel[1] < static_cast<int>(cent->gent->ghoul2.size()))
+		{
+			const int flash_bolt = gi.G2API_AddBolt(&cent->gent->ghoul2[cent->gent->weaponModel[1]], "*flash");
+			if (flash_bolt >= 0)
+			{
+				mdxaBone_t flash_matrix;
+				gi.G2API_GetBoltMatrix(cent->gent->ghoul2, cent->gent->weaponModel[1], flash_bolt, &flash_matrix, tempAngles,
+					ent.origin, cg.time, cgs.model_draw, cent->currentState.modelScale);
+				gi.G2API_GiveMeVectorFromMatrix(flash_matrix, ORIGIN, cg_saberBlasterMuzzle[cent->currentState.number]);
+				cg_saberBlasterMuzzleTime[cent->currentState.number] = cg.time;
+			}
+		}
+
 		if (cent->currentState.number != 0
 			|| cg.renderingThirdPerson
 			|| cg.snap->ps.stats[STAT_HEALTH] <= 0
@@ -18303,6 +18339,10 @@ void CG_Player(centity_t* cent)
 
 		if (WP_SaberBlasterChargeState(cent->gent, muzzle, &val, nullptr))
 		{
+			if (cg_saberBlasterMuzzleTime[cent->currentState.number] == cg.time)
+			{
+				VectorCopy(cg_saberBlasterMuzzle[cent->currentState.number], muzzle); // the gun as drawn (item 404)
+			}
 			vec3_t WHITE = { 1.0f, 1.0f, 1.0f };
 
 			if (cent->currentState.number == 0)

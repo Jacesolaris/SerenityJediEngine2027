@@ -2054,6 +2054,7 @@ void CG_EmplacedView(vec3_t angles);
 extern void CGCam_UpdateSmooth(vec3_t origin);
 extern void CGCam_UpdateShake(vec3_t origin, vec3_t angles);
 extern qboolean in_camera;
+extern qboolean CG_InServerCamera(void);
 extern void CGCam_RenderScene(void);
 void CGCam_UpdateFade(void);
 
@@ -3582,7 +3583,7 @@ void CG_DrawActiveFrame(const int serverTime, const stereoFrame_t stereoView, co
 		CG_AddPacketEntities(qfalse); // adter calcViewValues, so predicted player state is correct
 		CG_AddMarks();
 	}
-	if (!in_camera)
+	if (!in_camera && !CG_InServerCamera()) // (no gun in a cutscene)
 	{
 		CG_AddViewWeapon(&cg.predictedPlayerState);
 	}

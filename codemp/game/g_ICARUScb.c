@@ -57,11 +57,13 @@ extern stringID_table_t WPTable[];
 extern stringID_table_t BSTable[];
 extern stringID_table_t TeamTable[];
 qboolean skippingCutscene = qfalse; //toggle for cutscene skipping
+int g_cameraStartTime; // when the camera came on (g_active.c: the skip waits half a second)
 extern qboolean in_camera;
 qboolean player_locked = qfalse;
 extern qboolean WinterGear;
 qboolean inGameCinematic = qfalse;
 qboolean G_MissionSkipsCutscenes(void); // a mission skips cutscenes and videos (below)
+qboolean G_IsMission(void);
 void G_MissionPlayerMoved(const gentity_t* ent); // a script moved a player: the others may have to come along
 
 void ToggleNPCWinterGear(gentity_t* ent);
@@ -6940,7 +6942,9 @@ static void Q3_CameraGroup(const int entID, char* camG)
 		return;
 	}
 
-	ent->cameraGroup = camG;
+	// a copy (2026-11-16: the script's string was kept, it was gone by the time the camera looked for the group, so
+	// FOLLOW never found anyone)
+	ent->cameraGroup = G_NewString(camG);
 }
 
 /*
@@ -9228,7 +9232,7 @@ qboolean Q3_Set(const int taskID, const int entID, const char* type_name, const 
 
 	case SET_VIDEO_PLAY:
 		// (never in a mission: a video would stop everybody's game; it is skipped)
-		if (g_allowROQ.integer && !G_MissionSkipsCutscenes())
+		if (g_allowROQ.integer && !G_IsMission())
 		{
 			trap->SendServerCommand(-1, va("inGameCinematic %s", (char*)data));
 			inGameCinematic = qtrue;
@@ -9236,7 +9240,7 @@ qboolean Q3_Set(const int taskID, const int entID, const char* type_name, const 
 		break;
 
 	case SET_VIDEO_FADE_IN:
-		if (!G_MissionSkipsCutscenes()) // (the video is skipped in a mission: no fade to black for it)
+		if (!G_IsMission()) // (the video is skipped in a mission: no fade to black for it)
 		{
 			ICam_Fade(colorClear, colorBlack, 2000);
 		}
@@ -9244,7 +9248,7 @@ qboolean Q3_Set(const int taskID, const int entID, const char* type_name, const 
 
 	case SET_VIDEO_FADE_OUT:
 		//uh for now we're just going to use the camera fade code.
-		if (!G_MissionSkipsCutscenes())
+		if (!G_IsMission())
 		{
 			ICam_Fade(colorBlack, colorClear, 2000);
 		}
@@ -9555,9 +9559,18 @@ void ICam_Disable(void);
 static int mission_cutscene_start;
 static qboolean mission_cutscene; // a mission's cutscene camera is on (unseen)
 
-qboolean G_MissionSkipsCutscenes(void)
+// a co-op mission (Missions, GT_SINGLE_PLAYER)
+qboolean G_IsMission(void)
 {
 	return level.gametype == GT_SINGLE_PLAYER ? qtrue : qfalse;
+}
+
+// Cutscene camera in co-op (2026-11-16, DH; the JKG cinematics idea): g_missionCutscenes 1 shows a mission's cutscenes to every
+// player through the MP camera (CS_CAMERA, as outside Missions: everyone frozen, any player's skip key skips it for all);
+// 0 = they play out unseen as before. Videos (ROQ) are always skipped in a mission.
+qboolean G_MissionSkipsCutscenes(void)
+{
+	return G_IsMission() && !g_missionCutscenes.integer ? qtrue : qfalse;
 }
 
 // a mission's cutscene is running (unseen)
@@ -10124,6 +10137,52 @@ const char* G_MissionCutsceneSeen(void)
 	return seen;
 }
 
+/*
+-------------------------
+Skipping a shown cutscene (2026-11-16, DH)
+
+Any player's newly pressed key (g_active.c) skips the cutscene for everyone: its skip script runs (with the scripts/
+folder in front, G_MissionRunScript; the old skip ran it without, so it never did anything), and a camera the skip
+script has not turned off within CAMERA_SKIP_GRACE (or one without a skip script) is turned off here. The cutscene's
+script then goes on unseen in its own time, as in a mission with g_missionCutscenes 0: its camera commands are not sent
+any more and its player lock is not kept, until it turns its camera off itself or a new camera comes on.
+-------------------------
+*/
+#define CAMERA_SKIP_GRACE 3000
+static qboolean camera_skipped; // a shown cutscene was skipped, its script goes on unseen
+static int camera_skip_time; // when the skip key was pressed (0 = not skipping)
+
+void G_CameraSkip(gentity_t* ent)
+{
+	if (!in_camera || camera_skip_time)
+	{
+		return;
+	}
+	camera_skip_time = level.time;
+	if (cinematicSkipScript[0] && ent)
+	{
+		G_MissionRunScript(ent, cinematicSkipScript);
+		cinematicSkipScript[0] = 0;
+	}
+}
+
+// run from every player's think while the camera is on
+void G_CameraSkipThink(void)
+{
+	if (in_camera && camera_skip_time
+		&& (level.time - camera_skip_time > CAMERA_SKIP_GRACE || level.time < camera_skip_time))
+	{
+		ICam_Disable();
+		trap->SetConfigstring(CS_CAMERA, "fade 0 0 0 0 0 0 0 0 0"); // (no fade to black left on the screen)
+		camera_skipped = qtrue;
+	}
+}
+
+qboolean G_CameraSkipped(void)
+{
+	return camera_skipped;
+}
+
 //server side camera enable
 void ICam_Enable(void)
 {
@@ -10145,8 +10204,13 @@ void ICam_Enable(void)
 		return;
 	}
 
+	camera_skipped = qfalse; // (a new camera: shown again)
 	trap->SetConfigstring(CS_CAMERA, "enable");
 
+	if (!in_camera)
+	{
+		g_cameraStartTime = level.time;
+	}
 	in_camera = qtrue;
 
 	GCam_Enable();
@@ -10155,7 +10219,9 @@ void ICam_Enable(void)
 // a camera command goes to the clients (never in a mission)
 static qboolean ICam_SendToClients(void)
 {
-	return G_MissionSkipsCutscenes() ? qfalse : qtrue;
+	// (not while a skipped cutscene's script goes on unseen; a FADE after the camera is off still goes out, SJE's cgame
+	// draws it: a skip script's closing fade-in)
+	return !G_MissionSkipsCutscenes() && !camera_skipped ? qtrue : qfalse;
 }
 
 /*
@@ -10185,7 +10251,7 @@ static gentity_t* G_MissionLead(void)
 
 void G_MissionPlayerMoved(const gentity_t* ent)
 {
-	if (!G_MissionSkipsCutscenes() || !ent || !ent->client || ent != G_MissionLead())
+	if (!G_IsMission() || !ent || !ent->client || ent != G_MissionLead())
 	{
 		return;
 	}
@@ -10295,6 +10361,8 @@ void G_MissionGatherThink(void)
 //camera disable
 void ICam_Disable(void)
 {
+	camera_skipped = qfalse;
+	camera_skip_time = 0;
 	if (!G_MissionSkipsCutscenes())
 	{
 		trap->SetConfigstring(CS_CAMERA, "disable");
@@ -10357,9 +10425,16 @@ void ICam_Fade(vec4_t source, vec4_t dest, const float duration)
 
 void ICam_Follow(const char* cameraGroup, const float speed, const float initLerp)
 {
-	int CGroup[16] = { -1 }; //MAX_CAMERA_GROUP_SUBJECTS
+	int CGroup[16]; //MAX_CAMERA_GROUP_SUBJECTS
 	int num_subjects = 0;
 	gentity_t* from = NULL;
+
+	// every unused slot -1 (2026-11-16: "= { -1 }" set only the first, the rest were entity 0, the player held at
+	// the camera itself, so the camera aimed between the actors and itself)
+	for (int k = 0; k < 16; k++)
+	{
+		CGroup[k] = -1;
+	}
 
 	if (!cameraGroup || !cameraGroup[0])
 	{
@@ -10370,7 +10445,10 @@ void ICam_Follow(const char* cameraGroup, const float speed, const float initLer
 		|| Q_stricmp("NULL", (char*)cameraGroup) == 0)
 	{
 		//Turn off all aiming
-		trap->SetConfigstring(CS_CAMERA, "follow -2");
+		if (ICam_SendToClients())
+		{
+			trap->SetConfigstring(CS_CAMERA, "follow -2");
+		}
 		//te->s.legsAnim = -1;
 		return;
 	}

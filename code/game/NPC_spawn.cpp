@@ -6680,4 +6680,265 @@ void G_RancorPitThink()
 		rancorPitSpawnedOnce = qtrue;
 		rancorPitRespawnTime = 0;
 	}
+}extern cvar_t* g_civilians;
+extern bool in_camera;
+extern cvar_t* g_civilianTypes;
+
+//---------------------------------------------------------------------------------------------------------------------
+// Wandering civilians (2026-11-16, DH; after Jedi Knight Galaxies' civilian spawner, g_bot.cpp G_CheckCivilianNPCs):
+// g_civilians N keeps N civilian NPCs (types from g_civilianTypes) around the players. They appear out of sight
+// 500-1400 units away, walk the map's NPC waypoints (BS_WANDER; on a map without them they stand about), never pick a
+// fight, and the NPC chatter makes them talk to each other. One that drifts over 3000 units from every player while
+// out of sight is taken away again. 0 = off (default): campaign maps keep their own NPCs only.
+//---------------------------------------------------------------------------------------------------------------------
+#define MAX_CIVILIANS		32
+#define CIVILIAN_NEAR		500.0f
+#define CIVILIAN_FAR		1400.0f
+#define CIVILIAN_DESPAWN	3000.0f
+
+static int civilianEnts[MAX_CIVILIANS]; // entity number + 1
+static int civilianNextSpawn;
+static unsigned civilianBadTypes; // types that failed to spawn (bit per position in g_civilianTypes)
+
+// can any player see this spot (or is one closer than near)
+static qboolean G_CivilianSeen(const vec3_t pos, const float near, float* closest)
+{
+	int p;
+	trace_t tr;
+
+	*closest = 999999.0f;
+	for (p = 0; p < 1; p++)
+	{
+		const gentity_t* pl = &g_entities[p];
+		if (!pl->inuse || !pl->client)
+		{
+			continue;
+		}
+		{
+			vec3_t eye, top;
+			const float d = Distance(pl->currentOrigin, pos);
+
+			if (d < *closest)
+			{
+				*closest = d;
+			}
+			if (d < near)
+			{
+				return qtrue;
+			}
+			VectorCopy(pl->currentOrigin, eye);
+			eye[2] += pl->client->ps.viewheight;
+			VectorCopy(pos, top);
+			top[2] += 32.0f;
+			gi.trace(&tr, eye, nullptr, nullptr, top, pl->s.number, MASK_OPAQUE, static_cast<EG2_Collision>(0), 0);
+			if (tr.fraction >= 1.0f)
+			{
+				return qtrue;
+			}
+		}
+	}
+	return qfalse;
+}
+
+// a free spot on the ground out of sight near a random player, qfalse = none found this time
+static qboolean G_CivilianSpot(vec3_t out)
+{
+	int tries, p, count = 0, pick;
+	const gentity_t* around = nullptr;
+	vec3_t mins = { -16, -16, -24 }, maxs = { 16, 16, 40 };
+
+	for (p = 0; p < 1; p++)
+	{
+		const gentity_t* pl = &g_entities[p];
+		if (!pl->inuse || !pl->client)
+		{
+			continue;
+		}
+		count++;
+	}
+	if (!count)
+	{
+		return qfalse;
+	}
+	pick = Q_irand(1, count);
+	for (p = 0; p < 1; p++)
+	{
+		const gentity_t* pl = &g_entities[p];
+		if (!pl->inuse || !pl->client)
+		{
+			continue;
+		}
+		if (--pick == 0)
+		{
+			around = pl;
+			break;
+		}
+	}
+	if (!around)
+	{
+		return qfalse;
+	}
+	for (tries = 0; tries < 8; tries++)
+	{
+		trace_t tr;
+		vec3_t start, end;
+		float closest;
+		const float yaw = Q_flrand(0.0f, 2.0f * M_PI), dist = Q_flrand(CIVILIAN_NEAR, CIVILIAN_FAR);
+
+		VectorCopy(around->currentOrigin, start);
+		start[0] += cosf(yaw) * dist;
+		start[1] += sinf(yaw) * dist;
+		start[2] += 64.0f;
+		VectorCopy(start, end);
+		end[2] -= 512.0f;
+		gi.trace(&tr, start, mins, maxs, end, ENTITYNUM_NONE, MASK_NPCSOLID, static_cast<EG2_Collision>(0), 0);
+		if (tr.startsolid || tr.allsolid || tr.fraction >= 1.0f || tr.plane.normal[2] < 0.7f)
+		{
+			continue;
+		}
+		if (G_CivilianSeen(tr.endpos, CIVILIAN_NEAR, &closest))
+		{
+			continue;
+		}
+		VectorCopy(tr.endpos, out);
+		return qtrue;
+	}
+	return qfalse;
+}
+
+// a civilian: no side, no gun, wanders (the NPC file may have given it a team and a weapon)
+static void G_CivilianCalm(gentity_t* civ)
+{
+	if (!civ->client || !civ->NPC)
+	{
+		return;
+	}
+	civ->client->playerTeam = TEAM_NEUTRAL;
+	civ->client->enemyTeam = TEAM_NEUTRAL;
+	civ->enemy = nullptr;
+	if (civ->client->ps.weapon != WP_NONE)
+	{
+		civ->client->ps.weapon = WP_NONE;
+		civ->client->ps.stats[STAT_WEAPONS] = 0;
+		civ->s.weapon = WP_NONE;
+	}
+	civ->NPC->defaultBehavior = BS_WANDER;
+	if (civ->NPC->behaviorState == BS_DEFAULT)
+	{
+		civ->NPC->behaviorState = BS_WANDER;
+	}
+}
+
+static void G_CivilianSpawn(void)
+{
+	char list[512];
+	char* types[32];
+	int num_types = 0, i, pick;
+	char* s;
+	gentity_t* spawner;
+	gentity_t* civ;
+	vec3_t pos;
+
+	Q_strncpyz(list, (g_civilianTypes ? g_civilianTypes->string : ""), sizeof list);
+	for (s = strtok(list, " ,;"); s && num_types < 32; s = strtok(nullptr, " ,;"))
+	{
+		types[num_types++] = s;
+	}
+	if (!num_types || !G_CivilianSpot(pos))
+	{
+		return;
+	}
+	pick = Q_irand(0, num_types - 1);
+	for (i = 0; i < num_types && civilianBadTypes & 1u << pick; i++)
+	{
+		pick = (pick + 1) % num_types;
+	}
+	if (civilianBadTypes & 1u << pick)
+	{
+		return; // none of them spawns
+	}
+
+	spawner = G_Spawn();
+	if (!spawner)
+	{
+		return;
+	}
+	spawner->e_ThinkFunc = thinkF_G_FreeEntity;
+	spawner->nextthink = level.time + 100;
+	G_SetOrigin(spawner, pos);
+	VectorCopy(pos, spawner->s.origin);
+	spawner->s.angles[YAW] = Q_flrand(0.0f, 360.0f);
+	gi.linkentity(spawner);
+	spawner->NPC_type = G_NewString(types[pick]);
+	Q_strlwr(spawner->NPC_type);
+	spawner->NPC_targetname = G_NewString("sje_civilian");
+	spawner->count = 1;
+	spawner->delay = 0;
+	NPC_PrecacheByClassName(spawner->NPC_type);
+	civ = NPC_Spawn_Do(spawner, qtrue);
+	if (!civ)
+	{
+		civilianBadTypes |= 1u << pick;
+		return;
+	}
+	G_CivilianCalm(civ); // at once, before its first think
+	for (i = 0; i < MAX_CIVILIANS; i++)
+	{
+		if (!civilianEnts[i])
+		{
+			civilianEnts[i] = civ->s.number + 1;
+			break;
+		}
+	}
+}
+
+// every server frame: keep g_civilians civilians about, make them peaceful wanderers, take far ones away
+void G_CivilianThink(void)
+{
+	const int want = (g_civilians ? g_civilians->integer : 0) > MAX_CIVILIANS ? MAX_CIVILIANS : (g_civilians ? g_civilians->integer : 0);
+	int i, have = 0;
+
+	if (level.time < civilianNextSpawn || in_camera)
+	{
+		return; // not during cutscenes
+	}
+	civilianNextSpawn = level.time + 1000;
+
+	for (i = 0; i < MAX_CIVILIANS; i++)
+	{
+		gentity_t* civ;
+		float closest;
+
+		if (!civilianEnts[i])
+		{
+			continue;
+		}
+		civ = &g_entities[civilianEnts[i] - 1];
+		if (!civ->inuse || !civ->client || !civ->NPC || civ->health <= 0 || !civ->NPC_targetname
+			|| Q_stricmp(civ->NPC_targetname, "sje_civilian"))
+		{
+			civilianEnts[i] = 0; // gone (killed, removed)
+			continue;
+		}
+		// over the limit, or wandered far off, and nobody sees it: take it away
+		if (!G_CivilianSeen(civ->currentOrigin, CIVILIAN_NEAR, &closest) && (have >= want || closest > CIVILIAN_DESPAWN))
+		{
+			civilianEnts[i] = 0;
+			G_FreeEntity(civ);
+			continue;
+		}
+		have++;
+		G_CivilianCalm(civ);
+	}
+	if (have < want)
+	{
+		G_CivilianSpawn();
+	}
+}
+
+void G_CivilianReset(void)
+{
+	memset(civilianEnts, 0, sizeof civilianEnts);
+	civilianNextSpawn = 0;
+	civilianBadTypes = 0;
 }

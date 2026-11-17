@@ -642,10 +642,14 @@ static void CGCam_FollowUpdate(void)
 
 	for (i = 0; i < MAX_CAMERA_GROUP_SUBJECTS; i++)
 	{
-		centity_t* fromCent = &cg_entities[client_camera.cameraGroup[i]];
-		if (!fromCent)
+		if (client_camera.cameraGroup[i] < 0 || client_camera.cameraGroup[i] >= ENTITYNUM_WORLD)
 		{
-			continue;
+			break; // (the end of the group: the unused slots used to be entity 0, the player at the camera, 2026-11-16)
+		}
+		centity_t* fromCent = &cg_entities[client_camera.cameraGroup[i]];
+		if (!fromCent->currentValid)
+		{
+			continue; // (not in this snapshot)
 		}
 
 		qboolean focused = qfalse;
@@ -826,7 +830,20 @@ static void CGCam_FollowUpdate(void)
 	*/
 	VectorCopy(center, client_camera.subjectPos);
 
-	VectorSubtract(center, cg.refdef.vieworg, dir);
+	// from where the camera is now (2026-11-16): cg.refdef.vieworg is only set from client_camera.origin after this
+	// (CGCam_Update), so a camera that was not moving aimed from (0,0,0) and never faced the actors
+	{
+		vec3_t cam_org;
+		if (client_camera.info_state & CAMERA_MOVING)
+		{
+			VectorCopy(cg.refdef.vieworg, cam_org); // (set by the move above)
+		}
+		else
+		{
+			VectorCopy(client_camera.origin, cam_org);
+		}
+		VectorSubtract(center, cam_org, dir);
+	}
 	//can't use client_camera.origin because it's not updated until the end of the move.
 
 	//Get desired angle
@@ -2116,4 +2133,81 @@ void CGCam_DoFade(void)
 	{
 		CG_DrawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH * SCREEN_HEIGHT, client_camera.fade_color);
 	}
+}
+/*
+-------------------------
+The server-side cutscene camera (2026-11-16, DH)
+
+In MP the camera runs on the server (g_camera.c): every player is moved onto it, made invisible and frozen, and
+CS_CAMERA carries the camera commands ("enable", "move", "pan", ... "disable"). The cgame's own camera (in_camera,
+CGCam_*) is not used, so this tells the cgame a cutscene is on: no HUD, no selection, no prediction.
+-------------------------
+*/
+static int cg_serverCameraStart;
+
+qboolean CG_InServerCamera(void)
+{
+	static qboolean was_on;
+	const char* o = CG_ConfigString(CS_CAMERA);
+	// (and the server holds the player on it: invisible, g_camera.c EnablePlayerCameraPos)
+	const qboolean on = o && o[0] && Q_strncmp(o, "disable", 7) && cg.snap && cg.snap->ps.eFlags & EF_NODRAW
+		? qtrue : qfalse;
+
+	if (on && !was_on)
+	{
+		cg_serverCameraStart = cg.time;
+	}
+	was_on = on;
+	return on;
+}
+
+// the letterbox bars over a cutscene, sliding in (as SP; cg_drawwidescreenmodemp 1 = none)
+void CG_DrawServerCameraBars(void)
+{
+	float f, h;
+	vec4_t black = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+	if (cg_drawwidescreenmodemp.integer)
+	{
+		return;
+	}
+	f = (float)(cg.time - cg_serverCameraStart) / 1000.0f;
+	if (f < 0.0f)
+	{
+		f = 0.0f;
+	}
+	if (f > 1.0f)
+	{
+		f = 1.0f;
+	}
+	h = 48.0f * f;
+	black[3] = f;
+	CG_FillRect(0, 0, 640, h, black);
+	CG_FillRect(0, 480 - h, 640, h, black);
+	trap->R_SetColor(NULL);
+}
+
+// the weapon / force / inventory selection and the wheel do nothing during a cutscene (their releases still work)
+qboolean CG_ServerCameraBlocksCommand(const char* cmd)
+{
+	static const char* blocked[] = { "md_wheel_open", "forcenext", "forceprev", "invnext", "invprev", "weapnext",
+		"weapprev", "weapon", "weaponclean" };
+	size_t i;
+
+	if (!CG_InServerCamera())
+	{
+		return qfalse;
+	}
+	if (cmd[0] == '+' && (Q_stristr(cmd, "wheel") || !Q_stricmpn(cmd, "+force_", 7)))
+	{
+		return qtrue;
+	}
+	for (i = 0; i < ARRAY_LEN(blocked); i++)
+	{
+		if (!Q_stricmp(cmd, blocked[i]))
+		{
+			return qtrue;
+		}
+	}
+	return qfalse;
 }

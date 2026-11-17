@@ -3029,6 +3029,44 @@ static void G_GrenadeFreeze(gentity_t* ent, const int duration)
 	G_AddEvent(ent, EV_CRYOBAN, DirToByte(up)); // the ice
 }
 
+// Status looks (2026-11-16, DH; the Jedi Knight Galaxies body overlays): one of FLAG_ICELOOK / FLAG_CARBONITE /
+// FLAG_STUNLOOK in userInt3 (sent to every client) for duration ms; G_GrenadeClientThink takes it off again
+static void G_SetStatusLook(gentity_t* ent, const int flag, const int duration)
+{
+	gclient_t* cl = ent->client;
+
+	if (!cl)
+	{
+		return;
+	}
+	cl->ps.userInt3 &= ~(1 << FLAG_ICELOOK | 1 << FLAG_CARBONITE | 1 << FLAG_STUNLOOK);
+	cl->ps.userInt3 |= 1 << flag;
+	if (ent->statusLookTime < level.time + duration)
+	{
+		ent->statusLookTime = level.time + duration;
+	}
+}
+
+// Carbonite (2026-11-16, DH; JKG's carbonite rifle): a weapon variant with "hitfreeze" freezes whoever its shots hurt
+// for that many ms, with the carbonite overlay (G_Damage, next to the burning check)
+void G_WeaponVariantHitFreeze(gentity_t* targ, const gentity_t* inflictor)
+{
+	const weaponVariant_t* wv = inflictor ? BG_GetWeaponVariant(inflictor->s.weaponVariant, inflictor->s.weapon) : NULL;
+	gclient_t* cl;
+
+	if (!wv || wv->hitFreeze <= 0 || !targ || !targ->client || targ->health <= 0)
+	{
+		return;
+	}
+	cl = targ->client;
+	if (cl->NPC_class == CLASS_VEHICLE || cl->NPC_class == CLASS_RANCOR || cl->NPC_class == CLASS_ATST || cl->ps.m_iVehicleNum)
+	{
+		return;
+	}
+	G_GrenadeFreeze(targ, wv->hitFreeze);
+	G_SetStatusLook(targ, FLAG_CARBONITE, wv->hitFreeze);
+}
+
 // what a grenade type does to someone in its blast (alive, in sight of it)
 static void G_GrenadeStatus(gentity_t* victim, gentity_t* attacker, const int kind, const int time, vec3_t org)
 {
@@ -3055,6 +3093,7 @@ static void G_GrenadeStatus(gentity_t* victim, gentity_t* attacker, const int ki
 			&& !cl->ps.m_iVehicleNum)
 		{
 			G_GrenadeFreeze(victim, time);
+			G_SetStatusLook(victim, FLAG_ICELOOK, time); // the ice overlay (2026-11-16)
 		}
 		break;
 
@@ -3070,6 +3109,7 @@ static void G_GrenadeStatus(gentity_t* victim, gentity_t* attacker, const int ki
 			G_Knockdown(victim, attacker, dir, 300, qtrue);
 		}
 		cl->ps.electrifyTime = level.time + (time < 2000 ? time : 2000); // the shock look
+		G_SetStatusLook(victim, FLAG_STUNLOOK, time); // the blue stun glow (2026-11-16)
 		if (cl->ps.weaponTime < time)
 		{
 			cl->ps.weaponTime = time; // can't fire
@@ -3128,6 +3168,133 @@ static void G_GrenadeStatus(gentity_t* victim, gentity_t* attacker, const int ki
 	}
 }
 
+//---------------------------------------------------------------------------------------------------------------------
+// Lingering areas (2026-11-16, DH; after Jedi Knight Galaxies' damage areas, jkg_damageareas.cpp; as SP wp_thermal.cpp):
+// poison gas, a fire patch and a cryo cloud stay where the grenade went off and keep working on whoever is inside and
+// in sight of it: poison and fire renew a short dose each tick, the cryo cloud freezes people for 400 ms of every
+// second. Droids are immune, water puts fire out. g_grenadeAreas 0 = the blast only (the old way).
+//---------------------------------------------------------------------------------------------------------------------
+// as long as each kind's effect is seen (DH 2026-11-16: the fire burned on with no damage): the poison smoke ~20 s,
+// the burning patch (explosives/burnmedium_fire, played once: its flames go on for ~20 s) and the cryo snow ~15 s
+#define GRENADE_AREA_POISON_TIME	18000
+#define GRENADE_AREA_FIRE_TIME		20000
+#define GRENADE_AREA_FREEZE_TIME	15000
+#define GRENADE_AREA_TICK			500
+#define GRENADE_AREA_FREEZE_TICK	1000
+#define GRENADE_AREA_FREEZE_HOLD	400
+
+static void G_GrenadeAreaThink(gentity_t* self)
+{
+	static gentity_t* victims[MAX_GENTITIES];
+	const int kind = self->count;
+	gentity_t* attacker = self->r.ownerNum >= 0 && self->r.ownerNum < ENTITYNUM_WORLD ? &g_entities[self->r.ownerNum] : NULL;
+	int count, i;
+
+	if (level.time >= self->delay || !g_grenadeAreas.integer)
+	{
+		G_FreeEntity(self);
+		return;
+	}
+	if (attacker && !attacker->inuse)
+	{
+		attacker = NULL;
+	}
+
+	count = G_RadiusList(self->r.currentOrigin, self->radius, self, qtrue, victims);
+	for (i = 0; i < count; i++)
+	{
+		gentity_t* victim = victims[i];
+		gclient_t* cl;
+
+		if (!victim || !victim->inuse || !victim->client || victim->health <= 0
+			|| !CanDamage(victim, self->r.currentOrigin) || G_GrenadeIsDroid(victim))
+		{
+			continue;
+		}
+		cl = victim->client;
+		switch (kind)
+		{
+		case GK_POISON:
+			if (victim->grenadeDotKind != GK_POISON || victim->grenadeDotEnd < level.time + 1500) // never shortens a longer dose
+			{
+				G_GrenadeDot(victim, attacker, GK_POISON, 1500, 3);
+			}
+			break;
+		case GK_FIRE:
+			if (victim->waterlevel < 2)
+			{
+				if (victim->grenadeDotKind != GK_FIRE || victim->grenadeDotEnd < level.time + 1500) // never shortens a longer dose
+				{
+					G_GrenadeDot(victim, attacker, GK_FIRE, 1500, 4);
+				}
+			}
+			break;
+		case GK_FREEZE:
+			if ((level.time / GRENADE_AREA_TICK) % (GRENADE_AREA_FREEZE_TICK / GRENADE_AREA_TICK) == 0
+				&& cl->NPC_class != CLASS_RANCOR && cl->NPC_class != CLASS_WAMPA && !cl->ps.m_iVehicleNum
+				&& !(cl->ps.userInt3 & 1 << FLAG_FROZEN))
+			{
+				G_GrenadeFreeze(victim, GRENADE_AREA_FREEZE_HOLD);
+				G_SetStatusLook(victim, FLAG_ICELOOK, GRENADE_AREA_FREEZE_HOLD + 200);
+			}
+			break;
+		default:
+			break;
+		}
+	}
+	self->nextthink = level.time + GRENADE_AREA_TICK;
+}
+
+static void G_SpawnGrenadeArea(vec3_t org, const gentity_t* attacker, const int kind, const float blast_radius)
+{
+	gentity_t* area;
+	int life;
+	float radius;
+
+	if (!g_grenadeAreas.integer)
+	{
+		return;
+	}
+	switch (kind)
+	{
+	case GK_POISON:
+		life = GRENADE_AREA_POISON_TIME;
+		radius = blast_radius;
+		break;
+	case GK_FIRE:
+		life = GRENADE_AREA_FIRE_TIME;
+		radius = blast_radius * 0.5f < 64.0f ? 64.0f : blast_radius * 0.5f; // the flames spread ~50 units
+		break;
+	case GK_FREEZE:
+		life = GRENADE_AREA_FREEZE_TIME;
+		radius = blast_radius * 0.75f;
+		break;
+	default:
+		return;
+	}
+
+	area = G_Spawn();
+	if (!area)
+	{
+		return;
+	}
+	area->classname = "grenade_area";
+	G_SetOrigin(area, org);
+	area->r.svFlags |= SVF_NOCLIENT;
+	area->r.ownerNum = attacker ? attacker->s.number : ENTITYNUM_NONE;
+	area->count = kind;
+	area->radius = radius;
+	area->delay = level.time + life;
+	if (kind == GK_FIRE)
+	{
+		vec3_t up = { -90, 0, 0 };
+		G_PlayEffectID(G_EffectIndex("explosives/burnmedium_fire"), org, up); // once: it burns for ~20 s by itself
+	}
+	area->think = G_GrenadeAreaThink;
+	area->nextthink = level.time + GRENADE_AREA_TICK;
+	trap->LinkEntity((sharedEntity_t*)area);
+}
+
 // thermalDetonatorExplode, after the bolt has become the EV_MISSILE_MISS blast at org: the damage and status effect
 // of a grenade type; qfalse = a stock thermal (the old radius damage)
 static qboolean G_GrenadeBlast(gentity_t* ent, vec3_t org)
@@ -3169,6 +3336,7 @@ static qboolean G_GrenadeBlast(gentity_t* ent, vec3_t org)
 			}
 		}
 	}
+	G_SpawnGrenadeArea(org, ent->parent, kind, radius);
 	return qtrue;
 }
 
@@ -3228,6 +3396,13 @@ static void G_GrenadeBlowInHand(gentity_t* ent)
 static void G_GrenadeClientThink(gentity_t* ent)
 {
 	gclient_t* cl = ent->client;
+
+	// status looks (2026-11-16): off again when their time is up
+	if (ent->statusLookTime && level.time >= ent->statusLookTime)
+	{
+		ent->statusLookTime = 0;
+		cl->ps.userInt3 &= ~(1 << FLAG_ICELOOK | 1 << FLAG_CARBONITE | 1 << FLAG_STUNLOOK);
+	}
 
 	// cooking
 	if (cl->ps.weapon == WP_THERMAL && (cl->ps.weaponstate == WEAPON_CHARGING || cl->ps.weaponstate == WEAPON_CHARGING_ALT)
@@ -3918,6 +4093,9 @@ void laserTrapThink(gentity_t* ent)
 
 void laserTrapStick(gentity_t* ent, vec3_t endpos, vec3_t normal)
 {
+	// the trace stopped the mine's box LT_SIZE short of the wall: move it onto the wall, it floated in front of it
+	// (2026-11-16, fix from Jedi Knight Galaxies)
+	VectorMA(endpos, -LT_SIZE, normal, endpos);
 	G_SetOrigin(ent, endpos);
 	VectorCopy(normal, ent->pos1);
 
@@ -6760,6 +6938,233 @@ static int WV_PickVariant(const gentity_t* self, const int weapon)
 	return candidates[(WV_NameHash(name) + (unsigned)self->s.number * (self->s.eType == ET_NPC ? 7u : 0u)) % (unsigned)num_candidates];
 }
 
+
+// ---------------------------------------------------------------------------------------------------------------
+// Personal shields (2026-11-16, DH; from Jedi Knight Galaxies, see weapons.h / ext_data/sje_shields.dat)
+// ---------------------------------------------------------------------------------------------------------------
+
+// what a shield stops: guns and explosions (not sabers, melee, Force powers, falls, the environment, fire / gas ticks)
+static qboolean G_PersonalShieldBlocks(const int mod)
+{
+	switch (mod)
+	{
+	case MOD_BRYAR_PISTOL:
+	case MOD_BRYAR_PISTOL_ALT:
+	case MOD_BLASTER:
+	case MOD_TURBLAST:
+	case MOD_DISRUPTOR:
+	case MOD_DISRUPTOR_SPLASH:
+	case MOD_DISRUPTOR_SNIPER:
+	case MOD_BOWCASTER:
+	case MOD_REPEATER:
+	case MOD_REPEATER_ALT:
+	case MOD_REPEATER_ALT_SPLASH:
+	case MOD_DEMP2:
+	case MOD_DEMP2_ALT:
+	case MOD_FLECHETTE:
+	case MOD_FLECHETTE_ALT_SPLASH:
+	case MOD_ROCKET:
+	case MOD_ROCKET_SPLASH:
+	case MOD_ROCKET_HOMING:
+	case MOD_ROCKET_HOMING_SPLASH:
+	case MOD_THERMAL:
+	case MOD_THERMAL_SPLASH:
+	case MOD_TRIP_MINE_SPLASH:
+	case MOD_TIMED_MINE_SPLASH:
+	case MOD_DET_PACK_SPLASH:
+	case MOD_VEHICLE:
+	case MOD_CONC:
+	case MOD_CONC_ALT:
+	case MOD_SENTRY:
+	case MOD_TARGET_LASER:
+	case MOD_VEH_EXPLOSION:
+	case MOD_SEEKER:
+	case MOD_HEADSHOT:
+	case MOD_BODYSHOT:
+	case MOD_Z6_ROTARY_CANNON:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+static const personalShield_t* G_PersonalShield(const gentity_t* ent)
+{
+	return ent && ent->shieldType > 0 && ent->shieldType < bgNumPersonalShields ? &bgPersonalShields[ent->shieldType] : NULL;
+}
+
+// put a shield on (0 = take it off): full charge
+void G_PersonalShieldEquip(gentity_t* ent, const int type)
+{
+	const personalShield_t* sh;
+
+	ent->shieldType = type > 0 && type < bgNumPersonalShields ? type : 0;
+	sh = G_PersonalShield(ent);
+	ent->shieldCharge = sh ? sh->capacity : 0;
+	ent->shieldRecharging = 0;
+	ent->shieldLastHit = 0;
+	if (sh && sh->equipSound[0])
+	{
+		G_Sound(ent, CHAN_AUTO, G_SoundIndex(sh->equipSound));
+	}
+}
+
+// G_Damage, before the health goes down: the shield takes what it can of a gun / explosion hit; returns what is left
+int G_PersonalShieldAbsorb(gentity_t* targ, const gentity_t* inflictor, const int mod, int take, const int dflags, const vec3_t dir)
+{
+	const personalShield_t* sh = G_PersonalShield(targ);
+	int absorbed;
+
+	if (!sh || take <= 0 || !targ->client || targ->health <= 0 || targ->shieldCharge <= 0 || inflictor == targ
+		|| dflags & DAMAGE_NO_PROTECTION || !G_PersonalShieldBlocks(mod))
+	{
+		if (sh && take > 0 && targ->health > 0 && inflictor != targ && G_PersonalShieldBlocks(mod))
+		{
+			targ->shieldLastHit = level.time; // an empty shield still waits out its cooldown
+			targ->shieldRecharging = 0;
+		}
+		return take;
+	}
+	absorbed = take < targ->shieldCharge ? take : targ->shieldCharge;
+	targ->shieldCharge -= absorbed;
+	targ->shieldLastHit = level.time;
+	targ->shieldRecharging = 0;
+
+	{
+		// the shield shell flash (CG_PlayerShieldHit) and a hit sound
+		gentity_t* ev = G_TempEntity(targ->r.currentOrigin, EV_SHIELD_HIT);
+		vec3_t d = { 0, 0, 1 };
+
+		if (dir && VectorLengthSquared(dir) > 0.0f)
+		{
+			VectorCopy(dir, d);
+			VectorNormalize(d);
+		}
+		ev->s.otherEntityNum = targ->s.number;
+		ev->s.eventParm = DirToByte(d);
+		ev->s.time2 = absorbed;
+		G_Sound(targ, CHAN_AUTO, G_SoundIndex(va("sound/weapons/shield/shieldhit%d.mp3", Q_irand(1, 6))));
+	}
+	if (targ->shieldCharge <= 0 && sh->brokenSound[0])
+	{
+		G_Sound(targ, CHAN_AUTO, G_SoundIndex(sh->brokenSound));
+	}
+	return take - absorbed;
+}
+
+// every think (G_WeaponVariantThink): recharging, NPCs' shields (g_npcShields), the HUD stat
+void G_PersonalShieldThink(gentity_t* ent)
+{
+	gclient_t* cl = ent->client;
+	const personalShield_t* sh;
+
+	if (!cl)
+	{
+		return;
+	}
+	if (!ent->shieldChecked && ent->health > 0)
+	{
+		// a gunner NPC or bot wears one now and then (a saber user, a droid or a creature never)
+		ent->shieldChecked = 1;
+		if ((ent->s.eType == ET_NPC || ent->r.svFlags & SVF_BOT) && g_npcShields.integer > 0 && bgNumPersonalShields > 1 && cl->ps.weapon != WP_SABER
+			&& cl->ps.weapon > WP_NONE && !cl->ps.m_iVehicleNum && Q_irand(1, 100) <= g_npcShields.integer)
+		{
+			ent->shieldType = Q_irand(1, bgNumPersonalShields - 1);
+			sh = G_PersonalShield(ent);
+			ent->shieldCharge = sh ? sh->capacity : 0;
+		}
+	}
+	sh = G_PersonalShield(ent);
+	cl->ps.stats[STAT_SHIELD] = sh ? ent->shieldType << 10 | (ent->shieldCharge & 1023) : 0;
+	if (!sh)
+	{
+		return;
+	}
+	if (ent->health <= 0)
+	{
+		ent->shieldWasDead = 1;
+		return;
+	}
+	if (ent->shieldWasDead)
+	{
+		ent->shieldWasDead = 0; // respawned: a full shield
+		ent->shieldCharge = sh->capacity;
+		ent->shieldRecharging = 0;
+	}
+	if (ent->shieldCharge >= sh->capacity || level.time < ent->shieldLastHit + sh->cooldown)
+	{
+		return;
+	}
+	if (!ent->shieldRecharging)
+	{
+		ent->shieldRecharging = 1;
+		ent->shieldNextRegen = level.time + sh->regen;
+		if (sh->rechargeSound[0])
+		{
+			G_Sound(ent, CHAN_AUTO, G_SoundIndex(sh->rechargeSound));
+		}
+	}
+	while (level.time >= ent->shieldNextRegen && ent->shieldCharge < sh->capacity)
+	{
+		ent->shieldCharge++;
+		ent->shieldNextRegen += sh->regen;
+	}
+	if (ent->shieldCharge >= sh->capacity)
+	{
+		ent->shieldCharge = sh->capacity;
+		ent->shieldRecharging = 0;
+		if (sh->chargedSound[0])
+		{
+			G_Sound(ent, CHAN_AUTO, G_SoundIndex(sh->chargedSound));
+		}
+	}
+}
+
+// "shield": list the shields, "shield <id or number>" puts one on, "shield off" takes it off
+void Cmd_PersonalShield_f(gentity_t* ent)
+{
+	char arg[64];
+	int type;
+
+	if (!ent || !ent->client)
+	{
+		return;
+	}
+	if (!g_personalShields.integer)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Personal shields are off on this server (g_personalShields 0).\n\"");
+		return;
+	}
+	trap->Argv(1, arg, sizeof arg);
+	if (!arg[0])
+	{
+		int i;
+
+		for (i = 1; i < bgNumPersonalShields; i++)
+		{
+			trap->SendServerCommand(ent - g_entities, va("print \"%2i %-16s %s (%i)\n\"", i, bgPersonalShields[i].name, bgPersonalShields[i].displayName, bgPersonalShields[i].capacity));
+		}
+		trap->SendServerCommand(ent - g_entities, va("print \"%i shields, now: %s\n\"", bgNumPersonalShields - 1, G_PersonalShield(ent) ? G_PersonalShield(ent)->name : "none"));
+		return;
+	}
+	if (!Q_stricmp(arg, "off") || !Q_stricmp(arg, "none") || !Q_stricmp(arg, "0"))
+	{
+		G_PersonalShieldEquip(ent, 0);
+		return;
+	}
+	type = BG_PersonalShieldByName(arg);
+	if (!type)
+	{
+		type = atoi(arg);
+	}
+	if (type <= 0 || type >= bgNumPersonalShields)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"No such shield (\\shield lists them).\n\"");
+		return;
+	}
+	G_PersonalShieldEquip(ent, type);
+}
+
 // every think, before the move (ClientThink_real): gunner bots and NPCs get a variant of the gun in their hand
 static void G_GrenadeClientThink(gentity_t* ent);
 extern void G_Shop_PlayerThink(gentity_t* ent);
@@ -6773,6 +7178,7 @@ void G_WeaponVariantThink(gentity_t* ent)
 		return;
 	}
 	G_GrenadeClientThink(ent); // grenades (2026-10-31): cooking in hand, burning / poisoned people
+	G_PersonalShieldThink(ent); // personal shields (2026-11-16)
 	if (ent->s.number < MAX_CLIENTS && !(ent->r.svFlags & SVF_BOT))
 	{
 		G_Shop_PlayerThink(ent); // a player: the gun looks he owns (the shop, 2026-10-31, g_pazaak.c)
@@ -8019,10 +8425,10 @@ void G_SaberBlasterFire(gentity_t* ent, const int charge, gentity_t* target)
 	eye[2] += ent->client->ps.viewheight;
 	AngleVectors(ent->client->ps.viewangles, fwd, right, NULL);
 
-	// left hand, in front of the left shoulder
+	// the pistol muzzle of the gun arm held out (item 404; the server has no pistol model and no arm pose)
 	VectorCopy(eye, start);
-	start[2] -= 12.0f;
-	VectorMA(start, 16.0f, fwd, start);
+	start[2] -= 10.0f;
+	VectorMA(start, 28.0f, fwd, start);
 	VectorMA(start, -8.0f, right, start);
 	WP_TraceSetStart(ent, start, vec3_origin, vec3_origin);
 

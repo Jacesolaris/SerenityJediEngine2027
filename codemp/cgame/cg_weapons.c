@@ -1082,6 +1082,34 @@ static void CG_Z6SpinBarrel(centity_t* cent)
 		NEGATIVE_Z, cgs.game_models, 0, cg.time);
 }
 
+// Ammo counters (2026-11-16, after JKG jkg_wpindicators.cpp, without its renderer call): the gun is drawn with a skin
+// that hides its counter digits and every animated texture on it held at frame 0 (the fire mode screen); each digit
+// is then drawn again on its own (a skin with only that digit) with RF_SETANIMINDEX / skinNum = the digit's frame:
+// 0-9, 10 = blank (leading zeros), 11 = the reload sign
+static void CG_AddViewWeaponCounter(refEntity_t* gun, const cgWeaponVariant_t* cwv, const int ammo, const qboolean reloading)
+{
+	// a gun with fewer digits shows its top number while the pool holds more (SJE guns draw from the ammo pool)
+	const int top = cwv->numViewDigits >= 3 ? 999 : cwv->numViewDigits == 2 ? 99 : 9;
+	int frames[3], d, n = ammo < 0 ? 0 : ammo > top ? top : ammo;
+
+	frames[0] = n % 10;
+	frames[1] = n >= 10 ? n / 10 % 10 : 10;
+	frames[2] = n >= 100 ? n / 100 : 10;
+	for (d = 0; d < cwv->numViewDigits; d++)
+	{
+		refEntity_t digit = *gun;
+
+		if (!cwv->viewDigitSkin[d])
+		{
+			continue;
+		}
+		digit.customSkin = cwv->viewDigitSkin[d];
+		digit.renderfx |= RF_SETANIMINDEX;
+		digit.skinNum = reloading ? 11 : frames[d];
+		trap->R_AddRefEntityToScene(&digit);
+	}
+}
+
 void CG_AddPlayerWeapon(refEntity_t* parent, playerState_t* ps, centity_t* cent, vec3_t new_angles, qboolean third_person)
 {
 	if (third_person)
@@ -1094,6 +1122,7 @@ void CG_AddPlayerWeapon(refEntity_t* parent, playerState_t* ps, centity_t* cent,
 	weaponInfo_t* weapon = NULL;
 	centity_t* non_predicted_cent = NULL;
 	refEntity_t flash;
+	const cgWeaponVariant_t* variant_view = NULL;
 
 	weapon_num = cent->currentState.weapon;
 
@@ -1122,7 +1151,18 @@ void CG_AddPlayerWeapon(refEntity_t* parent, playerState_t* ps, centity_t* cent,
 		gun.shadowPlane = parent->shadowPlane;
 		gun.renderfx = parent->renderfx;
 
-		if (ps)
+		// an SJE gun's own first-person model (2026-11-16): CG_AddViewWeapon put its hand (tag) model in the parent
+		variant_view = ps ? CG_WeaponVariantView(ps) : NULL;
+		if (variant_view && parent->hModel != variant_view->viewHands)
+		{
+			variant_view = NULL;
+		}
+
+		if (variant_view)
+		{
+			gun.hModel = variant_view->viewModel;
+		}
+		else if (ps)
 		{
 			// this player, in first person view
 			gun.hModel = weapon->viewModel;
@@ -1160,11 +1200,45 @@ void CG_AddPlayerWeapon(refEntity_t* parent, playerState_t* ps, centity_t* cent,
 			cent->currentState.trickedentindex4,
 			cg.snap->ps.clientNum))
 		{
-			CG_AddWeaponWithPowerups(&gun);
+			if (variant_view && variant_view->numViewDigits && cg_gunCounters.integer && ps)
+			{
+				// an SJE gun's ammo counter (2026-11-16): the gun without its digits, then each digit (CG_AddViewWeaponCounter)
+				const weaponData_t* w = &weaponData[weapon_num];
+				const int per_shot = w->energyPerShot > 0 ? w->energyPerShot : 1;
+				const int ammo = w->ammoIndex >= 0 && w->ammoIndex < AMMO_MAX ? ps->ammo[w->ammoIndex] / per_shot : 0;
+
+				gun.customSkin = variant_view->viewSkinMain;
+				gun.renderfx |= RF_SETANIMINDEX;
+				gun.skinNum = 0;
+				CG_AddWeaponWithPowerups(&gun);
+				CG_AddViewWeaponCounter(&gun, variant_view, ammo, qfalse);
+			}
+			else
+			{
+				CG_AddWeaponWithPowerups(&gun);
+			}
 			//don't draw the weapon if the player is invisible
 		}
 
-		if (weapon_num == WP_STUN_BATON)
+		if (variant_view)
+		{
+			// the SJE gun's arms and moving parts, on the hand model's tag_barrel .. tag_barrel4
+			int i;
+
+			for (i = 0; i < variant_view->numViewBarrels; i++)
+			{
+				memset(&barrel, 0, sizeof barrel);
+				VectorCopy(parent->lightingOrigin, barrel.lightingOrigin);
+				barrel.shadowPlane = parent->shadowPlane;
+				barrel.renderfx = parent->renderfx;
+				barrel.hModel = variant_view->viewBarrels[i];
+				VectorClear(angles);
+				AnglesToAxis(angles, barrel.axis);
+				CG_PositionRotatedEntityOnTag(&barrel, parent, variant_view->viewHands, i ? va("tag_barrel%d", i + 1) : "tag_barrel");
+				CG_AddWeaponWithPowerups(&barrel);
+			}
+		}
+		else if (weapon_num == WP_STUN_BATON)
 		{
 			int i = 0;
 
@@ -1622,9 +1696,24 @@ void CG_AddViewWeapon(playerState_t* ps)
 
 	CG_CalculateWeaponPosition(hand.origin, angles);
 
-	VectorMA(hand.origin, cg_gunX.value, cg.refdef.viewaxis[0], hand.origin);
-	VectorMA(hand.origin, cg_gunY.value, cg.refdef.viewaxis[1], hand.origin);
-	VectorMA(hand.origin, cg_gunZ.value + fov_offset, cg.refdef.viewaxis[2], hand.origin);
+	{
+		// an SJE gun's own first-person model (2026-11-16) sits where its file says unless cg_gunX/Y/Z are set
+		const cgWeaponVariant_t* variant_view = (ps->eFlags & EF3_DUAL_WEAPONS && ps->weapon == WP_BRYAR_PISTOL) ? NULL : CG_WeaponVariantView(ps);
+		vec3_t gun_offset;
+
+		VectorSet(gun_offset, cg_gunX.value, cg_gunY.value, cg_gunZ.value);
+		if (variant_view && !cg_gunX.value && !cg_gunY.value && !cg_gunZ.value)
+		{
+			const weaponVariant_t* wv = BG_GetWeaponVariant(ps->weaponVariant, ps->weapon);
+			if (wv)
+			{
+				VectorCopy(wv->gunPosition, gun_offset);
+			}
+		}
+		VectorMA(hand.origin, gun_offset[0], cg.refdef.viewaxis[0], hand.origin);
+		VectorMA(hand.origin, gun_offset[1], cg.refdef.viewaxis[1], hand.origin);
+		VectorMA(hand.origin, gun_offset[2] + fov_offset, cg.refdef.viewaxis[2], hand.origin);
+	}
 
 	AnglesToAxis(angles, hand.axis);
 
@@ -1672,6 +1761,10 @@ void CG_AddViewWeapon(playerState_t* ps)
 
 	hand.hModel = weapon->handsModel;
 	hand.renderfx = RF_DEPTHHACK | RF_FIRST_PERSON;
+	if (!(ps->eFlags & EF3_DUAL_WEAPONS && ps->weapon == WP_BRYAR_PISTOL) && CG_WeaponVariantView(ps))
+	{
+		hand.hModel = CG_WeaponVariantView(ps)->viewHands; // the tags of the SJE gun's own view model (2026-11-16)
+	}
 
 	//
 	// SINGLE WEAPON PATH
@@ -3571,6 +3664,74 @@ static void CG_RegisterWeaponVariant(const int variant)
 		cwv->shotModel[f] = fire->shotModel[0] ? trap->R_RegisterModel(fire->shotModel) : 0;
 		cwv->shotSound[f] = fire->shotSound[0] ? trap->S_RegisterSound(fire->shotSound) : 0;
 	}
+
+}
+
+// First person (2026-11-16, DH: the SJE guns' own first-person models, from Jedi Knight Galaxies): the variant the
+// local player holds when it has a view model (and cg_variantViewModels is on), else NULL = the base weapon's
+const cgWeaponVariant_t* CG_WeaponVariantView(const playerState_t* ps)
+{
+	const cgWeaponVariant_t* cwv;
+
+	if (!ps || !cg_variantViewModels.integer)
+	{
+		return NULL;
+	}
+	cwv = CG_WeaponVariant(ps->weaponVariant, ps->weapon);
+	if (cwv && !cwv->viewRegistered)
+	{
+		// only on first use: all the guns' view models (up to 6 md3s each) would fill the renderer's model table
+		cgWeaponVariant_t* w = (cgWeaponVariant_t*)cwv;
+		const weaponVariant_t* wv = &bgWeaponVariants[ps->weaponVariant];
+
+		w->viewRegistered = qtrue;
+		// first person (2026-11-16): <name>.md3, <name>_hand.md3 (the tags), <name>_barrel.md3 .. _barrel4.md3 (arms, parts)
+		if (wv->viewModel[0])
+		{
+			char stem[MAX_QPATH];
+			int i;
+
+			COM_StripExtension(wv->viewModel, stem, sizeof stem);
+			w->viewModel = trap->R_RegisterModel(wv->viewModel);
+			w->viewHands = trap->R_RegisterModel(va("%s_hand.md3", stem));
+			if (!w->viewModel || !w->viewHands)
+			{
+				Com_Printf(S_COLOR_YELLOW "WARNING: weapon variant %s: can't load view model %s\n", wv->name, wv->viewModel);
+				w->viewModel = w->viewHands = 0;
+			}
+			else
+			{
+				for (i = 0; i < 4; i++)
+				{
+					const qhandle_t barrel = trap->R_RegisterModel(i ? va("%s_barrel%d.md3", stem, i + 1) : va("%s_barrel.md3", stem));
+					if (!barrel)
+					{
+						break;
+					}
+					w->viewBarrels[w->numViewBarrels++] = barrel;
+				}
+				if (wv->viewDigits > 0)
+				{
+					w->viewSkinMain = trap->R_RegisterSkin(va("%s_claude_main.skin", stem));
+					for (i = 0; i < wv->viewDigits && i < 3 && w->viewSkinMain; i++)
+					{
+						w->viewDigitSkin[i] = trap->R_RegisterSkin(va("%s_claude_d%d.skin", stem, i + 1));
+						w->numViewDigits = i + 1;
+					}
+				}
+			}
+		}
+	}
+	if (cg_variantViewModels.integer > 1)
+	{
+		static int last;
+		if (cg.time > last + 1000)
+		{
+			last = cg.time;
+			Com_Printf("variant view: weapon %i variant %i cwv %p model %i hands %i barrels %i\n", ps->weapon, ps->weaponVariant, (const void*)cwv, cwv ? cwv->viewModel : -1, cwv ? cwv->viewHands : -1, cwv ? cwv->numViewBarrels : -1);
+		}
+	}
+	return cwv && cwv->viewModel ? cwv : NULL;
 }
 
 // The gun looks each human player uses per weapon (the shop, 2026-10-31; "wvlooks" from g_pazaak.c): his holstered
@@ -3631,7 +3792,7 @@ void CG_PrecacheWeaponVariants(void)
 	// the grenade status effects the game plays by name (G_GrenadeBlast / G_GrenadeClientThink)
 	static const char* const grenade_fx[] = {
 		"thermal/explosion", "thermal/shockwave", "cryoban/explosion", "cryoban/stuck", "flash/faceflash",
-		"smoke/smokegrenade", "player/fire", "player/poison", "force/heal"
+		"smoke/smokegrenade", "player/fire", "player/poison", "force/heal", "explosives/burnmedium_fire"
 	};
 	int v, i;
 
@@ -3737,8 +3898,46 @@ qboolean CG_WeaponVariantMissile(centity_t* cent)
 		ent.hModel = cwv->shotModel[f];
 		ent.renderfx = RF_NOSHADOW;
 		vectoangles(forward, cent->lerpAngles);
-		AnglesToAxis(cent->lerpAngles, ent.axis);
+		if (s1->weapon == WP_THERMAL)
+		{
+			// a thrown grenade (2026-11-16): it tumbles, and is drawn a bit bigger so it can be seen in the air
+			int k;
+			vec3_t angles;
+
+			VectorCopy(cent->lerpAngles, angles);
+			angles[PITCH] += (float)((cg.time + s1->number * 97) % 720) * 0.5f;
+			angles[ROLL] += (float)((cg.time + s1->number * 53) % 1000) * 0.36f;
+			AnglesToAxis(angles, ent.axis);
+			for (k = 0; k < 3; k++)
+			{
+				VectorScale(ent.axis[k], 1.5f, ent.axis[k]);
+			}
+			ent.nonNormalizedAxes = qtrue;
+		}
+		else
+		{
+			AnglesToAxis(cent->lerpAngles, ent.axis);
+		}
 		trap->R_AddRefEntityToScene(&ent);
+	}
+	if (s1->weapon == WP_THERMAL)
+	{
+		// the stock thermal's trail and light, which made it easy to follow in flight (2026-11-16)
+		const weaponInfo_t* weapon = &cg_weapons[WP_THERMAL];
+
+		if (weapon->missileTrailFunc)
+		{
+			weapon->missileTrailFunc(cent, weapon);
+		}
+		if (weapon->missileDlight)
+		{
+			trap->R_AddLightToScene(cent->lerpOrigin, weapon->missileDlight, weapon->missileDlightColor[0],
+				weapon->missileDlightColor[1], weapon->missileDlightColor[2]);
+		}
+		else
+		{
+			trap->R_AddLightToScene(cent->lerpOrigin, 60, 1.0f, 0.3f, 0.2f); // a small red glow
+		}
 	}
 	return qtrue;
 }

@@ -621,6 +621,8 @@ static void Cmd_WeaponVariant_f(gentity_t* ent)
 
 // grenade [name|number|next|0] (2026-10-31, not a cheat): the grenade type you throw (a WP_THERMAL weapon variant);
 // no name lists them. 0 = the stock thermal.
+extern void Cmd_PersonalShield_f(gentity_t* ent); // g_weapon.c (personal shields, 2026-11-16)
+
 static void Cmd_Grenade_f(gentity_t* ent)
 {
 	char arg[MAX_TOKEN_CHARS] = { 0 };
@@ -4487,6 +4489,7 @@ command_t commands[] = {
 	{ "give", Cmd_Give_f, CMD_CHEAT | CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "weaponvariant", Cmd_WeaponVariant_f, CMD_CHEAT | CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "grenade", Cmd_Grenade_f, CMD_ALIVE | CMD_NOINTERMISSION },
+	{ "shield", Cmd_PersonalShield_f, CMD_ALIVE | CMD_NOINTERMISSION }, // personal shields (2026-11-16, g_weapon.c)
 	{ "giveother", Cmd_GiveOther_f, CMD_CHEAT | CMD_NOINTERMISSION },
 	{ "god", Cmd_God_f, CMD_CHEAT | CMD_ALIVE | CMD_NOINTERMISSION },
 	{ "kill", Cmd_Kill_f, CMD_ALIVE | CMD_NOINTERMISSION },

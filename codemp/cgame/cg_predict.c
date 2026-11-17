@@ -955,6 +955,7 @@ extern vmCvar_t cg_showVehBounds;
 pmove_t cg_vehPmove;
 qboolean cg_vehPmoveSet = qfalse;
 
+extern qboolean CG_InServerCamera(void);
 void CG_PredictPlayerState(void)
 {
 	int i = 0;
@@ -979,7 +980,8 @@ void CG_PredictPlayerState(void)
 	}
 
 	// demo playback just copies the moves
-	if (cg.demoPlayback || cg.snap->ps.pm_flags & PMF_FOLLOW)
+	// (also in a cutscene: the server holds the players on its camera, 2026-11-16)
+	if (cg.demoPlayback || cg.snap->ps.pm_flags & PMF_FOLLOW || CG_InServerCamera())
 	{
 		CG_InterpolatePlayerState(qfalse);
 		if (CG_Piloting(cg.predictedPlayerState.m_iVehicleNum))

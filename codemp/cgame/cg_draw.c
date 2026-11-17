@@ -3512,6 +3512,132 @@ static void CG_DrawSaberBlasterClip(const centity_t* cent)
 	}
 }
 
+// Personal shields (2026-11-16, JKG; DH: like the SS_BLASTER meter, on the right): the worn shield's charge
+static void CG_DrawPersonalShield(void)
+{
+	const int stat = cg.snap ? cg.snap->ps.stats[STAT_SHIELD] : 0;
+	const int type = stat >> 10 & 31, charge = stat & 1023;
+
+	if (!stat || type <= 0 || type >= bgNumPersonalShields || cg.snap->ps.stats[STAT_HEALTH] <= 0)
+	{
+		return;
+	}
+	{
+		// the same capsule as the SS_BLASTER clip meter (CG_DrawSaberBlasterClip), mirrored to the right of the screen:
+		// ten cells for the shield's charge (lit, half lit for a part cell, dark when spent; from the bottom up), the
+		// shield icon below; the frame pulses red while the shield is down, the top lit cell pulses while it recharges
+		const personalShield_t* sh = &bgPersonalShields[type];
+		const qhandle_t frame = trap->R_RegisterShaderNoMip("gfx/hud/saberblaster_frame");
+		const qhandle_t cell = trap->R_RegisterShaderNoMip("gfx/hud/saberblaster_cell");
+		const qhandle_t icon = trap->R_RegisterShaderNoMip("gfx/hud/claude_shield_icon");
+		const float hr = cgs.glconfig.vidWidth > 0 && cgs.glconfig.vidHeight > 0 ? (float)cgs.glconfig.vidHeight * 640.0f / ((float)cgs.glconfig.vidWidth * 480.0f) : 1.0f;
+		const float w = 20.0f * hr, x = 640.0f - 8.0f * hr - w, y = 254.0f, h = 136.0f;
+		const float cellsTop = y + 8.0f, cellsBottom = y + h - 30.0f;
+		const int cells = 10;
+		const float cellH = (cellsBottom - cellsTop) / (float)cells;
+		const float fill = sh->capacity > 0 ? (float)charge * (float)cells / (float)sh->capacity : 0.0f;
+		const int recharging = charge > 0 && charge < sh->capacity;
+		vec4_t frameColor = { 1.0f, 1.0f, 1.0f, 0.9f };
+		static vec4_t frameBack = { 0.05f, 0.07f, 0.1f, 0.65f };
+		static vec4_t lit = { 0.25f, 0.65f, 1.0f, 1.0f };
+		static vec4_t half = { 0.25f, 0.65f, 1.0f, 0.45f };
+		static vec4_t spent = { 0.35f, 0.35f, 0.38f, 0.55f };
+		vec4_t top = { 0.25f, 0.65f, 1.0f, 1.0f };
+		int i;
+
+		if (charge <= 0)
+		{
+			const float pulse = 0.5f + 0.5f * sinf((float)cg.time * 0.008f);
+			frameColor[1] = frameColor[2] = 0.3f + 0.3f * pulse;
+			frameColor[3] = 0.95f;
+		}
+		top[3] = 0.55f + 0.45f * sinf((float)cg.time * 0.012f);
+		if (frame)
+		{
+			trap->R_SetColor(frameColor);
+			CG_DrawPic(x, y, w, h, frame);
+		}
+		else
+		{
+			CG_FillRect(x, y, w, h, frameBack);
+		}
+		for (i = 0; i < cells; i++)
+		{
+			const float* color = fill >= (float)(i + 1) ? lit : fill > (float)i ? half : spent;
+			const float cy = cellsBottom - (float)(i + 1) * cellH + 1.0f;
+
+			if (recharging && fill > (float)i && fill <= (float)(i + 1))
+			{
+				color = top; // the cell that is filling up
+			}
+			if (cell)
+			{
+				trap->R_SetColor(color);
+				CG_DrawPic(x + 4.0f * hr, cy, w - 8.0f * hr, cellH - 2.0f, cell);
+			}
+			else
+			{
+				CG_FillRect(x + 4.0f * hr, cy, w - 8.0f * hr, cellH - 2.0f, color);
+			}
+		}
+		trap->R_SetColor(NULL);
+		if (icon)
+		{
+			CG_DrawPic(x + (w - 14.0f * hr) * 0.5f, y + h - 24.0f, 14.0f * hr, 14.0f, icon);
+		}
+	}
+}
+
+extern qboolean in_camera;
+// Grenade cooking (2026-11-16, DH; after JKG's "Detonation time" bar): while the player cooks a grenade, a bar under
+// the crosshair shows the fuse left: orange, red and pulsing for the last stretch (the warning beep), gone when thrown
+static void CG_DrawGrenadeCook(void)
+{
+	const playerState_t* ps = &cg.predictedPlayerState;
+	const char* cook_on = Info_ValueForKey(CG_ConfigString(CS_SERVERINFO), "g_grenadeCook");
+	const int fuse = 2000 + 500; // TD_TIME + GRENADE_WARN_TIME (g_weapon.c)
+	const int warn = 500;
+	int cook;
+
+	if (cook_on[0] && !atoi(cook_on))
+	{
+		return;
+	}
+	if (ps->weapon != WP_THERMAL || (ps->weaponstate != WEAPON_CHARGING && ps->weaponstate != WEAPON_CHARGING_ALT)
+		|| ps->weaponChargeTime <= 0 || ps->stats[STAT_HEALTH] <= 0)
+	{
+		return;
+	}
+	cook = cg.time - ps->weaponChargeTime - 900; // past a full wind-up (GRENADE_VELOCITY) the fuse burns
+	if (cook <= 0)
+	{
+		return;
+	}
+	{
+		const float left = (float)(fuse - cook) / (float)fuse;
+		const float w = 110.0f, h = 7.0f, x = 320.0f - w * 0.5f, y = 268.0f;
+		vec4_t back = { 0.05f, 0.07f, 0.1f, 0.7f };
+		vec4_t edge = { 1.0f, 1.0f, 1.0f, 0.8f };
+		vec4_t fill = { 1.0f, 0.6f, 0.15f, 0.95f };
+
+		if (fuse - cook <= warn)
+		{
+			const float pulse = 0.5f + 0.5f * sinf((float)cg.time * 0.03f);
+			fill[0] = 1.0f;
+			fill[1] = 0.15f + 0.2f * pulse;
+			fill[2] = 0.1f;
+			edge[1] = edge[2] = 0.3f + 0.4f * pulse;
+		}
+		CG_FillRect(x - 1.0f, y - 1.0f, w + 2.0f, h + 2.0f, edge);
+		CG_FillRect(x, y, w, h, back);
+		if (left > 0.0f)
+		{
+			CG_FillRect(x + 1.0f, y + 1.0f, (w - 2.0f) * (left > 1.0f ? 1.0f : left), h - 2.0f, fill);
+		}
+		trap->R_SetColor(NULL);
+	}
+}
+
 static void CG_DrawHUD(const centity_t* cent)
 {
 	// don't display if dead
@@ -5160,9 +5286,12 @@ static void CG_DrawStats(void)
 		}
 	}
 
-	if (drawHUD)
+	// not over a cutscene (the camera: Missions with g_missionCutscenes 1, SP maps outside Missions; 2026-11-16)
+	if (drawHUD && !in_camera)
 	{
 		CG_DrawHUD(cent);
+		CG_DrawPersonalShield();
+		CG_DrawGrenadeCook();
 	}
 }
 
@@ -12435,6 +12564,8 @@ static void CG_DrawSaberLockMeter(void)
 	CG_FillRect(x, y + h + 3.0f, w * time_frac, 2.0f, timer);
 }
 
+extern qboolean CG_InServerCamera(void);
+extern void CG_DrawServerCameraBars(void);
 static void CG_Draw2D(void)
 {
 	const float in_time = cg.invenSelectTime + WEAPON_SELECT_TIME;
@@ -12482,6 +12613,17 @@ static void CG_Draw2D(void)
 	if (cg.snap->ps.pm_type == PM_INTERMISSION)
 	{
 		CG_DrawIntermission();
+		CG_ChatBox_DrawStrings();
+		return;
+	}
+
+	// a cutscene (the server-side camera, 2026-11-16, DH): no HUD, crosshair, radar or selection; only the letterbox
+	// bars, center prints and chat
+	if (CG_InServerCamera())
+	{
+		CGCam_DoFade(); // (the cutscene's fades, SJE)
+		CG_DrawServerCameraBars();
+		CG_DrawCenterString();
 		CG_ChatBox_DrawStrings();
 		return;
 	}

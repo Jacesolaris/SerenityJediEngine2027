@@ -315,6 +315,222 @@ static int WV_PickVariant(const gentity_t* self, const int weapon)
 	return candidates[(WV_NameHash(self->NPC_type) + static_cast<unsigned>(self->s.number) * 7u) % static_cast<unsigned>(num_candidates)];
 }
 
+
+// ---------------------------------------------------------------------------------------------------------------
+// Personal shields (2026-11-16, DH; from Jedi Knight Galaxies, see weapons.h / ext_data/sje_shields.dat)
+// ---------------------------------------------------------------------------------------------------------------
+extern cvar_t* g_npcShields;
+extern Vehicle_t* G_IsRidingVehicle(const gentity_t* pEnt);
+
+// what a shield stops: guns and explosions (not sabers, melee, Force powers, falls, the environment, fire / gas ticks)
+static qboolean G_PersonalShieldBlocks(const int mod)
+{
+	switch (mod)
+	{
+	case MOD_BRYAR:
+	case MOD_BRYAR_ALT:
+	case MOD_BLASTER:
+	case MOD_BLASTER_ALT:
+	case MOD_DISRUPTOR:
+	case MOD_SNIPER:
+	case MOD_BOWCASTER:
+	case MOD_BOWCASTER_ALT:
+	case MOD_REPEATER:
+	case MOD_REPEATER_ALT:
+	case MOD_DEMP2:
+	case MOD_DEMP2_ALT:
+	case MOD_FLECHETTE:
+	case MOD_FLECHETTE_ALT:
+	case MOD_ROCKET:
+	case MOD_ROCKET_ALT:
+	case MOD_CONC:
+	case MOD_CONC_ALT:
+	case MOD_THERMAL:
+	case MOD_THERMAL_ALT:
+	case MOD_DETPACK:
+	case MOD_LASERTRIP:
+	case MOD_LASERTRIP_ALT:
+	case MOD_SEEKER:
+	case MOD_EMPLACED:
+	case MOD_EXPLOSIVE:
+	case MOD_EXPLOSIVE_SPLASH:
+	case MOD_ENERGY:
+	case MOD_ENERGY_SPLASH:
+	case MOD_HEADSHOT:
+	case MOD_BODYSHOT:
+	case MOD_PISTOL:
+	case MOD_PISTOL_ALT:
+	case MOD_Z6_ROTARY_CANNON:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+static const personalShield_t* G_PersonalShield(const gentity_t* ent)
+{
+	return ent && ent->shieldType > 0 && ent->shieldType < bgNumPersonalShields ? &bgPersonalShields[ent->shieldType] : nullptr;
+}
+
+// put a shield on (0 = take it off): full charge
+void G_PersonalShieldEquip(gentity_t* ent, const int type)
+{
+	const personalShield_t* sh;
+
+	ent->shieldType = type > 0 && type < bgNumPersonalShields ? type : 0;
+	sh = G_PersonalShield(ent);
+	ent->shieldCharge = sh ? sh->capacity : 0;
+	ent->shieldRecharging = 0;
+	ent->shieldLastHit = 0;
+	if (sh && sh->equipSound[0])
+	{
+		G_SoundOnEnt(ent, CHAN_AUTO, sh->equipSound);
+	}
+}
+
+// G_Damage, before the health goes down: the shield takes what it can of a gun / explosion hit; returns what is left
+int G_PersonalShieldAbsorb(gentity_t* targ, const gentity_t* inflictor, const int mod, int take, const int dflags, const vec3_t dir)
+{
+	const personalShield_t* sh = G_PersonalShield(targ);
+	int absorbed;
+
+	if (!sh || take <= 0 || !targ->client || targ->health <= 0 || targ->shieldCharge <= 0 || inflictor == targ
+		|| dflags & DAMAGE_NO_PROTECTION || !G_PersonalShieldBlocks(mod))
+	{
+		if (sh && take > 0 && targ->health > 0 && inflictor != targ && G_PersonalShieldBlocks(mod))
+		{
+			targ->shieldLastHit = level.time; // an empty shield still waits out its cooldown
+			targ->shieldRecharging = 0;
+		}
+		return take;
+	}
+	absorbed = take < targ->shieldCharge ? take : targ->shieldCharge;
+	targ->shieldCharge -= absorbed;
+	targ->shieldLastHit = level.time;
+	targ->shieldRecharging = 0;
+
+	{
+		// the shield shell flash (CG_PlayerShieldHit) and a hit sound
+		gentity_t* ev = G_TempEntity(targ->currentOrigin, EV_SHIELD_HIT);
+		vec3_t d = { 0, 0, 1 };
+
+		if (dir && VectorLengthSquared(dir) > 0.0f)
+		{
+			VectorCopy(dir, d);
+			VectorNormalize(d);
+		}
+		ev->s.otherEntityNum = targ->s.number;
+		ev->s.eventParm = DirToByte(d);
+		ev->s.time2 = absorbed;
+		G_SoundOnEnt(targ, CHAN_AUTO, va("sound/weapons/shield/shieldhit%d.mp3", Q_irand(1, 6)));
+	}
+	if (targ->shieldCharge <= 0 && sh->brokenSound[0])
+	{
+		G_SoundOnEnt(targ, CHAN_AUTO, sh->brokenSound);
+	}
+	return take - absorbed;
+}
+
+// every think (G_WeaponVariantThink): recharging, NPCs' shields (g_npcShields)
+void G_PersonalShieldThink(gentity_t* ent)
+{
+	gclient_t* cl = ent->client;
+	const personalShield_t* sh;
+
+	if (!cl)
+	{
+		return;
+	}
+	if (!ent->shieldChecked && ent->health > 0)
+	{
+		// a gunner NPC wears one now and then (a saber user, a droid or a creature never)
+		ent->shieldChecked = 1;
+		if ((ent->NPC && ent->s.number != 0) && (g_npcShields ? g_npcShields->integer : 0) > 0 && bgNumPersonalShields > 1 && cl->ps.weapon != WP_SABER
+			&& cl->ps.weapon > WP_NONE && !G_IsRidingVehicle(ent) && Q_irand(1, 100) <= (g_npcShields ? g_npcShields->integer : 0))
+		{
+			ent->shieldType = Q_irand(1, bgNumPersonalShields - 1);
+			sh = G_PersonalShield(ent);
+			ent->shieldCharge = sh ? sh->capacity : 0;
+		}
+	}
+	sh = G_PersonalShield(ent);
+	if (!sh)
+	{
+		return;
+	}
+	if (ent->health <= 0)
+	{
+		return;
+	}
+	if (ent->shieldCharge >= sh->capacity || level.time < ent->shieldLastHit + sh->cooldown)
+	{
+		return;
+	}
+	if (!ent->shieldRecharging)
+	{
+		ent->shieldRecharging = 1;
+		ent->shieldNextRegen = level.time + sh->regen;
+		if (sh->rechargeSound[0])
+		{
+			G_SoundOnEnt(ent, CHAN_AUTO, sh->rechargeSound);
+		}
+	}
+	while (level.time >= ent->shieldNextRegen && ent->shieldCharge < sh->capacity)
+	{
+		ent->shieldCharge++;
+		ent->shieldNextRegen += sh->regen;
+	}
+	if (ent->shieldCharge >= sh->capacity)
+	{
+		ent->shieldCharge = sh->capacity;
+		ent->shieldRecharging = 0;
+		if (sh->chargedSound[0])
+		{
+			G_SoundOnEnt(ent, CHAN_AUTO, sh->chargedSound);
+		}
+	}
+}
+
+// "shield": list the shields, "shield <id or number>" puts one on, "shield off" takes it off
+void Cmd_PersonalShield_f(gentity_t* ent)
+{
+	char arg[64];
+	int type;
+
+	if (!ent || !ent->client)
+	{
+		return;
+	}
+	Q_strncpyz(arg, gi.argv(1), sizeof arg);
+	if (!arg[0])
+	{
+		int i;
+
+		for (i = 1; i < bgNumPersonalShields; i++)
+		{
+			gi.Printf(va("%2i %-16s %s (%i)\n", i, bgPersonalShields[i].name, bgPersonalShields[i].displayName, bgPersonalShields[i].capacity));
+		}
+		gi.Printf(va("%i shields, now: %s\n", bgNumPersonalShields - 1, G_PersonalShield(ent) ? G_PersonalShield(ent)->name : "none"));
+		return;
+	}
+	if (!Q_stricmp(arg, "off") || !Q_stricmp(arg, "none") || !Q_stricmp(arg, "0"))
+	{
+		G_PersonalShieldEquip(ent, 0);
+		return;
+	}
+	type = BG_PersonalShieldByName(arg);
+	if (!type)
+	{
+		type = atoi(arg);
+	}
+	if (type <= 0 || type >= bgNumPersonalShields)
+	{
+		gi.Printf("No such shield (\\shield lists them).\n");
+		return;
+	}
+	G_PersonalShieldEquip(ent, type);
+}
+
 // every think, before the move (ClientThink_real): gunner NPCs get a variant of the gun in their hand, and the gun
 // model in the hand becomes the variant's
 extern void G_GrenadeClientThink(gentity_t* ent);
@@ -325,6 +541,7 @@ void G_WeaponVariantThink(gentity_t* ent)
 	gclient_t* cl = ent->client;
 
 	G_GrenadeClientThink(ent); // grenades (2026-10-31, wp_thermal.cpp): cooking in hand, burning / poisoned people
+	G_PersonalShieldThink(ent); // personal shields (2026-11-16)
 	if (cl && ent->s.number == 0)
 	{
 		G_Shop_PlayerThink(ent); // the shop (2026-10-31, g_pazaak.cpp): the player's owned gun looks

@@ -470,6 +470,8 @@ static void Cmd_WeaponVariant_f(gentity_t* ent)
 
 // grenade [name|number|next|0] (2026-10-31, not a cheat): the grenade type you throw (a WP_THERMAL weapon variant);
 // no name lists them. 0 = the stock thermal.
+extern void Cmd_PersonalShield_f(gentity_t* ent); // g_weapon.cpp (personal shields, 2026-11-16)
+
 static void Cmd_Grenade_f(gentity_t* ent)
 {
 	const char* arg = gi.argv(1);
@@ -1384,9 +1386,69 @@ enum
 	TAUNT_RELOAD
 };
 
+// The droids have no taunt sounds (the protocol sound set points at missing files), so their taunts play their own
+// chatter: the protocol droid one of its JK2 "use" conversation lines (sound/chars/protocol/misc/30proNNN, base
+// assets), a different set for taunt / flourish / gloat (taunt -1 = any line: the crouch taunt, g_active.cpp);
+// R2, R5, gonk and mouse their beeps. qfalse for everyone else.
+qboolean G_DroidTauntSound(const gentity_t* ent, const int taunt)
+{
+	static const int taunt_lines[] = { 3, 5, 6, 7, 8 };
+	static const int flourish_lines[] = { 9, 10, 11, 12 };
+	static const int gloat_lines[] = { 13, 15, 16 };
+	static const int any_lines[] = { 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16 };
+
+	if (!ent || !ent->client)
+	{
+		return qfalse;
+	}
+	switch (ent->client->NPC_class)
+	{
+	case CLASS_PROTOCOL:
+	{
+		const int* lines = any_lines;
+		int count = static_cast<int>(sizeof any_lines / sizeof any_lines[0]);
+		if (taunt == TAUNT_TAUNT)
+		{
+			lines = taunt_lines;
+			count = static_cast<int>(sizeof taunt_lines / sizeof taunt_lines[0]);
+		}
+		else if (taunt == TAUNT_FLOURISH)
+		{
+			lines = flourish_lines;
+			count = static_cast<int>(sizeof flourish_lines / sizeof flourish_lines[0]);
+		}
+		else if (taunt == TAUNT_GLOAT)
+		{
+			lines = gloat_lines;
+			count = static_cast<int>(sizeof gloat_lines / sizeof gloat_lines[0]);
+		}
+		G_SoundOnEnt(ent, CHAN_VOICE, va("sound/chars/protocol/misc/30pro%03d.mp3", lines[Q_irand(0, count - 1)]));
+		return qtrue;
+	}
+	case CLASS_R2D2:
+		G_SoundOnEnt(ent, CHAN_VOICE, va("sound/chars/r2d2/misc/r2d2talk0%d.wav", Q_irand(1, 3)));
+		return qtrue;
+	case CLASS_R5D2:
+		G_SoundOnEnt(ent, CHAN_VOICE, va("sound/chars/r5d2/misc/r5talk%d.wav", Q_irand(1, 4)));
+		return qtrue;
+	case CLASS_GONK:
+		G_SoundOnEnt(ent, CHAN_VOICE, va("sound/chars/gonk/misc/gonktalk%d.wav", Q_irand(1, 2)));
+		return qtrue;
+	case CLASS_MOUSE:
+		G_SoundOnEnt(ent, CHAN_VOICE, va("sound/chars/mouse/misc/mousego%d.wav", Q_irand(1, 3)));
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
 static void G_TauntSound(gentity_t* ent, int taunt)
 {
 	if (BG_IsAlreadyinTauntAnim(ent->client->ps.torsoAnim))
+	{
+		return;
+	}
+	if (G_DroidTauntSound(ent, taunt))
 	{
 		return;
 	}
@@ -2985,6 +3047,8 @@ void ClientCommand(const int clientNum)
 		Cmd_WeaponVariant_f(ent);
 	else if (Q_stricmp(cmd, "grenade") == 0)
 		Cmd_Grenade_f(ent);
+	else if (Q_stricmp(cmd, "shield") == 0)
+		Cmd_PersonalShield_f(ent); // personal shields (2026-11-16, g_weapon.cpp)
 	else if (Q_stricmp(cmd, "god") == 0)
 		Cmd_God_f(ent);
 	else if (Q_stricmp(cmd, "undying") == 0)

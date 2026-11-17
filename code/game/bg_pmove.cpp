@@ -1285,6 +1285,26 @@ qboolean PM_GentCantJump(const gentity_t* gent)
 	return qfalse;
 }
 
+extern qboolean ValidAnimFileIndex(int index);
+
+// a model with no real crouch anim: no BOTH_CROUCH1IDLE, or one that only repeats the stand pose (protocol droid,
+// R2/R5, gonk, saber droid, the creatures). The player on it doesn't crouch (full height, PmoveSingle); the crouch key
+// plays a taunt (G_NoCrouchTaunt, g_active.cpp)
+qboolean PM_GentCantCrouch(const gentity_t* gent)
+{
+	if (!gent || !gent->client || !ValidAnimFileIndex(gent->client->clientInfo.animFileIndex))
+	{
+		return qfalse;
+	}
+	const animation_t* anims = level.knownAnimFileSets[gent->client->clientInfo.animFileIndex].animations;
+	if (anims[BOTH_CROUCH1IDLE].numFrames <= 0)
+	{
+		return qtrue;
+	}
+	return anims[BOTH_CROUCH1IDLE].firstFrame == anims[BOTH_STAND1].firstFrame
+		&& anims[BOTH_CROUCH1IDLE].numFrames == anims[BOTH_STAND1].numFrames ? qtrue : qfalse;
+}
+
 static qboolean PM_Is_A_Dash_Anim(const int anim)
 {
 	switch (anim)
@@ -22812,6 +22832,21 @@ static void Pmove_Internal(pmove_t* pmove)
 		{
 			waterForceJump = qtrue;
 		}
+	}
+
+	if (pm->cmd.upmove < 0
+		&& !Flying
+		&& pm->ps->pm_type == PM_NORMAL
+		&& pm->waterlevel < 2
+		&& !(pm->watertype & CONTENTS_LADDER)
+		&& pm->gent && pm->gent->client
+		&& pm->gent->client->NPC_class != CLASS_VEHICLE
+		&& (pm->ps->clientNum < MAX_CLIENTS || G_ControlledByPlayer(pm->gent))
+		&& PM_GentCantCrouch(pm->gent))
+	{
+		// no crouch anim (protocol droid, R2/R5, gonk...): the player stays standing at full height, the press plays
+		// a taunt (G_NoCrouchTaunt). Swimming / climbing down still work.
+		pm->cmd.upmove = 0;
 	}
 
 	// set mins, maxs, and viewheight

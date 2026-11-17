@@ -2062,27 +2062,24 @@ int R_LerpTag(orientation_t* tag, qhandle_t handle, int startFrame, int endFrame
 	model_t* model = nullptr;
 
 	model = R_GetModelByHandle(handle);
-	if (!model->data.mdv[0])
+	// model->data is a union: pick the path by model type, never by which pointer
+	// is set. A Ghoul2 (.glm/.gla) or brush handle used to fall into the MD3 path
+	// and R_GetTag read its data as mdvModel_t (crash in MP CG_Item tag_barrel,
+	// whose weapon world models are .glm). MDR/IQM were mis-routed the same way.
+	if (model->type == MOD_MDR && model->data.mdr)
 	{
-		if (model->type == MOD_MDR)
-		{
-			start = &start_space;
-			end = &end_space;
-			R_GetAnimTag((mdrHeader_t*)model->data.mdr, startFrame, tagName, start);
-			R_GetAnimTag((mdrHeader_t*)model->data.mdr, endFrame, tagName, end);
-		}
-		else if (model->type == MOD_IQM) {
-			return R_IQMLerpTag(tag, (iqmData_t*)model->data.iqm,
-				startFrame, endFrame,
-				frac, tagName);
-		}
-		else {
-			AxisClear(tag->axis);
-			VectorClear(tag->origin);
-			return qfalse;
-		}
+		start = &start_space;
+		end = &end_space;
+		R_GetAnimTag(model->data.mdr, startFrame, tagName, start);
+		R_GetAnimTag(model->data.mdr, endFrame, tagName, end);
 	}
-	else
+	else if (model->type == MOD_IQM && model->data.iqm)
+	{
+		return R_IQMLerpTag(tag, model->data.iqm,
+			startFrame, endFrame,
+			frac, tagName);
+	}
+	else if (model->type == MOD_MESH && model->data.mdv[0])
 	{
 		start = R_GetTag(model->data.mdv[0], startFrame, tagName);
 		end = R_GetTag(model->data.mdv[0], endFrame, tagName);
@@ -2091,6 +2088,12 @@ int R_LerpTag(orientation_t* tag, qhandle_t handle, int startFrame, int endFrame
 			VectorClear(tag->origin);
 			return qfalse;
 		}
+	}
+	else
+	{
+		AxisClear(tag->axis);
+		VectorClear(tag->origin);
+		return qfalse;
 	}
 
 	frontLerp = frac;
@@ -2164,4 +2167,4 @@ void R_ModelBounds(qhandle_t handle, vec3_t mins, vec3_t maxs)
 
 	VectorClear(mins);
 	VectorClear(maxs);
-}
+}

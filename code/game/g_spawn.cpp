@@ -591,6 +591,7 @@ void SP_misc_portal_camera(gentity_t* ent);
 void SP_misc_bsp(gentity_t* ent);
 void SP_terrain(gentity_t* ent);
 void SP_misc_skyportal(gentity_t* ent);
+void SP_misc_skyportal_orient(gentity_t* ent);
 
 void SP_misc_portal_surface(gentity_t* ent);
 void SP_misc_camera_focus(gentity_t* self);
@@ -834,6 +835,7 @@ spawn_t spawns[] = {
 	{ "misc_bsp", SP_misc_bsp },
 	{ "terrain", SP_terrain },
 	{ "misc_skyportal", SP_misc_skyportal },
+	{ "misc_skyportal_orient", SP_misc_skyportal_orient },
 
 	{ "misc_camera_focus", SP_misc_camera_focus },
 	{ "misc_camera_track", SP_misc_camera_track },

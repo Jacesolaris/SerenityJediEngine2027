@@ -2688,6 +2688,14 @@ static void Shop_OpenMenu(void)
 	{
 		shopPage = 0;
 	}
+	// SP restarts the renderer on every map and save load (CL_FlushMemory), so shader handles kept from an
+	// earlier map point at other images (black boxes, loading screens): register them again at every opening
+	shopWhite = 0;
+	for (int i = 0; i < shopNumItems; i++)
+	{
+		shopItems[i].iconTried = 0;
+		shopItems[i].iconShader = 0;
+	}
 	Menus_ActivateByName(SHOP_MENU);
 	PZK_SetCatcher(PZK_GetCatcher() | KEYCATCH_UI);
 	shopOpen = 1;

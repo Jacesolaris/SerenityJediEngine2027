@@ -47,7 +47,7 @@ typedef struct camera_s
 	float pan_duration;
 
 	//Following information
-	char cameraGroup[64];
+	int cameraGroup[MAX_CAMERA_GROUP_SUBJECTS]; // entity numbers, -1 = unused (was char[64]: 490 became -22, 2026-11-16)
 	float cameraGroupZOfs;
 	char cameraGroupTag[64];
 	vec3_t subjectPos;

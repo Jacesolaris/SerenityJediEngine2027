@@ -399,6 +399,7 @@ The string has been tokenized and can be retrieved with
 Cmd_Argc() / Cmd_Argv()
 =================
 */
+extern qboolean CG_ServerCameraBlocksCommand(const char* cmd);
 qboolean CG_ConsoleCommand(void)
 {
 	const consoleCommand_t* command = (consoleCommand_t*)Q_LinearSearch(CG_Argv(0), commands, num_commands,
@@ -407,6 +408,10 @@ qboolean CG_ConsoleCommand(void)
 	if (!command || !command->func)
 		return qfalse;
 
+	if (CG_ServerCameraBlocksCommand(command->cmd))
+	{
+		return qtrue; // (a cutscene: no weapon / force selection, cg_camera.c)
+	}
 	command->func();
 	return qtrue;
 }

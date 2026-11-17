@@ -435,6 +435,8 @@ vmCvar_t cg_ignitionSpeedvader;
 vmCvar_t cg_smoothCamera;
 vmCvar_t cg_speedTrail;
 vmCvar_t cg_precacheWeaponVariants;
+vmCvar_t cg_gunCounters; // 2026-11-16: ammo counters on the SJE guns' first-person models (0 = off)
+vmCvar_t cg_variantViewModels; // 2026-11-16: the SJE guns use their own first-person models (0 = the base weapon's)
 vmCvar_t cg_saberLightRadius; // saber-only light (DH 2026-10-27): cg_saberLightRadius / cg_saberLightIntensity scale only lightsaber light, on top of r_dlightRadius / r_dlightIntensity
 vmCvar_t cg_lightningFxInterval; // force lightning bolt copies (DH 2026-11-02)
 vmCvar_t cg_lightningMarks; // force lightning scorch marks (DH 2026-11-02)
@@ -688,6 +690,8 @@ static cvarTable_t cvarTable[] = {
 	{ &cg_smoothCamera, "cg_smoothCamera", "1", CVAR_ARCHIVE },
 	{ &cg_speedTrail, "cg_speedTrail", "0", CVAR_ARCHIVE },
 	{ &cg_precacheWeaponVariants, "cg_precacheWeaponVariants", "1", CVAR_ARCHIVE },
+	{ &cg_variantViewModels, "cg_variantViewModels", "1", CVAR_ARCHIVE },
+	{ &cg_gunCounters, "cg_gunCounters", "1", CVAR_ARCHIVE },
 	{ &cg_saberLightRadius, "cg_saberLightRadius", "0.703125", CVAR_ARCHIVE }, // saber light reach (1 = as before)
 	{ &cg_lightningFxInterval, "cg_lightningFxInterval", "50", CVAR_ARCHIVE }, // ms between new copies of the force lightning bolt effect (16 = as before)
 	{ &cg_lightningMarks, "cg_lightningMarks", "1", CVAR_ARCHIVE }, // force lightning scorch / burn marks that fade (0 = off)
@@ -2166,6 +2170,7 @@ static void CG_RegisterGraphics()
 
 	memset(cg_items, 0, sizeof cg_items);
 	memset(cg_weapons, 0, sizeof cg_weapons);
+	CG_ClearWeaponVariantMedia(); // 2026-11-16: their model handles go with the level
 
 	// only register the items that the server says we need
 	Q_strncpyz(items, CG_ConfigString(CS_ITEMS), sizeof items);
@@ -2200,6 +2205,9 @@ static void CG_RegisterGraphics()
 	// doing one shader just makes it look like a shell.  By using two shaders with different bulge offsets and different texture scales, it has a much more chaotic look
 	cgs.media.electricBodyShader = cgi_R_RegisterShader("gfx/misc/electric");
 	cgs.media.electricBody2Shader = cgi_R_RegisterShader("gfx/misc/fullbodyelectric2");
+	cgs.media.overlayIceShader = cgi_R_RegisterShader("gfx/PlayerOverlays/ice");
+	cgs.media.overlayCarboniteShader = cgi_R_RegisterShader("gfx/PlayerOverlays/carbonite");
+	cgs.media.overlayStunShader = cgi_R_RegisterShader("gfx/PlayerOverlays/stun");
 
 	cgs.media.shockBodyShader = cgi_R_RegisterShader("gfx/misc/shockbody");
 	cgs.media.shockBody2Shader = cgi_R_RegisterShader("gfx/misc/fullshockbody");
@@ -2557,6 +2565,7 @@ static void CG_GameStateReceived()
 	}
 
 	memset(cg_weapons, 0, sizeof cg_weapons);
+	CG_ClearWeaponVariantMedia(); // 2026-11-16: their model handles go with the level
 	memset(cg_items, 0, sizeof cg_items);
 
 	CG_LinkCentsToGents();

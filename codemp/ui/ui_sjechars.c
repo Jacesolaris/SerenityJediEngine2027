@@ -71,7 +71,7 @@ typedef struct sjeVariant_s
 	char label[32];
 	char useModel[MAX_QPATH];	// model cvar on APPLY
 	char g2Folder[MAX_QPATH];	// preview: models/players/<g2Folder>/model.glm
-	char g2Skin[MAX_QPATH];		// preview skin
+	char g2Skin[256];		// preview skin (multi-part names can be longer than MAX_QPATH, 2026-11-16)
 	int botclass;
 } sjeVariant_t;
 

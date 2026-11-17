@@ -514,6 +514,10 @@ typedef struct centity_s {
 	int				scepterAnim;	// the torso anim its effects were last started for
 	int				scepterFxTime;	// when its beam effect is renewed
 	qboolean		saberBlasterPistol; // SS_BLASTER (2026-10-14): the left hand pistol model is in ghoul2 slot 2
+	int				saberBlasterArmState; // SS_BLASTER gun arm pose set on lhumerus (item 404): 0 none, 1 low, 2 aim
+	int				saberBlasterArmTime; // when it was set
+	int				saberBlasterAimUntil; // the arm aims until then
+	int				saberBlasterTorsoKey; // torso anim | restart flip last seen (a new shot anim)
 
 	float			smoothYaw;
 
@@ -1360,6 +1364,10 @@ typedef struct cgMedia_s {
 
 	qhandle_t	electricBodyShader;
 	qhandle_t	electricBody2Shader;
+	// status looks (2026-11-16, the Jedi Knight Galaxies body overlays, shaders/claude_jkg_overlays.shader)
+	qhandle_t overlayIceShader;
+	qhandle_t overlayCarboniteShader;
+	qhandle_t overlayStunShader;
 
 	qhandle_t	fsrMarkShader;
 	qhandle_t	fslMarkShader;
@@ -2418,8 +2426,18 @@ typedef struct cgWeaponVariant_s
 	fxHandle_t hitFx[2];
 	qhandle_t shotModel[2];
 	sfxHandle_t shotSound[2];
+	// first person (2026-11-16, from Jedi Knight Galaxies): the gun's own view model, 0 = the base weapon's
+	qboolean viewRegistered; // registered on first use
+	qhandle_t viewModel;
+	qhandle_t viewHands;
+	qhandle_t viewBarrels[4];
+	int numViewBarrels;
+	qhandle_t viewSkinMain; // ammo counter skins (2026-11-16)
+	qhandle_t viewDigitSkin[3];
+	int numViewDigits;
 } cgWeaponVariant_t;
 const cgWeaponVariant_t* CG_WeaponVariant(int variant, int weapon);
+const cgWeaponVariant_t* CG_WeaponVariantView(const playerState_t* ps); // 2026-11-16: the held gun's own first-person model
 void CG_SetWeaponLooks(int clientNum, const char* hex); // the shop: a player's gun looks per weapon ("wvlooks")
 void CG_WeaponVariantMuzzleFx(const entityState_t* es, fxHandle_t* muzzle_fx, fxHandle_t* alt_muzzle_fx);
 void CG_PrecacheWeaponVariants(void); // map load (2026-11-01): every variant's media, cg_precacheWeaponVariants

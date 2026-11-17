@@ -710,14 +710,12 @@ void SP_misc_turret(gentity_t* base)
 	//are checked for the value of 5 to spawn the turbo turrets, but in mp it checks for
 	//a spawn flag of 8 in sp_misc_turretg2, so setting to 8 before spawning.  No hoth style
 	//turrets can be found in sp so far.
-	if (level.gametype == GT_SINGLE_PLAYER && g_allowturret.integer)
+	// SP maps use misc_turret for their wall / ceiling turrets (SP's SP_misc_turret: the G2 turret_canon, never the
+	// turbo one): Missions always spawn those, as SP (2026-11-16, DH: doom_comm's turrets were missing; they needed
+	// g_allowturret, default 0, and "spawnflags & 5" made every START_OFF turret a space turbo turret);
+	// g_allowturret 1 also gives them in the other game types
+	if (level.gametype == GT_SINGLE_PLAYER || g_allowturret.integer)
 	{
-		//SP uses this same map entity name for the ceiling turrets.  Override to use them
-		if (base->spawnflags & 5)
-		{
-			base->spawnflags |= 8;
-		}
-
 		SP_misc_turretG2(base);
 		return;
 	}

@@ -1836,7 +1836,18 @@ static void CG_SaberBlasterEvent(const int owner_num, const int parm)
 		{
 			ci = &cgs.clientinfo[owner_num];
 		}
-		if (ci && owner->ghoul2 && ci->bolt_lhand)
+		if (owner->saberBlasterPistol && owner->ghoul2 && trap->G2API_HasGhoul2ModelOnIndex(&owner->ghoul2, 2))
+		{
+			// the pistol's own muzzle (item 404, DH: the flash came from the hand)
+			mdxaBone_t matrix;
+			trap->G2API_GetBoltMatrix(owner->ghoul2, 2, 0, &matrix, owner->turAngles, owner->lerpOrigin,
+				cg.time, cgs.game_models, owner->modelScale);
+			BG_GiveMeVectorFromMatrix(&matrix, ORIGIN, flash_origin);
+			// on the pistol's muzzle bolt, so it moves with the gun (DH: it stayed behind while strafing)
+			trap->FX_PlayBoltedEffectID(fx, flash_origin, owner->ghoul2, 0, owner_num, 2, 0, qtrue);
+			break;
+		}
+		else if (ci && owner->ghoul2 && ci->bolt_lhand)
 		{
 			mdxaBone_t matrix;
 			trap->G2API_GetBoltMatrix(owner->ghoul2, 0, ci->bolt_lhand, &matrix, owner->turAngles, owner->lerpOrigin,

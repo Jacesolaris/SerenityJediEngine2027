@@ -4222,8 +4222,10 @@ void G_UpdateClientAnims(gentity_t* self, float animSpeedScale)
 		return;
 	}
 
-	torsoAnim = self->client->ps.torsoAnim;
 	legsAnim = self->client->ps.legsAnim;
+	// SS_BLASTER shot / charge anims: the body keeps its legs anim (item 404, the gun arm is the cgame's)
+	torsoAnim = BG_SaberBlasterTorsoAnim(self->client->ps.torsoAnim, legsAnim, self->client->ps.weapon,
+		self->client->ps.fd.saberAnimLevel, self->client->ps.weaponChargeTime);
 
 	if (self->client->ps.saberLockFrame)
 	{

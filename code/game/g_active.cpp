@@ -6975,6 +6975,8 @@ static void ClientAlterSpeed(gentity_t* ent, usercmd_t* ucmd, const qboolean con
 				if ((ent->s.number < MAX_CLIENTS) || (G_ControlledByPlayer(ent) == qtrue))
 				{
 					if (client->NPC_class == CLASS_VADER) sprintMul *= 1.15f;
+					else if (client->NPC_class == CLASS_PROTOCOL) sprintMul *= 1.10f;
+					else if (client->NPC_class == CLASS_GONK) sprintMul *= 1.10f;
 					else if (client->NPC_class == CLASS_YODA) sprintMul *= 1.65f;
 					else sprintMul *= 1.60f;
 				}
@@ -6985,6 +6987,8 @@ static void ClientAlterSpeed(gentity_t* ent, usercmd_t* ucmd, const qboolean con
 				if ((ent->s.number < MAX_CLIENTS) || (G_ControlledByPlayer(ent) == qtrue))
 				{
 					if (client->NPC_class == CLASS_VADER) sprintMul *= 1.10f;
+					else if (client->NPC_class == CLASS_PROTOCOL) sprintMul *= 1.10f;
+					else if (client->NPC_class == CLASS_GONK) sprintMul *= 1.10f;
 					else if (client->NPC_class == CLASS_YODA) sprintMul *= 1.60f;
 					else sprintMul *= 1.50f;
 				}
@@ -8084,6 +8088,76 @@ static void G_SaberTargetLock(gentity_t* ent, const usercmd_t* ucmd)
 		yaw_rest = total - units * (360.0f / 65536.0f);
 		client->ps.delta_angles[YAW] = (client->ps.delta_angles[YAW] + units) & 65535;
 	}
+}
+
+#define NOCROUCH_TAUNT_COOLDOWN 3000
+extern qboolean PM_GentCantCrouch(const gentity_t* gent);
+extern qboolean G_DroidTauntSound(const gentity_t* ent, int taunt);
+extern qboolean CG_TryPlayCustomSound(vec3_t origin, int entityNum, soundChannel_t channel, const char* sound_name,
+	int custom_sound_set);
+
+// The crouch key of a model with no crouch anim (PM_GentCantCrouch: protocol droid, R2/R5, gonk...; pmove keeps it
+// standing at full height) plays a taunt instead, as the jump key of a model that can't jump does in MP (G_NoJumpTaunt):
+// the model's own taunt-like anim when it has one, and its taunt sound (*taunt / *anger / *victory / *gloat, the
+// sound-less droids their own chatter). The player (or the NPC the player controls), once per press, at most every
+// NOCROUCH_TAUNT_COOLDOWN ms.
+static void G_NoCrouchTaunt(gentity_t* ent, const usercmd_t* ucmd)
+{
+	// BOTH_TALK1: the protocol droid's gesturing (its only taunt-like anim; long, so on the torso only)
+	static const int taunt_anims[] = { BOTH_ENGAGETAUNT, BOTH_GESTURE1, TORSO_HANDSIGNAL4, BOTH_ALERT1, BOTH_STAND1TO2, BOTH_TALK1 };
+	static qboolean held = qfalse;
+	static int next_time = 0;
+	gclient_t* client = ent->client;
+	const qboolean pressed = ucmd->upmove < 0 ? qtrue : qfalse;
+	const qboolean was_held = held;
+
+	held = pressed;
+
+	if (!pressed || was_held || !client)
+	{
+		return;
+	}
+	if (next_time > level.time && next_time - level.time <= NOCROUCH_TAUNT_COOLDOWN) // (a time from another level is stale)
+	{
+		return;
+	}
+	if (!PM_GentCantCrouch(ent))
+	{
+		return;
+	}
+	if (client->ps.stats[STAT_HEALTH] <= 0
+		|| client->ps.pm_type != PM_NORMAL
+		|| client->ps.groundEntityNum == ENTITYNUM_NONE
+		|| client->ps.weaponTime > 0
+		|| client->moveType == MT_FLYSWIM
+		|| client->NPC_class == CLASS_VEHICLE
+		|| ent->waterlevel >= 2
+		|| G_IsRidingVehicle(ent))
+	{
+		return;
+	}
+
+	for (const int anim : taunt_anims)
+	{
+		if (PM_HasAnimation(ent, anim))
+		{
+			const qboolean standing = client->ps.velocity[0] * client->ps.velocity[0]
+				+ client->ps.velocity[1] * client->ps.velocity[1] < 100.0f ? qtrue : qfalse;
+			NPC_SetAnim(ent, standing && anim != BOTH_TALK1 ? SETANIM_BOTH : SETANIM_TORSO, anim,
+				SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+			break;
+		}
+	}
+
+	// droids: their own chatter (G_DroidTauntSound, g_cmds.cpp); everyone else the model's taunt sound
+	if (!G_DroidTauntSound(ent, -1)
+		&& !CG_TryPlayCustomSound(nullptr, ent->s.number, CHAN_VOICE, va("*taunt%d.wav", Q_irand(1, 5)), CS_TRY_ALL)
+		&& !CG_TryPlayCustomSound(nullptr, ent->s.number, CHAN_VOICE, va("*anger%d.wav", Q_irand(1, 3)), CS_TRY_ALL)
+		&& !CG_TryPlayCustomSound(nullptr, ent->s.number, CHAN_VOICE, va("*victory%d.wav", Q_irand(1, 3)), CS_TRY_ALL))
+	{
+		CG_TryPlayCustomSound(nullptr, ent->s.number, CHAN_VOICE, va("*gloat%d.wav", Q_irand(1, 3)), CS_TRY_ALL);
+	}
+	next_time = level.time + NOCROUCH_TAUNT_COOLDOWN;
 }
 
 static void ClientThink_real(gentity_t* ent, usercmd_t* ucmd)
@@ -9266,6 +9340,13 @@ static void ClientThink_real(gentity_t* ent, usercmd_t* ucmd)
 	BG_AddPushVecToUcmd(ent, ucmd);
 
 	G_CheckClampUcmd(ent, ucmd);
+
+	// a model with no crouch anim: the crouch key plays a taunt (pmove keeps it standing)
+	if ((ent->s.number == 0 && !(ent->client->ps.viewEntity > 0 && ent->client->ps.viewEntity < ENTITYNUM_WORLD))
+		|| controlled_by_player)
+	{
+		G_NoCrouchTaunt(ent, ucmd);
+	}
 
 	WP_SaberBlasterThink(ent, ucmd); // SS_BLASTER (2026-10-14): left hand pistol, filters alt attack
 

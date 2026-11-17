@@ -59,10 +59,10 @@ void GCam_Update(void)
 			//Note: does not actually change the camera's angles until the pan time is done!
 			if (client_camera.pan_time + client_camera.pan_duration < level.time)
 			{
-				//finished panning
+				//finished panning (as SP: the end angles are kept, they used to snap back, 2026-11-16)
 				for (i = 0; i < 3; i++)
 				{
-					cameraang[i] = AngleNormalize360(client_camera.angles[i] + client_camera.angles2[i]);
+					client_camera.angles[i] = AngleNormalize360(client_camera.angles[i] + client_camera.angles2[i]);
 				}
 
 				client_camera.info_state &= ~CAMERA_PANNING;
@@ -145,8 +145,12 @@ void GCam_FollowUpdate(void)
 
 	for (i = 0; i < MAX_CAMERA_GROUP_SUBJECTS; i++)
 	{
+		if (client_camera.cameraGroup[i] < 0 || client_camera.cameraGroup[i] >= ENTITYNUM_WORLD)
+		{
+			break; // (the end of the group, 2026-11-16)
+		}
 		gentity_t* from = &g_entities[client_camera.cameraGroup[i]];
-		if (!from)
+		if (!from->inuse)
 		{
 			continue;
 		}
@@ -181,8 +185,11 @@ void GCam_FollowUpdate(void)
 				|| from->s.eType == ET_NPC
 				|| from->s.number < MAX_CLIENTS)
 			{
-				//Track to their eyes - FIXME: maybe go off a tag?
-				//focus[num_subjects][2] += from->client->ps.viewheight;
+				//Track to their eyes (as SP)
+				if (from->client)
+				{
+					focus[num_subjects][2] += from->client->ps.viewheight;
+				}
 			}
 		}
 		if (client_camera.cameraGroupZOfs)

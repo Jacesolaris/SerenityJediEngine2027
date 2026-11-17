@@ -147,6 +147,9 @@ static void ValidateInUseBits()
 gentity_t* player;
 
 cvar_t* g_speed;
+cvar_t* g_npcChatter; // NPC chatter (2026-11-16, NPC.cpp): idle NPCs talk to each other, 0 = off
+cvar_t* g_civilians; // wandering civilians (2026-11-16, NPC_spawn.cpp): how many to keep about, 0 = off
+cvar_t* g_civilianTypes; // their NPC types
 cvar_t* g_gravity;
 cvar_t* g_stepSlideFix;
 
@@ -266,6 +269,8 @@ cvar_t* g_weaponVariants; // weapon variants (2026-10-31): gunner NPCs each get 
 cvar_t* g_aiReload; // AI clips and reloads (2026-10-31): gunner NPCs stop to reload when their clip is empty
 cvar_t* g_aiClipScale; // x every AI clip size
 cvar_t* g_grenadeCook; // grenades (2026-10-31): 1 = the player can cook a grenade (hold past a full throw), 0 = old
+cvar_t* g_npcShields; // personal shields (2026-11-16): % of gunner NPCs that wear one
+cvar_t* g_grenadeAreas; // grenades (2026-11-16): 1 = poison / fire / cryo grenades leave a lingering area (after JKG), 0 = blast only
 cvar_t* g_allowslipping;
 cvar_t* g_npcQuickGetUp; //item 319: non-Force NPCs get up 1-2 s sooner after a knockdown
 cvar_t* g_allowClimbing;
@@ -317,6 +322,8 @@ extern char* G_GetLocationForEnt(const gentity_t* ent);
 extern void CP_FindCombatPointWaypoints();
 extern qboolean InFront(vec3_t spot, vec3_t from, vec3_t from_angles, float thresh_hold = 0.0f);
 
+extern void G_CivilianThink(void);
+extern void G_CivilianReset(void);
 void G_RunFrame(const int levelTime);
 extern void WP_SaberHolsterCheckGuns(gentity_t* ent);
 void ClearNPCGlobals();
@@ -704,6 +711,9 @@ static void G_InitCvars()
 
 	// change anytime vars
 	g_speed = gi.cvar("g_speed", "250", CVAR_CHEAT);
+	g_npcChatter = gi.cvar("g_npcChatter", "1", CVAR_ARCHIVE);
+	g_civilians = gi.cvar("g_civilians", "0", CVAR_ARCHIVE);
+	g_civilianTypes = gi.cvar("g_civilianTypes", "rodian rodian2 gran gran2 trandoshan weequay jawa ugnaught prisoner protocol r2d2 r5d2", CVAR_ARCHIVE);
 	g_gravity = gi.cvar("g_gravity", "800", CVAR_SAVEGAME | CVAR_ROM);
 	g_stepSlideFix = gi.cvar("g_stepSlideFix", "1", CVAR_ARCHIVE);
 	g_sex = gi.cvar("sex", "f", CVAR_USERINFO | CVAR_ARCHIVE | CVAR_SAVEGAME | CVAR_NORESTART);
@@ -904,6 +914,8 @@ static void G_InitCvars()
 	g_aiReload = gi.cvar("g_aiReload", "1", CVAR_ARCHIVE | CVAR_NORESTART);
 	g_aiClipScale = gi.cvar("g_aiClipScale", "1", CVAR_ARCHIVE | CVAR_NORESTART);
 	g_grenadeCook = gi.cvar("g_grenadeCook", "1", CVAR_ARCHIVE | CVAR_NORESTART);
+	g_npcShields = gi.cvar("g_npcShields", "0", CVAR_ARCHIVE | CVAR_NORESTART);
+	g_grenadeAreas = gi.cvar("g_grenadeAreas", "1", CVAR_ARCHIVE | CVAR_NORESTART);
 
 	g_allowslipping = gi.cvar("g_allowslipping", "1", CVAR_ARCHIVE | CVAR_SAVEGAME | CVAR_NORESTART);
 	g_npcQuickGetUp = gi.cvar("g_npcQuickGetUp", "1", CVAR_ARCHIVE);
@@ -1093,6 +1105,7 @@ static void init_game(const char* mapname, const char* spawntarget, const int ch
 	IT_LoadWeatherParms();
 
 	BG_LoadWeaponVariants(); // weapon variants (2026-10-31): the SJE guns for gunner NPCs
+	BG_LoadPersonalShields(); // personal shields (2026-11-16)
 
 	clear_registered_items();
 
@@ -2385,6 +2398,7 @@ void G_RunFrame(const int levelTime)
 	}
 
 	AI_UpdateGroups();
+	G_CivilianThink(); // wandering civilians (2026-11-16, NPC_spawn)
 
 	//Look to clear out old events
 	ClearPlayerAlertEvents();

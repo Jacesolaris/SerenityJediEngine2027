@@ -498,6 +498,13 @@ typedef struct weaponVariant_s
 	float radiusScale; // grenades: blast radius, 1 = the stock thermal's
 	int effectTime; // grenades: ms the status effect lasts (burn, poison, freeze, stun, blind), 0 = the kind's default
 	int price; // the shop (2026-10-31): credits for the gun look (with the gun and ammo), grenades: a pack of 3; 0 = default
+	// first person (2026-11-16, from Jedi Knight Galaxies): the gun's own view model (stock md3 layout: <name>.md3 with
+	// <name>_hand.md3 holding the tags and <name>_barrel*.md3 = the arms and moving parts) and where it sits on screen
+	// (forward, right, up; used while cg_gunX/Y/Z are 0). Empty = the base weapon's view model.
+	char viewModel[MAX_QPATH];
+	float gunPosition[3];
+	int hitFreeze; // 2026-11-16 (JKG carbonite rifle): ms a hit freezes the target in carbonite, 0 = none
+	int viewDigits; // 2026-11-16: ammo counter digits on the first-person gun (<viewmodel>_claude_main / _d1.._d3.skin), 0 = none
 } weaponVariant_t;
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -516,6 +523,47 @@ typedef enum
 	GK_HEAL, // bacta: heals allies, cures fire and poison
 	GK_NUM_KINDS
 } grenadeKind_t;
+
+
+// ---------------------------------------------------------------------------------------------------------------
+// Status looks (2026-11-16, DH; the Jedi Knight Galaxies body overlays, gfx/PlayerOverlays/*): what a frozen or
+// stunned character looks like. Ice = the cryoban grenade and its cloud, carbonite = a "hitfreeze" gun (the carbonite
+// rifle), stun = the stun grenades. Force Stasis keeps its own tinted shell.
+// ---------------------------------------------------------------------------------------------------------------
+enum
+{
+	SL_NONE,
+	SL_ICE,
+	SL_CARBONITE,
+	SL_STUN
+};
+
+// ---------------------------------------------------------------------------------------------------------------
+// Personal shields (2026-11-16, DH; from Jedi Knight Galaxies, ext_data/sje_shields.dat): a worn energy shield takes
+// gun and explosion damage (not sabers, melee, Force powers, falls, environment or fire / gas ticks) until it is
+// empty, then recharges after "cooldown" ms without a hit, one point every "regen" ms. "shield <id>" equips one
+// ("shield" lists them, "shield off" takes it off). g_npcShields = % of gunner NPCs / bots that wear one.
+// ---------------------------------------------------------------------------------------------------------------
+#define MAX_PERSONAL_SHIELDS	32		// index 0 = none
+#define PERSONAL_SHIELD_FILE	"ext_data/sje_shields.dat"
+
+typedef struct personalShield_s
+{
+	char name[64]; // the id, e.g. "atgar"
+	char displayName[64]; // e.g. "Atgar Personal Shield"
+	int capacity; // points (max 1023: sent in 10 bits)
+	int cooldown; // ms without a hit before it recharges
+	int regen; // ms per point while recharging
+	char rechargeSound[MAX_QPATH];
+	char brokenSound[MAX_QPATH];
+	char equipSound[MAX_QPATH];
+	char chargedSound[MAX_QPATH];
+} personalShield_t;
+
+extern personalShield_t bgPersonalShields[MAX_PERSONAL_SHIELDS];
+extern int bgNumPersonalShields; // slots in use, slot 0 included (1 = none loaded)
+void BG_LoadPersonalShields(void);
+int BG_PersonalShieldByName(const char* name); // 0 when not found
 
 extern weaponVariant_t bgWeaponVariants[MAX_WEAPON_VARIANTS];
 extern int bgNumWeaponVariants; // the number of slots in use, slot 0 included (1 = no variants loaded)

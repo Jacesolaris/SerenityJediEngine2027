@@ -712,7 +712,9 @@ void _UI_DrawRect(float x, float y, float width, float height, float size, const
 	trap->R_SetColor(color);
 
 	_UI_DrawTopBottom(x, y, width, height, size);
-	_UI_DrawSides(x, y, width, height, size);
+	// the sides only between the top and bottom lines: the corners were drawn twice, so see-through boxes had darker
+	// corners (2026-11-16, fix from Jedi Knight Galaxies)
+	_UI_DrawSides(x, y + size * uiInfo.uiDC.yscale, width, height - 2 * size * uiInfo.uiDC.yscale, size);
 
 	trap->R_SetColor(NULL);
 }
@@ -1599,8 +1601,8 @@ void UI_LoadMenus(const char* menuFile, const qboolean reset)
 	Com_Printf("--------------------- Client Initialization ---------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("---------- genuine SerenityJediEngine-(Solaris Edition)MP--------\n");
-	Com_Printf("---------------------Build date 15/11/2026-----------------------\n"); // build date
-	Com_Printf("---------------------------Build 10------------------------------\n");
+	Com_Printf("---------------------Build date 17/11/2026-----------------------\n"); // build date
+	Com_Printf("---------------------------Build 11------------------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("------------------------LightSaber-------------------------------\n");
 	Com_Printf("-----------An elegant weapon for a more civilized age------------\n");

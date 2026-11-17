@@ -548,6 +548,35 @@ struct gentity_s
 	int grenadeDotNext; // the next damage tick
 	int grenadeDotAttacker; // entity number of the thrower
 	int grenadeDotDamage; // damage per tick
+	int statusLookTime; // status looks (2026-11-16): FLAG_ICELOOK / FLAG_CARBONITE / FLAG_STUNLOOK in userInt3 until then
+	// personal shields (2026-11-16, JKG; g_weapon.c): the worn shield (bgPersonalShields index, 0 = none) and its state
+	int shieldType;
+	int shieldCharge;
+	int shieldLastHit;
+	int shieldNextRegen;
+	int shieldRecharging;
+	int shieldChecked; // NPCs / bots: g_npcShields rolled
+	int shieldWasDead; // refilled on respawn
+	// NPC chatter (2026-11-16, NPC.c): partner entity + 1, role (1 leads), voice set + 1 (-1 none), dialog, line, timers
+	int chatPartner;
+	int chatRole;
+	int chatSet;
+	int chatDialog;
+	int chatLine;
+	int chatLines;
+	int chatTime;
+	int chatNext;
+	// bot talk and taunts (2026-11-16, ai_main.c bot_social_think): partner client + 1, leads, line, timers
+	int botChatPartner;
+	int botChatLead;
+	int botChatLine;
+	int botChatLines;
+	int botChatTime;
+	int botChatNext;
+	int botTauntNext;
+	int botTauntReply;
+	char botVoice[32]; // its character's voice folder with the voice command lines ("" = none)
+	int botVoiceChecked;
 	int TimeOfWeaponDrop;
 	qboolean exPhysWarned;
 	int weaponfiredelaytime;
@@ -1163,6 +1192,7 @@ struct gclient_s
 	// NOJUMP_TAUNT_COOLDOWN ms (G_NoJumpTaunt)
 	int noJumpTauntTime;
 	qboolean noJumpTauntHeld;
+	qboolean noCrouchTauntHeld; // models that can't crouch (BG_AnimSetCantCrouch): the crouch key plays the same taunt
 
 	// the SJE SP force powers ported to MP (w_force.c, 2026-10-12)
 	int graspEntityNum;			// FP_GRASP: who we hold + 1 (0 = nobody; the client struct is zeroed on spawn)

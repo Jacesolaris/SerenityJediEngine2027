@@ -2809,7 +2809,7 @@ static void CL_AddFavorite_f(void)
 	}
 }
 
-constexpr auto G2_VERT_SPACE_CLIENT_SIZE = 256;
+constexpr auto G2_VERT_SPACE_CLIENT_SIZE = 2048; // KB, was 256: ERR_DROP "Ran out of transform space" with vehicles / crowds (MD 9 uses 2048)
 
 /*
 ===============

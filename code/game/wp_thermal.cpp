@@ -185,6 +185,8 @@ static void G_GrenadeStatus(gentity_t* victim, gentity_t* attacker, const int ki
 			VectorClear(cl->ps.velocity);
 			player_Freeze(victim);
 			G_PlayEffect("cryoban/stuck", victim->currentOrigin);
+			victim->statusLook = SL_ICE; // the ice overlay (2026-11-16)
+			victim->statusLookTime = level.time + time;
 		}
 		break;
 
@@ -200,6 +202,8 @@ static void G_GrenadeStatus(gentity_t* victim, gentity_t* attacker, const int ki
 			G_Knockdown(victim, attacker, dir, 300, qtrue);
 		}
 		cl->ps.powerups[PW_STUNNED] = level.time + time; // NPCs can't fire, the stun look
+		victim->statusLook = SL_STUN; // the blue stun glow (2026-11-16)
+		victim->statusLookTime = level.time + time;
 		cl->ps.powerups[PW_SHOCKED] = level.time + (time < 2000 ? time : 2000);
 	}
 	break;
@@ -247,6 +251,156 @@ static void G_GrenadeStatus(gentity_t* victim, gentity_t* attacker, const int ki
 	}
 }
 
+//---------------------------------------------------------------------------------------------------------------------
+// Lingering areas (2026-11-16, DH; after Jedi Knight Galaxies' damage areas, jkg_damageareas.cpp): poison gas, a fire
+// patch and a cryo cloud stay where the grenade went off and keep working on whoever is inside and in sight of it:
+// poison and fire keep burning / poisoning (a short dose, renewed each tick), the cryo cloud freezes people again for a
+// moment every second (so they crawl through it). Droids don't breathe or burn, water puts fire out (as the blast).
+// g_grenadeAreas 0 = the blast only (the old way). The poison and cryo blast effects already linger that long.
+//---------------------------------------------------------------------------------------------------------------------
+extern cvar_t* g_grenadeAreas;
+
+// as long as each kind's effect is seen (DH 2026-11-16: the fire burned on with no damage): the poison smoke ~20 s,
+// the burning patch (explosives/burnmedium_fire, played once: its flames go on for ~20 s) and the cryo snow ~15 s
+#define GRENADE_AREA_POISON_TIME	18000
+#define GRENADE_AREA_FIRE_TIME		20000
+#define GRENADE_AREA_FREEZE_TIME	15000
+#define GRENADE_AREA_TICK			500
+#define GRENADE_AREA_FREEZE_TICK	1000	// the cryo cloud: frozen 400 ms of every second
+#define GRENADE_AREA_FREEZE_HOLD	400
+
+static void G_SpawnGrenadeArea(const vec3_t org, gentity_t* attacker, const int kind, const float blast_radius)
+{
+	int life;
+	float radius;
+
+	if (!g_grenadeAreas || !g_grenadeAreas->integer)
+	{
+		return;
+	}
+	switch (kind)
+	{
+	case GK_POISON:
+		life = GRENADE_AREA_POISON_TIME;
+		radius = blast_radius;
+		break;
+	case GK_FIRE:
+		life = GRENADE_AREA_FIRE_TIME;
+		radius = blast_radius * 0.5f < 64.0f ? 64.0f : blast_radius * 0.5f; // the flames spread ~50 units
+		break;
+	case GK_FREEZE:
+		life = GRENADE_AREA_FREEZE_TIME;
+		radius = blast_radius * 0.75f;
+		break;
+	default:
+		return;
+	}
+
+	gentity_t* area = G_Spawn();
+	if (!area)
+	{
+		return;
+	}
+	area->classname = "grenade_area";
+	G_SetOrigin(area, org);
+	area->svFlags |= SVF_NOCLIENT;
+	area->owner = attacker;
+	area->count = kind;
+	area->radius = radius;
+	area->delay = level.time + life; // the end
+	if (kind == GK_FIRE)
+	{
+		G_PlayEffect("explosives/burnmedium_fire", area->currentOrigin); // once: it burns for ~20 s by itself
+	}
+	area->e_ThinkFunc = thinkF_G_GrenadeAreaThink;
+	area->nextthink = level.time + GRENADE_AREA_TICK;
+	gi.linkentity(area);
+}
+
+void G_GrenadeAreaThink(gentity_t* self)
+{
+	static gentity_t* victims[MAX_GENTITIES];
+	const int kind = self->count;
+
+	if (level.time >= self->delay || !g_grenadeAreas->integer)
+	{
+		G_FreeEntity(self);
+		return;
+	}
+
+	const int count = G_RadiusList(self->currentOrigin, self->radius, self, qtrue, victims);
+	for (int i = 0; i < count; i++)
+	{
+		gentity_t* victim = victims[i];
+
+		if (!victim || !victim->client || victim->health <= 0 || !CanDamage(victim, self->currentOrigin)
+			|| G_GrenadeIsDroid(victim))
+		{
+			continue;
+		}
+		gclient_t* cl = victim->client;
+		switch (kind)
+		{
+		case GK_POISON:
+			if (victim->grenadeDotKind != GK_POISON || victim->grenadeDotEnd < level.time + 1500) // never shortens a longer dose
+			{
+				G_GrenadeDot(victim, self->owner, GK_POISON, 1500, 3);
+			}
+			break;
+		case GK_FIRE:
+			if (victim->waterlevel < 2)
+			{
+				if (victim->grenadeDotKind != GK_FIRE || victim->grenadeDotEnd < level.time + 1500) // never shortens a longer dose
+				{
+					G_GrenadeDot(victim, self->owner, GK_FIRE, 1500, 4);
+				}
+			}
+			break;
+		case GK_FREEZE:
+			if ((level.time / GRENADE_AREA_TICK) % (GRENADE_AREA_FREEZE_TICK / GRENADE_AREA_TICK) == 0
+				&& cl->NPC_class != CLASS_RANCOR && cl->NPC_class != CLASS_WAMPA && !G_IsRidingVehicle(victim)
+				&& cl->ps.stasisTime < level.time)
+			{
+				cl->ps.stasisTime = level.time + GRENADE_AREA_FREEZE_HOLD;
+				VectorClear(cl->ps.velocity);
+				player_Freeze(victim);
+				G_PlayEffect("cryoban/stuck", victim->currentOrigin);
+				victim->statusLook = SL_ICE;
+				victim->statusLookTime = level.time + GRENADE_AREA_FREEZE_HOLD + 200;
+			}
+			break;
+		default:
+			break;
+		}
+	}
+	self->nextthink = level.time + GRENADE_AREA_TICK;
+}
+
+// Carbonite (2026-11-16, DH; JKG's carbonite rifle): a weapon variant with "hitfreeze" freezes whoever its shots hurt
+// for that many ms, with the carbonite overlay (G_Damage, next to the burning check)
+void G_WeaponVariantHitFreeze(gentity_t* targ, const gentity_t* inflictor)
+{
+	const weaponVariant_t* wv = inflictor ? BG_GetWeaponVariant(inflictor->s.weaponVariant, inflictor->s.weapon) : nullptr;
+
+	if (!wv || wv->hitFreeze <= 0 || !targ || !targ->client || targ->health <= 0)
+	{
+		return;
+	}
+	gclient_t* cl = targ->client;
+	if (cl->NPC_class == CLASS_VEHICLE || cl->NPC_class == CLASS_RANCOR || cl->NPC_class == CLASS_ATST || G_IsRidingVehicle(targ))
+	{
+		return;
+	}
+	if (cl->ps.stasisTime < level.time + wv->hitFreeze)
+	{
+		cl->ps.stasisTime = level.time + wv->hitFreeze;
+		VectorClear(cl->ps.velocity);
+		player_Freeze(targ);
+	}
+	targ->statusLook = SL_CARBONITE;
+	targ->statusLookTime = level.time + wv->hitFreeze;
+}
+
 // thermalDetonatorExplode: the blast of a grenade type; qfalse = a stock thermal (the old blast)
 static qboolean G_GrenadeBlast(gentity_t* ent)
 {
@@ -292,6 +446,8 @@ static qboolean G_GrenadeBlast(gentity_t* ent)
 			}
 		}
 	}
+
+	G_SpawnGrenadeArea(org, attacker, kind, radius);
 
 	G_FreeEntity(ent);
 	return qtrue;
