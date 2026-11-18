@@ -6430,7 +6430,12 @@ void G_CheckForDismemberment(gentity_t* ent, const gentity_t* enemy, vec3_t poin
 		return;
 	}
 
-	if (gGAvoidDismember != 2 && !s_gun_dismember) // a gun kill always cuts, as in SP; g_dismember 0 still turns it off (2026-11-09)
+	// Saber Slice (2026-11-17): a killing saber blow always cuts where the blade hit, whatever the Model Dismemberment
+	// level (Low / Medium only make the Classic limb cuts rarer); Off still turns it off
+	const qboolean saber_slice_hit = g_saberSlice.integer && !s_gun_dismember
+		&& s_saberSliceHit.victim == ent->s.number && level.time - s_saberSliceHit.time <= 150 ? qtrue : qfalse;
+
+	if (gGAvoidDismember != 2 && !s_gun_dismember && !saber_slice_hit) // a gun kill always cuts, as in SP; g_dismember 0 still turns it off (2026-11-09)
 	{
 		//this means do the dismemberment regardless of randomness and damage
 		if (Q_irand(0, 100) > dismember)

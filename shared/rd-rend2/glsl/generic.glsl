@@ -1013,5 +1013,16 @@ void main()
 
 	out_Color = color;
 	out_Glow = mix(vec4(0.0, 0.0, 0.0, color.a), color, u_EnableTextures.x);
-	out_SsrMask = vec4(u_SsrNoReflect);
+	if (u_SsrNoReflect < 0.0)
+	{
+		// r_ssr (2026-11-17): a blended saber blade adds what it adds to the view to the mask (blended the same way),
+		// so r_ssr leaves the blade and its glow alone
+		vec3 added = color.rgb * (u_SsrNoReflect < -1.5 ? color.a : 1.0);
+		float coverage = clamp(max(added.r, max(added.g, added.b)) * 2.0, 0.0, 1.0);
+		out_SsrMask = vec4(coverage, coverage, coverage, 1.0);
+	}
+	else
+	{
+		out_SsrMask = vec4(u_SsrNoReflect);
+	}
 }

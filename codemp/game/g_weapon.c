@@ -36,6 +36,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // perform the server side effects of a weapon firing
 
 #include "g_local.h"
+#include "ghoul2/G2.h" // BONE_ANGLES_POSTMULT (the emplaced gun chair's swivel, 2026-11-18)
 extern qboolean jedi_npc_disruptor_dodge_evasion(gentity_t* self, gentity_t* shooter, vec3_t dmg_origin, int hit_loc);
 #include "b_local.h" // AI clips and reloads (2026-10-31): combat points, NPC globals
 #include "botlib/be_aas.h"
@@ -7165,6 +7166,42 @@ void Cmd_PersonalShield_f(gentity_t* ent)
 	G_PersonalShieldEquip(ent, type);
 }
 
+// stormtroopers keep the stock gun (as SP, 2026-11-18): the stormtrooper NPC types never get a weapon variant, so plain
+// troopers carry the stock E-11 and officers / commanders / snipers / rocket troopers the stock version of their own
+// gun. Matched by NPC type, not class: CLASS_STORMTROOPER is also used by mercs, Lando, droids and others. A "_nina"
+// suffix counts as the same type. Bots are not NPCs and keep their variants.
+static qboolean WV_IsStormtrooper(const gentity_t* ent)
+{
+	static const char* const st_types[] = {
+		"stormtrooper", "stormtrooper2", "stormtrooper_blue", "stormtrooper_red",
+		"snowtrooper", "snowtrooper2", "elitetrooper", "elitetrooper2",
+		"stofficer", "stofficer2", "stofficeralt", "stcommander", "etofficer", "etcommander",
+		"st_sniper", "sniper_stormtrooper", "rockettrooper", "rockettrooper_ver1"
+	};
+	char type[64];
+	size_t len;
+	int i;
+
+	if (!ent->NPC || !ent->NPC_type || !ent->NPC_type[0])
+	{
+		return qfalse;
+	}
+	Q_strncpyz(type, ent->NPC_type, sizeof type);
+	len = strlen(type);
+	if (len > 5 && !Q_stricmp(type + len - 5, "_nina"))
+	{
+		type[len - 5] = '\0';
+	}
+	for (i = 0; i < (int)ARRAY_LEN(st_types); i++)
+	{
+		if (!Q_stricmp(type, st_types[i]))
+		{
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
 // every think, before the move (ClientThink_real): gunner bots and NPCs get a variant of the gun in their hand
 static void G_GrenadeClientThink(gentity_t* ent);
 extern void G_Shop_PlayerThink(gentity_t* ent);
@@ -7192,9 +7229,10 @@ void G_WeaponVariantThink(gentity_t* ent)
 
 	const int weapon = cl->ps.weapon;
 
-	if (weapon == WP_SABER || BG_HasWeapon(cl->ps.stats, WP_SABER) || ent->s.NPC_class == CLASS_VEHICLE)
+	if (weapon == WP_SABER || BG_HasWeapon(cl->ps.stats, WP_SABER) || ent->s.NPC_class == CLASS_VEHICLE
+		|| WV_IsStormtrooper(ent))
 	{
-		// saber users never (DH), vehicles neither
+		// saber users never (DH), vehicles neither, nor stormtroopers (stock guns, as SP, DH 2026-11-18)
 		cl->ps.weaponVariant = 0;
 		return;
 	}
@@ -7773,6 +7811,210 @@ void FireWeapon(gentity_t* ent, const qboolean alt_fire)
 	G_LogWeaponFire(ent->s.number, ent->s.weapon);
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// SP emplaced gun chairs in MP (2026-11-18, DH: kejim_post's turret had no chair and could not be used as in SP).
+// On SP maps (g_emplacedChair 1: a map name without "mp/", or a mission; 2: every map; 0: never; the spawn key
+// "mpturret" "1" keeps one gun MP's) emplaced_gun is SP's models/map_objects/imp_mine/turret_chair.glm, as SP
+// g_emplaced.cpp: you sit in it from any side, the whole chair turns the way you look, the guns pitch with your view
+// and fire from its two muzzle tags; use, back or jump gets you out where you got in. s.origin2[1] = 1 tells bg and
+// the cgame it is a chair (s.origin2[0] = 360: no turning limit). SP's spawnflags on a chair: 1 INACTIVE (until a
+// target_activate), 4 VULNERABLE (else it can't be hurt). The MP stand-behind gun is unchanged on MP maps.
+// ---------------------------------------------------------------------------------------------------------------
+#define EMPLACED_CHAIR_MODEL	"models/map_objects/imp_mine/turret_chair.glm"
+
+static qboolean G_EmplacedChairMap(void)
+{
+	char mapname[MAX_QPATH];
+
+	if (g_emplacedChair.integer <= 0)
+	{
+		return qfalse;
+	}
+	if (g_emplacedChair.integer >= 2 || level.gametype == GT_SINGLE_PLAYER)
+	{
+		return qtrue;
+	}
+	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+	return Q_stricmpn(mapname, "mp/", 3) ? qtrue : qfalse;
+}
+
+static qboolean G_IsEmplacedChair(const gentity_t* gun)
+{
+	return gun && gun->inuse && gun->s.origin2[1] > 0.5f && gun->ghoul2 ? qtrue : qfalse;
+}
+
+// the chair turned to this yaw (as SP: the whole chair turns with its user), the guns to this pitch
+static void G_EmplacedChairAim(gentity_t* gun, const float yaw, const float pitch)
+{
+	vec3_t swivel;
+
+	VectorSet(gun->s.angles, 0, yaw, 0);
+	VectorCopy(gun->s.angles, gun->s.apos.trBase);
+	VectorCopy(gun->s.angles, gun->r.currentAngles);
+	VectorSet(swivel, -pitch, 0, 0);
+	trap->G2API_SetBoneAngles(gun->ghoul2, 0, "swivel_bone", swivel, BONE_ANGLES_POSTMULT, POSITIVE_Y, POSITIVE_Z,
+		POSITIVE_X, NULL, 0, level.time);
+}
+
+static qboolean G_EmplacedChairBolt(gentity_t* gun, const int bolt, vec3_t origin)
+{
+	mdxaBone_t matrix;
+
+	if (!gun->ghoul2 || bolt < 0)
+	{
+		return qfalse;
+	}
+	if (!trap->G2API_GetBoltMatrix(gun->ghoul2, 0, bolt, &matrix, gun->r.currentAngles, gun->r.currentOrigin,
+		level.time, NULL, gun->modelScale))
+	{
+		return qfalse;
+	}
+	BG_GiveMeVectorFromMatrix(&matrix, ORIGIN, origin);
+	return qtrue;
+}
+
+// he gets off: back where he got on (or a free spot around the chair), his own weapon back
+static void G_EmplacedChairDetach(gentity_t* gun)
+{
+	gentity_t* user = gun->activator;
+
+	if (!user || !user->client)
+	{
+		gun->activator = NULL;
+		gun->s.activeForcePass = 0;
+		return;
+	}
+	if (user->inuse)
+	{
+		static const float around[8][2] = {
+			{ -56, 0 }, { 56, 0 }, { 0, 56 }, { 0, -56 }, { -48, 48 }, { -48, -48 }, { 48, 48 }, { 48, -48 }
+		};
+		vec3_t spot, fwd, right;
+		trace_t tr;
+		int i;
+
+		VectorCopy(gun->pos2, spot);
+		trap->Trace(&tr, spot, user->r.mins, user->r.maxs, spot, user->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
+		if (tr.startsolid || tr.allsolid)
+		{
+			// something stands there now: another free spot around the chair (behind it first)
+			AngleVectors(gun->s.angles, fwd, right, NULL);
+			for (i = 0; i < 8; i++)
+			{
+				VectorMA(gun->r.currentOrigin, around[i][0], fwd, spot);
+				VectorMA(spot, around[i][1], right, spot);
+				spot[2] = gun->pos2[2];
+				trap->Trace(&tr, spot, user->r.mins, user->r.maxs, spot, user->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
+				if (!tr.startsolid && !tr.allsolid)
+				{
+					break;
+				}
+			}
+			if (i == 8)
+			{
+				VectorCopy(gun->pos2, spot);
+			}
+		}
+		VectorCopy(spot, user->client->ps.origin);
+		VectorCopy(spot, user->r.currentOrigin);
+		VectorClear(user->client->ps.velocity);
+		user->client->ps.eFlags ^= EF_TELEPORT_BIT;
+		trap->LinkEntity((sharedEntity_t*)user);
+		G_Sound(user, CHAN_AUTO, G_SoundIndex("sound/weapons/emplaced/emplaced_dismount.mp3"));
+	}
+	// the chair keeps facing the way it was left (as SP)
+	VectorCopy(gun->s.angles, gun->pos1);
+
+	BG_TakeWeapon(user->client->ps.stats, WP_EMPLACED_GUN);
+	user->client->ps.ammo[weaponData[WP_EMPLACED_GUN].ammoIndex] = 0;
+	{
+		const int old_weap = user->client->ps.weapon;
+		user->client->ps.weapon = gun->s.weapon;
+		gun->s.weapon = old_weap;
+	}
+	user->r.ownerNum = ENTITYNUM_NONE;
+	user->client->ps.emplacedTime = level.time + 1000;
+	user->client->ps.emplacedIndex = 0;
+	user->client->ps.saberHolstered = 0;
+	gun->activator = NULL;
+	gun->s.activeForcePass = 0;
+	gun->s.weapon = WP_EMPLACED_GUN;
+}
+
+// ClientThink, after his pmove: the chair turned the way he looks and he in its seat; or he just got off it
+void G_EmplacedChairThink(gentity_t* ent)
+{
+	gentity_t* gun;
+	vec3_t seat;
+
+	if (!ent->client || ent->r.ownerNum <= 0 || ent->r.ownerNum >= ENTITYNUM_WORLD)
+	{
+		return;
+	}
+	gun = &g_entities[ent->r.ownerNum];
+	if (!G_IsEmplacedChair(gun) || gun->activator != ent)
+	{
+		return;
+	}
+	if (ent->client->ps.emplacedIndex != gun->s.number || ent->health <= 0)
+	{
+		G_EmplacedChairDetach(gun); // (use, back, jump or death took him off)
+		return;
+	}
+	G_EmplacedChairAim(gun, ent->client->ps.viewangles[YAW], ent->client->ps.viewangles[PITCH]);
+	if (G_EmplacedChairBolt(gun, gun->genericValue11, seat))
+	{
+		VectorCopy(seat, ent->client->ps.origin);
+		VectorClear(ent->client->ps.velocity);
+	}
+}
+
+// emplaced_gun_use on a chair: he sits in it from any side
+static void G_EmplacedChairUse(gentity_t* self, gentity_t* activator)
+{
+	vec3_t v_len;
+
+	if (self->health <= 0 || self->activator || !activator || !activator->client || activator->s.number >= MAX_CLIENTS
+		|| activator->health <= 0)
+	{
+		return;
+	}
+	if (activator->client->ps.emplacedTime > level.time || activator->client->ps.forceHandExtend != HANDEXTEND_NONE
+		|| activator->client->ps.isJediMaster || activator->client->ps.m_iVehicleNum
+		|| activator->client->ps.duelInProgress)
+	{
+		return;
+	}
+	VectorSubtract(self->r.currentOrigin, activator->client->ps.origin, v_len);
+	if (VectorLength(v_len) > 96.0f)
+	{
+		return;
+	}
+
+	self->genericValue1 = 1; // (the use button is still down: not a get-off)
+	{
+		const int old_weapon = activator->s.weapon;
+		activator->client->ps.weapon = WP_EMPLACED_GUN;
+		activator->client->ps.weaponstate = WEAPON_READY;
+		BG_GiveWeapon(activator->client->ps.stats, WP_EMPLACED_GUN);
+		self->s.weapon = old_weapon; // the gun keeps the weapon he had
+	}
+	activator->client->ps.emplacedIndex = self->s.number;
+	self->s.emplacedOwner = activator->s.number;
+	self->s.activeForcePass = NUM_FORCE_POWERS + 1;
+	activator->r.ownerNum = self->s.number;
+	self->activator = activator;
+	VectorCopy(activator->client->ps.origin, self->pos2); // where he gets off again
+
+	// facing the way the chair faces, in its seat now
+	SetClientViewAngle(activator, self->pos1);
+	G_EmplacedChairThink(activator);
+	activator->client->ps.eFlags ^= EF_TELEPORT_BIT;
+
+	G_Sound(self, CHAN_AUTO, G_SoundIndex("sound/weapons/emplaced/emplaced_mount.mp3"));
+	G_ActivateBehavior(self, BSET_USE);
+}
+
 //---------------------------------------------------------
 static void WP_FireEmplaced(gentity_t* ent, const qboolean alt_fire)
 //---------------------------------------------------------
@@ -7819,6 +8061,13 @@ static void WP_FireEmplaced(gentity_t* ent, const qboolean alt_fire)
 	}
 
 	gun->genericValue10 = side;
+	if (G_IsEmplacedChair(gun))
+	{
+		// an SP chair: out of its muzzle tag on that side (the cgame's flash uses *flash02 for side 1), the guns pitched
+		// the way he looks
+		G_EmplacedChairAim(gun, ent->client->ps.viewangles[YAW], ent->client->ps.viewangles[PITCH]);
+		G_EmplacedChairBolt(gun, side ? gun->genericValue13 : gun->genericValue12, gunpoint);
+	}
 	G_AddEvent(gun, EV_FIRE_WEAPON, side);
 
 	vectoangles(forward, angs);
@@ -7864,6 +8113,12 @@ void emplaced_gun_use(gentity_t* self, gentity_t* other)
 	const float zoffset = 50;
 	vec3_t angles_to_owner;
 	vec3_t v_len;
+
+	if (G_IsEmplacedChair(self))
+	{
+		G_EmplacedChairUse(self, other); // an SP chair: sit in it from any side
+		return;
+	}
 
 	if (self->health <= 0)
 	{
@@ -8084,9 +8339,15 @@ static void emplaced_gun_update(gentity_t* self)
 
 	if (self->activator && self->activator->client &&
 		(!self->activator->inuse || self->activator->client->ps.emplacedIndex != self->s.number || self->genericValue4
-			|| own_len > 64))
+			|| own_len > (G_IsEmplacedChair(self) ? 160.0f : 64.0f)))
 	{
 		//get the user off of me then
+		if (G_IsEmplacedChair(self))
+		{
+			G_EmplacedChairDetach(self); // an SP chair: back where he got on
+			self->nextthink = level.time + 50;
+			return;
+		}
 		BG_TakeWeapon(self->activator->client->ps.stats, WP_EMPLACED_GUN);
 		self->activator->client->ps.ammo[weaponData[WP_EMPLACED_GUN].ammoIndex] = 0;
 
@@ -8131,11 +8392,92 @@ static void emplaced_gun_die(gentity_t* self, gentity_t* inflictor, gentity_t* a
 	self->genericValue5 = 0;
 }
 
+// emplaced_gun on an SP map: SP's chair (see G_EmplacedChairMap)
+static void SP_emplaced_gun_chair(gentity_t* ent)
+{
+	const qboolean vulnerable = ent->spawnflags & 4 ? qtrue : qfalse; // (SP's VULNERABLE)
+
+	RegisterItem(BG_FindItemForWeapon(WP_EMPLACED_GUN));
+
+	ent->r.contents = CONTENTS_SOLID;
+	ent->s.solid = SOLID_BBOX;
+	VectorSet(ent->r.mins, -30, -30, -5);
+	VectorSet(ent->r.maxs, 30, 30, 60);
+
+	if (ent->spawnflags & 1)
+	{
+		ent->flags |= FL_INACTIVE; // SP's INACTIVE: can't be used until a target_activate
+	}
+	ent->spawnflags = 4; // deadsolid (SP's flags are not MP's: 1 would be CANRESPAWN)
+
+	ent->genericValue5 = 0;
+	ent->genericValue4 = 0;
+	G_SpawnInt("health", "250", &ent->health);
+	if (ent->health <= 0)
+	{
+		ent->health = 250;
+	}
+	ent->maxHealth = ent->health;
+	G_ScaleNetHealth(ent);
+	ent->takedamage = vulnerable;
+	ent->pain = emplaced_gun_pain;
+	ent->die = emplaced_gun_die;
+	G_SpawnInt("splashDamage", "80", &ent->splashDamage);
+	G_SpawnInt("splashRadius", "128", &ent->splashRadius);
+	G_SpawnInt("count", "999", &ent->count);
+
+	ent->s.origin2[0] = 360.0f; // no turning limit (BG_EmplacedView)
+	ent->s.origin2[1] = 1.0f; // a chair (bg_pmove.c / cgame)
+	ent->s.modelIndex = G_model_index(EMPLACED_CHAIR_MODEL);
+	ent->s.modelGhoul2 = 1;
+	ent->s.g2radius = 110;
+	ent->s.weapon = WP_EMPLACED_GUN;
+
+	// the server's copy of the model, for its seat and muzzle tags
+	trap->G2API_InitGhoul2Model(&ent->ghoul2, EMPLACED_CHAIR_MODEL, 0, 0, 0, 0, 0);
+	if (ent->ghoul2)
+	{
+		ent->genericValue11 = trap->G2API_AddBolt(ent->ghoul2, 0, "*seat");
+		ent->genericValue12 = trap->G2API_AddBolt(ent->ghoul2, 0, "*flash01");
+		ent->genericValue13 = trap->G2API_AddBolt(ent->ghoul2, 0, "*flash02");
+	}
+	else
+	{
+		Com_Printf(S_COLOR_YELLOW "emplaced_gun: can't load %s, using the MP gun\n", EMPLACED_CHAIR_MODEL);
+		ent->s.origin2[1] = 0.0f;
+	}
+	G_SoundIndex("sound/weapons/emplaced/emplaced_mount.mp3");
+	G_SoundIndex("sound/weapons/emplaced/emplaced_dismount.mp3");
+
+	G_SetOrigin(ent, ent->s.origin);
+	VectorCopy(ent->s.angles, ent->pos1);
+	VectorCopy(ent->s.angles, ent->r.currentAngles);
+	VectorCopy(ent->s.angles, ent->s.apos.trBase);
+
+	ent->think = emplaced_gun_update;
+	ent->nextthink = level.time + 50;
+	ent->use = emplaced_gun_realuse;
+	ent->r.svFlags |= SVF_PLAYER_USABLE;
+	ent->s.pos.trType = TR_STATIONARY;
+	ent->s.owner = MAX_CLIENTS + 1;
+	ent->s.shouldtarget = qtrue;
+
+	trap->LinkEntity((sharedEntity_t*)ent);
+}
+
 void SP_emplaced_gun(gentity_t* ent)
 {
 	const char* name = "models/map_objects/mp/turret_chair.glm";
 	vec3_t down;
 	trace_t tr;
+	int mpturret = 0;
+
+	G_SpawnInt("mpturret", "0", &mpturret);
+	if (!mpturret && G_EmplacedChairMap())
+	{
+		SP_emplaced_gun_chair(ent); // an SP map: SP's chair (2026-11-18)
+		return;
+	}
 
 	//make sure our assets are precached
 	RegisterItem(BG_FindItemForWeapon(WP_EMPLACED_GUN));

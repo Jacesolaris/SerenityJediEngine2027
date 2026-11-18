@@ -2028,6 +2028,17 @@ static void G_Say(const gentity_t* ent, const gentity_t* target, int mode, const
 	char location[64];
 	char* loc_msg = NULL;
 
+	{
+		// an admin muted him (2026-11-18, Adminmute)
+		const int muted = G_AdminMuteLeft(ent);
+		if (muted)
+		{
+			trap->SendServerCommand(ent - g_entities, va("print \"^1You are muted%s%s.\n\"", muted > 0 ? " for " : "",
+				muted > 0 ? G_AdminTimeText(muted) : ""));
+			return;
+		}
+	}
+
 	if (level.gametype < GT_TEAM && mode == SAY_TEAM)
 	{
 		mode = SAY_ALL;
@@ -2207,6 +2218,11 @@ static void Cmd_VoiceCommand_f(gentity_t* ent)
 	int i = 0;
 
 	strcpy(content, "");
+
+	if (G_AdminMuteLeft(ent))
+	{
+		return; // muted by an admin (2026-11-18)
+	}
 
 	if (trap->Argc() < 2)
 	{
@@ -2695,12 +2711,22 @@ static void Cmd_ChangeMap(gentity_t* ent)
 		return;
 	}
 
+	// The arguments come from the client and go into the server command buffer:
+	// only accept a gametype number and a map name without command separators.
+	char   arg2[MAX_STRING_CHARS];
 	trap->Argv(1, arg1, sizeof(arg1));
-	trap->SendConsoleCommand(EXEC_APPEND, va("g_gametype %s\n", arg1));
-	G_LogPrintf("ChangeMap admin command executed by SERVER to GAMETYPE:%s", arg1);
-	trap->Argv(2, arg1, sizeof(arg1));
-	trap->SendConsoleCommand(EXEC_APPEND, va("map %s\n", arg1));
-	G_LogPrintf(" MAP:%s.\n", arg1);
+	trap->Argv(2, arg2, sizeof(arg2));
+	const int gametype = atoi(arg1);
+	if (!arg1[0] || gametype < 0 || gametype >= GT_MAX_GAME_TYPE ||
+		!arg2[0] || strpbrk(arg2, ";\"\n\r"))
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Usage: /Adminchangemap <gametype number> <map name>\n\"");
+		return;
+	}
+	trap->SendConsoleCommand(EXEC_APPEND, va("g_gametype %i\n", gametype));
+	G_LogPrintf("ChangeMap admin command executed by SERVER to GAMETYPE:%i", gametype);
+	trap->SendConsoleCommand(EXEC_APPEND, va("map %s\n", arg2));
+	G_LogPrintf(" MAP:%s.\n", arg2);
 }
 
 static void Cmd_Punish(gentity_t* ent)
@@ -2736,6 +2762,11 @@ static void Cmd_Punish(gentity_t* ent)
 	if (!g_entities[client_id].inuse)
 	{ // check to make sure client slot is in use
 		trap->SendServerCommand(ent - g_entities, va("print \"Client %s is not active\n\"", arg1));
+		return;
+	}
+	if (client_id != ent->s.number && g_entities[client_id].r.svFlags & SVF_ADMIN)
+	{ // admins can't kick or punish each other (2026-11-18)
+		trap->SendServerCommand(ent - g_entities, va("print \"%s^7 is an admin.\n\"", g_entities[client_id].client->pers.netname));
 		return;
 	}
 	if (g_entities[client_id].client->ps.duelInProgress == 1)
@@ -2809,6 +2840,11 @@ static void Cmd_Kick(gentity_t* ent)
 		trap->SendServerCommand(ent - g_entities, va("print \"Client %s is not active\n\"", arg1));
 		return;
 	}
+	if (client_id != ent->s.number && g_entities[client_id].r.svFlags & SVF_ADMIN)
+	{ // admins can't kick or punish each other (2026-11-18)
+		trap->SendServerCommand(ent - g_entities, va("print \"%s^7 is an admin.\n\"", g_entities[client_id].client->pers.netname));
+		return;
+	}
 	if (client_id == ent->client->ps.clientNum)
 	{
 		trap->SendServerCommand(ent - g_entities, va("print \"You cant kick yourself.\n\""));
@@ -2823,9 +2859,462 @@ static void Cmd_Kick(gentity_t* ent)
 	G_LogPrintf("Kick command executed by %s on %s.\n", ent->client->pers.netname, g_entities[client_id].client->pers.netname);
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// More admin commands (2026-11-18, DH; ideas from Jedi Knight Galaxies' admin system): bans, mutes, admin messages,
+// a status list, noclip and teleports. g_svcmds.c keeps the ban / mute / login lock list. All in the admin menu.
+// ---------------------------------------------------------------------------------------------------------------
+static qboolean Admin_Check(const gentity_t* ent)
+{
+	if (!(ent->r.svFlags & SVF_ADMIN))
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Must login with /adminlogin (password)\n\"");
+		return qfalse;
+	}
+	return qtrue;
+}
+
+// The player an admin command names (client number or name); NULL after telling the admin why not. protect: not
+// another admin and not himself (kick, punish, ban, mute)
+static gentity_t* Admin_Target(const gentity_t* ent, const char* arg, const qboolean protect)
+{
+	char name[MAX_STRING_CHARS];
+	gentity_t* target;
+	int client_id;
+
+	if (!arg || !arg[0])
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"No player given.\n\"");
+		return NULL;
+	}
+	Q_strncpyz(name, arg, sizeof name);
+	client_id = G_ClientNumberFromArg(name);
+	if (client_id == -1)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"Can't find client ID for %s\n\"", name));
+		return NULL;
+	}
+	if (client_id == -2)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"Ambiguous client ID for %s\n\"", name));
+		return NULL;
+	}
+	if (client_id < 0 || client_id >= MAX_CLIENTS)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"Bad client ID for %s\n\"", name));
+		return NULL;
+	}
+	target = &g_entities[client_id];
+	if (!target->inuse || !target->client || target->client->pers.connected == CON_DISCONNECTED)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"Client %s is not active\n\"", name));
+		return NULL;
+	}
+	if (protect && target == ent)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"You can't do that to yourself.\n\"");
+		return NULL;
+	}
+	if (protect && target->r.svFlags & SVF_ADMIN)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"%s^7 is an admin.\n\"", target->client->pers.netname));
+		return NULL;
+	}
+	return target;
+}
+
+// the admin's own text (a reason, a message) with the characters that would break a server command taken out
+static void Admin_CleanText(char* text)
+{
+	Q_strstrip(text, "\"\n\r;%", "'    ");
+}
+
+static void Admin_PrintHelp(const gentity_t* ent)
+{
+	trap->SendServerCommand(ent - g_entities, "print \""
+		"^3Admin commands (^7Adminmenu^3 opens the admin menu):\n"
+		"^7Adminlogout ^5- log out\n"
+		"^7Adminkick <player>   Adminpunish <player>\n"
+		"^7Adminban <player> [time] [reason] ^5- time 30m, 2h, 7d or 0 = permanent (none = 1 day)\n"
+		"^7Adminbanlist   Adminunban <id> ^5- the bans, mutes and login locks / lift one\n"
+		"^7Adminmute <player> [time] [reason]   Adminunmute <player> ^5- chat and voice (none = 10 minutes)\n"
+		"^7Adminsay <text>   Admintell <player> <text> ^5- admin messages\n"
+		"^7Adminstatus ^5- players, IPs, admins and mutes\n"
+		"^7Adminnoclip   Admingoto <player>   Adminbring <player>\n"
+		"^7Adminchangemap <gametype number> <map>\n"
+		"^7Adminnpc spawn <NPC> / kill ^5- with g_cheatoverride 1\n\"");
+}
+
+// "Adminban <player> [time] [reason]"
+static void Cmd_AdminBan_f(gentity_t* ent)
+{
+	char arg[MAX_STRING_CHARS], reason[ADMINLIST_REASON];
+	gentity_t* target;
+	int seconds, id;
+	const char* time_text;
+
+	if (!Admin_Check(ent))
+	{
+		return;
+	}
+	if (trap->Argc() < 2)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Usage: /Adminban <player> [time: 30m, 2h, 7d, 0 = permanent; none = 1d] [reason]\n\"");
+		return;
+	}
+	trap->Argv(1, arg, sizeof arg);
+	target = Admin_Target(ent, arg, qtrue);
+	if (!target)
+	{
+		return;
+	}
+	trap->Argv(2, arg, sizeof arg);
+	seconds = G_AdminParseDuration(arg);
+	if (seconds == -2)
+	{
+		seconds = 86400;
+	}
+	if (seconds < 0)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"Bad time '%s' (30m, 2h, 7d, 0 = permanent)\n\"", arg));
+		return;
+	}
+	Q_strncpyz(reason, trap->Argc() > 3 ? ConcatArgs(3) : "", sizeof reason);
+	Admin_CleanText(reason);
+	time_text = G_AdminTimeText(seconds);
+	id = G_AdminListAdd('B', target->client->sess.IP, seconds, reason);
+	if (id < 0)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"%s^7 has no IP address to ban (a bot or the host): kicked instead.\n\"",
+			target->client->pers.netname));
+	}
+	G_LogPrintf("Admin %s banned %s [%s] (%s): %s\n", ent->client->pers.netname, target->client->pers.netname,
+		target->client->sess.IP, time_text, reason);
+	trap->SendServerCommand(-1, va("print \"%s^7 was banned by %s^7 (%s)%s%s\n\"", target->client->pers.netname,
+		ent->client->pers.netname, time_text, reason[0] ? ": " : ".", reason));
+	trap->DropClient(target - g_entities, va("was banned (%s)%s%s", time_text, reason[0] ? ": " : "", reason));
+}
+
+// "Adminunban <id>": a ban, a mute or a login lock, by its number in Adminbanlist
+static void Cmd_AdminUnban_f(gentity_t* ent)
+{
+	char arg[MAX_STRING_CHARS];
+	char type;
+
+	if (!Admin_Check(ent))
+	{
+		return;
+	}
+	trap->Argv(1, arg, sizeof arg);
+	if (!arg[0] || atoi(arg) <= 0)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Usage: /Adminunban <id> (/Adminbanlist shows them)\n\"");
+		return;
+	}
+	type = G_AdminListRemove(atoi(arg));
+	if (!type)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"No entry %i in the admin list (/Adminbanlist)\n\"", atoi(arg)));
+		return;
+	}
+	G_LogPrintf("Admin %s lifted admin list entry %i (%c)\n", ent->client->pers.netname, atoi(arg), type);
+	trap->SendServerCommand(ent - g_entities, va("print \"%s %i lifted.\n\"",
+		type == 'B' ? "Ban" : type == 'M' ? "Mute" : "Admin login lock", atoi(arg)));
+}
+
+static void Cmd_AdminBanList_f(gentity_t* ent)
+{
+	if (!Admin_Check(ent))
+	{
+		return;
+	}
+	G_AdminListPrint(ent - g_entities);
+}
+
+// "Adminmute <player> [time] [reason]": his chat and voice commands are dropped
+static void Cmd_AdminMute_f(gentity_t* ent)
+{
+	char arg[MAX_STRING_CHARS], reason[ADMINLIST_REASON];
+	gentity_t* target;
+	int seconds;
+	const char* time_text;
+
+	if (!Admin_Check(ent))
+	{
+		return;
+	}
+	if (trap->Argc() < 2)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Usage: /Adminmute <player> [time: 10m, 1h, 0 = permanent; none = 10m] [reason]\n\"");
+		return;
+	}
+	trap->Argv(1, arg, sizeof arg);
+	target = Admin_Target(ent, arg, qtrue);
+	if (!target)
+	{
+		return;
+	}
+	trap->Argv(2, arg, sizeof arg);
+	seconds = G_AdminParseDuration(arg);
+	if (seconds == -2)
+	{
+		seconds = 600;
+	}
+	if (seconds < 0)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"Bad time '%s' (10m, 1h, 0 = permanent)\n\"", arg));
+		return;
+	}
+	Q_strncpyz(reason, trap->Argc() > 3 ? ConcatArgs(3) : "", sizeof reason);
+	Admin_CleanText(reason);
+	time_text = G_AdminTimeText(seconds);
+	if (G_AdminListAdd('M', target->client->sess.IP, seconds, reason) < 0)
+	{
+		target->client->pers.adminMuted = qtrue; // no IP (a bot): for this map
+	}
+	G_LogPrintf("Admin %s muted %s [%s] (%s): %s\n", ent->client->pers.netname, target->client->pers.netname,
+		target->client->sess.IP, time_text, reason);
+	trap->SendServerCommand(-1, va("print \"%s^7 was muted by %s^7 (%s)%s%s\n\"", target->client->pers.netname,
+		ent->client->pers.netname, time_text, reason[0] ? ": " : ".", reason));
+}
+
+static void Cmd_AdminUnmute_f(gentity_t* ent)
+{
+	char arg[MAX_STRING_CHARS];
+	gentity_t* target;
+
+	if (!Admin_Check(ent))
+	{
+		return;
+	}
+	trap->Argv(1, arg, sizeof arg);
+	target = Admin_Target(ent, arg, qfalse);
+	if (!target)
+	{
+		return;
+	}
+	G_AdminListRemoveIP('M', target->client->sess.IP);
+	target->client->pers.adminMuted = qfalse;
+	G_LogPrintf("Admin %s unmuted %s\n", ent->client->pers.netname, target->client->pers.netname);
+	trap->SendServerCommand(-1, va("print \"%s^7 can talk again (unmuted by %s^7).\n\"", target->client->pers.netname,
+		ent->client->pers.netname));
+}
+
+// "Adminsay <text>": to everyone, marked as from an admin
+static void Cmd_AdminSay_f(gentity_t* ent)
+{
+	char text[MAX_SAY_TEXT];
+
+	if (!Admin_Check(ent))
+	{
+		return;
+	}
+	if (trap->Argc() < 2)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Usage: /Adminsay <text>\n\"");
+		return;
+	}
+	Q_strncpyz(text, ConcatArgs(1), sizeof text);
+	Admin_CleanText(text);
+	G_LogPrintf("adminsay: %s: %s\n", ent->client->pers.netname, text);
+	trap->SendServerCommand(-1, va("chat \"^1[Admin] %s^7: ^3%s\" %i", ent->client->pers.netname, text, ent->s.number));
+}
+
+// "Admintell <player> <text>": to one player, marked as from an admin
+static void Cmd_AdminTell_f(gentity_t* ent)
+{
+	char arg[MAX_STRING_CHARS], text[MAX_SAY_TEXT];
+	gentity_t* target;
+
+	if (!Admin_Check(ent))
+	{
+		return;
+	}
+	if (trap->Argc() < 3)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Usage: /Admintell <player> <text>\n\"");
+		return;
+	}
+	trap->Argv(1, arg, sizeof arg);
+	target = Admin_Target(ent, arg, qfalse);
+	if (!target)
+	{
+		return;
+	}
+	Q_strncpyz(text, ConcatArgs(2), sizeof text);
+	Admin_CleanText(text);
+	G_LogPrintf("admintell: %s to %s: %s\n", ent->client->pers.netname, target->client->pers.netname, text);
+	trap->SendServerCommand(target - g_entities, va("chat \"^1[Admin to you] %s^7: ^3%s\" %i", ent->client->pers.netname, text,
+		ent->s.number));
+	if (target != ent)
+	{
+		trap->SendServerCommand(ent - g_entities, va("chat \"^1[Admin to %s^1]^7: ^3%s\" %i", target->client->pers.netname, text,
+			ent->s.number));
+	}
+}
+
+// "Adminstatus": every player with his number, team, ping and IP, and who is an admin or muted
+static void Cmd_AdminStatus_f(gentity_t* ent)
+{
+	char chunk[1000];
+	int i;
+
+	if (!Admin_Check(ent))
+	{
+		return;
+	}
+	Q_strncpyz(chunk, "^3Num  Team  Ping  IP                     Flags  Name\n", sizeof chunk);
+	for (i = 0; i <= level.maxclients; i++)
+	{
+		char line[192];
+
+		line[0] = 0;
+		if (i < level.maxclients)
+		{
+			const gentity_t* other = &g_entities[i];
+			const gclient_t* cl = &level.clients[i];
+			const int mute = other->inuse && other->client ? G_AdminMuteLeft(other) : 0;
+			const char* team;
+			char flags[8];
+
+			if (cl->pers.connected == CON_DISCONNECTED)
+			{
+				continue;
+			}
+			switch (cl->sess.sessionTeam)
+			{
+			case TEAM_RED:
+				team = "red";
+				break;
+			case TEAM_BLUE:
+				team = "blue";
+				break;
+			case TEAM_SPECTATOR:
+				team = "spec";
+				break;
+			default:
+				team = "free";
+				break;
+			}
+			Com_sprintf(flags, sizeof flags, "%s%s%s", other->r.svFlags & SVF_ADMIN ? "A" : "",
+				other->r.svFlags & SVF_BOT ? "B" : "", mute ? "M" : "");
+			Com_sprintf(line, sizeof line, "^7%3i  %-4s  %4i  %-21s  %-5s  %s\n", i, team,
+				cl->pers.connected == CON_CONNECTED ? cl->ps.ping : -1, cl->sess.IP, flags, cl->pers.netname);
+		}
+		if (i == level.maxclients || strlen(chunk) + strlen(line) >= sizeof chunk - 16)
+		{
+			if (i == level.maxclients)
+			{
+				Q_strcat(chunk, sizeof chunk, "^5Flags: A = admin, B = bot, M = muted\n");
+			}
+			Q_strstrip(chunk, "\"", "'");
+			trap->SendServerCommand(ent - g_entities, va("print \"%s\"", chunk));
+			chunk[0] = 0;
+		}
+		Q_strcat(chunk, sizeof chunk, line);
+	}
+}
+
+// "Adminnoclip": fly through walls (no cheats needed)
+static void Cmd_AdminNoclip_f(gentity_t* ent)
+{
+	if (!Admin_Check(ent))
+	{
+		return;
+	}
+	ent->client->noclip = !ent->client->noclip;
+	trap->SendServerCommand(ent - g_entities, va("print \"Admin noclip %s\n\"", ent->client->noclip ? "ON" : "OFF"));
+}
+
+// A free spot next to near_ent for mover (in front, behind, to the sides, above), so the teleport kills no one
+static qboolean Admin_FreeSpot(const gentity_t* mover, const gentity_t* near_ent, vec3_t out)
+{
+	static const float offsets[9][3] = {
+		{ 64, 0, 1 }, { -64, 0, 1 }, { 0, 64, 1 }, { 0, -64, 1 },
+		{ 48, 48, 1 }, { -48, 48, 1 }, { 48, -48, 1 }, { -48, -48, 1 }, { 0, 0, 80 }
+	};
+	vec3_t start, end;
+	trace_t tr;
+	int i;
+
+	VectorCopy(near_ent->client->ps.origin, start);
+	for (i = 0; i < 9; i++)
+	{
+		VectorSet(end, start[0] + offsets[i][0], start[1] + offsets[i][1], start[2] + offsets[i][2]);
+		trap->Trace(&tr, start, mover->r.mins, mover->r.maxs, end, near_ent->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
+		if (!tr.startsolid && !tr.allsolid && tr.fraction >= 1.0f)
+		{
+			VectorCopy(end, out);
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+static void Admin_Teleport(gentity_t* ent, gentity_t* mover, const gentity_t* to)
+{
+	vec3_t spot, angles;
+
+	if (mover == to)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"That's the same player.\n\"");
+		return;
+	}
+	if (mover->health <= 0 || mover->client->sess.sessionTeam == TEAM_SPECTATOR || mover->client->ps.m_iVehicleNum
+		|| to->health <= 0 || to->client->sess.sessionTeam == TEAM_SPECTATOR)
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"Both players must be alive, in the game and not in a vehicle.\n\"");
+		return;
+	}
+	if (!Admin_FreeSpot(mover, to, spot))
+	{
+		trap->SendServerCommand(ent - g_entities, "print \"No free spot there.\n\"");
+		return;
+	}
+	VectorCopy(mover->client->ps.viewangles, angles);
+	TeleportPlayer(mover, spot, angles);
+}
+
+// "Admingoto <player>": the admin goes to him
+static void Cmd_AdminGoto_f(gentity_t* ent)
+{
+	char arg[MAX_STRING_CHARS];
+	gentity_t* target;
+
+	if (!Admin_Check(ent))
+	{
+		return;
+	}
+	trap->Argv(1, arg, sizeof arg);
+	target = Admin_Target(ent, arg, qfalse);
+	if (target)
+	{
+		Admin_Teleport(ent, ent, target);
+	}
+}
+
+// "Adminbring <player>": he comes to the admin
+static void Cmd_AdminBring_f(gentity_t* ent)
+{
+	char arg[MAX_STRING_CHARS];
+	gentity_t* target;
+
+	if (!Admin_Check(ent))
+	{
+		return;
+	}
+	trap->Argv(1, arg, sizeof arg);
+	target = Admin_Target(ent, arg, qfalse);
+	if (target)
+	{
+		Admin_Teleport(ent, target, ent);
+		G_LogPrintf("Admin %s brought %s\n", ent->client->pers.netname, target->client->pers.netname);
+	}
+}
+
 static void Cmd_AdminLogin(gentity_t* ent)
 {
 	char   password[MAX_STRING_CHARS];
+	int locked;
 
 	trap->Cvar_Set("cl_noprint", "0");
 
@@ -2841,12 +3330,24 @@ static void Cmd_AdminLogin(gentity_t* ent)
 		return;
 	}
 
+	// too many wrong passwords from this IP (2026-11-18): no tries for a while
+	locked = G_AdminLoginLocked(ent->client->sess.IP);
+	if (locked > 0)
+	{
+		trap->SendServerCommand(ent - g_entities, va("print \"^1Too many wrong admin passwords: admin login is locked for %s.\n\"",
+			G_AdminTimeText(locked)));
+		return;
+	}
+
 	trap->Argv(1, password, sizeof(password)); // password
 
 	if (ent->client->pers.plugindetect == qtrue)
 	{
-		if (strcmp(password, g_adminpassword.string) == 0)
+		// no admin login while g_adminpassword is not set (its default is ""), and never with a blank password
+		if (g_adminpassword.string[0] && password[0] && strcmp(password, g_adminpassword.string) == 0)
 		{
+			G_AdminLoginGood(ent->client->sess.IP);
+
 			strcpy(ent->client->pers.login, g_adminlogin_saying.string);
 			strcpy(ent->client->pers.logout, g_adminlogout_saying.string);
 
@@ -2858,24 +3359,25 @@ static void Cmd_AdminLogin(gentity_t* ent)
 
 			trap->SendServerCommand(-1, va("print \"%s ^7%s\n\"", ent->client->pers.netname, ent->client->pers.login));
 
-			Com_Printf("-----Now type Adminmenu to see admin commands ----------\n");
-			Com_Printf("--------------------------------------------------------\n");
-			Com_Printf("-----Adminlogout---To log out as admin------------------\n");
-			Com_Printf("--------------------------------------------------------\n");
-			Com_Printf("-----Adminchangemap <Map name>--To change the map-------\n");
-			Com_Printf("--------------------------------------------------------\n");
-			Com_Printf("-----Adminpunish <Player name>--To punish the player----\n");
-			Com_Printf("--------------------------------------------------------\n");
-			Com_Printf("-----Adminkick <Player name>----To kick the player------\n");
-			Com_Printf("--------------------------------------------------------\n");
-			Com_Printf("-----Adminnpc spawn <NPC name>--To spawn an npc---------\n");
-			Com_Printf("--------------------------------------------------------\n");
-			Com_Printf("-----Type seta g_cheatoverride 1 to override cheats-----\n");
-			Com_Printf("--------------------------------------------------------\n");
+			// the command list goes to the admin (it went to the server console with Com_Printf, 2026-11-18)
+			Admin_PrintHelp(ent);
 		}
 		else
 		{
-			trap->SendServerCommand(ent - g_entities, va("print \"Incorrect password.\n\""));
+			const int left = G_AdminLoginFailed(ent->client->sess.IP);
+
+			G_SecurityLogPrintf("Wrong admin password from client %d (%s) [IP: %s]\n", ent->s.number,
+				ent->client->pers.netname, ent->client->sess.IP);
+			if (left > 0)
+			{
+				trap->SendServerCommand(ent - g_entities, va("print \"Incorrect password (%i more tr%s before admin login is locked).\n\"",
+					left, left == 1 ? "y" : "ies"));
+			}
+			else
+			{
+				trap->SendServerCommand(ent - g_entities, va("print \"^1Incorrect password: admin login is now locked for %s.\n\"",
+					G_AdminTimeText((g_adminLockTime.integer > 0 ? g_adminLockTime.integer : 120) * 60)));
+			}
 		}
 	}
 	else
@@ -4521,6 +5023,18 @@ command_t commands[] = {
 	{ "Adminpunish", Cmd_Punish, CMD_NOINTERMISSION },
 	{ "Adminkick", Cmd_Kick, CMD_NOINTERMISSION },
 	{ "Adminmenu", CG_AdminMenu, CMD_NOINTERMISSION },
+	// more admin commands (2026-11-18)
+	{ "Adminban", Cmd_AdminBan_f, 0 },
+	{ "Adminunban", Cmd_AdminUnban_f, 0 },
+	{ "Adminbanlist", Cmd_AdminBanList_f, 0 },
+	{ "Adminmute", Cmd_AdminMute_f, 0 },
+	{ "Adminunmute", Cmd_AdminUnmute_f, 0 },
+	{ "Adminsay", Cmd_AdminSay_f, 0 },
+	{ "Admintell", Cmd_AdminTell_f, 0 },
+	{ "Adminstatus", Cmd_AdminStatus_f, 0 },
+	{ "Adminnoclip", Cmd_AdminNoclip_f, CMD_ALIVE | CMD_NOINTERMISSION },
+	{ "Admingoto", Cmd_AdminGoto_f, CMD_ALIVE | CMD_NOINTERMISSION },
+	{ "Adminbring", Cmd_AdminBring_f, CMD_NOINTERMISSION },
 	{ "noforce", Cmd_Noforce_f, CMD_ALIVE | CMD_NOINTERMISSION },
 };
 

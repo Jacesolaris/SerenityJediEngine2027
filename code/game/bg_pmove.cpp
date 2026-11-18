@@ -5288,11 +5288,17 @@ static void PM_CrashLand()
 				//				(!(pml.groundTrace.contents & CONTENTS_NODROP)) &&
 				!(pm->pointcontents(pm->ps->origin, pm->ps->clientNum) & CONTENTS_NODROP))
 			{
+				// a body that was not coming down has not fallen: no fall sound. Walking into a dead body
+				// (G_CorpseTouchPush, g_main.cpp) lifts it by 60 and takes it off the ground; the ground trace puts
+				// it back on in the same frame (it lets go only from 100 up), and that counted as a landing here:
+				// a thud every 100 ms while somebody walked over a body that never moved
+				const qboolean fell = pml.previous_velocity[2] < 0.0f ? qtrue : qfalse;
+
 				if (pm->waterlevel < 2)
 				{
 					//don't play fallsplat when impact in the water
 					dead_fall_sound = qtrue;
-					if (!(pm->ps->eFlags & EF_NODRAW))
+					if (!(pm->ps->eFlags & EF_NODRAW) && fell)
 					{
 						//no sound if no draw
 						if (delta >= 75)
@@ -5305,7 +5311,7 @@ static void PM_CrashLand()
 						}
 					}
 				}
-				else
+				else if (fell)
 				{
 					G_SoundOnEnt(pm->gent, CHAN_BODY, va("sound/player/bodyfall_water%d.wav", Q_irand(1, 3)));
 				}

@@ -570,6 +570,8 @@ float forceJumpStrength[NUM_FORCE_POWER_LEVELS] =
 	840
 };
 
+static qboolean PM_InEmplacedChair(void);
+
 //rww - Get a pointer to the bgEntity by the index
 bgEntity_t* PM_BGEntForNum(const int num)
 {
@@ -596,6 +598,19 @@ bgEntity_t* PM_BGEntForNum(const int num)
 	bgEntity_t* ent = (bgEntity_t*)((byte*)pm->baseEnt + pm->entSize * num);
 
 	return ent;
+}
+
+// sitting in an SP emplaced gun chair (g_weapon.c SP_emplaced_gun_chair, 2026-11-18): the gun's s.origin2[1] is 1
+static qboolean PM_InEmplacedChair(void)
+{
+	const bgEntity_t* gun;
+
+	if (!pm || !pm->ps || pm->ps->emplacedIndex <= 0 || pm->ps->emplacedIndex >= ENTITYNUM_WORLD || !pm->baseEnt)
+	{
+		return qfalse;
+	}
+	gun = PM_BGEntForNum(pm->ps->emplacedIndex);
+	return gun && gun->s.origin2[1] > 0.5f ? qtrue : qfalse;
 }
 
 qboolean PM_WalkingAnim(int anim);
@@ -15305,14 +15320,28 @@ static void PM_Weapon(void)
 		PM_StartTorsoAnim(BOTH_GUNSIT1);
 	}
 
-	if (pm->ps->isJediMaster || pm->ps->duelInProgress || pm->ps->trueJedi)
+	if (pm->ps->isJediMaster || pm->ps->duelInProgress)
 	{
 		pm->cmd.weapon = WP_SABER;
 		pm->ps->weapon = WP_SABER;
 
-		if (pm->ps->isJediMaster || pm->ps->trueJedi)
+		if (pm->ps->isJediMaster)
 		{
 			BG_SetOnlyWeapon(pm->ps->stats, WP_SABER);
+		}
+	}
+	else if (pm->ps->trueJedi)
+	{
+		// Jedi vs Merc (2026-11-18, DH): a Jedi keeps his saber and may also use the guns he bought in the shop. He can
+		// never pick one up (BG_CanItemBeGrabbed) and spawns with the saber only, so a gun he carries came from the shop.
+		BG_GiveWeapon(pm->ps->stats, WP_SABER);
+		if (pm->cmd.weapon <= WP_NONE || pm->cmd.weapon >= WP_NUM_WEAPONS || !BG_HasWeapon(pm->ps->stats, pm->cmd.weapon))
+		{
+			pm->cmd.weapon = WP_SABER;
+		}
+		if (pm->ps->weapon <= WP_NONE || pm->ps->weapon >= WP_NUM_WEAPONS || !BG_HasWeapon(pm->ps->stats, pm->ps->weapon))
+		{
+			pm->ps->weapon = WP_SABER;
 		}
 	}
 
@@ -16493,6 +16522,9 @@ static void PM_BotGesture(void)
 PM_DropTimers
 ================
 */
+void BG_SetLegsAnimTimer(playerState_t* ps, int time); // bg_panimate.c
+void BG_SetTorsoAnimTimer(playerState_t* ps, int time);
+
 static void PM_DropTimers(void)
 {
 	// drop misc timing counter
@@ -16510,22 +16542,20 @@ static void PM_DropTimers(void)
 	}
 
 	// drop animation counter
+	// (through BG_SetLegsAnimTimer / BG_SetTorsoAnimTimer, as SP's PM_DropTimers, 2026-11-18: an anim a script waits for
+	// (SET_ANIM_BOTH / UPPER / LOWER in a dowait or a task) is done when its timer runs out. Counting it down here
+	// directly never told ICARUS, so the script waited until some other anim replaced it - forever for a cinematic NPC:
+	// kejim_post's intro stopped after Jan's first line.)
 	if (pm->ps->legsTimer > 0)
 	{
-		pm->ps->legsTimer -= pml.msec;
-		if (pm->ps->legsTimer < 0)
-		{
-			pm->ps->legsTimer = 0;
-		}
+		const int new_time = pm->ps->legsTimer - pml.msec;
+		BG_SetLegsAnimTimer(pm->ps, new_time > 0 ? new_time : 0);
 	}
 
 	if (pm->ps->torsoTimer > 0)
 	{
-		pm->ps->torsoTimer -= pml.msec;
-		if (pm->ps->torsoTimer < 0)
-		{
-			pm->ps->torsoTimer = 0;
-		}
+		const int new_time = pm->ps->torsoTimer - pml.msec;
+		BG_SetTorsoAnimTimer(pm->ps, new_time > 0 ? new_time : 0);
 	}
 }
 
@@ -19076,6 +19106,26 @@ void BG_G2PlayerAngles(void* ghoul2, const int motionBolt, entityState_t* cent, 
 		angles[0] = -30;
 	}
 
+	if (cent->weapon == WP_EMPLACED_GUN && emplaced && emplaced->origin2[1] > 0.5f)
+	{
+		// sitting in an SP emplaced gun chair (2026-11-18): he faces the way the chair (and he) looks, spine straight
+		VectorSet(legsAngles, 0, cent_lerpAngles[YAW], 0);
+		*lYawAngle = legsAngles[YAW];
+		VectorCopy(legsAngles, turAngles);
+		AnglesToAxis(legsAngles, legs);
+		trap->G2API_SetBoneAngles(ghoul2, 0, "lower_lumbar", vec3_origin, BONE_ANGLES_POSTMULT, POSITIVE_X, NEGATIVE_Y,
+			NEGATIVE_Z, 0, 0, time);
+		trap->G2API_SetBoneAngles(ghoul2, 0, "upper_lumbar", vec3_origin, BONE_ANGLES_POSTMULT, POSITIVE_X, NEGATIVE_Y,
+			NEGATIVE_Z, 0, 0, time);
+		trap->G2API_SetBoneAngles(ghoul2, 0, "thoracic", vec3_origin, BONE_ANGLES_POSTMULT, POSITIVE_X, NEGATIVE_Y,
+			NEGATIVE_Z, 0, 0, time);
+		trap->G2API_SetBoneAngles(ghoul2, 0, "cervical", vec3_origin, BONE_ANGLES_POSTMULT, POSITIVE_X, NEGATIVE_Y,
+			NEGATIVE_Z, 0, 0, time);
+		trap->G2API_SetBoneAngles(ghoul2, 0, "cranium", vec3_origin, BONE_ANGLES_POSTMULT, POSITIVE_X, NEGATIVE_Y,
+			NEGATIVE_Z, 0, 0, time);
+		return;
+	}
+
 	if (cent->weapon == WP_EMPLACED_GUN &&
 		emplaced)
 	{
@@ -20871,7 +20921,8 @@ static void PmoveSingle(pmove_t* pmove)
 
 	if (pm->ps->emplacedIndex)
 	{
-		if (pm->cmd.forwardmove < 0 || PM_GroundDistance() > 32.0f)
+		// (a chair: back or jump gets him off, as SP; its seat is off the ground)
+		if (pm->cmd.forwardmove < 0 || (PM_InEmplacedChair() ? pm->cmd.upmove > 0 : PM_GroundDistance() > 32.0f))
 		{
 			pm->ps->emplacedIndex = 0;
 			pm->ps->saberHolstered = 0;
@@ -21309,7 +21360,18 @@ static void PmoveSingle(pmove_t* pmove)
 	}
 
 	// set groundentity
-	PM_GroundTrace();
+	if (PM_InEmplacedChair())
+	{
+		// in an SP emplaced gun chair: the server keeps him in the seat; no ground trace, fall or move (as SP)
+		pml.groundPlane = qtrue;
+		pml.walking = qtrue;
+		pm->ps->groundEntityNum = ENTITYNUM_WORLD;
+		VectorClear(pm->ps->velocity);
+	}
+	else
+	{
+		PM_GroundTrace();
+	}
 
 	if (pm->ps->groundEntityNum == ENTITYNUM_WORLD)
 	{
@@ -21729,7 +21791,15 @@ static void PmoveSingle(pmove_t* pmove)
 	{
 		//don't do this if we're on a vehicle, or we are one
 		// footstep events / legs animations
-		PM_Footsteps();
+		if (PM_InEmplacedChair())
+		{
+			// sitting in an SP emplaced gun chair: the whole body sits (as SP)
+			PM_SetAnim(SETANIM_BOTH, BOTH_GUNSIT1, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+		}
+		else
+		{
+			PM_Footsteps();
+		}
 	}
 	else
 	{

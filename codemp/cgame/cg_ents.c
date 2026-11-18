@@ -1419,10 +1419,23 @@ static void CG_General(centity_t* cent)
 		{
 			emp_angles[PITCH] = 40;
 		}
-		emp_angles[YAW] -= cent->currentState.angles[YAW];
+		if (cent->currentState.origin2[1] > 0.5f)
+		{
+			// an SP emplaced gun chair (g_weapon.c, 2026-11-18): the whole chair turns the way its user looks, the guns
+			// pitch with him (as SP cg_players.cpp)
+			vec3_t swivel;
+			VectorSet(swivel, -emp_angles[PITCH], 0, 0);
+			VectorSet(cent->lerpAngles, 0, emp_angles[YAW], 0);
+			trap->G2API_SetBoneAngles(cent->ghoul2, 0, "swivel_bone", swivel, BONE_ANGLES_POSTMULT, POSITIVE_Y,
+				POSITIVE_Z, POSITIVE_X, NULL, 0, cg.time);
+		}
+		else
+		{
+			emp_angles[YAW] -= cent->currentState.angles[YAW];
 
-		trap->G2API_SetBoneAngles(cent->ghoul2, 0, "Bone02", emp_angles, BONE_ANGLES_REPLACE, NEGATIVE_Y, NEGATIVE_X,
-			POSITIVE_Z, NULL, 0, cg.time);
+			trap->G2API_SetBoneAngles(cent->ghoul2, 0, "Bone02", emp_angles, BONE_ANGLES_REPLACE, NEGATIVE_Y, NEGATIVE_X,
+				POSITIVE_Z, NULL, 0, cg.time);
+		}
 	}
 
 	s1 = &cent->currentState;

@@ -3531,6 +3531,159 @@ void SP_fx_runner(gentity_t* ent)
 	trap->LinkEntity((sharedEntity_t*)ent);
 }
 
+/*QUAKED fx_explosion_trail (0 0 1) (-8 -8 -8) (8 8 8) GRAVITY
+Ported from SP's g_fx.cpp (2026-11-18: kejim_post's "fireball" and "hall_trail" had no spawn function in MP).
+When used, an explosion trail goes out from here at its target (or along its angles), playing its effect as it goes
+and hurting what it passes, until it hits something.
+
+  GRAVITY - the trail falls instead of going straight
+
+  "fxFile" - the trail's effect ( default "env/exp_trail_comp" )
+  "fxFile2" - an effect where it hits
+  "model" - a model that goes with it
+  "target" - the way it goes, required unless it has angles
+  "targetname" - (required) it goes when used
+  "speed" - its speed ( default 350 )
+  "radius" - the damage radius around it as it goes ( default 128 )
+  "damage" - the damage around it as it goes ( default 128 )
+  "splashDamage" - the damage where it hits ( default 0 )
+  "splashRadius" - that damage's radius ( default 0 )
+*/
+static void fx_explosion_trail_think(gentity_t* ent)
+{
+	vec3_t origin;
+	trace_t tr;
+
+	BG_EvaluateTrajectory(&ent->s.pos, level.time, origin);
+
+	trap->Trace(&tr, ent->r.currentOrigin, vec3_origin, vec3_origin, origin,
+		ent->parent ? ent->parent->s.number : ENTITYNUM_NONE, ent->clipmask, qfalse, 0, 0);
+
+	if (tr.fraction < 1.0f || tr.startsolid)
+	{
+		// it hit something (never explodes on the sky)
+		if (!(tr.surfaceFlags & SURF_NOIMPACT))
+		{
+			if (ent->splashDamage && ent->splashRadius)
+			{
+				g_radius_damage(tr.endpos, ent, ent->splashDamage, ent->splashRadius, ent, ent, MOD_UNKNOWN);
+			}
+			if (ent->genericValue6)
+			{
+				vec3_t ang;
+
+				vectoangles(tr.plane.normal, ang);
+				G_PlayEffectID(ent->genericValue6, tr.endpos, ang);
+			}
+		}
+		G_FreeEntity(ent);
+		return;
+	}
+
+	if (ent->damage && ent->radius > 0)
+	{
+		g_radius_damage(origin, ent, ent->damage, ent->radius, ent, ent, MOD_UNKNOWN);
+	}
+	G_PlayEffectID(ent->genericValue5, origin, ent->r.currentAngles);
+
+	VectorCopy(origin, ent->r.currentOrigin);
+	ent->nextthink = level.time + 50;
+	trap->LinkEntity((sharedEntity_t*)ent);
+}
+
+static void fx_explosion_trail_use(gentity_t* self, gentity_t* other, gentity_t* activator)
+{
+	gentity_t* trail = G_Spawn();
+
+	trail->classname = "fx_exp_trail";
+	trail->parent = self;
+	trail->s.eType = ET_GENERAL;
+	trail->s.modelIndex = self->genericValue7;
+	trail->spawnflags = self->spawnflags;
+
+	G_SetOrigin(trail, self->r.currentOrigin);
+	trail->s.pos.trType = self->spawnflags & 1 ? TR_GRAVITY : TR_LINEAR;
+	trail->s.pos.trTime = level.time;
+	VectorScale(self->movedir, self->speed, trail->s.pos.trDelta);
+
+	vectoangles(self->movedir, trail->r.currentAngles);
+	VectorCopy(trail->r.currentAngles, trail->s.angles);
+	VectorCopy(trail->r.currentAngles, trail->s.apos.trBase);
+
+	trail->radius = self->radius;
+	trail->damage = self->damage;
+	trail->splashDamage = self->splashDamage;
+	trail->splashRadius = self->splashRadius;
+	trail->genericValue5 = self->genericValue5;
+	trail->genericValue6 = self->genericValue6;
+	trail->clipmask = MASK_SHOT;
+
+	trail->think = fx_explosion_trail_think;
+	trail->nextthink = level.time + 50;
+	trap->LinkEntity((sharedEntity_t*)trail);
+}
+
+static void fx_explosion_trail_link(gentity_t* ent)
+{
+	// it only goes when used
+	ent->use = fx_explosion_trail_use;
+
+	if (ent->target)
+	{
+		// its target gives the way it goes
+		const gentity_t* target = G_Find(NULL, FOFS(targetname), ent->target);
+
+		if (!target)
+		{
+			Com_Printf(S_COLOR_RED"ERROR: fx_explosion_trail %s could not find target %s\n", ent->targetname,
+				ent->target);
+			G_FreeEntity(ent);
+			return;
+		}
+		VectorSubtract(target->s.origin, ent->s.origin, ent->movedir);
+		VectorNormalize(ent->movedir);
+	}
+	else
+	{
+		AngleVectors(ent->s.angles, ent->movedir, NULL, NULL);
+	}
+}
+
+void SP_fx_explosion_trail(gentity_t* ent)
+{
+	char* fx_file = NULL;
+	char* fx_file2 = NULL;
+
+	// it has to be used, or it never goes
+	if (!ent->targetname)
+	{
+		Com_Printf(S_COLOR_RED"ERROR: fx_explosion_trail at %s has no targetname specified\n", vtos(ent->s.origin));
+		G_FreeEntity(ent);
+		return;
+	}
+
+	G_SpawnString("fxFile", "env/exp_trail_comp", &fx_file);
+	G_SpawnString("fxFile2", "", &fx_file2);
+	G_SpawnInt("damage", "128", &ent->damage);
+	G_SpawnFloat("radius", "128", &ent->radius);
+	G_SpawnFloat("speed", "350", &ent->speed);
+	G_SpawnInt("splashDamage", "0", &ent->splashDamage);
+	G_SpawnInt("splashRadius", "0", &ent->splashRadius);
+
+	ent->genericValue5 = G_EffectIndex(fx_file);
+	ent->genericValue6 = fx_file2 && fx_file2[0] ? G_EffectIndex(fx_file2) : 0;
+	ent->genericValue7 = ent->model && ent->model[0] ? G_model_index(ent->model) : 0;
+
+	// time for the other entities to spawn, it may aim at one of them
+	ent->think = fx_explosion_trail_link;
+	ent->nextthink = level.time + 500;
+
+	G_SetOrigin(ent, ent->s.origin);
+	VectorSet(ent->r.maxs, FX_ENT_RADIUS, FX_ENT_RADIUS, FX_ENT_RADIUS);
+	VectorScale(ent->r.maxs, -1, ent->r.mins);
+	trap->LinkEntity((sharedEntity_t*)ent);
+}
+
 /*QUAKED fx_wind (0 .5 .8) (-16 -16 -16) (16 16 16) NORMAL CONSTANT GUSTING SWIRLING x  FOG LIGHT_FOG
 Generates global wind forces
 

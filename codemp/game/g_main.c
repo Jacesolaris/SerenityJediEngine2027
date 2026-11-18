@@ -277,6 +277,29 @@ extern void Load_Autosaves(void);
 void SP_light(gentity_t* self);
 extern void BG_InitPool(void);
 
+// Jedi Outcast's SP maps (level.is_outcast_map), 2026-11-18: also asked before the level is set up (NPC_stats.c)
+qboolean G_IsOutcastSPMap(const char* mapname)
+{
+	static const char* maps[] =
+	{
+		"kejim_post", "kejim_base", "artus_mine", "artus_detention", "artus_topside", "valley", "yavin_temple",
+		"yavin_trial", "ns_streets", "ns_hideout", "ns_starpad", "bespin_undercity", "bespin_streets", "bespin_platform",
+		"cairn_bay", "cairn_assembly", "cairn_reactor", "cairn_dock1", "doom_comm", "doom_detention", "doom_shields",
+		"yavin_swamp", "yavin_canyon", "yavin_courtyard", "yavin_final", "dtention", "fuelstat", "gromas", "jabship",
+		"narshada", "robotics", "secbase", "sewers", "talay", "testbase"
+	};
+	int i;
+
+	for (i = 0; i < (int)ARRAY_LEN(maps); i++)
+	{
+		if (!Q_stricmp(mapname, maps[i]))
+		{
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
 void G_InitGame(int levelTime, int randomSeed, int restart)
 {
 	int i = 0;
@@ -530,24 +553,7 @@ void G_InitGame(int levelTime, int randomSeed, int restart)
 		level.sp_map = qtrue;
 	}
 
-	if (Q_stricmp(sje_mapname, "kejim_post") == 0 || Q_stricmp(sje_mapname, "kejim_base") == 0 ||
-		Q_stricmp(sje_mapname, "artus_mine") == 0 || Q_stricmp(sje_mapname, "artus_detention") == 0 ||
-		Q_stricmp(sje_mapname, "artus_topside") == 0 || Q_stricmp(sje_mapname, "valley") == 0 ||
-		Q_stricmp(sje_mapname, "yavin_temple") == 0 || Q_stricmp(sje_mapname, "yavin_trial") == 0 ||
-		Q_stricmp(sje_mapname, "ns_streets") == 0 || Q_stricmp(sje_mapname, "ns_hideout") == 0 ||
-		Q_stricmp(sje_mapname, "ns_starpad") == 0 || Q_stricmp(sje_mapname, "bespin_undercity") == 0 ||
-		Q_stricmp(sje_mapname, "bespin_streets") == 0 || Q_stricmp(sje_mapname, "bespin_platform") == 0 ||
-		Q_stricmp(sje_mapname, "cairn_bay") == 0 || Q_stricmp(sje_mapname, "cairn_assembly") == 0 ||
-		Q_stricmp(sje_mapname, "cairn_reactor") == 0 || Q_stricmp(sje_mapname, "cairn_dock1") == 0 ||
-		Q_stricmp(sje_mapname, "doom_comm") == 0 || Q_stricmp(sje_mapname, "doom_detention") == 0 ||
-		Q_stricmp(sje_mapname, "doom_shields") == 0 || Q_stricmp(sje_mapname, "yavin_swamp") == 0 ||
-		Q_stricmp(sje_mapname, "yavin_canyon") == 0 || Q_stricmp(sje_mapname, "yavin_courtyard") == 0 ||
-		Q_stricmp(sje_mapname, "yavin_final") == 0 ||
-		Q_stricmp(sje_mapname, "dtention") == 0 || Q_stricmp(sje_mapname, "fuelstat") == 0 ||
-		Q_stricmp(sje_mapname, "gromas") == 0 || Q_stricmp(sje_mapname, "jabship") == 0 ||
-		Q_stricmp(sje_mapname, "narshada") == 0 || Q_stricmp(sje_mapname, "robotics") == 0 ||
-		Q_stricmp(sje_mapname, "secbase") == 0 || Q_stricmp(sje_mapname, "sewers") == 0 ||
-		Q_stricmp(sje_mapname, "talay") == 0 || Q_stricmp(sje_mapname, "testbase") == 0)
+	if (G_IsOutcastSPMap(sje_mapname))
 	{
 		level.is_outcast_map = qtrue;
 	}

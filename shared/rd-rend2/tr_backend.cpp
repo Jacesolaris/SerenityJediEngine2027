@@ -1162,8 +1162,10 @@ static void RB_SetRenderState(const RenderState& renderState)
 	// (blended decals / effects / fog keep what the surface under them wrote)
 	if (tr.ssrMaskImage && glState.currentFBO && glState.currentFBO == tr.renderFbo)
 	{
+		// (saber blade cores and glows are blended but add their brightness to it, see RB_SsrMaskBlend, 2026-11-17)
 		const GLboolean write = !backEnd.depthFill
-			&& !(renderState.stateBits & (GLS_SRCBLEND_BITS | GLS_DSTBLEND_BITS | GLS_COLORMASK_BITS | GLS_COLORMASK_BUF1))
+			&& !(renderState.stateBits & (GLS_COLORMASK_BITS | GLS_COLORMASK_BUF1))
+			&& (renderState.ssrMaskBlend || !(renderState.stateBits & (GLS_SRCBLEND_BITS | GLS_DSTBLEND_BITS)))
 			? GL_TRUE : GL_FALSE;
 		qglColorMaski(2, write, write, write, write);
 	}

@@ -1660,6 +1660,39 @@ static int RB_HudFadeStage(int stateBits, vec4_t baseColor, vec4_t vertColor, bo
 	return stateBits;
 }
 
+// r_ssr (2026-11-17): saber blade cores (RT_LINE) and glows (RT_SABER_GLOW) are blended, so they wrote nothing into
+// the SSR mask and r_ssr mixed the floor reflection over the blade (it looked see-through, also with
+// cg_saberSolidCore). Drawn with the generic shader and a blend that only adds to what is there (src ONE / SRC_ALPHA,
+// dst ONE or ONE_MINUS_SRC_COLOR), they now add their own brightness to the mask: r_ssr fades out under the blade
+// and its glow and leaves the floor around it alone.
+static bool RB_SsrMaskBlend(const int stateBits, const shaderProgram_t* sp)
+{
+	if (!tr.ssrMaskImage || !backEnd.currentEntity || !sp)
+	{
+		return false;
+	}
+	const int re_type = backEnd.currentEntity->e.reType;
+	if (re_type != RT_LINE && re_type != RT_SABER_GLOW)
+	{
+		return false;
+	}
+	if (sp < tr.genericShader || sp >= tr.genericShader + GENERICDEF_COUNT)
+	{
+		return false;
+	}
+	const int src = stateBits & GLS_SRCBLEND_BITS;
+	const int dst = stateBits & GLS_DSTBLEND_BITS;
+	if (src == GLS_SRCBLEND_ONE)
+	{
+		return dst == GLS_DSTBLEND_ONE || dst == GLS_DSTBLEND_ONE_MINUS_SRC_COLOR;
+	}
+	if (src == GLS_SRCBLEND_SRC_ALPHA)
+	{
+		return dst == GLS_DSTBLEND_ONE;
+	}
+	return false;
+}
+
 static void RB_IterateStagesGeneric(shaderCommands_t* input, const VertexArraysProperties* vertexArrays)
 {
 	Allocator& frameAllocator = *backEndData->perFrameMemory;
@@ -1784,7 +1817,11 @@ static void RB_IterateStagesGeneric(shaderCommands_t* input, const VertexArraysP
 		uniformDataWriter.Start(sp);
 		RB_GrassCutPlantUniforms(input, sp, uniformDataWriter, samplerBindingsWriter);
 		// r_ssr material mask (Jace 2026-11-04): grass, sand, mud... mark their pixels so r_ssr leaves them alone
-		uniformDataWriter.SetUniformFloat(UNIFORM_SSRNOREFLECT, input->shader->noSsr ? 1.0f : 0.0f);
+		// saber blades (2026-11-17): < 0 = "add your brightness" (-2: times alpha, for SRC_ALPHA blends)
+		const bool ssrMaskBlend = RB_SsrMaskBlend(stateBits, sp);
+		uniformDataWriter.SetUniformFloat(UNIFORM_SSRNOREFLECT, ssrMaskBlend
+			? (stateBits & GLS_SRCBLEND_BITS) == GLS_SRCBLEND_SRC_ALPHA ? -2.0f : -1.0f
+			: input->shader->noSsr ? 1.0f : 0.0f);
 
 		if (input->fogNum
 			&& pStage->glslShaderGroup != tr.lightallShader
@@ -2172,6 +2209,7 @@ static void RB_IterateStagesGeneric(shaderCommands_t* input, const VertexArraysP
 		DrawItem item = {};
 		item.renderState.stateBits = stateBits;
 		item.renderState.cullType = forceRefraction ? CT_TWO_SIDED : cullType;
+		item.renderState.ssrMaskBlend = ssrMaskBlend && !forceRefraction;
 		item.renderState.depthRange = RB_GetDepthRange(backEnd.currentEntity, input->shader);
 		item.program = sp;
 		item.ibo = input->externalIBO ? input->externalIBO : backEndData->currentFrame->dynamicIbo;

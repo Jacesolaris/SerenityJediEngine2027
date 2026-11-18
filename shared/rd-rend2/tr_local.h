@@ -1334,7 +1334,7 @@ enum
 	GENERICDEF_USE_VERTEX_ANIMATION = 0x0100,
 	GENERICDEF_ALL = 0x01FF,
 #else
-	GENERICDEF_ALL = 0x007F,
+	GENERICDEF_ALL = 0x00FF,	// with GENERICDEF_USE_FLARE_TEST (0x0080): at 0x007F the flare programs were never built and their index read past tr.genericShader into tr.refractionShader
 #endif // REND2_SP_MD3
 
 	GENERICDEF_COUNT = GENERICDEF_ALL + 1,
@@ -4160,6 +4160,7 @@ struct RenderState
 	uint32_t cullType; // this is stupid
 
 	bool transformFeedback;
+	bool ssrMaskBlend; // r_ssr (2026-11-17): a blended saber blade draw that still adds its brightness to the SSR mask
 };
 
 struct DrawItem

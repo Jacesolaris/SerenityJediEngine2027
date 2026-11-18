@@ -1,6 +1,7 @@
 # SerenityJediEngine2027: the files and folders of the SerenityJediEngine2027 mod folder of a release.
 # A release build of the launcher only starts the game when the mod folder holds exactly these: none missing and
 # nothing else (Windows' own desktop.ini and Thumbs.db are ignored). Debug builds show the check but always start.
+# One exception, built into the launcher (OptionalModFile): z_zzzz_zz_Claude_Edits.pk3 may be in the mod folder or not.
 # One path per line, relative to the SerenityJediEngine2027 folder; a folder ends with "\" and its files are listed
 # under it. Letter case does not matter. Lines starting with "#" are notes.
 # Update this list (and rebuild the launcher) when a release adds, removes or renames a file.

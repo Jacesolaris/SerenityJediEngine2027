@@ -378,6 +378,9 @@ stringID_table_t setTable[] =
 	ENUM2STRING(SHAKE),
 	ENUM2STRING(FOLLOW),
 
+	// JK2's name for SET_altFire (its scripts use it, 2026-11-18: kejim_post's stand_shoot_burst)
+	{ "SET_ALT_FIRE", SET_altFire },
+
 	{ "", SET_ },
 };
 
@@ -1356,13 +1359,149 @@ static char* Q3_GetAnimBoth(const gentity_t* ent)
 	return lowerName;
 }
 
+/*
+-------------------------
+Voice lengths (2026-11-18, DH: kejim_post's intro): a script's voice line (sound CHAN_VOICE ..., then wait for it)
+waits as long as the sound plays, as SP (which asks its sound system). The server has no sound system: the length is
+read from the sound file itself, a .wav (its data size and byte rate) or an .mp3 (its frame count, or its size and
+bit rate). JK2's voices are mostly mp3s, though its scripts often name them .wav. It was 5000 ms for any line not in
+SubtitleTimeTable (every Jedi Outcast one): long lines were cut off by the next, short ones left gaps.
+-------------------------
+*/
+static int G_SoundFileWavMs(const unsigned char* b, const int n)
+{
+	int p = 12, byte_rate = 0;
+
+	if (n < 12 || memcmp(b, "RIFF", 4) || memcmp(b + 8, "WAVE", 4))
+	{
+		return 0;
+	}
+	while (p + 8 <= n)
+	{
+		const int size = b[p + 4] | b[p + 5] << 8 | b[p + 6] << 16 | b[p + 7] << 24;
+
+		if (!memcmp(b + p, "fmt ", 4) && p + 20 <= n)
+		{
+			byte_rate = b[p + 16] | b[p + 17] << 8 | b[p + 18] << 16 | b[p + 19] << 24;
+		}
+		else if (!memcmp(b + p, "data", 4))
+		{
+			return byte_rate > 0 && size > 0 ? (int)((double)size * 1000.0 / byte_rate) : 0;
+		}
+		if (size < 0)
+		{
+			return 0;
+		}
+		p += 8 + size + (size & 1);
+	}
+	return 0;
+}
+
+static int G_SoundFileMp3Ms(const unsigned char* b, const int n, const int file_len)
+{
+	static const int kbps[2][16] = {
+		{ 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0 }, // MPEG-1 layer III
+		{ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0 } // MPEG-2 and 2.5 layer III
+	};
+	static const int hz1[3] = { 44100, 48000, 32000 };
+	int p = 0;
+
+	if (n >= 10 && !memcmp(b, "ID3", 3))
+	{
+		p = 10 + ((b[6] & 0x7f) << 21 | (b[7] & 0x7f) << 14 | (b[8] & 0x7f) << 7 | (b[9] & 0x7f));
+	}
+	for (; p + 4 <= n; p++)
+	{
+		if (b[p] == 0xff && (b[p + 1] & 0xe0) == 0xe0)
+		{
+			const int ver = b[p + 1] >> 3 & 3; // 3 MPEG-1, 2 MPEG-2, 0 MPEG-2.5
+			const int layer = b[p + 1] >> 1 & 3; // 1 layer III
+			const int rate = b[p + 2] >> 4;
+			const int freq = b[p + 2] >> 2 & 3;
+
+			if (ver == 1 || layer != 1 || rate == 0 || rate == 15 || freq == 3)
+			{
+				continue;
+			}
+			{
+				const qboolean mpeg1 = ver == 3 ? qtrue : qfalse;
+				const int hz = hz1[freq] >> (ver == 3 ? 0 : ver == 2 ? 1 : 2);
+				const int samples = mpeg1 ? 1152 : 576;
+				const qboolean mono = b[p + 3] >> 6 == 3 ? qtrue : qfalse;
+				const int x = p + 4 + (mpeg1 ? mono ? 17 : 32 : mono ? 9 : 17);
+
+				// a VBR file: its Xing (or Info) header has the frame count
+				if (x + 12 <= n && (!memcmp(b + x, "Xing", 4) || !memcmp(b + x, "Info", 4)) && b[x + 7] & 1)
+				{
+					const int frames = b[x + 8] << 24 | b[x + 9] << 16 | b[x + 10] << 8 | b[x + 11];
+
+					if (frames > 0)
+					{
+						return (int)((double)frames * samples * 1000.0 / hz);
+					}
+				}
+				// bits / kbit per second = ms
+				return (int)((double)(file_len - p) * 8.0 / kbps[mpeg1 ? 0 : 1][rate]);
+			}
+		}
+	}
+	return 0;
+}
+
+// the length of a sound in ms (0: not found)
+static int G_SoundFileMs(const char* name)
+{
+	static const char* exts[2] = { ".mp3", ".wav" };
+	static unsigned char buf[8192];
+	char base[MAX_QPATH];
+	int i;
+
+	Q_strncpyz(base, name, sizeof base);
+	COM_StripExtension(base, base, sizeof base);
+	for (i = 0; i < 2; i++)
+	{
+		fileHandle_t f = 0;
+		const int len = trap->FS_Open(va("%s%s", base, exts[i]), &f, FS_READ);
+		int n, ms;
+
+		if (!f)
+		{
+			continue;
+		}
+		if (len <= 0)
+		{
+			trap->FS_Close(f);
+			continue;
+		}
+		n = len < (int)sizeof buf ? len : (int)sizeof buf;
+		trap->FS_Read(buf, n, f);
+		trap->FS_Close(f);
+		ms = G_SoundFileWavMs(buf, n); // (whatever its name says)
+		if (ms <= 0)
+		{
+			ms = G_SoundFileMp3Ms(buf, n, len);
+		}
+		if (ms > 0)
+		{
+			return ms;
+		}
+	}
+	return 0;
+}
+
 static int Icarus_SoundTime(char soundName[MAX_QPATH])
 {
 	char temp[MAX_QPATH];
 	char* sound = Q_strrchr(soundName, '/');
-	sound++;
+	int time = G_SoundFileMs(soundName); // the sound's own length, as SP (2026-11-18)
+
+	if (time > 0)
+	{
+		return time;
+	}
+	sound = sound ? sound + 1 : soundName;
 	trap->Cvar_VariableStringBuffer("mapname", temp, MAX_QPATH);
-	int time = GetIDForString(SubtitleTimeTable, va("%s_%s", temp, sound));
+	time = GetIDForString(SubtitleTimeTable, va("%s_%s", temp, sound));
 	if (time < 0)
 	{
 		//couldn't find it in the original file.  Try looking into OJP's supplimental file.
@@ -3775,7 +3914,20 @@ static qboolean Q3_SetAnimUpper(const int entID, const char* anim_name)
 		return qfalse;
 	}
 
+	// As SP (Q3_Interface.cpp PM_HasAnimation, 2026-11-18): an anim this model doesn't have is not played and the script
+	// doesn't wait for it. It waited forever (the old timer of a -1 hold time never ran out): kejim_post's intro stopped
+	// after Jan's first line.
+	if (entID < 0 || entID >= MAX_GENTITIES || !g_entities[entID].client
+		|| !BG_HasAnimation(g_entities[entID].localAnimIndex, animID))
+	{
+		return qfalse;
+	}
+
 	SetUpperAnim(entID, animID);
+	if (g_entities[entID].client->ps.torsoAnim != animID)
+	{
+		return qfalse; // (it didn't take: don't wait for it either)
+	}
 	return qtrue;
 }
 
@@ -3798,7 +3950,20 @@ static qboolean Q3_SetAnimLower(const int entID, const char* anim_name)
 		return qfalse;
 	}
 
+	// As SP (Q3_Interface.cpp PM_HasAnimation, 2026-11-18): an anim this model doesn't have is not played and the script
+	// doesn't wait for it. It waited forever (the old timer of a -1 hold time never ran out): kejim_post's intro stopped
+	// after Jan's first line.
+	if (entID < 0 || entID >= MAX_GENTITIES || !g_entities[entID].client
+		|| !BG_HasAnimation(g_entities[entID].localAnimIndex, animID))
+	{
+		return qfalse;
+	}
+
 	SetLowerAnim(entID, animID);
+	if (g_entities[entID].client->ps.legsAnim != animID)
+	{
+		return qfalse; // (it didn't take: don't wait for it either)
+	}
 	return qtrue;
 }
 
@@ -3812,6 +3977,9 @@ Q3_SetAnimHoldTime
   Argument		: qboolean lower
 ============
 */
+void BG_SetLegsAnimTimer(playerState_t* ps, int time); // bg_panimate.c
+void BG_SetTorsoAnimTimer(playerState_t* ps, int time);
+
 static void Q3_SetAnimHoldTime(const int entID, const int int_data, const qboolean lower)
 {
 	const gentity_t* ent = &g_entities[entID];
@@ -3826,13 +3994,14 @@ static void Q3_SetAnimHoldTime(const int entID, const int int_data, const qboole
 		return;
 	}
 
+	// through the timer setters, as SP (2026-11-18): a hold time of 0 ends a waited-for anim at once
 	if (lower)
 	{
-		ent->client->ps.legsTimer = int_data;
+		BG_SetLegsAnimTimer(&ent->client->ps, int_data);
 	}
 	else
 	{
-		ent->client->ps.torsoTimer = int_data;
+		BG_SetTorsoAnimTimer(&ent->client->ps, int_data);
 	}
 	G_ScriptHeldAnimSet(ent, lower ? 0 : 1, int_data == -1 ? qtrue : qfalse); // (-1: held until a script changes it, as SP)
 }
@@ -8242,6 +8411,14 @@ qboolean Q3_Set(const int taskID, const int entID, const char* type_name, const 
 	//TODO: Throw in a showscript command that will list each command and what they're doing...
 	//		maybe as simple as printing that line of the script to the console preceeded by the person's name?
 	//		showscript can take any number of targetnames or "all"?  Groupname?
+
+	// JK2's SET_CENTERTEXT (not in MP's set list, 2026-11-18): the text in the middle of every player's screen, as SP
+	if (toSet == -1 && !Q_stricmp(type_name, "SET_CENTERTEXT"))
+	{
+		trap->SendServerCommand(-1, va("cp \"%s\"", data));
+		return qtrue;
+	}
+
 	switch (toSet)
 	{
 	case SET_ORIGIN:
@@ -8379,6 +8556,12 @@ qboolean Q3_Set(const int taskID, const int entID, const char* type_name, const 
 		if (both >= 2)
 		{
 			trap->ICARUS_TaskIDSet((sharedEntity_t*)ent, TID_ANIM_BOTH, taskID);
+		}
+		else if (both)
+		{
+			// only one half took: wait for that half alone (an old "both" task would be completed in its place, and this
+			// one never, 2026-11-18)
+			Q3_TaskIDClear(&ent->taskID[TID_ANIM_BOTH]);
 		}
 		if (both)
 		{

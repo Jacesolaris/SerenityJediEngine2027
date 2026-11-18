@@ -3125,6 +3125,16 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 			gunangle[1] = -matrix.matrix[1][0];
 			gunangle[2] = -matrix.matrix[2][0];
 
+			if (cent->currentState.origin2[1] > 0.5f)
+			{
+				// an SP emplaced gun chair (2026-11-18): its muzzle tags point along their Y axis, and it plays SP's
+				// firing frames
+				gunangle[0] = matrix.matrix[0][1];
+				gunangle[1] = matrix.matrix[1][1];
+				gunangle[2] = matrix.matrix[2][1];
+				trap->G2API_SetBoneAnim(cent->ghoul2, 0, "base_bone", 0, 3, BONE_ANIM_OVERRIDE_FREEZE, 0.6f, cg.time, -1, 0);
+			}
+
 			trap->FX_PlayEffectID(cgs.effects.mEmplacedMuzzleFlash, gunpoint, gunangle, -1, -1, qfalse);
 		}
 		// Normal weapons / NPCs

@@ -1415,6 +1415,11 @@ static bool GLSL_IsValidPermutationForGeneric(int shaderCaps)
 		(shaderCaps & GENERICDEF_USE_SKELETAL_ANIMATION))
 		return false;
 #endif // REND2_SP
+	// The flare test is for flare quads only (tr_flares.cpp): never a skinned model, and never with the two bits
+	// nothing sets (GLOW_BUFFER, ALPHA_TEST). Without those, 16 flare programs are built instead of 128.
+	if ((shaderCaps & GENERICDEF_USE_FLARE_TEST) &&
+		(shaderCaps & (GENERICDEF_USE_SKELETAL_ANIMATION | GENERICDEF_USE_GLOW_BUFFER | GENERICDEF_USE_ALPHA_TEST)))
+		return false;
 	return true;
 }
 

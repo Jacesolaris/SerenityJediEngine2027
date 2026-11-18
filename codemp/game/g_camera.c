@@ -157,7 +157,8 @@ void GCam_FollowUpdate(void)
 
 		qboolean focused = qfalse;
 
-		if ((from->s.eType == ET_PLAYER
+		if (from->client // the bolt needs its view angles and origin (C6011)
+			&& (from->s.eType == ET_PLAYER
 			|| from->s.eType == ET_NPC
 			|| from->s.number < MAX_CLIENTS)
 			&& client_camera.cameraGroupTag && client_camera.cameraGroupTag[0])

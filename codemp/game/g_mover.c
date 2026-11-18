@@ -750,10 +750,26 @@ void ReturnToPos1(gentity_t* ent)
 
 // Missions (GT_SINGLE_PLAYER): a door that has opened stays open (it does not go back after its wait), so no player
 // is shut out behind it once it has opened for someone or for a script (t1_fatal). Toggle doors (8) as before.
+// A lift is a func_door too (kejim_post's main lift, 2026-11-18: it stayed down and shut the player in): a flat one
+// (thinner than it is wide either way) that moves up or down. It goes back after its wait, as in SP.
+static qboolean G_DoorIsLift(const gentity_t* ent)
+{
+	vec3_t size, move;
+
+	VectorSubtract(ent->r.maxs, ent->r.mins, size);
+	VectorSubtract(ent->pos2, ent->pos1, move);
+	const float len = VectorLength(move);
+	if (len < 1.0f || fabs(move[2]) < len * 0.7f)
+	{
+		return qfalse; // (not vertical)
+	}
+	return size[2] < size[0] && size[2] < size[1] ? qtrue : qfalse;
+}
+
 static qboolean G_MissionDoorStaysOpen(const gentity_t* ent)
 {
 	return level.gametype == GT_SINGLE_PLAYER && !(ent->spawnflags & 8)
-		&& ent->classname && !Q_stricmp(ent->classname, "func_door") ? qtrue : qfalse;
+		&& ent->classname && !Q_stricmp(ent->classname, "func_door") && !G_DoorIsLift(ent) ? qtrue : qfalse;
 }
 
 /*

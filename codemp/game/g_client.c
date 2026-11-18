@@ -3168,6 +3168,9 @@ static void G_SaberSkinPartsFromUserinfo(const char* userinfo, const char* key, 
 	out[n] = 0;
 }
 
+// the last wrong admin password each client had in his userinfo (counted once, 2026-11-18)
+static char adminUserinfoTried[MAX_CLIENTS][64];
+
 qboolean client_userinfo_changed(const int clientNum)
 {
 	gentity_t* ent = g_entities + clientNum;
@@ -3209,20 +3212,30 @@ qboolean client_userinfo_changed(const int clientNum)
 		return qfalse;
 	}
 
+	// The admin password in his userinfo logs him in (2026-11-18: an exact match, never while the server has none or
+	// his IP's admin login is locked; a wrong one counts towards the lock, each different one once)
 	s = Info_ValueForKey(userinfo, "g_adminpassword");
-	if (!Q_stricmp(s, ""))
+	if (!s[0] || !g_adminpassword.string[0] || ent->r.svFlags & SVF_BOT || ent->r.svFlags & SVF_ADMIN)
 	{
-		//Blank? Don't log in!
+		//Blank, no admin password on this server, a bot, or logged in already: nothing to do
 	}
-	else if (!Q_stricmp(s, g_adminpassword.string))
+	else if (!strcmp(s, g_adminpassword.string))
 	{
-		if (!(ent->r.svFlags & SVF_BOT))
-		{ //bots login automatically for some reason
+		if (G_AdminLoginLocked(client->sess.IP) <= 0)
+		{
+			G_AdminLoginGood(client->sess.IP);
 			ent->client->pers.iamanadmin = 1;
 			ent->r.svFlags |= SVF_ADMIN;
 			strcpy(ent->client->pers.login, g_adminlogin_saying.string);
 			strcpy(ent->client->pers.logout, g_adminlogout_saying.string);
 		}
+	}
+	else if (clientNum >= 0 && clientNum < MAX_CLIENTS && strcmp(s, adminUserinfoTried[clientNum]))
+	{
+		Q_strncpyz(adminUserinfoTried[clientNum], s, sizeof adminUserinfoTried[0]);
+		G_AdminLoginFailed(client->sess.IP);
+		G_SecurityLogPrintf("Wrong admin password in the userinfo of client %d (%s) [IP: %s]\n", clientNum,
+			client->pers.netname, client->sess.IP);
 	}
 
 	// check for local client
@@ -3721,6 +3734,15 @@ char* ClientConnect(int clientNum, const qboolean firstTime, const qboolean isBo
 	if (G_FilterPacket(value))
 	{
 		return "Banned.";
+	}
+	if (!isBot)
+	{
+		// the admin bans (g_svcmds.c, 2026-11-18): how long and why
+		const char* ban_msg = G_AdminBanCheck(value);
+		if (ban_msg)
+		{
+			return (char*)ban_msg;
+		}
 	}
 
 	if (!isBot && g_needpass.integer)

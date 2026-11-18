@@ -15,7 +15,8 @@ with UPDATES / MODDB / YOUTUBE below the version at the bottom left.
   when the launcher starts, if switched on in SETTINGS); opens the downloads page. A dot on UPDATES when ModDB has a
   newer download that hasn't been looked at yet.
 - INSTALLATION CHECK: the SerenityJediEngine2027 mod folder against texts/AllowedFiles.txt (built into the exe): every
-  file and folder listed there must be there, and nothing else may be (Windows' desktop.ini / Thumbs.db are ignored).
+  file and folder listed there must be there, and nothing else may be (Windows' desktop.ini / Thumbs.db are ignored,
+  and z_zzzz_zz_Claude_Edits.pk3 may be there or not).
   In a RELEASE build of the launcher (NDEBUG, as the game's Sys_RequireLauncher) SINGLEPLAYER, START MULTIPLAYER and
   START SERVER only start when the check passes: otherwise the INSTALLATION CHECK page shows what is extra or missing
   and the player must fix the folder first. Debug builds show the check but always start.
@@ -884,6 +885,13 @@ namespace
 		return lower == L"desktop.ini" || lower == L"thumbs.db";
 	}
 
+	// files the mod folder may have but doesn't need (top level only, never reported as extra or missing):
+	// z_zzzz_zz_Claude_Edits.pk3 (Jace 2026-11-17)
+	bool OptionalModFile(const std::wstring& rel, const std::wstring& name)
+	{
+		return rel.empty() && Lower(name) == L"z_zzzz_zz_claude_edits.pk3";
+	}
+
 	void WalkModFolder(const std::wstring& root, const std::wstring& rel, const std::set<std::wstring>& allowed,
 		std::set<std::wstring>& seen, std::vector<CheckItem>& extra)
 	{
@@ -913,7 +921,7 @@ namespace
 					extra.push_back({ Problem::Extra, path }); // a whole folder that isn't SJE's
 				}
 			}
-			else if (!IgnoredFile(name))
+			else if (!IgnoredFile(name) && !OptionalModFile(rel, name))
 			{
 				const std::wstring path = rel + name;
 				if (allowed.count(Lower(path)))

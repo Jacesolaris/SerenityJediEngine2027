@@ -17772,6 +17772,41 @@ static void CG_HolsteredWeaponRender(centity_t* cent, const clientInfo_t* ci, co
 #define		G2MODEL_GOLAN_HOLSTERED			10
 #define		SABERBLASTER_HIP_HOLSTERED		(WP_NUM_WEAPONS + 1) // SS_BLASTER (2026-10-14): blaster2_holstered marker
 
+// A gun bolted to a holster tag (2026-11-18, DH: a gun bought in the shop was drawn as the stock gun once he put it
+// away): the look the player uses on that weapon (cg_weapons.c CG_G2HolsterBoltInstance, the shop's "wvlooks"), not
+// the look of the gun in his hand. When the look changes (a gun bought, a bot's gun) the tag's model is copied again.
+void* CG_G2HolsterBoltInstance(const centity_t* cent, int weapon);
+static void* cg_holsterBolted[MAX_GENTITIES][4]; // the model on each tag: right hip, left hip, back, golan
+
+static void CG_HolsterBoltCheck(centity_t* cent, const int slot, const int g2_index, const int weapon, int* state)
+{
+	const int num = cent->currentState.number;
+	void* want;
+
+	if (num < 0 || num >= MAX_GENTITIES)
+	{
+		return;
+	}
+	if (!*state || weapon <= WP_NONE || weapon >= WP_NUM_WEAPONS)
+	{
+		cg_holsterBolted[num][slot] = NULL;
+		return;
+	}
+	want = CG_G2HolsterBoltInstance(cent, weapon);
+	if (cg_holsterBolted[num][slot] && cg_holsterBolted[num][slot] != want)
+	{
+		// another look now: take the old gun off, the code below bolts the new one this frame
+		if (trap->G2API_HasGhoul2ModelOnIndex(&cent->ghoul2, g2_index))
+		{
+			trap->G2API_RemoveGhoul2Model(&cent->ghoul2, g2_index);
+		}
+		*state = 0;
+		cg_holsterBolted[num][slot] = NULL;
+		return;
+	}
+	cg_holsterBolted[num][slot] = want;
+}
+
 // SS_BLASTER is Kyle Katarn's style only (game: G_SaberBlasterKyleModel, g_active.c): his model folders contain "kyle".
 // Only he carries the style's bryar pistol on the left hip (as MD9 MP; Jace 2026-10-29)
 static qboolean CG_SaberBlasterKyleModel(const clientInfo_t* ci)
@@ -18356,6 +18391,17 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 	{
 		int left_hip_in_use = 0;
 		int right_hip_in_use = 0;
+		// the guns already on the holster tags still have the look he uses on them (shop, 2026-11-18)
+		CG_HolsterBoltCheck(cent, 0, G2MODEL_BLASTER_HOLSTERED, ci->blaster_holstered, &ci->blaster_holstered);
+		CG_HolsterBoltCheck(cent, 1, G2MODEL_BLASTER2_HOLSTERED,
+			ci->blaster2_holstered == SABERBLASTER_HIP_HOLSTERED ? WP_BRYAR_PISTOL : ci->blaster2_holstered,
+			&ci->blaster2_holstered);
+		CG_HolsterBoltCheck(cent, 2, G2MODEL_LAUNCHER_HOLSTERED, ci->launcher_holstered, &ci->launcher_holstered);
+		{
+			int golan = ci->golan_holstered ? 1 : 0;
+			CG_HolsterBoltCheck(cent, 3, G2MODEL_GOLAN_HOLSTERED, WP_ROCKET_LAUNCHER, &golan);
+			ci->golan_holstered = golan ? qtrue : qfalse;
+		}
 		// SS_BLASTER (Jace 2026-10-31): someone who can use the blaster saber style (Kyle Katarn's model, single one-blade
 		// saber that does not forbid it) carries one bryar pistol - the style's, on the left hip or in his left hand -
 		// so his inventory bryar pistol is not shown on the right hip as well
@@ -18385,7 +18431,7 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 							if (!ci->saberHolstered)
 							{
 								//we haven't bolted the saber to the model yet. Do it now.
-								trap->G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, WP_SABER), 0,
+								trap->G2API_CopySpecificGhoul2Model(CG_G2HolsterBoltInstance(cent, WP_SABER), 0,
 									cent->ghoul2, G2MODEL_SABER_HOLSTERED);
 								trap->G2API_SetBoltInfo(cent->ghoul2, G2MODEL_SABER_HOLSTERED, ci->holster_saber);
 								ci->saberHolstered = qtrue;
@@ -18432,7 +18478,7 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 								if (!ci->saberHolstered)
 								{
 									//we haven't bolted the saber to the model yet. Do it now.
-									trap->G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, WP_SABER), 0,
+									trap->G2API_CopySpecificGhoul2Model(CG_G2HolsterBoltInstance(cent, WP_SABER), 0,
 										cent->ghoul2, G2MODEL_STAFF_HOLSTERED);
 									trap->G2API_SetBoltInfo(cent->ghoul2, G2MODEL_STAFF_HOLSTERED, ci->holster_staff);
 									ci->staff_holstered = qtrue;
@@ -18551,7 +18597,7 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 					}
 
 					//now add the blaster
-					trap->G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, WP_BLASTER), 0, cent->ghoul2,
+					trap->G2API_CopySpecificGhoul2Model(CG_G2HolsterBoltInstance(cent, WP_BLASTER), 0, cent->ghoul2,
 						G2MODEL_BLASTER_HOLSTERED);
 					trap->G2API_SetBoltInfo(cent->ghoul2, G2MODEL_BLASTER_HOLSTERED, ci->holster_blaster);
 					ci->blaster_holstered = WP_BLASTER;
@@ -18601,7 +18647,7 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 					}
 
 					//now add the WP_BRYAR_PISTOL
-					trap->G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, WP_BRYAR_PISTOL), 0, cent->ghoul2,
+					trap->G2API_CopySpecificGhoul2Model(CG_G2HolsterBoltInstance(cent, WP_BRYAR_PISTOL), 0, cent->ghoul2,
 						G2MODEL_BLASTER_HOLSTERED);
 					trap->G2API_SetBoltInfo(cent->ghoul2, G2MODEL_BLASTER_HOLSTERED, ci->holster_blaster);
 					ci->blaster_holstered = WP_BRYAR_PISTOL;
@@ -18650,7 +18696,7 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 					}
 
 					//now add the WP_BRYAR_OLD
-					trap->G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, WP_BRYAR_OLD), 0, cent->ghoul2,
+					trap->G2API_CopySpecificGhoul2Model(CG_G2HolsterBoltInstance(cent, WP_BRYAR_OLD), 0, cent->ghoul2,
 						G2MODEL_BLASTER_HOLSTERED);
 					trap->G2API_SetBoltInfo(cent->ghoul2, G2MODEL_BLASTER_HOLSTERED, ci->holster_blaster);
 					ci->blaster_holstered = WP_BRYAR_OLD;
@@ -18686,7 +18732,7 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 						{
 							trap->G2API_RemoveGhoul2Model(&cent->ghoul2, G2MODEL_BLASTER2_HOLSTERED);
 						}
-						trap->G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, WP_BRYAR_PISTOL), 0, cent->ghoul2,
+						trap->G2API_CopySpecificGhoul2Model(CG_G2HolsterBoltInstance(cent, WP_BRYAR_PISTOL), 0, cent->ghoul2,
 							G2MODEL_BLASTER2_HOLSTERED);
 						trap->G2API_SetBoltInfo(cent->ghoul2, G2MODEL_BLASTER2_HOLSTERED, ci->holster_blaster2);
 						ci->blaster2_holstered = SABERBLASTER_HIP_HOLSTERED;
@@ -18755,7 +18801,7 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 					}
 
 					//now add the blaster
-					trap->G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, WP_BLASTER), 0, cent->ghoul2,
+					trap->G2API_CopySpecificGhoul2Model(CG_G2HolsterBoltInstance(cent, WP_BLASTER), 0, cent->ghoul2,
 						G2MODEL_BLASTER2_HOLSTERED);
 					trap->G2API_SetBoltInfo(cent->ghoul2, G2MODEL_BLASTER2_HOLSTERED, ci->holster_blaster2);
 					ci->blaster2_holstered = WP_BLASTER;
@@ -18806,7 +18852,7 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 					}
 
 					//now add the blaster
-					trap->G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, WP_BRYAR_PISTOL), 0, cent->ghoul2,
+					trap->G2API_CopySpecificGhoul2Model(CG_G2HolsterBoltInstance(cent, WP_BRYAR_PISTOL), 0, cent->ghoul2,
 						G2MODEL_BLASTER2_HOLSTERED);
 					trap->G2API_SetBoltInfo(cent->ghoul2, G2MODEL_BLASTER2_HOLSTERED, ci->holster_blaster2);
 					ci->blaster2_holstered = WP_BRYAR_PISTOL;
@@ -18857,7 +18903,7 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 					}
 
 					//now add the blaster
-					trap->G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, WP_BRYAR_OLD), 0, cent->ghoul2,
+					trap->G2API_CopySpecificGhoul2Model(CG_G2HolsterBoltInstance(cent, WP_BRYAR_OLD), 0, cent->ghoul2,
 						G2MODEL_BLASTER2_HOLSTERED);
 					trap->G2API_SetBoltInfo(cent->ghoul2, G2MODEL_BLASTER2_HOLSTERED, ci->holster_blaster2);
 					ci->blaster2_holstered = WP_BRYAR_OLD;
@@ -18894,13 +18940,16 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 			if (cent->currentState.weapon != WP_ROCKET_LAUNCHER && !back_in_use)
 			{
 				//need to render holstered rocket launcher
-				if (ci->holster_golan != -1 && !ci->golan_holstered)
+				if (ci->holster_golan != -1)
 				{
-					//we have a valid holster bolt for this weapon and we haven't bolted
-					trap->G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, WP_ROCKET_LAUNCHER), 0, cent->ghoul2,
-						G2MODEL_GOLAN_HOLSTERED);
-					trap->G2API_SetBoltInfo(cent->ghoul2, G2MODEL_GOLAN_HOLSTERED, ci->holster_golan);
-					ci->golan_holstered = qtrue;
+					//we have a valid holster bolt for this weapon (once bolted it is not drawn by hand as well, 2026-11-18)
+					if (!ci->golan_holstered)
+					{
+						trap->G2API_CopySpecificGhoul2Model(CG_G2HolsterBoltInstance(cent, WP_ROCKET_LAUNCHER), 0, cent->ghoul2,
+							G2MODEL_GOLAN_HOLSTERED);
+						trap->G2API_SetBoltInfo(cent->ghoul2, G2MODEL_GOLAN_HOLSTERED, ci->holster_golan);
+						ci->golan_holstered = qtrue;
+					}
 				}
 				else
 				{
@@ -18964,7 +19013,7 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 					}
 
 					//now add the concussion
-					trap->G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, WP_CONCUSSION), 0, cent->ghoul2,
+					trap->G2API_CopySpecificGhoul2Model(CG_G2HolsterBoltInstance(cent, WP_CONCUSSION), 0, cent->ghoul2,
 						G2MODEL_LAUNCHER_HOLSTERED);
 					trap->G2API_SetBoltInfo(cent->ghoul2, G2MODEL_LAUNCHER_HOLSTERED, ci->holster_launcher);
 					ci->launcher_holstered = WP_CONCUSSION;
@@ -19013,7 +19062,7 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 					}
 
 					//now bolt the weapon
-					trap->G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, WP_REPEATER), 0, cent->ghoul2,
+					trap->G2API_CopySpecificGhoul2Model(CG_G2HolsterBoltInstance(cent, WP_REPEATER), 0, cent->ghoul2,
 						G2MODEL_LAUNCHER_HOLSTERED);
 					trap->G2API_SetBoltInfo(cent->ghoul2, G2MODEL_LAUNCHER_HOLSTERED, ci->holster_launcher);
 					ci->launcher_holstered = WP_REPEATER;
@@ -19062,7 +19111,7 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 					}
 
 					//now bolt the weapon
-					trap->G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, WP_Z6_ROTARY_CANNON), 0, cent->ghoul2,
+					trap->G2API_CopySpecificGhoul2Model(CG_G2HolsterBoltInstance(cent, WP_Z6_ROTARY_CANNON), 0, cent->ghoul2,
 						G2MODEL_LAUNCHER_HOLSTERED);
 					trap->G2API_SetBoltInfo(cent->ghoul2, G2MODEL_LAUNCHER_HOLSTERED, ci->holster_launcher);
 					ci->launcher_holstered = WP_Z6_ROTARY_CANNON;
@@ -19111,7 +19160,7 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 					}
 
 					//now bolt the weapon
-					trap->G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, WP_FLECHETTE), 0, cent->ghoul2,
+					trap->G2API_CopySpecificGhoul2Model(CG_G2HolsterBoltInstance(cent, WP_FLECHETTE), 0, cent->ghoul2,
 						G2MODEL_LAUNCHER_HOLSTERED);
 					trap->G2API_SetBoltInfo(cent->ghoul2, G2MODEL_LAUNCHER_HOLSTERED, ci->holster_launcher);
 					ci->launcher_holstered = WP_FLECHETTE;
@@ -19160,7 +19209,7 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 					}
 
 					//now bolt the weapon
-					trap->G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, WP_DISRUPTOR), 0, cent->ghoul2,
+					trap->G2API_CopySpecificGhoul2Model(CG_G2HolsterBoltInstance(cent, WP_DISRUPTOR), 0, cent->ghoul2,
 						G2MODEL_LAUNCHER_HOLSTERED);
 					trap->G2API_SetBoltInfo(cent->ghoul2, G2MODEL_LAUNCHER_HOLSTERED, ci->holster_launcher);
 					ci->launcher_holstered = WP_DISRUPTOR;
@@ -19209,7 +19258,7 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 					}
 
 					//now bolt the weapon
-					trap->G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, WP_BOWCASTER), 0, cent->ghoul2,
+					trap->G2API_CopySpecificGhoul2Model(CG_G2HolsterBoltInstance(cent, WP_BOWCASTER), 0, cent->ghoul2,
 						G2MODEL_LAUNCHER_HOLSTERED);
 					trap->G2API_SetBoltInfo(cent->ghoul2, G2MODEL_LAUNCHER_HOLSTERED, ci->holster_launcher);
 					ci->launcher_holstered = WP_BOWCASTER;
@@ -19258,7 +19307,7 @@ void CG_VisualWeaponsUpdate(centity_t* cent, clientInfo_t* ci)
 					}
 
 					//now add the demp2
-					trap->G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, WP_DEMP2), 0, cent->ghoul2,
+					trap->G2API_CopySpecificGhoul2Model(CG_G2HolsterBoltInstance(cent, WP_DEMP2), 0, cent->ghoul2,
 						G2MODEL_LAUNCHER_HOLSTERED);
 					trap->G2API_SetBoltInfo(cent->ghoul2, G2MODEL_LAUNCHER_HOLSTERED, ci->holster_launcher);
 					ci->launcher_holstered = WP_DEMP2;
@@ -19573,6 +19622,30 @@ void CG_Player(centity_t* cent)
 			&emp_yaw, cg_entities[cent->currentState.otherentityNum2].currentState.origin2[0]))
 		{
 			cent->lerpAngles[YAW] = emp_yaw;
+		}
+	}
+
+	// sitting in an SP emplaced gun chair (g_weapon.c, 2026-11-18): drawn in its seat, the chair turned the way he looks
+	// (as SP cg_players.cpp)
+	if (cent->currentState.weapon == WP_EMPLACED_GUN && cent->currentState.otherentityNum2 > 0
+		&& cent->currentState.otherentityNum2 < ENTITYNUM_WORLD
+		&& cg_entities[cent->currentState.otherentityNum2].currentState.origin2[1] > 0.5f
+		&& cg_entities[cent->currentState.otherentityNum2].ghoul2)
+	{
+		centity_t* chair = &cg_entities[cent->currentState.otherentityNum2];
+		const int seat = trap->G2API_AddBolt(chair->ghoul2, 0, "*seat");
+
+		if (seat >= 0)
+		{
+			mdxaBone_t seat_matrix;
+			vec3_t chair_angles;
+
+			VectorSet(chair_angles, 0, cent->lerpAngles[YAW], 0);
+			if (trap->G2API_GetBoltMatrix(chair->ghoul2, 0, seat, &seat_matrix, chair_angles, chair->lerpOrigin, cg.time,
+				cgs.game_models, chair->modelScale))
+			{
+				BG_GiveMeVectorFromMatrix(&seat_matrix, ORIGIN, cent->lerpOrigin);
+			}
 		}
 	}
 

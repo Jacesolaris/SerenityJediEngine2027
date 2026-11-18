@@ -76,8 +76,10 @@ void main()
 	if (d >= SKY_DEPTH || d < DEPTHHACK_LIMIT)
 		return;
 
-	// grass, sand, mud and other matte ground never reflect
-	if (texelFetch(u_SsrMaskMap, ip, 0).r > 0.5)
+	// grass, sand, mud and other matte ground never reflect (mask 1); saber blades add their brightness to the mask
+	// (2026-11-17), so the reflection fades out under the blade and its glow instead of showing through it
+	float noReflect = clamp(texelFetch(u_SsrMaskMap, ip, 0).r, 0.0, 1.0);
+	if (noReflect > 0.98)
 		return;
 
 	vec3 P = ViewPos(vec2(ip) + 0.5, d);
@@ -197,6 +199,6 @@ void main()
 	// Fresnel-like: grazing angles reflect more
 	float fresnel = mix(0.35, 1.0, pow(1.0 - clamp(dot(-V, N), 0.0, 1.0), 4.0));
 
-	float w = clamp(u_SsrParams.z * surf * facing * edge * distFade * fresnel, 0.0, 1.0);
+	float w = clamp(u_SsrParams.z * surf * facing * edge * distFade * fresnel * (1.0 - noReflect), 0.0, 1.0);
 	out_Color = vec4(mix(base, refl, w), 1.0);
 }

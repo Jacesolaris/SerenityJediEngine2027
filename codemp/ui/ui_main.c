@@ -1601,7 +1601,7 @@ void UI_LoadMenus(const char* menuFile, const qboolean reset)
 	Com_Printf("--------------------- Client Initialization ---------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("---------- genuine SerenityJediEngine-(Solaris Edition)MP--------\n");
-	Com_Printf("---------------------Build date 17/11/2026-----------------------\n"); // build date
+	Com_Printf("---------------------Build date 18/11/2026-----------------------\n"); // build date
 	Com_Printf("---------------------------Build 11------------------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("------------------------LightSaber-------------------------------\n");
@@ -8382,6 +8382,47 @@ static void UI_RunMenuScript(char** args)
 			{
 				trap->Cmd_ExecuteText(EXEC_APPEND, va("Adminpunish \"%i\"\n", uiInfo.playerIndexes[uiInfo.playerIndex]));
 			}
+		}
+		else if (Q_stricmp(name, "AdminMenuPlayer") == 0 || Q_stricmp(name, "AdminMenuCommand") == 0)
+		{
+			// The admin menu's new panels (2026-11-18): "uiScript AdminMenuPlayer <command> [cvar...]" runs an admin
+			// command on the player picked in the list, "uiScript AdminMenuCommand <command> [cvar...]" one without a
+			// player; each cvar's value goes after it (a time, a reason, a message, a ban id)
+			const qboolean on_player = Q_stricmp(name, "AdminMenuPlayer") == 0 ? qtrue : qfalse;
+			const char* word = NULL;
+			char command[64];
+			char line[512];
+
+			if (!String_Parse(args, &word) || !word || !word[0] || strpbrk(word, ";\"\n\r "))
+			{
+				return;
+			}
+			Q_strncpyz(command, word, sizeof command);
+			if (on_player)
+			{
+				if (uiInfo.playerIndex < 0 || uiInfo.playerIndex >= uiInfo.playerCount)
+				{
+					return;
+				}
+				Com_sprintf(line, sizeof line, "%s \"%i\"", command, uiInfo.playerIndexes[uiInfo.playerIndex]);
+			}
+			else
+			{
+				Q_strncpyz(line, command, sizeof line);
+			}
+			while (String_Parse(args, &word) && word && word[0] && word[0] != ';')
+			{
+				char value[256];
+				Q_strncpyz(value, UI_Cvar_VariableString(word), sizeof value);
+				Q_strstrip(value, ";\"\n\r", "    ");
+				if (value[0])
+				{
+					Q_strcat(line, sizeof line, " ");
+					Q_strcat(line, sizeof line, value);
+				}
+			}
+			Q_strcat(line, sizeof line, "\n");
+			trap->Cmd_ExecuteText(EXEC_APPEND, line);
 		}
 		else if (Q_stricmp(name, "AdminMenuSpawnHolocron") == 0)
 		{

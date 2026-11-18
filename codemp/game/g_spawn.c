@@ -361,6 +361,7 @@ void SP_misc_model_ammo_power_converter(gentity_t* ent);
 void SP_misc_model_health_power_converter(gentity_t* ent);
 
 void SP_fx_runner(gentity_t* ent);
+void SP_fx_explosion_trail(gentity_t* ent); // g_misc.c (2026-11-18)
 
 void SP_target_screenshake(gentity_t* ent);
 void SP_target_escapetrig(gentity_t* ent);
@@ -582,6 +583,7 @@ spawn_t spawns[] = {
 	{ "func_usable", SP_func_usable },
 	{ "func_wall", SP_func_wall },
 	{ "fx_rain", SP_CreateRain },
+	{ "fx_explosion_trail", SP_fx_explosion_trail },
 	{ "fx_runner", SP_fx_runner },
 	{ "fx_snow", SP_CreateSnow },
 	{ "fx_spacedust", SP_CreateSpaceDust },

@@ -977,6 +977,722 @@ static void Svcmd_Say_f(void)
 	trap->SendServerCommand(-1, va("print \"server: %s\n\"", text));
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// Admin bans, mutes and login locks (2026-11-18, DH; after Jedi Knight Galaxies' jkg_bans.cpp and its hammer bans).
+// One list, saved to g_adminListFile ("adminbans.txt" in the mod folder) at every change, so it is kept over map
+// changes and server restarts:
+//   B = ban (that IP can't connect), M = mute (his chat and voice commands are dropped), L = admin login locked.
+// An IP may have '*' parts (192.168.*.*). The end is a real time (seconds since 1970), 0 = permanent.
+// Wrong admin passwords: g_adminLockFails of them within 10 minutes lock that IP out of admin login for
+// g_adminLockTime minutes. The counts are kept for this map; the lock goes in the list.
+// Commands: g_cmds.c (Adminban, Adminmute...) and the rcon ones below (adminban, adminunban, adminbanlist,
+// adminmute, adminunmute).
+// ---------------------------------------------------------------------------------------------------------------
+#define ADMINLIST_MAX		256
+
+typedef struct
+{
+	int id;
+	char type; // 'B', 'M' or 'L'
+	unsigned char ip[4];
+	unsigned char mask; // bit n set: part n must match (a '*' part has it clear)
+	int expire; // time(NULL) when it ends, 0 = never
+	char reason[ADMINLIST_REASON];
+} adminListEntry_t;
+
+static adminListEntry_t adminList[ADMINLIST_MAX];
+static int adminListCount;
+static int adminListNextId = 1;
+static qboolean adminListLoaded;
+
+#define ADMIN_FAIL_SLOTS	64
+#define ADMIN_FAIL_WINDOW	600 // seconds
+
+typedef struct
+{
+	unsigned char ip[4];
+	int fails;
+	int first; // time(NULL) of the first wrong password in this window
+} adminFail_t;
+
+static adminFail_t adminFails[ADMIN_FAIL_SLOTS];
+
+static int AL_Now(void)
+{
+	return (int)time(NULL);
+}
+
+static const char* AL_File(void)
+{
+	return g_adminListFile.string[0] ? g_adminListFile.string : "adminbans.txt";
+}
+
+// "a.b.c.d" (a ":port" after it is ignored), '*' for any number in a part
+static qboolean AL_ParseIP(const char* s, unsigned char* ip, unsigned char* mask)
+{
+	int part;
+
+	ip[0] = ip[1] = ip[2] = ip[3] = 0;
+	*mask = 0;
+	if (!s || !s[0])
+	{
+		return qfalse;
+	}
+	for (part = 0; part < 4; part++)
+	{
+		if (*s == '*')
+		{
+			s++;
+		}
+		else
+		{
+			int v = 0, digits = 0;
+			while (*s >= '0' && *s <= '9' && digits < 4)
+			{
+				v = v * 10 + (*s - '0');
+				s++;
+				digits++;
+			}
+			if (!digits || v > 255)
+			{
+				return qfalse;
+			}
+			ip[part] = (unsigned char)v;
+			*mask |= (unsigned char)(1 << part);
+		}
+		if (part < 3)
+		{
+			if (*s != '.')
+			{
+				return qfalse;
+			}
+			s++;
+		}
+	}
+	return !*s || *s == ':' ? qtrue : qfalse;
+}
+
+static const char* AL_IPString(const adminListEntry_t* e)
+{
+	static char buf[32];
+	int i;
+
+	buf[0] = 0;
+	for (i = 0; i < 4; i++)
+	{
+		char part[8];
+		if (e->mask & 1 << i)
+		{
+			Com_sprintf(part, sizeof part, "%s%i", i ? "." : "", e->ip[i]);
+		}
+		else
+		{
+			Com_sprintf(part, sizeof part, "%s*", i ? "." : "");
+		}
+		Q_strcat(buf, sizeof buf, part);
+	}
+	return buf;
+}
+
+// "2 days 3 hours", "1 hour 5 minutes", "12 minutes", "permanent"
+const char* G_AdminTimeText(const int seconds)
+{
+	static char buf[64];
+	const int days = seconds / 86400, hours = seconds % 86400 / 3600, minutes = seconds % 3600 / 60;
+
+	if (seconds <= 0)
+	{
+		Q_strncpyz(buf, "permanent", sizeof buf);
+	}
+	else if (days)
+	{
+		Com_sprintf(buf, sizeof buf, "%i day%s %i hour%s", days, days == 1 ? "" : "s", hours, hours == 1 ? "" : "s");
+	}
+	else if (hours)
+	{
+		Com_sprintf(buf, sizeof buf, "%i hour%s %i minute%s", hours, hours == 1 ? "" : "s", minutes, minutes == 1 ? "" : "s");
+	}
+	else if (minutes)
+	{
+		Com_sprintf(buf, sizeof buf, "%i minute%s", minutes, minutes == 1 ? "" : "s");
+	}
+	else
+	{
+		Com_sprintf(buf, sizeof buf, "%i second%s", seconds, seconds == 1 ? "" : "s");
+	}
+	return buf;
+}
+
+// "30m", "2h", "7d", "1w", a plain number = minutes, "0" / "perm" = permanent (0). -1 = not a time, -2 = empty
+int G_AdminParseDuration(const char* s)
+{
+	int n = 0, digits = 0;
+
+	if (!s || !s[0])
+	{
+		return -2;
+	}
+	if (!Q_stricmp(s, "perm") || !Q_stricmp(s, "permanent") || !Q_stricmp(s, "forever"))
+	{
+		return 0;
+	}
+	while (*s >= '0' && *s <= '9' && digits < 6)
+	{
+		n = n * 10 + (*s - '0');
+		s++;
+		digits++;
+	}
+	if (!digits)
+	{
+		return -1;
+	}
+	switch (*s >= 'A' && *s <= 'Z' ? *s + ('a' - 'A') : *s)
+	{
+	case 0:
+	case 'm':
+		return n * 60;
+	case 's':
+		return n;
+	case 'h':
+		return n * 3600;
+	case 'd':
+		return n * 86400;
+	case 'w':
+		return n * 604800;
+	default:
+		return -1;
+	}
+}
+
+static void AL_Save(void)
+{
+	fileHandle_t f = 0;
+	int i;
+
+	trap->FS_Open(AL_File(), &f, FS_WRITE);
+	if (!f)
+	{
+		Com_Printf(S_COLOR_YELLOW "Admin list: can't write %s\n", AL_File());
+		return;
+	}
+	for (i = 0; i < adminListCount; i++)
+	{
+		const adminListEntry_t* e = &adminList[i];
+		const char* line = va("%c %i %s %i %s\n", e->type, e->id, AL_IPString(e), e->expire, e->reason[0] ? e->reason : "-");
+		trap->FS_Write(line, (int)strlen(line), f);
+	}
+	trap->FS_Close(f);
+}
+
+static void AL_Load(void)
+{
+	static char buf[ADMINLIST_MAX * 128];
+	fileHandle_t f = 0;
+	char* p;
+	int len;
+
+	adminListLoaded = qtrue;
+	adminListCount = 0;
+	adminListNextId = 1;
+	len = trap->FS_Open(AL_File(), &f, FS_READ);
+	if (!f)
+	{
+		return; // no list yet
+	}
+	if (len <= 0 || len >= (int)sizeof buf)
+	{
+		trap->FS_Close(f);
+		return;
+	}
+	trap->FS_Read(buf, len, f);
+	trap->FS_Close(f);
+	buf[len] = 0;
+
+	p = buf;
+	while (*p && adminListCount < ADMINLIST_MAX)
+	{
+		char* end = p;
+		char type = 0, ipstr[32];
+		int id = 0, expire = 0, used = 0;
+
+		while (*end && *end != '\n' && *end != '\r')
+		{
+			end++;
+		}
+		{
+			const char next = *end;
+			*end = 0;
+			if (sscanf(p, "%c %i %31s %i %n", &type, &id, ipstr, &expire, &used) >= 4
+				&& (type == 'B' || type == 'M' || type == 'L') && id > 0)
+			{
+				adminListEntry_t* e = &adminList[adminListCount];
+				if (AL_ParseIP(ipstr, e->ip, &e->mask))
+				{
+					e->id = id;
+					e->type = type;
+					e->expire = expire;
+					Q_strncpyz(e->reason, used > 0 && strcmp(p + used, "-") ? p + used : "", sizeof e->reason);
+					adminListCount++;
+					if (id >= adminListNextId)
+					{
+						adminListNextId = id + 1;
+					}
+				}
+			}
+			p = next ? end + 1 : end;
+		}
+	}
+}
+
+// the ones that have ended go (and the file is written when any did)
+static void AL_Purge(void)
+{
+	const int now = AL_Now();
+	int i, j = 0;
+
+	if (!adminListLoaded)
+	{
+		AL_Load();
+	}
+	for (i = 0; i < adminListCount; i++)
+	{
+		if (adminList[i].expire && adminList[i].expire <= now)
+		{
+			continue;
+		}
+		if (i != j)
+		{
+			adminList[j] = adminList[i];
+		}
+		j++;
+	}
+	if (j != adminListCount)
+	{
+		adminListCount = j;
+		AL_Save();
+	}
+}
+
+static adminListEntry_t* AL_Match(const char type, const char* ipstr)
+{
+	unsigned char ip[4], mask;
+	int i;
+
+	if (!AL_ParseIP(ipstr, ip, &mask) || mask != 15)
+	{
+		return NULL; // a bot, the host ("localhost")
+	}
+	AL_Purge();
+	for (i = 0; i < adminListCount; i++)
+	{
+		const adminListEntry_t* e = &adminList[i];
+		int part;
+		if (e->type != type)
+		{
+			continue;
+		}
+		for (part = 0; part < 4; part++)
+		{
+			if (e->mask & 1 << part && e->ip[part] != ip[part])
+			{
+				break;
+			}
+		}
+		if (part == 4)
+		{
+			return &adminList[i];
+		}
+	}
+	return NULL;
+}
+
+// a new entry (or the same IP's one of this type changed): its id, -1 = not an IP (a bot, the host) or the list is full
+int G_AdminListAdd(const char type, const char* ipmask, const int seconds, const char* reason)
+{
+	unsigned char ip[4], mask;
+	adminListEntry_t* e = NULL;
+	int i;
+
+	if (!AL_ParseIP(ipmask, ip, &mask) || !mask)
+	{
+		return -1;
+	}
+	AL_Purge();
+	for (i = 0; i < adminListCount; i++)
+	{
+		if (adminList[i].type == type && adminList[i].mask == mask && !memcmp(adminList[i].ip, ip, 4))
+		{
+			e = &adminList[i];
+			break;
+		}
+	}
+	if (!e)
+	{
+		if (adminListCount >= ADMINLIST_MAX)
+		{
+			return -1;
+		}
+		e = &adminList[adminListCount++];
+		memset(e, 0, sizeof * e);
+		e->id = adminListNextId++;
+		e->type = type;
+		memcpy(e->ip, ip, 4);
+		e->mask = mask;
+	}
+	e->expire = seconds > 0 ? AL_Now() + seconds : 0;
+	Q_strncpyz(e->reason, reason ? reason : "", sizeof e->reason);
+	Q_strstrip(e->reason, "\"\n\r;%", "'    ");
+	AL_Save();
+	return e->id;
+}
+
+// takes away an entry by its id (a ban, a mute or a login lock); its type, 0 = none had that id
+char G_AdminListRemove(const int id)
+{
+	int i;
+
+	AL_Purge();
+	for (i = 0; i < adminListCount; i++)
+	{
+		if (adminList[i].id == id)
+		{
+			const char type = adminList[i].type;
+			memmove(&adminList[i], &adminList[i + 1], (adminListCount - i - 1) * sizeof adminList[0]);
+			adminListCount--;
+			AL_Save();
+			return type;
+		}
+	}
+	return 0;
+}
+
+// takes away every entry of this type that covers this player's IP (unmute); how many
+int G_AdminListRemoveIP(const char type, const char* ipstr)
+{
+	int n = 0;
+	adminListEntry_t* e;
+
+	while ((e = AL_Match(type, ipstr)) != NULL && n < ADMINLIST_MAX)
+	{
+		G_AdminListRemove(e->id);
+		n++;
+	}
+	return n;
+}
+
+// The list as text, to a client (clientNum) or the server console (-1)
+void G_AdminListPrint(const int clientNum)
+{
+	char chunk[1000];
+	int i;
+
+	AL_Purge();
+	Com_sprintf(chunk, sizeof chunk, "^3Admin list (%s): %i entr%s. B = ban, M = mute, L = admin login locked\n",
+		AL_File(), adminListCount, adminListCount == 1 ? "y" : "ies");
+	for (i = 0; i <= adminListCount; i++)
+	{
+		char line[192];
+
+		line[0] = 0;
+		if (i < adminListCount)
+		{
+			const adminListEntry_t* e = &adminList[i];
+			Com_sprintf(line, sizeof line, "^7%4i  %c  %-15s  %-22s  %s\n", e->id, e->type, AL_IPString(e),
+				e->expire ? G_AdminTimeText(e->expire - AL_Now()) : "permanent", e->reason);
+		}
+		if (i == adminListCount || strlen(chunk) + strlen(line) >= sizeof chunk - 16)
+		{
+			if (clientNum >= 0)
+			{
+				Q_strstrip(chunk, "\"", "'");
+				trap->SendServerCommand(clientNum, va("print \"%s\"", chunk));
+			}
+			else
+			{
+				trap->Print("%s", chunk);
+			}
+			chunk[0] = 0;
+		}
+		Q_strcat(chunk, sizeof chunk, line);
+	}
+}
+
+// ClientConnect: the message for a banned IP, NULL = may connect
+const char* G_AdminBanCheck(const char* ipstr)
+{
+	const adminListEntry_t* e = AL_Match('B', ipstr);
+	static char msg[256];
+
+	if (!e)
+	{
+		return NULL;
+	}
+	if (e->expire)
+	{
+		Com_sprintf(msg, sizeof msg, "You are banned from this server for %s more.%s%s", G_AdminTimeText(e->expire - AL_Now()),
+			e->reason[0] ? "\nReason: " : "", e->reason);
+	}
+	else
+	{
+		Com_sprintf(msg, sizeof msg, "You are banned from this server.%s%s", e->reason[0] ? "\nReason: " : "", e->reason);
+	}
+	return msg;
+}
+
+// seconds of mute left (-1 = permanent), 0 = not muted
+int G_AdminMuteLeft(const gentity_t* ent)
+{
+	const adminListEntry_t* e;
+
+	if (!ent || !ent->client || ent->s.number < 0 || ent->s.number >= MAX_CLIENTS || ent->r.svFlags & SVF_ADMIN)
+	{
+		return 0;
+	}
+	if (ent->client->pers.adminMuted)
+	{
+		return -1; // no IP (a bot): muted for this map
+	}
+	e = AL_Match('M', ent->client->sess.IP);
+	if (!e)
+	{
+		return 0;
+	}
+	return e->expire ? e->expire - AL_Now() : -1;
+}
+
+// seconds the admin login of this IP is still locked, 0 = it isn't
+int G_AdminLoginLocked(const char* ipstr)
+{
+	const adminListEntry_t* e = AL_Match('L', ipstr);
+	if (!e)
+	{
+		return 0;
+	}
+	return e->expire ? e->expire - AL_Now() : 1;
+}
+
+static adminFail_t* AL_FailSlot(const char* ipstr, const qboolean create)
+{
+	unsigned char ip[4], mask;
+	adminFail_t* oldest = &adminFails[0];
+	int i;
+
+	if (!AL_ParseIP(ipstr, ip, &mask) || mask != 15)
+	{
+		return NULL;
+	}
+	for (i = 0; i < ADMIN_FAIL_SLOTS; i++)
+	{
+		if (adminFails[i].fails && !memcmp(adminFails[i].ip, ip, 4))
+		{
+			return &adminFails[i];
+		}
+		if (adminFails[i].first < oldest->first)
+		{
+			oldest = &adminFails[i];
+		}
+	}
+	if (!create)
+	{
+		return NULL;
+	}
+	memset(oldest, 0, sizeof * oldest);
+	memcpy(oldest->ip, ip, 4);
+	return oldest;
+}
+
+// a wrong admin password from this IP: the tries left before it is locked, 0 = it is locked now
+int G_AdminLoginFailed(const char* ipstr)
+{
+	adminFail_t* slot = AL_FailSlot(ipstr, qtrue);
+	const int now = AL_Now();
+	const int limit = g_adminLockFails.integer > 0 ? g_adminLockFails.integer : 5;
+
+	if (!slot)
+	{
+		return limit;
+	}
+	if (!slot->fails || now - slot->first > ADMIN_FAIL_WINDOW)
+	{
+		slot->fails = 0;
+		slot->first = now;
+	}
+	slot->fails++;
+	if (slot->fails < limit)
+	{
+		return limit - slot->fails;
+	}
+	slot->fails = 0;
+	G_AdminListAdd('L', ipstr, (g_adminLockTime.integer > 0 ? g_adminLockTime.integer : 120) * 60, "too many wrong admin passwords");
+	G_SecurityLogPrintf("Admin login locked for IP %s: %i wrong passwords\n", ipstr, limit);
+	return 0;
+}
+
+void G_AdminLoginGood(const char* ipstr)
+{
+	adminFail_t* slot = AL_FailSlot(ipstr, qfalse);
+	if (slot)
+	{
+		slot->fails = 0;
+	}
+}
+
+// rcon: "adminban <player | ip mask> [time] [reason]" (time: 30m, 2h, 7d, 0 = permanent; none = 1 day)
+static void Svcmd_AdminBan_f(void)
+{
+	char arg[MAX_TOKEN_CHARS], reason[ADMINLIST_REASON];
+	gclient_t* cl = NULL;
+	int seconds, id;
+
+	if (trap->Argc() < 2)
+	{
+		trap->Print("Usage: adminban <player | ip mask like 1.2.3.*> [time: 30m, 2h, 7d, 0 = permanent; none = 1d] [reason]\n");
+		return;
+	}
+	trap->Argv(2, arg, sizeof arg);
+	seconds = G_AdminParseDuration(arg);
+	if (seconds == -2)
+	{
+		seconds = 86400;
+	}
+	if (seconds < 0)
+	{
+		trap->Print("Bad time \"%s\" (30m, 2h, 7d, 0 = permanent)\n", arg);
+		return;
+	}
+	Q_strncpyz(reason, trap->Argc() > 3 ? ConcatArgs(3) : "", sizeof reason);
+	trap->Argv(1, arg, sizeof arg);
+	if (strchr(arg, '.'))
+	{
+		id = G_AdminListAdd('B', arg, seconds, reason);
+	}
+	else
+	{
+		cl = ClientForString(arg);
+		if (!cl)
+		{
+			return;
+		}
+		id = G_AdminListAdd('B', cl->sess.IP, seconds, reason);
+	}
+	if (id < 0)
+	{
+		trap->Print("Can't ban %s: not an IP address (or the list is full)\n", arg);
+		if (!cl)
+		{
+			return;
+		}
+	}
+	else
+	{
+		trap->Print("Ban %i: %s (%s)\n", id, arg, G_AdminTimeText(seconds));
+	}
+	G_LogPrintf("Admin ban by the server: %s (%s): %s\n", cl ? cl->pers.netname : arg, G_AdminTimeText(seconds), reason);
+	if (cl)
+	{
+		trap->DropClient(cl - level.clients, va("was banned (%s)%s%s", G_AdminTimeText(seconds), reason[0] ? ": " : "", reason));
+	}
+	else
+	{
+		// everyone on that IP range goes now
+		int i;
+		for (i = 0; i < level.maxclients; i++)
+		{
+			if (level.clients[i].pers.connected != CON_DISCONNECTED && G_AdminBanCheck(level.clients[i].sess.IP))
+			{
+				trap->DropClient(i, va("was banned (%s)%s%s", G_AdminTimeText(seconds), reason[0] ? ": " : "", reason));
+			}
+		}
+	}
+}
+
+// rcon: "adminunban <id>" (adminbanlist shows them; also takes away a mute or a login lock)
+static void Svcmd_AdminUnban_f(void)
+{
+	char arg[MAX_TOKEN_CHARS];
+	char type;
+
+	trap->Argv(1, arg, sizeof arg);
+	if (!arg[0])
+	{
+		trap->Print("Usage: adminunban <id> (adminbanlist shows them)\n");
+		return;
+	}
+	type = G_AdminListRemove(atoi(arg));
+	if (!type)
+	{
+		trap->Print("No entry %s in the admin list\n", arg);
+		return;
+	}
+	trap->Print("%s %s lifted\n", type == 'B' ? "Ban" : type == 'M' ? "Mute" : "Admin login lock", arg);
+}
+
+static void Svcmd_AdminBanList_f(void)
+{
+	G_AdminListPrint(-1);
+}
+
+// rcon: "adminmute <player> [time] [reason]" (none = 10 minutes), "adminunmute <player>"
+static void Svcmd_AdminMute_f(void)
+{
+	char arg[MAX_TOKEN_CHARS], reason[ADMINLIST_REASON];
+	gclient_t* cl;
+	int seconds;
+
+	if (trap->Argc() < 2)
+	{
+		trap->Print("Usage: adminmute <player> [time: 10m, 1h, 0 = permanent; none = 10m] [reason]\n");
+		return;
+	}
+	trap->Argv(1, arg, sizeof arg);
+	cl = ClientForString(arg);
+	if (!cl)
+	{
+		return;
+	}
+	trap->Argv(2, arg, sizeof arg);
+	seconds = G_AdminParseDuration(arg);
+	if (seconds == -2)
+	{
+		seconds = 600;
+	}
+	if (seconds < 0)
+	{
+		trap->Print("Bad time \"%s\" (10m, 1h, 0 = permanent)\n", arg);
+		return;
+	}
+	Q_strncpyz(reason, trap->Argc() > 3 ? ConcatArgs(3) : "", sizeof reason);
+	if (G_AdminListAdd('M', cl->sess.IP, seconds, reason) < 0)
+	{
+		cl->pers.adminMuted = qtrue; // no IP (a bot): for this map
+	}
+	trap->SendServerCommand(cl - level.clients, va("print \"^1You have been muted (%s).\n\"", G_AdminTimeText(seconds)));
+	trap->Print("%s muted (%s)\n", cl->pers.netname, G_AdminTimeText(seconds));
+	G_LogPrintf("Admin mute by the server: %s (%s): %s\n", cl->pers.netname, G_AdminTimeText(seconds), reason);
+}
+
+static void Svcmd_AdminUnmute_f(void)
+{
+	char arg[MAX_TOKEN_CHARS];
+	gclient_t* cl;
+
+	trap->Argv(1, arg, sizeof arg);
+	if (!arg[0])
+	{
+		trap->Print("Usage: adminunmute <player>\n");
+		return;
+	}
+	cl = ClientForString(arg);
+	if (!cl)
+	{
+		return;
+	}
+	G_AdminListRemoveIP('M', cl->sess.IP);
+	cl->pers.adminMuted = qfalse;
+	trap->SendServerCommand(cl - level.clients, "print \"^2You can talk again.\n\"");
+	trap->Print("%s unmuted\n", cl->pers.netname);
+}
+
 typedef struct svcmd_s
 {
 	const char* name;
@@ -1040,6 +1756,12 @@ svcmd_t svcmds[] = {
 	{ "toggleallowvote", Svcmd_ToggleAllowVote_f, qfalse },
 	{ "toggleuserinfovalidation", Svcmd_ToggleUserinfoValidation_f, qfalse },
 	{ "centersay", Svcmd_CenterSay_f, qfalse },
+	// admin bans, mutes and login locks (2026-11-18)
+	{ "adminban", Svcmd_AdminBan_f, qfalse },
+	{ "adminunban", Svcmd_AdminUnban_f, qfalse },
+	{ "adminbanlist", Svcmd_AdminBanList_f, qfalse },
+	{ "adminmute", Svcmd_AdminMute_f, qfalse },
+	{ "adminunmute", Svcmd_AdminUnmute_f, qfalse },
 };
 static const size_t numsvcmds = ARRAY_LEN(svcmds);
 

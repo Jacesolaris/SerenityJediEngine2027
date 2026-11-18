@@ -649,6 +649,9 @@ stringID_table_t setTable[] =
 	ENUM2STRING(SET_PLAYER_CLEAR_WEAPONS),
 	ENUM2STRING(SET_PLAYER_CLEAR_FORCE),
 
+	// JK2's name for SET_altFire (its scripts use it, 2026-11-18: kejim_post's stand_shoot_burst)
+	{ "SET_ALT_FIRE", SET_altFire },
+
 	{ "", SET_ }
 };
 

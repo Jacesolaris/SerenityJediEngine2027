@@ -7599,6 +7599,9 @@ static void ClientThink_real(gentity_t* ent)
 		}
 	}
 
+	// sitting in an SP emplaced gun chair: the chair turns with him, he stays in its seat (g_weapon.c, 2026-11-18)
+	G_EmplacedChairThink(ent);
+
 	// save results of pmove
 	if (ent->client->ps.eventSequence != old_event_sequence)
 	{

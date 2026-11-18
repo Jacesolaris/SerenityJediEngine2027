@@ -29,6 +29,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "bg_weapons.h"
 
 extern qboolean NPCsPrecached;
+qboolean NPC_AddMissingParms(const char* npc_name); // (2026-11-18)
 
 extern qboolean WP_SaberParseParms(const char* SaberName, saberInfo_t* saber);
 extern void WP_RemoveSaber(saberInfo_t* sabers, int saberNum);
@@ -530,6 +531,7 @@ void NPC_Precache(gentity_t* spawner)
 	char playerModel[MAX_QPATH];
 	char customSkin[MAX_QPATH];
 	char sessionName[MAX_QPATH + 15];
+	qboolean added = qfalse;
 
 	if (!Q_stricmp("random", spawner->NPC_type))
 	{
@@ -547,7 +549,17 @@ void NPC_Precache(gentity_t* spawner)
 	{
 		token = COM_ParseExt(&p, qtrue);
 		if (token[0] == 0)
+		{
+			// not in NPCParms: maybe in SP's NPCs (2026-11-18)
+			if (!added && NPC_AddMissingParms(spawner->NPC_type))
+			{
+				added = qtrue;
+				p = NPCParms;
+				COM_BeginParseSession(sessionName);
+				continue;
+			}
 			return;
+		}
 
 		if (!Q_stricmp(token, spawner->NPC_type))
 		{
@@ -928,6 +940,7 @@ qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 		char* patch = NULL;
 		const char* token = NULL;
 		int fp = 0;
+		qboolean added = qfalse;
 
 		p = NPCParms;
 		Com_sprintf(session_name, sizeof session_name, "NPC_ParseParms(%s)", npc_name);
@@ -939,6 +952,14 @@ qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 			token = COM_ParseExt(&p, qtrue);
 			if (token[0] == 0)
 			{
+				// not in NPCParms: maybe in SP's NPCs (2026-11-18)
+				if (!added && NPC_AddMissingParms(npc_name))
+				{
+					added = qtrue;
+					p = NPCParms;
+					COM_BeginParseSession(session_name);
+					continue;
+				}
 				return qfalse;
 			}
 
@@ -3537,58 +3558,68 @@ qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 	return qtrue;
 }
 
+#define NPC_MP_FOLDER "ext_data/mpnpcs"
+#define NPC_SP_OUTCAST_FOLDER "ext_data/jkonpcs" // SJE SP's Jedi Outcast (and Dark Forces) NPCs
+#define NPC_SP_FOLDERS "ext_data/npcs", "ext_data/jkonpcs"
 char npcParseBuffer[MAX_NPC_DATA_SIZE];
 
-// Load NPC extension files from ext_data/mpnpcs and append them to NPCParms.
-// Behaviour preserved; only safety and stack usage improved.
-void NPC_LoadParms(void)
-{
-	int npcExtFNLen = 0;
-	fileHandle_t f = 0;
-	int len = 0;
+/*
+-------------------------
+SP's NPC definitions in MP (2026-11-18, DH: kejim_post as it plays in SP)
 
+MP's NPCs come from NPC_MP_FOLDER only. On a Jedi Outcast map in a mission (g_missionSPNPCs 1; 2: in any game on
+those maps; 0: never) NPC_SP_OUTCAST_FOLDER, the folder SP plays Jedi Outcast with, is read first, so its NPCs are
+SP's (the first one of a name is the one used): SJE's mpnpcs stormtroopers have 10 health (SP's 60), its "mouse" is a
+red saber Reborn (the kejim_post mouse droid), its imperials and probes have other guns and voices. NPC_MP_FOLDER keeps
+its room: what of the SP folder doesn't fit is left out. An NPC type not in NPCParms at all (an SP cutscene actor,
+MD's _jk2 troopers) is looked for in NPC_SP_FOLDERS when one is spawned, and added (NPC_AddMissingParms).
+-------------------------
+*/
+// one folder's .npc files added to NPCParms[totallen], up to room bytes (must_fit: an error if one doesn't fit, as
+// before; else it is left out); returns the new length
+static int NPC_LoadParmsFolder(const char* folder, int totallen, const int room, const qboolean must_fit)
+{
 	// static: too big for the stack, and BG_Alloc is never freed: asked for on every call, this ran the pool dry
 	static char npcExtensionListBuf[16384];
-
-	// Remember where to store the next one
-	int totallen = 0;
+	int npcExtFNLen = 0;
 	char* marker = NPCParms + totallen;
-	*marker = 0;
-
-	// Load .npc extension list
-	const int fileCnt = trap->FS_GetFileList(
-		"ext_data/mpnpcs",
-		".npc",
-		npcExtensionListBuf,
-		16384);
-
 	char* holdChar = npcExtensionListBuf;
+	const int fileCnt = trap->FS_GetFileList(folder, ".npc", npcExtensionListBuf, sizeof npcExtensionListBuf);
+	int i;
 
-	for (int i = 0; i < fileCnt; i++, holdChar += npcExtFNLen + 1)
+	*marker = 0;
+	for (i = 0; i < fileCnt; i++, holdChar += npcExtFNLen + 1)
 	{
+		fileHandle_t f = 0;
+		int len;
+
 		npcExtFNLen = strlen(holdChar);
 
-		len = trap->FS_Open(va("ext_data/mpnpcs/%s", holdChar), &f, FS_READ);
-
-		if (len == -1)
+		len = trap->FS_Open(va("%s/%s", folder, holdChar), &f, FS_READ);
+		if (len == -1 || !f)
 		{
 			Com_Printf("NPC_LoadParms: error reading file %s\n", holdChar);
 			continue;
 		}
 
 		// Check space
-		if (totallen + len >= MAX_NPC_DATA_SIZE)
+		if (totallen + len + 1 >= room || len >= MAX_NPC_DATA_SIZE)
 		{
 			trap->FS_Close(f);
-			trap->Error(
-				ERR_DROP,
-				"NPC_LoadParms: ran out of space before reading %s\n(you must make the .npc files smaller)",
-				holdChar);
+			if (must_fit)
+			{
+				trap->Error(ERR_DROP,
+					"NPC_LoadParms: ran out of space before reading %s\n(you must make the .npc files smaller)",
+					holdChar);
+			}
+			Com_Printf(S_COLOR_YELLOW "NPC_LoadParms: no room for %s/%s, left out\n", folder, holdChar);
+			continue;
 		}
 
 		// Read file
 		trap->FS_Read(npcParseBuffer, len, f);
 		npcParseBuffer[len] = 0;
+		trap->FS_Close(f);
 
 		// Compress
 		len = COM_Compress(npcParseBuffer);
@@ -3598,11 +3629,171 @@ void NPC_LoadParms(void)
 		strcat(marker, "\n");
 		len++;
 
-		trap->FS_Close(f);
-
 		totallen += len;
 		marker = NPCParms + totallen;
 	}
+	return totallen;
+}
+
+// the space a folder's .npc files take (uncompressed)
+static int NPC_ParmsFolderSize(const char* folder)
+{
+	static char npcSizeListBuf[16384];
+	int npcExtFNLen = 0, size = 0, i;
+	char* holdChar = npcSizeListBuf;
+	const int fileCnt = trap->FS_GetFileList(folder, ".npc", npcSizeListBuf, sizeof npcSizeListBuf);
+
+	for (i = 0; i < fileCnt; i++, holdChar += npcExtFNLen + 1)
+	{
+		fileHandle_t f = 0;
+		const int len = trap->FS_Open(va("%s/%s", folder, holdChar), &f, FS_READ);
+
+		npcExtFNLen = strlen(holdChar);
+		if (f)
+		{
+			trap->FS_Close(f);
+		}
+		if (len > 0)
+		{
+			size += len + 1;
+		}
+	}
+	return size;
+}
+
+extern qboolean G_IsOutcastSPMap(const char* mapname);
+
+// the SP folder whose NPCs come first on this map (NULL: none)
+static const char* NPC_MissionSPFolder(void)
+{
+	char mapname[MAX_QPATH];
+
+	if (!NPC_SP_OUTCAST_FOLDER[0] || g_missionSPNPCs.integer <= 0
+		|| (g_missionSPNPCs.integer < 2 && level.gametype != GT_SINGLE_PLAYER))
+	{
+		return NULL;
+	}
+	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
+	return G_IsOutcastSPMap(mapname) ? NPC_SP_OUTCAST_FOLDER : NULL;
+}
+
+static int npcParmsLen; // NPCParms' length
+static char npcMissing[64][MAX_QPATH]; // types not found in NPC_SP_FOLDERS either
+static int npcNumMissing;
+
+// Load NPC extension files from NPC_MP_FOLDER (after SP's on a Jedi Outcast mission) into NPCParms.
+void NPC_LoadParms(void)
+{
+	const char* sp_folder = NPC_MissionSPFolder();
+	int totallen = 0;
+
+	NPCParms[0] = 0;
+	npcNumMissing = 0;
+	if (sp_folder)
+	{
+		const int room = MAX_NPC_DATA_SIZE - NPC_ParmsFolderSize(NPC_MP_FOLDER) - 1;
+
+		totallen = NPC_LoadParmsFolder(sp_folder, 0, room, qfalse);
+		Com_Printf("NPC_LoadParms: a Jedi Outcast mission: %s's NPCs first (g_missionSPNPCs)\n", sp_folder);
+	}
+	npcParmsLen = NPC_LoadParmsFolder(NPC_MP_FOLDER, totallen, MAX_NPC_DATA_SIZE, qtrue);
+}
+
+// an NPC type NPCParms doesn't have, looked for in SP's NPC folders and added to NPCParms; qtrue: it's there now
+qboolean NPC_AddMissingParms(const char* npc_name)
+{
+	static const char* folders[] = { NPC_SP_FOLDERS };
+	static char npcMissingListBuf[16384];
+	int i, k;
+
+	if (!npc_name || !npc_name[0] || !Q_stricmp(npc_name, "random"))
+	{
+		return qfalse;
+	}
+	for (i = 0; i < npcNumMissing; i++)
+	{
+		if (!Q_stricmp(npcMissing[i], npc_name))
+		{
+			return qfalse; // looked for already
+		}
+	}
+
+	for (k = 0; k < (int)ARRAY_LEN(folders); k++)
+	{
+		int npcExtFNLen = 0;
+		char* holdChar = npcMissingListBuf;
+		const int fileCnt = trap->FS_GetFileList(folders[k], ".npc", npcMissingListBuf, sizeof npcMissingListBuf);
+
+		for (i = 0; i < fileCnt; i++, holdChar += npcExtFNLen + 1)
+		{
+			fileHandle_t f = 0;
+			const int len = trap->FS_Open(va("%s/%s", folders[k], holdChar), &f, FS_READ);
+			const char* p;
+
+			npcExtFNLen = strlen(holdChar);
+			if (!f)
+			{
+				continue;
+			}
+			if (len <= 0 || len >= MAX_NPC_DATA_SIZE)
+			{
+				trap->FS_Close(f);
+				continue;
+			}
+			trap->FS_Read(npcParseBuffer, len, f);
+			npcParseBuffer[len] = 0;
+			trap->FS_Close(f);
+			COM_Compress(npcParseBuffer);
+
+			p = npcParseBuffer;
+			COM_BeginParseSession("NPC_AddMissingParms");
+			while (p)
+			{
+				const char* token = COM_ParseExt(&p, qtrue);
+				const char* block;
+
+				if (!token[0])
+				{
+					break;
+				}
+				if (Q_stricmp(token, npc_name))
+				{
+					SkipBracedSection(&p, 0);
+					continue;
+				}
+				// found it: "name { ... }" added to NPCParms
+				block = p;
+				SkipBracedSection(&p, 0);
+				if (p && p > block)
+				{
+					const int name_len = strlen(npc_name);
+					const int block_len = p - block;
+
+					if (npcParmsLen + name_len + block_len + 3 >= MAX_NPC_DATA_SIZE)
+					{
+						Com_Printf(S_COLOR_YELLOW "NPC_AddMissingParms: no room for NPC '%s'\n", npc_name);
+						return qfalse;
+					}
+					NPCParms[npcParmsLen++] = '\n';
+					memcpy(NPCParms + npcParmsLen, npc_name, name_len);
+					npcParmsLen += name_len;
+					memcpy(NPCParms + npcParmsLen, block, block_len);
+					npcParmsLen += block_len;
+					NPCParms[npcParmsLen++] = '\n';
+					NPCParms[npcParmsLen] = 0;
+					Com_Printf("NPC '%s' isn't in %s: using %s/%s\n", npc_name, NPC_MP_FOLDER, folders[k], holdChar);
+					return qtrue;
+				}
+				break;
+			}
+		}
+	}
+
+	if (npcNumMissing < (int)ARRAY_LEN(npcMissing))
+	{
+		Q_strncpyz(npcMissing[npcNumMissing++], npc_name, sizeof npcMissing[0]);
+	}
+	return qfalse;
 }
 
 extern void npc_shadow_trooper_precache(void);

@@ -909,7 +909,12 @@ static void WV_ParseKey(weaponVariant_t* wv, const char* key, const char* value,
 	}
 	else if (!Q_stricmp(key, "gunposition"))
 	{
-		sscanf(value, "%f %f %f", &wv->gunPosition[0], &wv->gunPosition[1], &wv->gunPosition[2]);
+		// three numbers, or the default position stays (C6031)
+		vec3_t pos = { 0.0f, 0.0f, 0.0f };
+		if (sscanf(value, "%f %f %f", &pos[0], &pos[1], &pos[2]) == 3)
+		{
+			VectorCopy(pos, wv->gunPosition);
+		}
 	}
 	else if (!Q_stricmp(key, "price"))
 	{

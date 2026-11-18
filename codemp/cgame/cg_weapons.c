@@ -4211,6 +4211,14 @@ void* CG_G2HolsterWeaponInstance(const centity_t* cent, const int weapon, const 
 	return g2HolsterWeaponInstances[weapon];
 }
 
+// A gun bolted to a holster tag on the player model (cg_players.c CG_VisualWeaponsUpdate, 2026-11-18): the look he
+// uses on that weapon (the shop), else the gun's own model
+void* CG_G2HolsterBoltInstance(const centity_t* cent, const int weapon)
+{
+	void* variant_g2 = weapon != WP_SABER ? CG_WeaponVariantG2(cent, weapon, qtrue) : NULL;
+	return variant_g2 ? variant_g2 : CG_G2WeaponInstance(cent, weapon);
+}
+
 // what ghoul2 model do we want to copy ?
 void CG_CopyG2WeaponInstance(const centity_t* cent, const int weapon_num, void* to_ghoul2)
 {

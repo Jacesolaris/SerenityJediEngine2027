@@ -722,6 +722,7 @@ typedef struct clientPersistant_s
 	char		logout[1024];
 	qboolean	plugindetect;
 	qboolean	isbeingpunished;
+	qboolean	adminMuted; // muted by an admin for this map (a player with no IP, a bot; the others are in the admin list, 2026-11-18)
 	int			weaponVariant; // weapon variant (2026-10-31): the last one this bot/NPC had, kept over respawns (ClientSpawn clears ps)
 	// the shop (2026-10-31, g_pazaak.c shop code): for this map (ClientConnect clears pers)
 	int			shopInit; // the starting credits were given
@@ -1608,6 +1609,8 @@ void G_FreeEntity(gentity_t* ed);
 qboolean G_EntitiesFree(void);
 
 qboolean G_ActivateBehavior(gentity_t* self, int bset);
+void G_EmplacedChairThink(gentity_t* ent); // g_weapon.c: SP emplaced gun chairs (2026-11-18)
+qboolean G_IsOutcastSPMap(const char* mapname); // g_main.c: a Jedi Outcast SP map (2026-11-18)
 
 void GetAnglesForDirection(const vec3_t p1, const vec3_t p2, vec3_t out);
 
@@ -1811,6 +1814,19 @@ extern gentity_t* gJMSaberEnt;
 qboolean ConsoleCommand(void);
 void G_ProcessIPBans(void);
 qboolean G_FilterPacket(char* from);
+// admin bans, mutes and login locks (g_svcmds.c, 2026-11-18)
+#define ADMINLIST_REASON	64
+const char* G_AdminTimeText(int seconds);
+int G_AdminParseDuration(const char* s);
+int G_AdminListAdd(char type, const char* ipmask, int seconds, const char* reason);
+char G_AdminListRemove(int id);
+int G_AdminListRemoveIP(char type, const char* ipstr);
+void G_AdminListPrint(int clientNum);
+const char* G_AdminBanCheck(const char* ipstr);
+int G_AdminMuteLeft(const gentity_t* ent);
+int G_AdminLoginLocked(const char* ipstr);
+int G_AdminLoginFailed(const char* ipstr);
+void G_AdminLoginGood(const char* ipstr);
 
 //
 // g_weapon.c
