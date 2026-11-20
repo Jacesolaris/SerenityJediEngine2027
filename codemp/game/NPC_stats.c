@@ -47,6 +47,35 @@ stringID_table_t TeamTable[] =
 	{ "", -1 }
 };
 
+// A team name to its NPCTEAM_ value, -1 if it is none (2026-11-19). The SP / JKO scripts and map keys name teams three
+// ways: "NPCTEAM_ENEMY", "TEAM_ENEMY" (the scripts' SET_PLAYER_TEAM / SET_ENEMY_TEAM) and "enemy" (misc_sentry_turret's
+// team key). TeamTable has only the first, so the others gave -1: a scripted NPC was on no team (kejim_post, bespin,
+// cairn, doom scripts).
+int G_NPCTeamForName(const char* name)
+{
+	char buf[64];
+	int team;
+
+	if (!name || !name[0])
+	{
+		return -1;
+	}
+	team = GetIDForString(TeamTable, name);
+	if (team >= 0)
+	{
+		return team;
+	}
+	if (!Q_stricmpn(name, "TEAM_", 5))
+	{
+		Com_sprintf(buf, sizeof buf, "NPC%s", name);
+	}
+	else
+	{
+		Com_sprintf(buf, sizeof buf, "NPCTEAM_%s", name);
+	}
+	return GetIDForString(TeamTable, buf);
+}
+
 // this list was made using the model directories, this MUST be in the same order as the CLASS_ enum in teams.h
 stringID_table_t ClassTable[] =
 {

@@ -380,6 +380,8 @@ stringID_table_t setTable[] =
 
 	// JK2's name for SET_altFire (its scripts use it, 2026-11-18: kejim_post's stand_shoot_burst)
 	{ "SET_ALT_FIRE", SET_altFire },
+	// JK2's name for SET_FACE_MOVE_DIR (2026-11-19: its scripts use it)
+	{ "SET_FACE_MOVEDIR", SET_FACE_MOVE_DIR },
 
 	{ "", SET_ },
 };
@@ -4018,7 +4020,14 @@ static void Q3_SetPlayerTeam(const int entID, const char* data)
 	if (!ent->client)
 		return;
 
-	ent->client->playerTeam = GetIDForString(TeamTable, data);
+	// (2026-11-19: also the scripts' "TEAM_ENEMY" and the like, G_NPCTeamForName)
+	const int team = G_NPCTeamForName(data);
+	if (team < 0)
+	{
+		G_DebugPrint(WL_WARNING, "Q3_SetPlayerTeam: unknown team '%s'\n", data);
+		return;
+	}
+	ent->client->playerTeam = team;
 }
 
 //==========
@@ -4032,7 +4041,14 @@ static void Q3_SetEnemyTeam(const int entID, const char* data)
 	if (!ent->client)
 		return;
 
-	ent->client->enemyTeam = GetIDForString(TeamTable, data);
+	// (2026-11-19: also the scripts' "TEAM_PLAYER" and the like, G_NPCTeamForName)
+	const int team = G_NPCTeamForName(data);
+	if (team < 0)
+	{
+		G_DebugPrint(WL_WARNING, "Q3_SetEnemyTeam: unknown team '%s'\n", data);
+		return;
+	}
+	ent->client->enemyTeam = team;
 }
 
 /*
@@ -7142,12 +7158,45 @@ static void Q3_CameraGroupTag(const char* camGTag)
 
 /*
 ============
+SP's hand models in MP (2026-11-19, DH: Kyle's comlink in artus_mine's intro, SET_ADDLHANDBOLT_MODEL): the NPC's
+s.bolt2 is the model's index (+ HANDMODEL_LEFT for the left hand), and the clients put it in that hand
+(cg_players.c CG_HandModelUpdate). As SP, one at a time; a remove takes it away.
+============
+*/
+#define HANDMODEL_LEFT 512
+
+static void Q3_SetHandModel(const int entID, const char* model, const qboolean left)
+{
+	gentity_t* ent = &g_entities[entID];
+	int index;
+
+	if (!ent->inuse || !ent->client || !ent->NPC)
+	{
+		G_DebugPrint(WL_WARNING, "Q3_SetHandModel: entity %d is not an NPC\n", entID);
+		return;
+	}
+	if (!model || !model[0] || !Q_stricmp(model, "NULL") || !Q_stricmp(model, "DEFAULT"))
+	{
+		ent->s.bolt2 = 0;
+		return;
+	}
+	index = G_model_index(model);
+	if (index <= 0 || index >= HANDMODEL_LEFT)
+	{
+		G_DebugPrint(WL_WARNING, "Q3_SetHandModel: can't send model %s (index %d)\n", model, index);
+		return;
+	}
+	ent->s.bolt2 = index | (left ? HANDMODEL_LEFT : 0);
+}
+
+/*
+============
 Q3_RemoveRHandModel
 ============
 */
 static void Q3_RemoveRHandModel(int entID, char* addModel)
 {
-	//G_DebugPrint(WL_WARNING, "Q3_RemoveRHandModel: NOT SUPPORTED IN MP\n");
+	Q3_SetHandModel(entID, NULL, qfalse);
 }
 
 /*
@@ -7157,7 +7206,7 @@ Q3_AddRHandModel
 */
 static void Q3_AddRHandModel(int entID, char* addModel)
 {
-	//G_DebugPrint( WL_WARNING, "Q3_AddRHandModel: NOT SUPPORTED IN MP\n");
+	Q3_SetHandModel(entID, addModel, qfalse);
 }
 
 /*
@@ -7167,7 +7216,7 @@ Q3_AddLHandModel
 */
 static void Q3_AddLHandModel(int entID, char* addModel)
 {
-	//G_DebugPrint( WL_WARNING, "Q3_AddLHandModel: NOT SUPPORTED IN MP\n");
+	Q3_SetHandModel(entID, addModel, qtrue);
 }
 
 /*
@@ -7177,7 +7226,7 @@ Q3_RemoveLHandModel
 */
 static void Q3_RemoveLHandModel(int entID, char* addModel)
 {
-	//G_DebugPrint(WL_WARNING, "Q3_RemoveLHandModel: NOT SUPPORTED IN MP\n");
+	Q3_SetHandModel(entID, NULL, qtrue);
 }
 
 /*
@@ -7900,6 +7949,55 @@ static void Q3_SetSaberActive(const int entID, const qboolean active)
 	}
 }
 
+
+// SP's SET_SABER1BLADEON / OFF and SET_SABER2BLADEON / OFF (not in MP's set list, 2026-11-19: the JA scripts turn NPC
+// sabers on and off with them, yavin1, taspir2, t2_rogue, kor2). MP has no per-blade state, only ps.saberHolstered (0
+// all on, 1 the second blade or the second saber off, 2 all off): the first blade of the first saber is the whole saber,
+// the second blade of a staff or the second saber is the "1".
+static void Q3_SetSaberBladeActive(const int entID, const int saberNum, const int bladeNum, const qboolean active)
+{
+	gentity_t* ent;
+	gclient_t* cl;
+	qboolean second;
+
+	if (entID < 0 || entID >= MAX_GENTITIES)
+	{
+		return;
+	}
+	ent = &g_entities[entID];
+	if (!ent->inuse || !ent->client)
+	{
+		G_DebugPrint(WL_WARNING, "Q3_SetSaberBladeActive: entity %d is not a client\n", entID);
+		return;
+	}
+	cl = ent->client;
+
+	second = saberNum == 1 || bladeNum > 0 ? qtrue : qfalse;
+	if (!second)
+	{
+		Q3_SetSaberActive(entID, active);
+		return;
+	}
+	if (saberNum == 1 ? !cl->saber[1].model[0] : cl->saber[0].numBlades <= bladeNum)
+	{
+		return; // no such saber / blade
+	}
+	if (cl->ps.weapon != WP_SABER || cl->ps.saberHolstered == 2)
+	{
+		return; // the first one is off: MP can't show the second alone
+	}
+	if (active && cl->ps.saberHolstered == 1)
+	{
+		cl->ps.saberHolstered = 0;
+		G_Sound(ent, CHAN_AUTO, cl->saber[saberNum].soundOn);
+	}
+	else if (!active && cl->ps.saberHolstered == 0)
+	{
+		cl->ps.saberHolstered = 1;
+		G_Sound(ent, CHAN_AUTO, cl->saber[saberNum].soundOff);
+	}
+}
+
 /*
 ============
 Q3_SetAdjustAreaPortals
@@ -8391,6 +8489,10 @@ static void G_MissionWipeCheck(void)
 
 void G_MissionCutsceneMessage(int entID);
 void G_MissionCutsceneNoteFirst(int entID);
+void ICam_Roll(float roll, float duration); // (2026-11-19)
+void ICam_Track(const char* trackName, float speed, float initLerp);
+void ICam_Distance(float distance, float initLerp);
+void ICam_Path(const char* roff);
 void G_MissionIntroCamera(int entID);
 
 //returns qtrue if it got to the end, otherwise qfalse.
@@ -8417,6 +8519,68 @@ qboolean Q3_Set(const int taskID, const int entID, const char* type_name, const 
 	{
 		trap->SendServerCommand(-1, va("cp \"%s\"", data));
 		return qtrue;
+	}
+
+	// SP set keys MP's set list has not got (2026-11-19, the JKO scripts audit)
+	if (toSet == -1)
+	{
+		// camera roll / track / distance / path (2026-11-19: the engine sends them in missions now, TaskManager.cpp)
+		if (!Q_stricmp(type_name, "ROLL") || !Q_stricmp(type_name, "DISTANCE"))
+		{
+			if (sscanf(data, "%f %*s %f", &float_data, &float2_data) != 2)
+			{
+				G_DebugPrint(WL_WARNING, "Q3_Set: failed sscanf on %s (%s)\n", type_name, data);
+			}
+			if (!Q_stricmp(type_name, "ROLL"))
+			{
+				ICam_Roll(float_data, float2_data);
+			}
+			else
+			{
+				ICam_Distance(float_data, float2_data);
+			}
+			return qtrue;
+		}
+		if (!Q_stricmp(type_name, "TRACK"))
+		{
+			if (sscanf(data, "%999s %f %*s %f", &char_data[0], &float_data, &float2_data) != 3)
+			{
+				G_DebugPrint(WL_WARNING, "Q3_Set: failed sscanf on TRACK (%s)\n", data);
+			}
+			RemoveComma(char_data);
+			ICam_Track(char_data, float_data, float2_data);
+			return qtrue;
+		}
+		if (!Q_stricmp(type_name, "PATH"))
+		{
+			Q_strncpyz(char_data, data, sizeof char_data);
+			ICam_Path(char_data);
+			return qtrue;
+		}
+		// the players' model (the JKO player_setup / start scripts): mission players keep their own model, and MP
+		// can't change an NPC's
+		if (!Q_stricmp(type_name, "SET_PLAYERMODEL"))
+		{
+			if (ent->s.number >= MAX_CLIENTS)
+			{
+				G_DebugPrint(WL_WARNING, "Q3_Set: SET_PLAYERMODEL can't change an NPC's model in MP (%s)\n",
+					ent->targetname ? ent->targetname : "");
+			}
+			return qtrue;
+		}
+		// where the player's saber lies (artus_topside's start, yavin_temple's getsaber, where he finds it): mission
+		// players keep their own sabers
+		if (!Q_stricmp(type_name, "SET_SABER_ORIGIN"))
+		{
+			return qtrue;
+		}
+		if (!Q_stricmp(type_name, "SET_SABER1BLADEON") || !Q_stricmp(type_name, "SET_SABER1BLADEOFF")
+			|| !Q_stricmp(type_name, "SET_SABER2BLADEON") || !Q_stricmp(type_name, "SET_SABER2BLADEOFF"))
+		{
+			Q3_SetSaberBladeActive(entID, type_name[9] == '2' ? 1 : 0, atoi(data),
+				Q_stricmp(type_name + 10, "BLADEON") == 0 ? qtrue : qfalse);
+			return qtrue;
+		}
 	}
 
 	switch (toSet)
@@ -9924,7 +10088,8 @@ void G_MissionCutsceneMessage(const int entID)
 
 /*
 -------------------------
-Missions: a map's first cutscene plays once per mission (DH 2026-11-03)
+Missions: a map's first cutscene plays once per mission (DH 2026-11-03; 2026-11-19, DH: also when the players watch
+the cutscenes, g_missionCutscenes 1 - killed two minutes into artus_mine, the map restarted with its intro again)
 
 The script that started a map's first cutscene (the one its camera's entity runs: G_MissionScriptRunOn) and that
 cutscene's skip script are kept in g_missionCutsceneSeen ("<map> <script> <skip script>") and in the checkpoint save
@@ -9972,9 +10137,9 @@ void G_MissionCutsceneNoteFirst(const int entID)
 {
 	char mapname[MAX_QPATH], seen[MAX_CVAR_VALUE_STRING], key[MAX_QPATH];
 
-	if (!G_MissionSkipsCutscenes() || mission_first_level == level.startTime || entID < 0 || entID >= MAX_GENTITIES)
+	if (!G_IsMission() || mission_first_level == level.startTime || entID < 0 || entID >= MAX_GENTITIES)
 	{
-		return;
+		return; // (watched or not: g_missionCutscenes)
 	}
 	mission_first_level = level.startTime;
 	trap->Cvar_VariableStringBuffer(MISSION_SEEN_CVAR, seen, sizeof seen);
@@ -10249,9 +10414,9 @@ qboolean G_MissionReplayBlocksScript(const char* script)
 	{
 		return qtrue; // (Missions: the map's intro, g_missionSkipIntro)
 	}
-	if (!mission_replay || !G_MissionSkipsCutscenes() || !script || !script[0])
+	if (!mission_replay || !G_IsMission() || !script || !script[0])
 	{
-		return qfalse;
+		return qfalse; // (watched or not: g_missionCutscenes)
 	}
 	trap->Cvar_VariableStringBuffer(MISSION_SEEN_CVAR, seen, sizeof seen);
 	const char* p = seen;
@@ -10662,6 +10827,117 @@ void ICam_Follow(const char* cameraGroup, const float speed, const float initLer
 	}
 
 	GCam_Follow(CGroup, speed, initLerp);
+}
+
+/*
+-------------------------
+camera( ROLL / TRACK / DISTANCE / PATH ) (2026-11-19)
+
+The engine's ICARUS used to call stubs for these in MP (TaskManager.cpp); in missions it now sends them here as it
+does the other camera commands. The clients get them through CS_CAMERA as those do (cg_camera.c), and the server's
+copy of the camera follows a track or a path too (g_camera.c), for what the players are sent.
+-------------------------
+*/
+void GCam_TrackPoints(const vec3_t* org, const float* radius, const float* speed, int count, int loop, float trackSpeed,
+	float initLerp);
+void GCam_Distance(float distance, float initLerp);
+void GCam_PlayRoff(const char* roff);
+
+#define ICAM_TRACK_POINTS	24
+
+void ICam_Roll(const float roll, const float duration)
+{
+	if (ICam_SendToClients())
+	{
+		trap->SetConfigstring(CS_CAMERA, va("roll %f %f", roll, duration));
+	}
+}
+
+// SP's camera tracks follow a chain of path_corners from the one named; only the server has those, so the chain's
+// points go to the clients (a path_corner's origin, radius and speed; the point the last one leads back to, if any)
+void ICam_Track(const char* trackName, const float speed, const float initLerp)
+{
+	gentity_t* chain[ICAM_TRACK_POINTS];
+	vec3_t org[ICAM_TRACK_POINTS];
+	float radius[ICAM_TRACK_POINTS], pSpeed[ICAM_TRACK_POINTS];
+	char msg[2048];
+	int count = 0, loop = -1;
+
+	if (!trackName || !trackName[0] || !Q_stricmp(trackName, "none") || !Q_stricmp(trackName, "NULL"))
+	{
+		// turn off tracking
+		if (ICam_SendToClients())
+		{
+			trap->SetConfigstring(CS_CAMERA, "track 0 0 0 -1");
+		}
+		GCam_TrackPoints(org, radius, pSpeed, 0, -1, 0, 0);
+		return;
+	}
+
+	gentity_t* p = G_Find(NULL, FOFS(targetname), trackName);
+	if (!p)
+	{
+		G_DebugPrint(WL_WARNING, "camera track target %s not found\n", trackName);
+		return;
+	}
+
+	while (p && count < ICAM_TRACK_POINTS)
+	{
+		for (int k = 0; k < count; k++)
+		{
+			if (chain[k] == p)
+			{
+				loop = k; // it goes round
+				break;
+			}
+		}
+		if (loop >= 0)
+		{
+			break;
+		}
+		chain[count] = p;
+		VectorCopy(p->s.origin, org[count]); // (a path_corner isn't linked: its origin is the map's)
+		radius[count] = p->radius;
+		pSpeed[count] = p->speed;
+		count++;
+		p = p->target && p->target[0] ? G_Find(NULL, FOFS(targetname), p->target) : NULL;
+	}
+
+	Com_sprintf(msg, sizeof msg, "track %f %d %d %d", speed, initLerp ? 1 : 0, count, loop);
+	for (int k = 0; k < count; k++)
+	{
+		Q_strcat(msg, sizeof msg, va(" %.1f %.1f %.1f %.1f %.2f", org[k][0], org[k][1], org[k][2], radius[k],
+			pSpeed[k]));
+	}
+
+	if (ICam_SendToClients())
+	{
+		trap->SetConfigstring(CS_CAMERA, msg);
+	}
+	GCam_TrackPoints(org, radius, pSpeed, count, loop, speed, initLerp);
+}
+
+void ICam_Distance(const float distance, const float initLerp)
+{
+	if (ICam_SendToClients())
+	{
+		trap->SetConfigstring(CS_CAMERA, va("distance %f %f", distance, initLerp));
+	}
+	GCam_Distance(distance, initLerp);
+}
+
+// the camera plays a ROFF (scriptsmp/<roff>.rof)
+void ICam_Path(const char* roff)
+{
+	if (!roff || !roff[0])
+	{
+		return;
+	}
+	if (ICam_SendToClients())
+	{
+		trap->SetConfigstring(CS_CAMERA, va("roff %s", roff));
+	}
+	GCam_PlayRoff(roff);
 }
 
 //input is assumed to be placed at the very beginning of the $tag(

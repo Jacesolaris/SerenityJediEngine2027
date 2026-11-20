@@ -1,6 +1,7 @@
 #include "qcommon/q_shared.h"
 #include "g_camera.h"
 #include "g_local.h"
+#include "g_roff.h"
 
 //prototypes
 void EnablePlayerCameraPos(gentity_t* player);
@@ -13,16 +14,29 @@ extern int g_TimeSinceLastFrame;
 vec3_t camerapos;
 vec3_t cameraang;
 
+// camera track and path (2026-11-19: the server's copy of the camera follows them too, so the players, who are held
+// at the camera, see the right part of the map; the client draws the camera, cg_camera.c)
+#define GCAM_TRACK_POINTS	24
+static vec3_t gcam_trackOrg[GCAM_TRACK_POINTS];
+static float gcam_trackRadius[GCAM_TRACK_POINTS];
+static float gcam_trackSpeed[GCAM_TRACK_POINTS];
+static int gcam_trackCount = 0;
+static int gcam_trackLoop = -1;
+static int gcam_trackIndex = -1;
+static int gcam_roffNum = 0; // G_LoadRoffs' id (0 none)
+static void GCam_TrackUpdate(void);
+static void GCam_Roff(void);
+
 void GCam_Update(void)
 {
 	int i = 0;
 	qboolean checkFollow = qfalse;
 
-	// Apply new roff data to the camera as needed
-	/*if (client_camera.info_state & CAMERA_ROFFING)
+	// Apply new roff data to the camera as needed (2026-11-19)
+	if (client_camera.info_state & CAMERA_ROFFING)
 	{
-		CGCam_Roff();
-	}*/
+		GCam_Roff();
+	}
 
 	//Check for roffing angles
 	if (client_camera.info_state & CAMERA_ROFFING && !(client_camera.info_state & CAMERA_FOLLOWING))
@@ -115,9 +129,11 @@ void GCam_Update(void)
 			}
 		}
 	}
-	else
+	else if (client_camera.info_state & CAMERA_TRACKING)
 	{
-		qboolean checkTrack = qtrue;
+		// (2026-11-19: a camera track, after the move)
+		GCam_TrackUpdate();
+		VectorCopy(client_camera.origin, camerapos);
 	}
 
 	if (checkFollow)
@@ -274,6 +290,7 @@ static void GCam_TrackDisable(void)
 {
 	client_camera.info_state &= ~CAMERA_TRACKING;
 	client_camera.trackEntNum = ENTITYNUM_WORLD;
+	gcam_trackIndex = -1;
 }
 
 static void GCam_DistanceDisable(void)
@@ -666,4 +683,228 @@ void UpdatePlayerCameraAngle(const gentity_t* ent, vec3_t newAngle)
 	}
 
 	VectorCopy(newAngle, playerCamPos[ent->s.number].viewangles);
+}
+
+/*
+-------------------------
+Camera track and path (2026-11-19)
+
+camera( TRACK, "<first path_corner>", speed, initLerp ) and camera( PATH, "<roff>" ), as SP's cgame
+(cg_camera.cpp CGCam_Track / CGCam_StartRoff), on the server's copy of the camera: the players are held at it
+(UpdatePlayerCameraPos), so what they are sent follows it. The client runs its own (cg_camera.c).
+-------------------------
+*/
+void GCam_TrackPoints(const vec3_t* org, const float* radius, const float* speed, const int count, const int loop,
+	const float trackSpeed, const float initLerp)
+{
+	GCam_TrackDisable();
+
+	if (count <= 0)
+	{
+		return; // turned off
+	}
+
+	gcam_trackCount = count > GCAM_TRACK_POINTS ? GCAM_TRACK_POINTS : count;
+	for (int i = 0; i < gcam_trackCount; i++)
+	{
+		VectorCopy(org[i], gcam_trackOrg[i]);
+		gcam_trackRadius[i] = radius[i];
+		gcam_trackSpeed[i] = speed[i];
+	}
+	gcam_trackLoop = loop >= 0 && loop < gcam_trackCount ? loop : -1;
+	gcam_trackIndex = 0;
+
+	client_camera.info_state |= CAMERA_TRACKING;
+	client_camera.info_state &= ~CAMERA_MOVING;
+	client_camera.trackEntNum = 0;
+	client_camera.initSpeed = trackSpeed / 10.0f;
+	client_camera.speed = trackSpeed;
+	client_camera.nextTrackEntUpdateTime = level.time;
+	client_camera.trackInitLerp = initLerp ? qtrue : qfalse;
+
+	VectorCopy(gcam_trackOrg[0], client_camera.trackToOrg);
+	VectorSubtract(gcam_trackOrg[0], client_camera.origin, client_camera.moveDir);
+
+	if (!client_camera.trackInitLerp)
+	{
+		//want to snap to first position
+		VectorCopy(gcam_trackOrg[0], client_camera.origin);
+		if (gcam_trackCount > 1)
+		{
+			VectorSubtract(gcam_trackOrg[1], client_camera.origin, client_camera.moveDir);
+		}
+	}
+	VectorNormalize(client_camera.moveDir);
+	VectorCopy(client_camera.origin, camerapos);
+}
+
+void GCam_Distance(const float distance, const float initLerp)
+{
+	client_camera.distance = distance;
+	client_camera.distanceInitLerp = initLerp ? qtrue : qfalse;
+}
+
+static void GCam_TrackPointUpdate(void)
+{
+	qboolean reached = qfalse;
+
+	if (gcam_trackIndex >= 0 && gcam_trackIndex < gcam_trackCount)
+	{
+		vec3_t vec;
+		VectorSubtract(gcam_trackOrg[gcam_trackIndex], client_camera.origin, vec);
+		if (VectorLengthSquared(vec) < 256) //16 squared
+		{
+			reached = qtrue;
+		}
+	}
+
+	if (reached)
+	{
+		int next = gcam_trackIndex + 1;
+		if (next >= gcam_trackCount)
+		{
+			next = gcam_trackLoop;
+		}
+		if (next < 0)
+		{
+			GCam_TrackDisable(); // the last one
+			return;
+		}
+		if (gcam_trackRadius[next] < 0)
+		{
+			client_camera.distance = 0;
+			client_camera.speed = client_camera.initSpeed;
+		}
+		else if (gcam_trackRadius[next] > 0)
+		{
+			client_camera.distance = gcam_trackRadius[next];
+		}
+		if (gcam_trackSpeed[next] < 0)
+		{
+			client_camera.speed = client_camera.initSpeed;
+		}
+		else if (gcam_trackSpeed[next] > 0)
+		{
+			client_camera.speed = gcam_trackSpeed[next] / 10.0f;
+		}
+		gcam_trackIndex = next;
+		client_camera.trackEntNum = next;
+		VectorCopy(gcam_trackOrg[next], client_camera.trackToOrg);
+	}
+
+	client_camera.nextTrackEntUpdateTime = level.time + 100;
+}
+
+static void GCam_TrackUpdate(void)
+{
+	vec3_t goalVec, curVec;
+	float ft = (float)g_TimeSinceLastFrame;
+
+	if (client_camera.nextTrackEntUpdateTime <= level.time)
+	{
+		GCam_TrackPointUpdate();
+	}
+	if (!(client_camera.info_state & CAMERA_TRACKING))
+	{
+		return;
+	}
+	if (ft <= 0.0f)
+	{
+		return;
+	}
+	if (ft > 100.0f)
+	{
+		ft = 100.0f;
+	}
+
+	// (SP's steering; its keeping a distance from a followed subject is the client's alone)
+	VectorSubtract(client_camera.trackToOrg, client_camera.origin, goalVec);
+	VectorNormalize(goalVec);
+	VectorScale(goalVec, ft / 100.0f, goalVec);
+	VectorScale(client_camera.moveDir, (100.0f - ft) / 100.0f, curVec);
+	VectorAdd(goalVec, curVec, client_camera.moveDir);
+	VectorNormalize(client_camera.moveDir);
+	VectorMA(client_camera.origin, client_camera.speed * ft / 100.0f, client_camera.moveDir, client_camera.origin);
+}
+
+void GCam_PlayRoff(const char* roff)
+{
+	GCam_FollowDisable();
+	GCam_TrackDisable();
+
+	gcam_roffNum = G_LoadRoffs(roff);
+	if (!gcam_roffNum)
+	{
+		return;
+	}
+
+	client_camera.info_state |= CAMERA_MOVING;
+	client_camera.info_state |= CAMERA_PANNING;
+	client_camera.info_state |= CAMERA_ROFFING;
+
+	Q_strncpyz(client_camera.sRoff, roff, sizeof client_camera.sRoff);
+	client_camera.roff_frame = 0;
+	client_camera.next_roff_time = level.time;
+}
+
+static void GCam_StopRoff(void)
+{
+	client_camera.info_state &= ~CAMERA_ROFFING;
+	client_camera.info_state &= ~CAMERA_MOVING;
+	gcam_roffNum = 0;
+}
+
+static void GCam_Roff(void)
+{
+	while (client_camera.next_roff_time <= level.time)
+	{
+		if (gcam_roffNum <= 0 || gcam_roffNum > num_roffs)
+		{
+			GCam_StopRoff();
+			return;
+		}
+
+		const roff_list_t* roff = &roffs[gcam_roffNum - 1];
+		const int frame = client_camera.roff_frame;
+		vec3_t org, ang;
+
+		if (frame >= roff->frames || frame >= MAXNUMDATANEW)
+		{
+			GCam_StopRoff();
+			return;
+		}
+
+		VectorCopy(roff->data[frame].origin_delta, org);
+		VectorCopy(roff->data[frame].rotate_delta, ang);
+		ang[ROLL] = -ang[ROLL];
+
+		if (frame)
+		{
+			if (!(client_camera.info_state & CAMERA_FOLLOWING))
+			{
+				VectorAdd(client_camera.angles, client_camera.angles2, client_camera.angles);
+			}
+			VectorCopy(client_camera.origin2, client_camera.origin);
+		}
+
+		if (!(client_camera.info_state & CAMERA_FOLLOWING))
+		{
+			VectorCopy(ang, client_camera.angles2);
+			client_camera.pan_time = level.time;
+			client_camera.pan_duration = roff->mFrameTime;
+		}
+
+		VectorAdd(client_camera.origin, org, client_camera.origin2);
+
+		client_camera.move_time = level.time;
+		client_camera.move_duration = roff->mFrameTime;
+
+		if (++client_camera.roff_frame >= roff->frames)
+		{
+			GCam_StopRoff();
+			return;
+		}
+
+		client_camera.next_roff_time += roff->mFrameTime;
+	}
 }

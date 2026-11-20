@@ -560,6 +560,22 @@ static void RB_BeginDrawingView(void) {
 			clearBits |= GL_COLOR_BUFFER_BIT;
 		}
 	}
+	// r_voidFog: where this view draws nothing - the view distance cut the world off and no sky lies behind - the
+	// picture showed the black every frame starts from (the old game showed the smeared last frame there). A map
+	// with a global fog clears to its fog colour above. Without one, clear to the colour of the fog the view point
+	// stands in: that is what the cut-off world would have faded to. Not for a view that has a mirror / portal
+	// picture or a sky portal's picture under it, and not for the mirror view itself.
+	if (r_voidFog && r_voidFog->integer && !(clearBits & GL_COLOR_BUFFER_BIT) && !g_bRenderGlowingObjects
+		&& !(backEnd.refdef.rdflags & RDF_NOWORLDMODEL) && tr.world && tr.world->globalFog == -1
+		&& backEnd.refdef.fogIndex > 0 && backEnd.refdef.fogIndex < tr.world->numfogs
+		&& !backEnd.viewParms.isPortal && !backEnd.viewParms.hadPortal
+		&& (!RB_SMP(skyboxportal, skyboxportal) || backEnd.refdef.rdflags & RDF_SKYBOXPORTAL))
+	{
+		const fog_t* fog = &tr.world->fogs[backEnd.refdef.fogIndex];
+
+		qglClearColor(fog->parms.color[0], fog->parms.color[1], fog->parms.color[2], 1.0f);
+		clearBits |= GL_COLOR_BUFFER_BIT;
+	}
 	// If this pass is to just render the glowing objects, don't clear the depth buffer since
 	// we're sharing it with the main scene (since the main scene has already been rendered). -AReis
 	if (g_bRenderGlowingObjects)

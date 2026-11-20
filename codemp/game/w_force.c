@@ -5129,6 +5129,25 @@ static void WP_AddAsMindtricked(forcedata_t* fd, const int entNum)
 	}
 }
 
+extern qboolean G_IsMission(void);
+
+// the NPC team a mind trick reads its user as (2026-11-19): an NPC's own; in a mission a player is SP's player
+// (NPCTEAM_PLAYER): his session team is free (0), so every NPC, his allies too, counted as an enemy and a charmed one
+// turned neutral; in the team modes red stands for the Imperials (NPCTEAM_ENEMY) and blue for the Rebels
+// (NPCTEAM_PLAYER), as the level 3 turn below has them; in the other modes free, as before
+static int WP_MindTrickUserTeam(const gentity_t* self)
+{
+	if (self->NPC)
+	{
+		return self->client->playerTeam;
+	}
+	if (G_IsMission())
+	{
+		return NPCTEAM_PLAYER;
+	}
+	return self->client->sess.sessionTeam;
+}
+
 static qboolean ForceTelepathyCheckDirectNPCTarget(gentity_t* self, trace_t* tr, qboolean* tookPower)
 {
 	qboolean targetLive = qfalse;
@@ -5202,8 +5221,7 @@ static qboolean ForceTelepathyCheckDirectNPCTarget(gentity_t* self, trace_t* tr,
 			//FIXME: do the visual sparkles effect on their heads, still?
 			WP_ForcePowerStart(self, FP_TELEPATHY, 0);
 		}
-		else if (self->NPC && traceEnt->client->playerTeam != self->client->playerTeam
-			|| !self->NPC && traceEnt->client->playerTeam != (npcteam_t)self->client->sess.sessionTeam)
+		else if (traceEnt->client->playerTeam != WP_MindTrickUserTeam(self))
 		{
 			//an enemy
 			const int override = 0;
@@ -5241,7 +5259,13 @@ static qboolean ForceTelepathyCheckDirectNPCTarget(gentity_t* self, trace_t* tr,
 						else
 						{
 							//client/bot
-							if (self->client->sess.sessionTeam == TEAM_BLUE)
+							if (G_IsMission())
+							{
+								//a mission's player: on his side, as SP (2026-11-19)
+								newPlayerTeam = NPCTEAM_PLAYER;
+								newEnemyTeam = NPCTEAM_ENEMY;
+							}
+							else if (self->client->sess.sessionTeam == TEAM_BLUE)
 							{
 								//rebel
 								newPlayerTeam = NPCTEAM_PLAYER;
@@ -5298,7 +5322,7 @@ static qboolean ForceTelepathyCheckDirectNPCTarget(gentity_t* self, trace_t* tr,
 			}
 			WP_ForcePowerStart(self, FP_TELEPATHY, override);
 		}
-		else if (traceEnt->client->playerTeam == self->client->playerTeam)
+		else if (traceEnt->client->playerTeam == WP_MindTrickUserTeam(self))
 		{
 			//an ally
 			//maybe just have him look at you?  Respond?  Take your enemy?
@@ -6103,6 +6127,231 @@ static npcThrowReaction_t WP_NPCForceThrowReaction(gentity_t* target, gentity_t*
 
 	//okay, everyone else
 	return NPC_THROW_KNOCKDOWN;
+}
+
+extern void ChangeWeapon(const gentity_t* ent, int new_weapon);
+
+// SP's WP_DropWeapon for an NPC whose gun a force pull yanks away (wp_saber.cpp, 2026-11-19): it flies towards the
+// puller, he's left with nothing (a thermal thrower with his fists); MP's TossClientWeapon is a player's (his ammo pool)
+static void WP_NPCDropWeapon(gentity_t* dropper, const vec3_t pull_vec)
+{
+	const int old_weap = dropper->client->ps.weapon;
+	const int replace_weap = old_weap == WP_THERMAL ? WP_MELEE : WP_NONE;
+	vec3_t org, vel;
+
+	if (level.gametype == GT_SIEGE || old_weap <= WP_NONE || old_weap >= WP_NUM_WEAPONS)
+	{
+		return;
+	}
+	gitem_t* item = BG_FindItemForWeapon(old_weap);
+	if (!item)
+	{
+		return;
+	}
+
+	VectorCopy(dropper->client->ps.origin, org);
+	org[2] += 24.0f;
+	VectorScale(pull_vec, 3.0f, vel); // (SP: the pull vector, not normalized, times 3)
+	if (VectorLength(vel) > 1200.0f)
+	{
+		VectorNormalize(vel);
+		VectorScale(vel, 1200.0f, vel);
+	}
+	if (vel[2] < 150.0f)
+	{
+		vel[2] = 150.0f; // not dropped down on you
+	}
+
+	gentity_t* weapon = LaunchItem(item, org, vel);
+	if (weapon)
+	{
+		weapon->s.generic1 = dropper->s.number; // he can't grab it straight back
+		weapon->s.powerups = level.time + 1500;
+		weapon->forcePushTime = level.time + 600;
+	}
+
+	BG_TakeWeapon(dropper->client->ps.stats, old_weap);
+	if (replace_weap != WP_NONE)
+	{
+		BG_GiveWeapon(dropper->client->ps.stats, replace_weap);
+	}
+	ChangeWeapon(dropper, replace_weap);
+	dropper->client->ps.weapon = replace_weap;
+	dropper->s.weapon = replace_weap;
+	if (dropper->NPC)
+	{
+		dropper->NPC->last_ucmd.weapon = replace_weap;
+	}
+}
+
+// a force push / pull on an NPC that doesn't resist it, the SP way (wp_saber.cpp ForceThrow, 2026-11-19). MP shoved
+// NPCs as players: a set speed (mostly 200-250, SP throws them at about four times its knockback, ~700 for a level 3
+// saber push), no moment of lost control, so they dropped where they stood; always the hard knockdown; a pull never
+// took a trooper's gun. Now SP's: G_Throw with SP's knockback (lifted off the ground, its movement locked a moment,
+// forcePushTime), the hard knockdown only for a hard push, a level 2+ pull yanks the gun of a trooper facing you; a
+// key holder goes down where he stands. Flying into something then hurts (g_active.c G_NPCPmoveImpacts).
+static void WP_NPCForceThrowShove(gentity_t* self, gentity_t* target, const qboolean pull, vec3_t impact_org,
+	const int damage_level)
+{
+	const int power_use = pull ? FP_PULL : FP_PUSH;
+	const int power_level = self->client->ps.fd.forcePowerLevel[power_use];
+	const qboolean saber_off = self->client->ps.weapon == WP_SABER && BG_SabersOff(&self->client->ps);
+	const qboolean unarmed = self->client->ps.weapon == WP_MELEE || self->client->ps.weapon == WP_NONE
+		|| saber_off && !PM_InKnockDown(&self->client->ps);
+	const qboolean repulse = self->client->ps.weapon == WP_MELEE
+		|| (self->client->ps.weapon == WP_NONE || saber_off) && self->client->ps.groundEntityNum == ENTITYNUM_NONE;
+	float knockback = pull ? 0.0f : 200.0f;
+	vec3_t push_dir, pull_vec;
+	qboolean strong = qfalse;
+
+	// what every push does (as MP's): it breaks his grip on me, he's credited with a fall, the body push effect
+	if (self->client->ps.fd.forceGripBeingGripped > level.time
+		&& target->client->ps.fd.forceGripentity_num == self->s.number)
+	{
+		WP_ForcePowerStop(target, FP_GRIP);
+		self->client->ps.fd.forceGripBeingGripped = 0;
+		target->client->ps.fd.forceGripUseTime = level.time + 1000;
+	}
+	target->client->ps.otherKiller = self->s.number;
+	target->client->ps.otherKillerTime = level.time + 5000;
+	target->client->ps.otherKillerDebounceTime = level.time + 100;
+	target->client->otherKillerMOD = MOD_UNKNOWN;
+	target->client->otherKillerVehWeapon = 0;
+	target->client->otherKillerWeaponType = WP_NONE;
+	target->client->pushEffectTime = level.time + 600;
+
+	if (pull)
+	{
+		VectorSubtract(self->client->ps.origin, target->client->ps.origin, push_dir);
+	}
+	else
+	{
+		VectorSubtract(target->client->ps.origin, self->client->ps.origin, push_dir);
+	}
+	VectorCopy(push_dir, pull_vec);
+
+	if (target->message || target->flags & FL_NO_KNOCKBACK)
+	{
+		// an NPC who has a key: goes down where he stands
+		VectorNormalize(push_dir);
+		G_Knockdown(target, self, push_dir, 30, qtrue);
+		G_Sound(target, CHAN_BODY, G_SoundIndex("sound/weapons/force/pushed.mp3"));
+		if (repulse)
+		{
+			RepulseDamage(self, target, impact_org, damage_level);
+		}
+		else if (!pull)
+		{
+			PushDamage(self, target, impact_org, damage_level);
+		}
+		return;
+	}
+
+	if (pull)
+	{
+		if (power_level > FORCE_LEVEL_1
+			&& !(target->NPC && target->NPC->scriptFlags & SCF_DONT_FLEE) // can't run after it, so doesn't drop it
+			&& target->client->NPC_class != CLASS_ROCKETTROOPER
+			&& target->client->NPC_class != CLASS_VEHICLE
+			&& target->client->NPC_class != CLASS_BOBAFETT
+			&& target->client->NPC_class != CLASS_TUSKEN
+			&& target->client->NPC_class != CLASS_HAZARD_TROOPER
+			&& target->client->NPC_class != CLASS_ASSASSIN_DROID
+			&& target->client->NPC_class != CLASS_DROIDEKA
+			&& target->client->NPC_class != CLASS_SBD
+			&& target->client->ps.weapon != WP_NONE
+			&& target->client->ps.weapon != WP_SABER
+			&& target->client->ps.weapon != WP_MELEE
+			&& target->client->ps.weapon != WP_THERMAL
+			&& target->client->ps.weapon != WP_CONCUSSION
+			&& InFront(self->client->ps.origin, target->client->ps.origin, target->client->ps.viewangles, 0.0f))
+		{
+			// yank the weapon (he has to be facing me; level 1 just knocks him down)
+			WP_NPCDropWeapon(target, pull_vec);
+		}
+		knockback += VectorNormalize(push_dir);
+		if (knockback > 300.0f)
+		{
+			knockback = 300.0f;
+		}
+		if (power_level < FORCE_LEVEL_3)
+		{
+			knockback /= 3.0f;
+		}
+	}
+	else
+	{
+		knockback -= VectorNormalize(push_dir);
+		G_Sound(target, CHAN_BODY, G_SoundIndex("sound/weapons/force/pushed.mp3"));
+		if (knockback < 100.0f)
+		{
+			knockback = 100.0f;
+		}
+		if (power_level < FORCE_LEVEL_2)
+		{
+			knockback /= unarmed ? 2.0f : 3.0f;
+		}
+		else if (power_level == FORCE_LEVEL_2)
+		{
+			knockback = unarmed ? 125.0f : 100.0f;
+		}
+		else
+		{
+			knockback = unarmed ? 225.0f : 175.0f; // superpush
+		}
+	}
+
+	// his absorb takes some of it
+	const int mod_power_level = wp_absorb_conversion(target, target->client->ps.fd.forcePowerLevel[FP_ABSORB],
+		power_use, power_level, forcePowerNeeded[power_level][power_use]);
+	if (mod_power_level != -1)
+	{
+		if (!mod_power_level)
+		{
+			knockback /= 10.0f;
+		}
+		else if (mod_power_level == 1)
+		{
+			knockback /= 6.0f;
+		}
+		else
+		{
+			knockback /= 2.0f;
+		}
+	}
+
+	// actually push / pull him
+	G_Throw(target, push_dir, knockback);
+	target->forcePuller = self->s.number; // (he doesn't hurt me when pulled into me)
+	if (target->client->ps.groundEntityNum != ENTITYNUM_NONE && target->client->ps.velocity[2] < knockback)
+	{
+		// on the ground: shoved up some
+		target->client->ps.velocity[2] = knockback;
+	}
+
+	if (target->health > 0)
+	{
+		// a hard knockdown only for a hard push (SP: over 150 for a level 1 push, over 100 otherwise; Desann, the Sith
+		// lords and Vader always knock you down hard, unless you're Luke)
+		const float hard_at = !pull && power_level < FORCE_LEVEL_2 ? 150.0f : 100.0f;
+		strong = !pull && knockback > hard_at ? qtrue : qfalse;
+		if ((self->client->NPC_class == CLASS_DESANN || self->client->NPC_class == CLASS_SITHLORD
+			|| self->client->NPC_class == CLASS_VADER) && target->client->NPC_class != CLASS_LUKE)
+		{
+			strong = qtrue;
+		}
+		G_Knockdown(target, self, push_dir, strong ? 100.0f : 30.0f, qtrue); // (G_Knockdown: over 100 x3 is the hard one)
+		G_Sound(target, CHAN_BODY, G_SoundIndex("sound/weapons/force/pushed.mp3"));
+		if (repulse)
+		{
+			RepulseDamage(self, target, impact_org, damage_level);
+		}
+		else if (!pull)
+		{
+			PushDamage(self, target, impact_org, damage_level);
+		}
+	}
+	target->forcePushTime = level.time + 600; // the push effect lasts 600 ms
 }
 
 void ForceThrow(gentity_t* self, qboolean pull)
@@ -7245,6 +7494,13 @@ void ForceThrow(gentity_t* self, qboolean pull)
 
 					//Make a counter-throw effect
 					WP_ResistForcePush(push_target[x], self, qfalse);
+					continue;
+				}
+
+				if (npc_reaction == NPC_THROW_KNOCKDOWN)
+				{
+					//an NPC who doesn't resist: shoved the SP way (2026-11-19)
+					WP_NPCForceThrowShove(self, push_target[x], pull, tr.endpos, damage_level);
 					continue;
 				}
 

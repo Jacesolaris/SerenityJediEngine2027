@@ -1119,6 +1119,81 @@ static void G_SetClientSound(gentity_t* ent)
 ClientImpacts
 ==============
 */
+/*
+============
+G_NPCPmoveImpacts
+
+SP's impacts for NPCs (bg_pmove.cpp PM_ClientImpact -> DoImpact, 2026-11-19): an NPC flying into something at speed
+(a force push or pull, a throw), after 100 ms off the ground, smacks into it: the dust and thump when knocked down,
+glass and thin breakables broken, someone it flies into hurt or knocked down, a very hard hit hurts it. MP had DoImpact
+but never called it. The wall, floor or brush in its way this frame, and anyone it touched. Players and bots keep MP's
+rules.
+============
+*/
+static void G_NPCPmoveImpacts(gentity_t* ent, const vec3_t pre_org, const vec3_t pre_vel, const int pre_last_on_ground,
+	const int msec, const pmove_t* pm)
+{
+	const float mass = ent->mass ? (float)ent->mass : 10.0f;
+	const float speed = VectorLength(pre_vel);
+	int hit[MAXTOUCH + 1];
+	int num_hit = 0;
+	vec3_t cur_vel, dir, end;
+	trace_t tr;
+
+	if (speed * (mass / 10.0f) < 100.0f || pre_last_on_ground + 100 >= level.time || msec <= 0)
+	{
+		return;
+	}
+
+	VectorCopy(ent->client->ps.velocity, cur_vel);
+	VectorCopy(pre_vel, ent->client->ps.velocity); // DoImpact goes by the speed it hit with
+
+	// what was in its way this frame
+	VectorScale(pre_vel, 1.0f / speed, dir);
+	VectorMA(pre_org, speed * msec / 1000.0f + 4.0f, dir, end);
+	trap->Trace(&tr, pre_org, ent->r.mins, ent->r.maxs, end, ent->s.number, ent->clipmask, qfalse, 0, 0);
+	if (!tr.startsolid && !tr.allsolid && tr.fraction < 1.0f && tr.entityNum < ENTITYNUM_NONE
+		&& DotProduct(tr.plane.normal, dir) < -0.2f)
+	{
+		// (landing on the floor: no harm to itself, MP's falling damage does that)
+		DoImpact(ent, &g_entities[tr.entityNum], tr.plane.normal[2] > 0.7f ? qfalse : qtrue);
+		hit[num_hit++] = tr.entityNum;
+	}
+
+	// anyone (or anything) it ran into
+	for (int i = 0; i < pm->numtouch && ent->inuse && ent->client; i++)
+	{
+		const int n = pm->touchents[i];
+		int k;
+
+		if (n == ent->s.number || n < 0 || n >= ENTITYNUM_NONE)
+		{
+			continue;
+		}
+		for (k = 0; k < num_hit; k++)
+		{
+			if (hit[k] == n)
+			{
+				break;
+			}
+		}
+		if (k < num_hit || num_hit >= MAXTOUCH)
+		{
+			continue;
+		}
+		hit[num_hit++] = n;
+		if (g_entities[n].inuse)
+		{
+			DoImpact(ent, &g_entities[n], qtrue);
+		}
+	}
+
+	if (ent->inuse && ent->client)
+	{
+		VectorCopy(cur_vel, ent->client->ps.velocity);
+	}
+}
+
 static void ClientImpacts(gentity_t* ent, const pmove_t* pmove)
 {
 	int j = 0;
@@ -6903,6 +6978,25 @@ static void ClientThink_real(gentity_t* ent)
 		ent->client->ps.heldByClient = 0;
 	}
 
+	// SP's: an NPC being knocked back or force pushed can't do anything (g_active.cpp ClientThink_real); and what
+	// it flies into (G_NPCPmoveImpacts, 2026-11-19). Players and bots keep MP's rules.
+	const qboolean npc_impacts = ent->s.number >= MAX_CLIENTS && ent->NPC && ent->client->NPC_class != CLASS_VEHICLE
+		? qtrue : qfalse;
+	vec3_t npc_pre_org, npc_pre_vel;
+	const int npc_pre_last_on_ground = ent->client->ps.lastOnGround;
+	const int npc_pre_ground = ent->client->ps.groundEntityNum;
+	VectorCopy(ent->client->ps.origin, npc_pre_org);
+	VectorCopy(ent->client->ps.velocity, npc_pre_vel);
+	if (npc_impacts
+		&& (ent->client->ps.pm_time && ent->client->ps.pm_flags & PMF_TIME_KNOCKBACK || ent->forcePushTime > level.time))
+	{
+		//being knocked back, can't do anything!
+		ucmd->buttons = 0;
+		ucmd->forwardmove = 0;
+		ucmd->rightmove = 0;
+		ucmd->upmove = 0;
+	}
+
 	// set up for pmove
 	old_event_sequence = client->ps.eventSequence;
 
@@ -7255,6 +7349,17 @@ static void ClientThink_real(gentity_t* ent)
 	ent->client->saberBlasterLockEnemy = ent->client->ps.saberLockTime >= level.time ? ent->client->ps.saberLockEnemy : ENTITYNUM_NONE;
 
 	Pmove(&pmove);
+
+	if (npc_impacts && ent->inuse && ent->client)
+	{
+		G_NPCPmoveImpacts(ent, npc_pre_org, npc_pre_vel, npc_pre_last_on_ground, msec, &pmove);
+		if (ent->inuse && ent->client && npc_pre_ground == ENTITYNUM_NONE
+			&& ent->client->ps.groundEntityNum != ENTITYNUM_NONE)
+		{
+			//stop the force push effect when he lands (SP)
+			ent->forcePushTime = 0;
+		}
+	}
 
 	G_SaberRiposteUpdate(ent); // riposte window 500 ms, riposte swing 1.5 s at most (g_saberPerfectParry, 2026-11-09)
 

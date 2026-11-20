@@ -429,6 +429,97 @@ void CGCam_Fade(vec4_t source, vec4_t dest, const float duration)
 	client_camera.info_state |= CAMERA_FADING;
 }
 
+/*
+-------------------------
+Camera track (2026-11-19)
+
+SP's track follows a chain of path_corners, which only the server has in MP, so the server sends the chain
+(g_ICARUScb.c ICam_Track): "track <speed> <initLerp> <count> <loop> <x y z radius speed>...", loop the point
+the last one leads back to (-1 none). The camera then heads from point to point as SP's CGCam_TrackEntUpdate does.
+-------------------------
+*/
+#define CAM_TRACK_POINTS	24
+
+static vec3_t cam_trackOrg[CAM_TRACK_POINTS];
+static float cam_trackRadius[CAM_TRACK_POINTS];
+static float cam_trackSpeed[CAM_TRACK_POINTS];
+static int cam_trackCount = 0;
+static int cam_trackLoop = -1;
+static int cam_trackIndex = -1;
+
+static void CGCam_TrackPoints(const float speed, const int initLerp)
+{
+	CGCam_TrackDisable();
+
+	if (cam_trackCount <= 0)
+	{
+		return; // turned off
+	}
+
+	//NOTE: if this interrupts a move before it's done, need to copy the cg.refdef.vieworg to the camera.origin!
+	client_camera.info_state |= CAMERA_TRACKING;
+	client_camera.info_state &= ~CAMERA_MOVING;
+
+	cam_trackIndex = 0;
+	client_camera.trackEntNum = 0;
+	client_camera.initSpeed = speed / 10.0f;
+	client_camera.speed = speed;
+	client_camera.nextTrackEntUpdateTime = cg.time;
+	client_camera.trackInitLerp = initLerp ? qtrue : qfalse;
+
+	// (heads for the first point; SP left trackToOrg where it was)
+	VectorCopy(cam_trackOrg[0], client_camera.trackToOrg);
+
+	//Set a moveDir
+	VectorSubtract(cam_trackOrg[0], client_camera.origin, client_camera.moveDir);
+
+	if (!client_camera.trackInitLerp)
+	{
+		//want to snap to first position
+		VectorCopy(cam_trackOrg[0], client_camera.origin);
+
+		//Set new moveDir if the track has a next point
+		if (cam_trackCount > 1)
+		{
+			VectorSubtract(cam_trackOrg[1], client_camera.origin, client_camera.moveDir);
+		}
+	}
+
+	VectorNormalize(client_camera.moveDir);
+}
+
+static void CGCam_TrackParse(const char* s)
+{
+	float speed = 0.0f;
+	int initLerp = 0, count = 0, loop = -1, used = 0;
+
+	if (sscanf(s, "%*s %f %d %d %d%n", &speed, &initLerp, &count, &loop, &used) < 4)
+	{
+		Com_Printf("CG_CameraParse WARNING: bad 'track' format\n");
+		return;
+	}
+	s += used;
+
+	if (count > CAM_TRACK_POINTS)
+	{
+		count = CAM_TRACK_POINTS;
+	}
+	cam_trackCount = 0;
+	for (int i = 0; i < count; i++)
+	{
+		if (sscanf(s, "%f %f %f %f %f%n", &cam_trackOrg[i][0], &cam_trackOrg[i][1], &cam_trackOrg[i][2],
+			&cam_trackRadius[i], &cam_trackSpeed[i], &used) < 5)
+		{
+			break;
+		}
+		s += used;
+		cam_trackCount++;
+	}
+	cam_trackLoop = loop >= 0 && loop < cam_trackCount ? loop : -1;
+
+	CGCam_TrackPoints(speed, initLerp);
+}
+
 void CGCam_FollowDisable(void)
 {
 	client_camera.info_state &= ~CAMERA_FOLLOWING;
@@ -445,6 +536,7 @@ void CGCam_TrackDisable(void)
 {
 	client_camera.info_state &= ~CAMERA_TRACKING;
 	client_camera.trackEntNum = ENTITYNUM_WORLD;
+	cam_trackIndex = -1;
 }
 
 void CGCam_DistanceDisable(void)
@@ -891,69 +983,64 @@ static void CGCam_FollowUpdate(void)
 
 static void CGCam_TrackEntUpdate(void)
 {
-	//FIXME: only do every 100 ms
-	//RAFIXME - looks like this needs to be server side.
-	/*
-	gentity_t	*trackEnt = NULL;
-	gentity_t	*newTrackEnt = NULL;
-	qboolean	reached = qfalse;
-	vec3_t		vec;
-	float		dist;
+	// SP's, on the points the server sent (CGCam_TrackParse, 2026-11-19: SP walks the path_corners)
+	qboolean reached = qfalse;
+	int next = -1;
 
-	if ( client_camera.trackEntNum >= 0 && client_camera.trackEntNum < ENTITYNUM_WORLD )
-	{//We're already heading to a path_corner
-		trackEnt = &g_entities[client_camera.trackEntNum];
-		VectorSubtract( trackEnt->currentOrigin, client_camera.origin, vec );
-		dist = VectorLengthSquared( vec );
-		if ( dist < 256 )//16 squared
-		{//FIXME: who should be doing the using here?
-			G_UseTargets( trackEnt, trackEnt );
+	if (cam_trackIndex >= 0 && cam_trackIndex < cam_trackCount)
+	{
+		//We're already heading to a path_corner
+		vec3_t vec;
+		VectorSubtract(cam_trackOrg[cam_trackIndex], client_camera.origin, vec);
+		if (VectorLengthSquared(vec) < 256) //16 squared
+		{
 			reached = qtrue;
 		}
 	}
 
-	if ( trackEnt && reached )
+	if (reached)
 	{
-		if ( trackEnt->target && trackEnt->target[0] )
-		{//Find our next path_corner
-			newTrackEnt = G_Find( NULL, FOFS(targetname), trackEnt->target );
-			if ( newTrackEnt )
-			{
-				if ( newTrackEnt->radius < 0 )
-				{//Don't bother trying to maintain a radius
-					client_camera.distance = 0;
-					client_camera.speed = client_camera.initSpeed;
-				}
-				else if ( newTrackEnt->radius > 0 )
-				{
-					client_camera.distance = newTrackEnt->radius;
-				}
-
-				if ( newTrackEnt->speed < 0 )
-				{//go back to our default speed
-					client_camera.speed = client_camera.initSpeed;
-				}
-				else if ( newTrackEnt->speed > 0 )
-				{
-					client_camera.speed = newTrackEnt->speed/10.0f;
-				}
-			}
+		next = cam_trackIndex + 1;
+		if (next >= cam_trackCount)
+		{
+			next = cam_trackLoop; // the last one leads back round, or the track ends
 		}
-		else
-		{//stop thinking if this is the last one
+		if (next < 0)
+		{
+			//stop thinking if this is the last one
 			CGCam_TrackDisable();
+			return;
 		}
-	}
 
-	if ( newTrackEnt )
-	{//Update will lerp this
+		if (cam_trackRadius[next] < 0)
+		{
+			//Don't bother trying to maintain a radius
+			client_camera.distance = 0;
+			client_camera.speed = client_camera.initSpeed;
+		}
+		else if (cam_trackRadius[next] > 0)
+		{
+			client_camera.distance = cam_trackRadius[next];
+		}
+
+		if (cam_trackSpeed[next] < 0)
+		{
+			//go back to our default speed
+			client_camera.speed = client_camera.initSpeed;
+		}
+		else if (cam_trackSpeed[next] > 0)
+		{
+			client_camera.speed = cam_trackSpeed[next] / 10.0f;
+		}
+
+		//Update will lerp this
 		client_camera.info_state |= CAMERA_TRACKING;
-		client_camera.trackEntNum = newTrackEnt->s.number;
-		VectorCopy( newTrackEnt->currentOrigin, client_camera.trackToOrg );
+		cam_trackIndex = next;
+		client_camera.trackEntNum = next;
+		VectorCopy(cam_trackOrg[next], client_camera.trackToOrg);
 	}
 
 	client_camera.nextTrackEntUpdateTime = cg.time + 100;
-	*/
 }
 
 static void CGCam_TrackUpdate(void)
@@ -1869,6 +1956,198 @@ static void CG_RoffNotetrackCallback(const char* notetrack)
 
 /*
 -------------------------
+Camera path: a ROFF the camera plays (2026-11-19)
+
+SP's camera( PATH, "<roff>" ). The cgame reads the .rof itself (scriptsmp/<roff>.rof, as the game's G_LoadRoffs),
+with its note tracks (cut, fov, fovzoom, fovaccel: CG_RoffNotetrackCallback).
+-------------------------
+*/
+#define CAM_ROFFS			4
+#define CAM_ROFF_FRAMES		1000
+#define CAM_ROFF_NOTES		64
+#define CAM_ROFF_NOTE_LEN	128
+#define CAM_ROFF_FILE_SIZE	131072
+
+typedef struct
+{
+	char name[MAX_QPATH];
+	int type; // 1 old, 2 new (note tracks)
+	int frames;
+	int frameTime;
+	vec3_t org[CAM_ROFF_FRAMES];
+	vec3_t ang[CAM_ROFF_FRAMES];
+	int startNote[CAM_ROFF_FRAMES];
+	int numNotes;
+	char notes[CAM_ROFF_NOTES][CAM_ROFF_NOTE_LEN];
+} camRoff_t;
+
+static camRoff_t cam_roffs[CAM_ROFFS];
+static int cam_numRoffs = 0;
+static int cam_roffNum = -1; // the one playing
+
+typedef struct
+{
+	char mHeader[4];
+	int mVersion;
+	float mCount;
+} camRoffHdr1_t;
+
+typedef struct
+{
+	char mHeader[4];
+	int mVersion;
+	int mCount;
+	int mFrameRate;
+	int mNumNotes;
+} camRoffHdr2_t;
+
+typedef struct
+{
+	vec3_t origin_delta;
+	vec3_t rotate_delta;
+} camRoffData1_t;
+
+typedef struct
+{
+	vec3_t origin_delta;
+	vec3_t rotate_delta;
+	int mStartNote, mNumNotes;
+} camRoffData2_t;
+
+static int CGCam_LoadRoff(const char* roffName)
+{
+	static char data[CAM_ROFF_FILE_SIZE];
+	char file[MAX_QPATH];
+	fileHandle_t f = 0;
+	camRoff_t* roff;
+	int i;
+
+	Com_sprintf(file, sizeof file, "%s/%s.rof", Q3_SCRIPT_DIR, roffName);
+
+	for (i = 0; i < cam_numRoffs; i++)
+	{
+		if (!Q_stricmp(cam_roffs[i].name, file))
+		{
+			return i;
+		}
+	}
+
+	const int len = trap->FS_Open(file, &f, FS_READ);
+	if (len <= 0 || !f)
+	{
+		Com_Printf(S_COLOR_RED "Could not open camera .ROF file '%s'\n", file);
+		return -1;
+	}
+	if (len >= CAM_ROFF_FILE_SIZE || len < (int)sizeof(camRoffHdr1_t))
+	{
+		Com_Printf(S_COLOR_RED "Camera .ROF file '%s': bad size\n", file);
+		trap->FS_Close(f);
+		return -1;
+	}
+	trap->FS_Read(data, len, f);
+	trap->FS_Close(f);
+
+	// the slot: a new one, or the oldest goes (only one plays at a time)
+	if (cam_numRoffs < CAM_ROFFS)
+	{
+		i = cam_numRoffs++;
+	}
+	else
+	{
+		i = cam_roffNum == 0 ? 1 : 0;
+	}
+	roff = &cam_roffs[i];
+	memset(roff, 0, sizeof * roff);
+
+	const camRoffHdr1_t* h1 = (const camRoffHdr1_t*)data;
+	if (strncmp(h1->mHeader, "ROFF", 4))
+	{
+		Com_Printf(S_COLOR_RED "Invalid camera roff format '%s'\n", file);
+		roff->name[0] = '\0';
+		return -1;
+	}
+
+	if (h1->mVersion == 1 && h1->mCount > 0.0f)
+	{
+		const camRoffData1_t* d = (const camRoffData1_t*)&h1[1];
+		int count = (int)h1->mCount;
+
+		if ((int)sizeof * h1 + count * (int)sizeof * d > len)
+		{
+			count = (len - (int)sizeof * h1) / (int)sizeof * d;
+		}
+		if (count > CAM_ROFF_FRAMES)
+		{
+			count = CAM_ROFF_FRAMES;
+		}
+		roff->type = 1;
+		roff->frameTime = 100; // old ones have a set frame time
+		roff->frames = count;
+		for (int k = 0; k < count; k++)
+		{
+			VectorCopy(d[k].origin_delta, roff->org[k]);
+			VectorCopy(d[k].rotate_delta, roff->ang[k]);
+			roff->startNote[k] = -1;
+		}
+	}
+	else if (h1->mVersion == 2 && ((const camRoffHdr2_t*)data)->mCount > 0)
+	{
+		const camRoffHdr2_t* h2 = (const camRoffHdr2_t*)data;
+		const camRoffData2_t* d = (const camRoffData2_t*)&h2[1];
+		int count = h2->mCount;
+		int stored = count;
+
+		if ((int)sizeof * h2 + count * (int)sizeof * d > len)
+		{
+			count = stored = (len - (int)sizeof * h2) / (int)sizeof * d;
+		}
+		if (stored > CAM_ROFF_FRAMES)
+		{
+			stored = CAM_ROFF_FRAMES;
+		}
+		roff->type = 2;
+		roff->frameTime = h2->mFrameRate >= 50 ? h2->mFrameRate : 50;
+		roff->frames = stored;
+		for (int k = 0; k < stored; k++)
+		{
+			VectorCopy(d[k].origin_delta, roff->org[k]);
+			VectorCopy(d[k].rotate_delta, roff->ang[k]);
+			roff->startNote[k] = d[k].mNumNotes > 0 ? d[k].mStartNote : -1;
+		}
+
+		// the notes follow the frames, each ends with a 0
+		const char* n = (const char*)&d[count];
+		const char* end = data + len;
+		for (int k = 0; k < h2->mNumNotes && k < CAM_ROFF_NOTES && n < end; k++)
+		{
+			Q_strncpyz(roff->notes[k], n, CAM_ROFF_NOTE_LEN);
+			roff->numNotes++;
+			while (n < end && *n)
+			{
+				n++;
+			}
+			n++;
+		}
+	}
+	else
+	{
+		Com_Printf(S_COLOR_RED "Invalid camera roff format '%s'\n", file);
+		return -1;
+	}
+
+	Q_strncpyz(roff->name, file, sizeof roff->name);
+	return i;
+}
+
+static void CGCam_StopRoff(void)
+{
+	client_camera.info_state &= ~CAMERA_ROFFING;
+	client_camera.info_state &= ~CAMERA_MOVING;
+	cam_roffNum = -1;
+}
+
+/*
+-------------------------
 CGCam_StartRoff
 
 Sets up the camera to use
@@ -1878,134 +2157,107 @@ a rof file
 
 void CGCam_StartRoff(const char* roff)
 {
-	/*//RAFIXME - need to get this stuff figured out.
-	   CGCam_FollowDisable();
-	   CGCam_TrackDisable();
+	CGCam_FollowDisable();
+	CGCam_TrackDisable();
 
-	   // Set up the roff state info..we'll hijack the moving and panning code until told otherwise
-	   //	...CAMERA_FOLLOWING would be a case that could override this..
-	   client_camera.info_state |= CAMERA_MOVING;
-	   client_camera.info_state |= CAMERA_PANNING;
+	const int num = CGCam_LoadRoff(roff);
+	if (num < 0)
+	{
+		// The load failed so don't turn on the roff playback...
+		Com_Printf(S_COLOR_RED "ROFF camera playback failed\n");
+		return;
+	}
 
-	   if ( !G_LoadRoffs( roff ) )
-	   {
-		   // The load failed so don't turn on the roff playback...
-		   Com_Printf( S_COLOR_RED"ROFF camera playback failed\n" );
-		   return;
-	   };
+	// Set up the roff state info..we'll hijack the moving and panning code until told otherwise
+	client_camera.info_state |= CAMERA_MOVING;
+	client_camera.info_state |= CAMERA_PANNING;
+	client_camera.info_state |= CAMERA_ROFFING;
 
-	   client_camera.info_state |= CAMERA_ROFFING;
-
-	   strncpy(client_camera.sRoff,roff,sizeof(client_camera.sRoff));
-	   client_camera.roff_frame = 0;
-	   client_camera.next_roff_time = cg.time;	// I can work right away*/
+	cam_roffNum = num;
+	Q_strncpyz(client_camera.sRoff, roff, sizeof client_camera.sRoff);
+	client_camera.roff_frame = 0;
+	client_camera.next_roff_time = cg.time; // I can work right away
 }
-
-/*
--------------------------
-CGCam_StopRoff
-
-Stops camera rof
--------------------------
-*/
-
-///* Not used at the moment
-//static void CGCam_StopRoff(void)
-//{
-//	// Clear the roff flag
-//	client_camera.info_state &= ~CAMERA_ROFFING;
-//	client_camera.info_state &= ~CAMERA_MOVING;
-//}
-
-//*/
 
 /*
 ------------------------------------------------------
 CGCam_Roff
 
 Applies the sampled roff data to the camera and does
-the lerping itself...this is done because the current
-camera interpolation doesn't seem to work all that
-great when you are adjusting the camera org and angles
-so often...or maybe I'm just on crack.
+the lerping itself (SP's)
 ------------------------------------------------------
 */
 
 static void CGCam_Roff(void)
 {
-	//while (client_camera.next_roff_time <= cg.time)
-	//{
-	//	// Make sure that the roff is cached
-	//	const int roff_id = G_LoadRoffs(client_camera.sRoff);
+	while (client_camera.next_roff_time <= cg.time)
+	{
+		if (cam_roffNum < 0 || cam_roffNum >= cam_numRoffs)
+		{
+			CGCam_StopRoff();
+			return;
+		}
 
-	//	if (!roff_id)
-	//	{
-	//		return;
-	//	}
+		const camRoff_t* roff = &cam_roffs[cam_roffNum];
+		const int frame = client_camera.roff_frame;
+		vec3_t org, ang;
 
-	//	// The ID is one higher than the array index
-	//	const roff_list_t* roff = &roffs[roff_id - 1];
-	//	vec3_t org, ang;
+		if (frame >= roff->frames)
+		{
+			CGCam_StopRoff();
+			return;
+		}
 
-	//	if (roff->type == 2)
-	//	{
-	//		move_rotate2_t* data = &((move_rotate2_t*)roff->data)[client_camera.roff_frame];
-	//		VectorCopy(data->origin_delta, org);
-	//		VectorCopy(data->rotate_delta, ang);
+		VectorCopy(roff->org[frame], org);
+		VectorCopy(roff->ang[frame], ang);
 
-	//		// since we just hit a new frame, clear our CUT flag
-	//		client_camera.info_state &= ~CAMERA_CUT;
+		if (roff->type == 2)
+		{
+			// since we just hit a new frame, clear our CUT flag
+			client_camera.info_state &= ~CAMERA_CUT;
 
-	//		if (data->mStartNote != -1 || data->mNumNotes)
-	//		{
-	//			CG_RoffNotetrackCallback(roffs[roff_id - 1].mNoteTrackIndexes[data->mStartNote]);
-	//		}
-	//	}
-	//	else
-	//	{
-	//		move_rotate_t* data = &((move_rotate_t*)roff->data)[client_camera.roff_frame];
-	//		VectorCopy(data->origin_delta, org);
-	//		VectorCopy(data->rotate_delta, ang);
-	//	}
+			if (roff->startNote[frame] >= 0 && roff->startNote[frame] < roff->numNotes)
+			{
+				CG_RoffNotetrackCallback(roff->notes[roff->startNote[frame]]);
+			}
+		}
 
-	//	// Yeah, um, I guess this just has to be negated?
-	//	//ang[PITCH]	=- ang[PITCH];
-	//	ang[ROLL] = -ang[ROLL];
-	//	// might need to to yaw as well.  need a test...
+		// Yeah, um, I guess this just has to be negated?
+		ang[ROLL] = -ang[ROLL];
 
-	//	if (client_camera.roff_frame)
-	//	{
-	//		// Don't mess with angles if we are following
-	//		if (!(client_camera.info_state & CAMERA_FOLLOWING))
-	//		{
-	//			VectorAdd(client_camera.angles, client_camera.angles2, client_camera.angles);
-	//		}
+		if (frame)
+		{
+			// Don't mess with angles if we are following
+			if (!(client_camera.info_state & CAMERA_FOLLOWING))
+			{
+				VectorAdd(client_camera.angles, client_camera.angles2, client_camera.angles);
+			}
 
-	//		VectorCopy(client_camera.origin2, client_camera.origin);
-	//	}
+			VectorCopy(client_camera.origin2, client_camera.origin);
+		}
 
-	//	// Don't mess with angles if we are following
-	//	if (!(client_camera.info_state & CAMERA_FOLLOWING))
-	//	{
-	//		VectorCopy(ang, client_camera.angles2);
-	//		client_camera.pan_time = cg.time;
-	//		client_camera.pan_duration = roff->mFrameTime;
-	//	}
+		// Don't mess with angles if we are following
+		if (!(client_camera.info_state & CAMERA_FOLLOWING))
+		{
+			VectorCopy(ang, client_camera.angles2);
+			client_camera.pan_time = cg.time;
+			client_camera.pan_duration = roff->frameTime;
+		}
 
-	//	VectorAdd(client_camera.origin, org, client_camera.origin2);
+		VectorAdd(client_camera.origin, org, client_camera.origin2);
 
-	//	client_camera.move_time = cg.time;
-	//	client_camera.move_duration = roff->mFrameTime;
+		client_camera.move_time = cg.time;
+		client_camera.move_duration = roff->frameTime;
 
-	//	if (++client_camera.roff_frame >= roff->frames)
-	//	{
-	//		CGCam_StopRoff();
-	//		return;
-	//	}
+		if (++client_camera.roff_frame >= roff->frames)
+		{
+			CGCam_StopRoff();
+			return;
+		}
 
-	//	// Check back in frameTime to get the next roff entry
-	//	client_camera.next_roff_time += roff->mFrameTime;
-	//}
+		// Check back in frameTime to get the next roff entry
+		client_camera.next_roff_time += roff->frameTime;
+	}
 }
 
 void CMD_CGCam_Disable(void)
@@ -2118,6 +2370,29 @@ void CG_CameraParse(void)
 		{
 			Com_Printf("CG_CameraParse WARNING: bad 'follow' format\n");
 		}
+	}
+	else if (strncmp("roll", o, 4) == 0)
+	{
+		// (2026-11-19: camera( ROLL ), camera( TRACK ), camera( DISTANCE ), camera( PATH ), ICam_Roll...)
+		if (sscanf(o, "%*s %f %f", &float_data, &float2_data) == 2)
+		{
+			CGCam_Roll(float_data, float2_data);
+		}
+	}
+	else if (strncmp("track", o, 5) == 0)
+	{
+		CGCam_TrackParse(o);
+	}
+	else if (strncmp("distance", o, 8) == 0)
+	{
+		if (sscanf(o, "%*s %f %f", &float_data, &float2_data) == 2)
+		{
+			CGCam_Distance(float_data, float2_data);
+		}
+	}
+	else if (strncmp("roff ", o, 5) == 0)
+	{
+		CGCam_StartRoff(o + 5);
 	}
 	else
 	{

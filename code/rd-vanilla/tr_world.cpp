@@ -453,7 +453,14 @@ void RE_GetBModelVerts(const int bmodelIndex, vec3_t* verts, vec3_t normal)
 R_RecursiveWorldNode
 ================
 */
-static void R_RecursiveWorldNode(mnode_t* node, int plane_bits, int dlightBits) {
+// r_voidFog: the sky is not cut off by the view distance. A sky face stands for something endlessly far away and is
+// drawn as the sky box whatever its own distance, but its BSP node was dropped with everything else beyond the far
+// plane: a map whose "distanceCull" is shorter than the way to its sky walls or its sky ceiling showed holes at the
+// horizon and overhead. With this set (R_AddWorldSurfaces) a node beyond the far plane is still walked, for its sky
+// faces alone. Not on maps with a global fog: those clear to their fog colour, and their look stays as it was.
+static bool s_voidSky = false;
+
+static void R_RecursiveWorldNode(mnode_t* node, int plane_bits, int dlightBits, bool farOnly = false) {
 	do {
 		int			new_dlights[2]{};
 
@@ -511,7 +518,12 @@ static void R_RecursiveWorldNode(mnode_t* node, int plane_bits, int dlightBits) 
 			if (plane_bits & 16) {
 				r = BoxOnPlaneSide(node->mins, node->maxs, &tr.viewParms.frustum[4]);
 				if (r == 2) {
-					return;						// culled
+					if (!s_voidSky) {
+						return;					// culled
+					}
+					farOnly = true;				// r_voidFog: beyond the view distance, go on for its sky faces alone
+					plane_bits &= ~16;
+					dlightBits = 0;
 				}
 				if (r == 1) {
 					plane_bits &= ~16;			// all descendants will also be in front
@@ -552,12 +564,28 @@ static void R_RecursiveWorldNode(mnode_t* node, int plane_bits, int dlightBits) 
 			new_dlights[1] = dlightBits;
 		}
 		// recurse down the children, front side first
-		R_RecursiveWorldNode(node->children[0], plane_bits, new_dlights[0]);
+		R_RecursiveWorldNode(node->children[0], plane_bits, new_dlights[0], farOnly);
 
 		// tail recurse
 		node = node->children[1];
 		dlightBits = new_dlights[1];
 	} while (true);
+
+	if (farOnly)
+	{
+		// r_voidFog: a leaf beyond the view distance gives its sky faces and nothing else; it does not push the
+		// far clipping plane out either
+		msurface_t** mark = node->firstmarksurface;
+		int c = node->nummarksurfaces;
+		while (c--) {
+			msurface_t* surf = *mark;
+			if (surf->shader && (surf->shader->sky || surf->shader->surfaceFlags & SURF_SKY)) {
+				R_AddWorldSurface(surf, 0);
+			}
+			mark++;
+		}
+		return;
+	}
 
 	{
 		tr.pc.c_leafs++;
@@ -768,6 +796,8 @@ void R_AddWorldSurfaces(void)
 	if (tr.refdef.num_dlights > 32) {
 		tr.refdef.num_dlights = 32;
 	}
+
+	s_voidSky = r_voidFog && r_voidFog->integer && tr.world->globalFog == -1;	// (see R_RecursiveWorldNode)
 
 	R_RecursiveWorldNode(tr.world->nodes, 31, (1 << tr.refdef.num_dlights) - 1);
 }

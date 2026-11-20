@@ -1088,6 +1088,7 @@ using trGlobals_t = struct trGlobals_s {
 
 	float					rangedFog;
 	float					distanceCull;
+	float					distanceCullMap;	// what the map asked for (worldspawn "distanceCull" or the default); r_distanceCull overrides it
 };
 
 struct glconfigExt_t
@@ -1148,6 +1149,7 @@ extern cvar_t* r_primitives;			// "0" = based on compiled vertex array existance
 
 extern cvar_t* r_inGameVideo;				// controls whether in game video should be draw
 extern cvar_t* r_fastsky;				// controls whether sky should be cleared or drawn
+extern cvar_t* r_distanceCull;
 extern cvar_t* r_drawSun;				// controls drawing of sun quad
 extern cvar_t* r_dynamiclight;		// dynamic lights enabled/disabled
 extern cvar_t* r_Turn_Off_dynamiclight; // dynamic lights enabled/disabled
@@ -1242,6 +1244,7 @@ extern	cvar_t* r_clear;						// force screen clear every frame
 
 extern	cvar_t* r_shadows;
 extern cvar_t* r_meshCloth;
+extern cvar_t* r_meshClothSubdiv;		// SJE: draw cloth with its triangles split on a smooth curved patch (0 off, 1 on, 2 twice)
 extern cvar_t* r_meshClothGravity;
 extern cvar_t* r_meshClothDrag;
 extern cvar_t* r_meshClothIter;

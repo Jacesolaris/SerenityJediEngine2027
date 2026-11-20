@@ -652,6 +652,9 @@ stringID_table_t setTable[] =
 	// JK2's name for SET_altFire (its scripts use it, 2026-11-18: kejim_post's stand_shoot_burst)
 	{ "SET_ALT_FIRE", SET_altFire },
 
+	// JK2's name for SET_FACE_MOVE_DIR (2026-11-19: its scripts use it)
+	{ "SET_FACE_MOVEDIR", SET_FACE_MOVE_DIR },
+
 	{ "", SET_ }
 };
 

@@ -1031,6 +1031,7 @@ static qboolean R_MirrorViewBySurface(drawSurf_t* drawSurf, int entityNum)
 	R_RenderView(&newParms);
 
 	tr.viewParms = oldParms;
+	tr.viewParms.hadPortal = qtrue;	// r_voidFog: this view must not clear the colour the mirror view just drew
 
 	return qtrue;
 }

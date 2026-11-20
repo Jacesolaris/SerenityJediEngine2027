@@ -18280,6 +18280,87 @@ static void CG_ScepterEffects(centity_t* cent)
 	}
 }
 
+/*
+SP's SET_ADDLHANDBOLT_MODEL / SET_ADDRHANDBOLT_MODEL in MP (2026-11-19, DH: Kyle's comlink in artus_mine's intro):
+an NPC's s.bolt2 is the model's index (+ HANDMODEL_LEFT for the left hand, g_ICARUScb.c Q3_SetHandModel). It goes
+in model slot 2 (as Ragnos' scepter), bolted to that hand, unless something else holds slot 2. Not on the dead (a
+dead one's bolt2 is his weapon, g_combat.c).
+*/
+#define HANDMODEL_LEFT 512
+static void* cg_handG2[MAX_MODELS];
+static char cg_handG2Name[MAX_MODELS][MAX_QPATH];
+static int cg_handModelValue[MAX_GENTITIES];
+static void* cg_handModelOwner[MAX_GENTITIES];
+
+static void CG_HandModelUpdate(centity_t* cent, const clientInfo_t* ci)
+{
+	const int num = cent->currentState.number;
+	int value, model, bolt;
+
+	if (!cent->ghoul2 || !ci || num < 0 || num >= MAX_GENTITIES)
+	{
+		return;
+	}
+	value = cent->currentState.eType == ET_NPC && !(cent->currentState.eFlags & EF_DEAD)
+		? cent->currentState.bolt2 & (2 * HANDMODEL_LEFT - 1) : 0;
+	model = value & (HANDMODEL_LEFT - 1);
+
+	if (cg_handModelOwner[num] != cent->ghoul2)
+	{
+		// a new model instance: nothing of ours in it
+		cg_handModelOwner[num] = cent->ghoul2;
+		cg_handModelValue[num] = 0;
+	}
+	if (cg_handModelValue[num] && cg_handModelValue[num] != value)
+	{
+		// it changed or went: ours out of slot 2
+		if (trap->G2API_HasGhoul2ModelOnIndex(&cent->ghoul2, 2))
+		{
+			trap->G2API_RemoveGhoul2Model(&cent->ghoul2, 2);
+		}
+		cg_handModelValue[num] = 0;
+	}
+	if (!model || model >= MAX_MODELS)
+	{
+		return;
+	}
+	bolt = value & HANDMODEL_LEFT ? ci->bolt_lhand : ci->bolt_rhand;
+	if (bolt < 0 || trap->G2API_HasGhoul2ModelOnIndex(&cent->ghoul2, 2))
+	{
+		return; // (ours is there, or something else has the slot)
+	}
+
+	{
+		const char* name = CG_ConfigString(CS_MODELS + model);
+
+		if (!name || !name[0])
+		{
+			return;
+		}
+		if (Q_stricmp(cg_handG2Name[model], name))
+		{
+			// (a model index of an earlier map)
+			if (cg_handG2[model])
+			{
+				trap->G2API_CleanGhoul2Models(&cg_handG2[model]);
+			}
+			cg_handG2[model] = NULL;
+			Q_strncpyz(cg_handG2Name[model], name, sizeof cg_handG2Name[model]);
+			if (Q_stristr(name, ".glm"))
+			{
+				trap->G2API_InitGhoul2Model(&cg_handG2[model], name, 0, 0, 0, 0, 0);
+			}
+		}
+		if (!cg_handG2[model])
+		{
+			return;
+		}
+	}
+	trap->G2API_CopySpecificGhoul2Model(cg_handG2[model], 0, cent->ghoul2, 2);
+	trap->G2API_SetBoltInfo(cent->ghoul2, 2, bolt);
+	cg_handModelValue[num] = value;
+}
+
 static void CG_ScepterUpdate(centity_t* cent, const clientInfo_t* ci)
 {
 	if (!cent->ghoul2 || !ci)
@@ -19868,8 +19949,7 @@ void CG_Player(centity_t* cent)
 
 	if (cent->currentState.eType == ET_NPC)
 	{
-		//add vehicles
-		CG_AddRadarEnt(cent);
+		//add vehicles (already on the radar above: twice drew every NPC twice, 2026-11-18)
 		if (cent->currentState.NPC_class == CLASS_VEHICLE && CG_InFighter())
 		{
 			//this is a vehicle, bracket it
@@ -20389,6 +20469,7 @@ void CG_Player(centity_t* cent)
 	CG_SaberBlasterArmPose(cent); // the gun arm (item 404)
 	CG_SaberBlasterChargeGlow(cent); // the charged shot's glow (2026-10-31)
 	CG_ScepterUpdate(cent, ci); // Ragnos' scepter in the left hand (EF2_SCEPTER, 2026-10-23)
+	CG_HandModelUpdate(cent, ci); // a script's model in an NPC's hand (SET_ADDLHANDBOLT_MODEL, 2026-11-19)
 
 	if (cent->saberWasInFlight && g2_has_weapon && cent->ghoul2weapon == CG_G2WeaponInstance(cent, WP_SABER))
 	{

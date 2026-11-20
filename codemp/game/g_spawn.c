@@ -320,6 +320,12 @@ void SP_misc_model(gentity_t* ent);
 void SP_misc_model_static(gentity_t* ent);
 void SP_misc_model_breakable(gentity_t* ent);
 void SP_misc_G2model(gentity_t* ent);
+void SP_misc_model_ghoul(gentity_t* ent); // g_misc.c (2026-11-19)
+void SP_fx_target_beam(gentity_t* ent); // g_misc.c (2026-11-19)
+void SP_fx_cloudlayer(gentity_t* ent); // g_misc.c (2026-11-19)
+void SP_misc_model_welder(gentity_t* ent); // g_misc.c (2026-11-19)
+void SP_misc_model_jabba_cam(gentity_t* ent); // g_misc.c (2026-11-19)
+void SP_misc_sentry_turret(gentity_t* base); // g_items.c: one a map places (2026-11-19)
 void SP_misc_portal_camera(gentity_t* ent);
 void SP_misc_portal_surface(gentity_t* ent);
 void SP_misc_weather_zone(gentity_t* ent);
@@ -616,6 +622,11 @@ spawn_t spawns[] = {
 	{ "misc_cubemap", SP_misc_cubemap },
 	{ "misc_faller", SP_misc_faller },
 	{ "misc_G2model", SP_misc_G2model },
+	{ "misc_model_ghoul", SP_misc_model_ghoul },
+	{ "misc_model_welder", SP_misc_model_welder },
+	{ "misc_model_jabba_cam", SP_misc_model_jabba_cam },
+	{ "fx_target_beam", SP_fx_target_beam },
+	{ "fx_cloudlayer", SP_fx_cloudlayer },
 	{ "misc_holocron", SP_misc_holocron },
 	{ "holocron", SP_Holocron },
 	{ "misc_maglock", SP_misc_maglock },
@@ -644,7 +655,7 @@ spawn_t spawns[] = {
 	{ "holocron_force_levitation", SP_holocron_force_levitation },
 	{ "misc_model_bomb_planted", SP_misc_model_bomb_planted },
 	{ "misc_model_beacon", SP_misc_model_beacon },
-	{ "misc_sentry_turret", SP_PAS },
+	{ "misc_sentry_turret", SP_misc_sentry_turret }, // (2026-11-19: not SP_PAS, the deployed one)
 	{ "misc_model_static", SP_misc_model_static },
 	{ "misc_portal_camera", SP_misc_portal_camera },
 	{ "misc_portal_surface", SP_misc_portal_surface },
@@ -834,6 +845,17 @@ qboolean G_CallSpawn(gentity_t* ent)
 	if (!Q_stricmp(ent->classname, "item_bacta"))
 	{
 		ent->classname = "item_medpac";
+	}
+	// (2026-11-19: JO's Bryar pistol, ns_streets' pickup, is MP's weapon_blaster_pistol)
+	if (!Q_stricmp(ent->classname, "weapon_bryar_pistol"))
+	{
+		ent->classname = "weapon_blaster_pistol";
+	}
+	// (2026-11-19: JO's light amplification goggles, kejim; MP has no such item, so quietly none)
+	if (!Q_stricmp(ent->classname, "item_la_goggles"))
+	{
+		G_FreeEntity(ent);
+		return qtrue;
 	}
 
 	// check item spawn functions

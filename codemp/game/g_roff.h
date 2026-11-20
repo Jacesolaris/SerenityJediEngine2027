@@ -82,7 +82,7 @@ typedef struct roff_list_s
 	int type; // roff type number, 1-old, 2-new
 	char* fileName; // roff filename
 	int frames; // number of roff entries
-	move_rotate2_t data[MAXNOTETRACKSNEW]; // delta move and rotate vector list
+	move_rotate2_t data[MAXNUMDATANEW]; // delta move and rotate vector list (it had MAXNOTETRACKSNEW, 8: every MP ROFF longer than 8 frames ran over its frame time, lerp and the next ROFFs, 2026-11-19)
 	int NumData; //number of data positions we are currently using.
 	int mFrameTime; // frame rate
 	int mLerp; // Lerp rate (FPS)

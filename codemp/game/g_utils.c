@@ -885,7 +885,16 @@ void G_UseTargets2(gentity_t* ent, gentity_t* activator, const char* string)
 	{
 		if (t == ent)
 		{
-			trap->Print("WARNING: Entity used itself.\n");
+			// SP uses an entity that targets itself too (2026-11-18: kejim_post's intro, a target_speaker whose script
+			// uses itself every few seconds, was never heard and printed "Entity used itself"); only a loop is stopped
+			static int self_use_depth;
+
+			if (t->use && self_use_depth < 4)
+			{
+				self_use_depth++;
+				GlobalUse(t, ent, activator);
+				self_use_depth--;
+			}
 		}
 		else
 		{

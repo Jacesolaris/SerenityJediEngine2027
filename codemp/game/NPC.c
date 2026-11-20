@@ -2574,6 +2574,11 @@ void NPC_Think(gentity_t* self)
 
 	SetNPCGlobals(self);
 
+	if (self->NPC && self->NPC->teamownerIsTeam && self->client)
+	{
+		self->s.teamowner = self->client->playerTeam; // (the client's crosshair and radar colour: NPC_spawn.c)
+	}
+
 	memset(&NPCS.ucmd, 0, sizeof NPCS.ucmd);
 
 	VectorCopy(self->client->ps.moveDir, oldMoveDir);

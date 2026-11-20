@@ -2264,6 +2264,16 @@ gentity_t* NPC_Spawn_Do(gentity_t* ent)
 	}
 	newent->client->ps.persistant[PERS_TEAM] = newent->client->sess.sessionTeam;
 
+	// the client sees the NPC's own team (s.teamowner: the crosshair's green ally / red enemy, the radar) when the map
+	// gave it none; NPC_Think keeps it up as scripts or the force change it (2026-11-18). Not siege, vehicles or
+	// shouldtarget ones, whose teamowner means a side (and sessionTeam is left as it was).
+	if (newent->s.teamowner == TEAM_FREE && level.gametype != GT_SIEGE && !newent->s.shouldtarget
+		&& newent->client->NPC_class != CLASS_VEHICLE)
+	{
+		newent->NPC->teamownerIsTeam = qtrue;
+		newent->s.teamowner = newent->client->playerTeam;
+	}
+
 	trap->LinkEntity((sharedEntity_t*)newent);
 
 	if (!ent->use)

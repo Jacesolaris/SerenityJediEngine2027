@@ -302,6 +302,7 @@ static qboolean G_InitRoff(char* file, unsigned char* data)
 	{
 		//have more frames than data slots. give an error.
 		Com_Printf(S_COLOR_RED"ROFF file: %s has more frames than currently supported.\n", file);
+		count = MAXNUMDATANEW - 1; // (only as many as there is room for)
 	}
 
 	//set filename
@@ -341,6 +342,11 @@ static qboolean G_InitRoff(char* file, unsigned char* data)
 		// Version 2.0, heck yeah!
 		roff_hdr2_t* hdr = (roff_hdr2_t*)data;
 		count = hdr->mCount;
+		if (count >= MAXNUMDATANEW)
+		{
+			Com_Printf(S_COLOR_RED"ROFF file: %s has more frames than currently supported.\n", file);
+			count = MAXNUMDATANEW - 1; // (only as many as there is room for)
+		}
 
 		roffs[num_roffs].frames = count;
 		roffs[num_roffs].NumData = 0;

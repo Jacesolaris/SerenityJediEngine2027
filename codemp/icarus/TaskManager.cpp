@@ -1286,8 +1286,9 @@ int CTaskManager::Camera(CTask* task)
 
 	// Missions (GT_SINGLE_PLAYER, DH 2026-11-02): camera() commands go to the game's camera code through I_Set, as the
 	// rewritten scripts' set(ENABLE / MOVE / PAN / ...) do, so the Missions cutscene skip and its message run for them
-	// too (g_ICARUScb.c ICam_Enable). Roll, track, distance and path have no game side and stay as before. In the other
-	// game modes every camera() command stays as it was (the stubs).
+	// too (g_ICARUScb.c ICam_Enable). Roll, track, distance and path too (2026-11-19: they called the stubs, so the
+	// cutscenes' tracking shots and camera ROFFs did nothing; g_ICARUScb.c ICam_Track / ICam_Path). In the other game
+	// modes every camera() command stays as it was (the stubs).
 	const bool toGame = Cvar_VariableIntegerValue("g_gametype") == GT_SINGLE_PLAYER;
 
 	//Get the camera function type
@@ -1357,7 +1358,14 @@ int CTaskManager::Camera(CTask* task)
 
 		m_owner->GetInterface()->I_DPrintf(WL_DEBUG, "%4d camera( ROLL, %f, %f); [%d]", m_ownerID, fVal, fVal2,
 			task->GetTimeStamp());
-		ie->I_CameraRoll(fVal, fVal2);
+		if (toGame)
+		{
+			ie->I_Set(task->GetGUID(), m_ownerID, "ROLL", va("%f, %f", fVal, fVal2));
+		}
+		else
+		{
+			ie->I_CameraRoll(fVal, fVal2);
+		}
 
 		break;
 
@@ -1388,7 +1396,14 @@ int CTaskManager::Camera(CTask* task)
 
 		m_owner->GetInterface()->I_DPrintf(WL_DEBUG, "%4d camera( TRACK, \"%s\", %f, %f); [%d]", m_ownerID, sVal, fVal,
 			fVal2, task->GetTimeStamp());
-		ie->I_CameraTrack(static_cast<const char*>(sVal), fVal, fVal2);
+		if (toGame)
+		{
+			ie->I_Set(task->GetGUID(), m_ownerID, "TRACK", va("%s, %f, %f", sVal, fVal, fVal2));
+		}
+		else
+		{
+			ie->I_CameraTrack(static_cast<const char*>(sVal), fVal, fVal2);
+		}
 		break;
 
 	case TYPE_DISTANCE:
@@ -1398,7 +1413,14 @@ int CTaskManager::Camera(CTask* task)
 
 		m_owner->GetInterface()->I_DPrintf(WL_DEBUG, "%4d camera( DISTANCE, %f, %f); [%d]", m_ownerID, fVal, fVal2,
 			task->GetTimeStamp());
-		ie->I_CameraDistance(fVal, fVal2);
+		if (toGame)
+		{
+			ie->I_Set(task->GetGUID(), m_ownerID, "DISTANCE", va("%f, %f", fVal, fVal2));
+		}
+		else
+		{
+			ie->I_CameraDistance(fVal, fVal2);
+		}
 		break;
 
 	case TYPE_FADE:
@@ -1430,7 +1452,14 @@ int CTaskManager::Camera(CTask* task)
 
 		m_owner->GetInterface()->I_DPrintf(WL_DEBUG, "%4d camera( PATH, \"%s\"); [%d]", m_ownerID, sVal,
 			task->GetTimeStamp());
-		ie->I_CameraPath(sVal);
+		if (toGame)
+		{
+			ie->I_Set(task->GetGUID(), m_ownerID, "PATH", sVal);
+		}
+		else
+		{
+			ie->I_CameraPath(sVal);
+		}
 		break;
 
 	case TYPE_ENABLE:

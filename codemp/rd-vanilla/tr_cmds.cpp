@@ -381,6 +381,12 @@ void RE_BeginFrame(const stereoFrame_t stereoFrame) {
 	}
 	R_WorldEffectsWind();	// weather wind, once a frame (mesh cloth, R_GetWindVector)
 
+	// r_distanceCull: over 0 overrides the map's view distance, live (0 = back to what the map asked for)
+	if (tr.distanceCullMap > 0.0f)
+	{
+		tr.distanceCull = r_distanceCull && r_distanceCull->value > 0.0f ? r_distanceCull->value : tr.distanceCullMap;
+	}
+
 	tr.frameCount++;
 	tr.frameSceneNum = 0;
 

@@ -369,6 +369,7 @@ typedef struct
 	lookMode_t lookMode;
 	qboolean shouldJetOn;
 	int counterFlags; // SP Jedi AI counterattack AIFLAG_* bits; own field, SP's bits clash with NPCAI_WALKING/KNEEL (DH 2026-10-24 SP NPC port)
+	qboolean teamownerIsTeam; // s.teamowner is kept as client->playerTeam, for the client (NPC_spawn.c, 2026-11-18)
 } gNPC_t;
 
 void NPC_InitGame(void);

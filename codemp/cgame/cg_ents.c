@@ -871,6 +871,35 @@ static void CG_General(centity_t* cent)
 		}
 	}
 
+	// SP's search spotlight (g_misc.c misc_spotlight, 2026-11-19): its light cone from the lamp and a light where it
+	// lands (s.angles2[0]: the beam's length)
+	if (cent->currentState.eFlags & EF_ALT_FIRING && cent->currentState.eType == ET_GENERAL
+		&& cent->currentState.modelIndex
+		&& !Q_stricmp(CG_ConfigString(CS_MODELS + cent->currentState.modelIndex),
+			"models/map_objects/imp_mine/spotlight.md3"))
+	{
+		orientation_t tag;
+		vec3_t axis[3], org, dir;
+		int i;
+
+		AnglesToAxis(cent->lerpAngles, axis);
+		VectorCopy(cent->lerpOrigin, org);
+		if (trap->R_LerpTag(&tag, cgs.game_models[cent->currentState.modelIndex], 0, 0, 1.0f, "tag_flash"))
+		{
+			for (i = 0; i < 3; i++)
+			{
+				VectorMA(org, tag.origin[i], axis[i], org);
+			}
+		}
+		AngleVectors(cent->lerpAngles, dir, NULL, NULL);
+		trap->FX_PlayEffectID(trap->FX_RegisterEffect("env/light_cone"), org, dir, -1, -1, qfalse);
+
+		// stay a bit back from the impact point
+		VectorMA(cent->lerpOrigin, cent->currentState.angles2[0] - 5.0f, dir, org);
+		trap->R_AddLightToScene(org, 225, 1.0f, 1.0f, 1.0f);
+	}
+
+
 	if (cent->currentState.weapon == WP_STUN_BATON)
 	{
 		int i = 0;
@@ -3666,7 +3695,17 @@ static void CG_Mover(centity_t* cent)
 	Ghoul2 Insert Start
 	*/
 
+	// a ghoul2 model entity a script moves (Q3_Lerp2Pos makes it a mover, 2026-11-19: cairn_assembly's
+	// misc_model_welder): its ghoul2 model, if it was not drawn as a general entity first (it came into view moving)
+	if (s1->modelGhoul2 && !cent->ghoul2 && s1->modelIndex && s1->solid != SOLID_BMODEL)
+	{
+		trap->G2API_InitGhoul2Model(&cent->ghoul2, CG_ConfigString(CS_MODELS + s1->modelIndex), 0, 0, 0, 0, 0);
+	}
 	CG_SetGhoul2Info(&ent, cent);
+	if (s1->modelGhoul2 && cent->ghoul2 && s1->g2radius)
+	{
+		ent.radius = s1->g2radius;
+	}
 	/*
 	Ghoul2 Insert End
 	*/
@@ -3772,6 +3811,94 @@ void CG_Beam(const centity_t* cent)
 	*/
 	// add to refresh list
 	trap->R_AddRefEntityToScene(&ent);
+}
+
+/*
+===============
+CG_Clouds
+
+fx_cloudlayer (g_misc.c, 2026-11-19: bespin_undercity), as SP's: the renderer's RT_CLOUDS
+===============
+*/
+static void CG_Clouds(const centity_t* cent)
+{
+	static qhandle_t haze = 0, haze2 = 0;
+	const entityState_t* s1 = &cent->currentState;
+	refEntity_t ent;
+
+	if (!haze)
+	{
+		haze = trap->R_RegisterShader("gfx/world/haze");
+		haze2 = trap->R_RegisterShader("gfx/world/haze2");
+	}
+
+	memset(&ent, 0, sizeof ent);
+	VectorCopy(cent->lerpOrigin, ent.origin);
+	ent.shaderRGBA[0] = ent.shaderRGBA[1] = ent.shaderRGBA[2] = ent.shaderRGBA[3] = 255;
+	ent.radius = s1->angles2[0];
+	ent.backlerp = s1->angles2[2];
+	ent.reType = RT_CLOUDS;
+
+	if (s1->time2 & 1)
+	{
+		// TUBE type, the one with a hole in the middle
+		ent.rotation = s1->angles2[1];
+		ent.renderfx = RF_GROW; // tube flag
+	}
+	ent.customShader = s1->time2 & 2 ? haze2 : haze; // ALT type, a different shader
+
+	trap->R_AddRefEntityToScene(&ent);
+}
+
+/*
+===============
+CG_TargetBeam
+
+fx_target_beam (g_misc.c, 2026-11-19: kejim_base's laser grid): drawn while it fires (s.time, when it last fired, is
+recent) from it to s.origin2, with its impact effect (s.time2) at the end each time it fires again
+===============
+*/
+static void CG_TargetBeam(centity_t* cent)
+{
+	const entityState_t* s1 = &cent->currentState;
+	refEntity_t line;
+
+	if (!s1->time || cg.time - s1->time > 160)
+	{
+		return;
+	}
+
+	memset(&line, 0, sizeof line);
+	line.reType = RT_LINE;
+	line.customShader = cgs.media.redSaberCoreShader;
+	line.renderfx = RF_NOSHADOW;
+	VectorCopy(cent->lerpOrigin, line.origin);
+	VectorCopy(s1->origin2, line.oldorigin);
+	line.shaderTexCoord[0] = line.shaderTexCoord[1] = 1.0f;
+	line.shaderRGBA[0] = line.shaderRGBA[1] = line.shaderRGBA[2] = line.shaderRGBA[3] = 255;
+	line.radius = 1.2f;
+	trap->R_AddRefEntityToScene(&line);
+
+	// a softer edge
+	line.shaderRGBA[0] = line.shaderRGBA[1] = line.shaderRGBA[2] = line.shaderRGBA[3] = 80;
+	line.radius = 3.0f;
+	trap->R_AddRefEntityToScene(&line);
+
+	trap->R_AddLightToScene(s1->origin2, 40.0f, 1.0f, 0.15f, 0.1f);
+
+	if (s1->time2 && s1->time != cent->bolt4 && cg.time >= cent->miscTime)
+	{
+		vec3_t norm;
+
+		VectorCopy(s1->angles2, norm);
+		if (VectorNormalize(norm) < 0.5f)
+		{
+			VectorSet(norm, 0, 0, 1);
+		}
+		cent->bolt4 = s1->time;
+		cent->miscTime = cg.time + 100;
+		trap->FX_PlayEffectID(s1->time2, (float*)s1->origin2, norm, -1, -1, qfalse);
+	}
 }
 
 /*
@@ -4246,7 +4373,18 @@ static void CG_AddCEntity(centity_t* cent)
 		CG_Mover(cent);
 		break;
 	case ET_BEAM:
-		CG_Beam(cent);
+		if (cent->currentState.generic1 == 1)
+		{
+			CG_TargetBeam(cent); // fx_target_beam (2026-11-19)
+		}
+		else if (cent->currentState.generic1 == 2)
+		{
+			CG_Clouds(cent); // fx_cloudlayer (2026-11-19)
+		}
+		else
+		{
+			CG_Beam(cent);
+		}
 		break;
 	case ET_PORTAL:
 		CG_Portal(cent);

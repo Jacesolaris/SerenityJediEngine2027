@@ -1155,6 +1155,327 @@ static void turret_free(gentity_t* self)
 	G_FreeEntity(self);
 }
 
+//------------------------------------------------------------------------
+// Map-placed misc_sentry_turret (SP / JKO missions, 2026-11-19)
+//------------------------------------------------------------------------
+// The map's misc_sentry_turret went to SP_PAS, the code for the sentry a player deploys: no model was set (it was
+// invisible), client 0 was taken as its owner (it never shot him and was removed when he was not on the server or not
+// on team 0), it ran out after 100 seconds and it shot the enemy NPCs it was placed to help (bespin_platform,
+// cairn_assembly, cairn_reactor, doom_comm, yavin_canyon). This is SP's sentry (g_turret.cpp SP_PAS): START_OFF (1),
+// use toggles it, radius (512), count (shots, -1 = endless, 150), health (50), splashDamage / splashRadius when it
+// blows up, target (used when destroyed), target2 (used when it takes an enemy) and team, the NPC team it leaves alone
+// ("enemy" / "player" / "neutral"; mission players are the player team). The client draws it as it does the
+// deployed one (cg_turret.c: s.bolt1 = 1, s.bolt2 = its enemy, s.fireflag).
+#define MAPSENTRY_START_OFF	1
+#define MAPSENTRY_DAMAGE	2		// SP's PAS_DAMAGE
+#define MAPSENTRY_DELAY	400		// ms between shots (SP's delay)
+#define MAPSENTRY_SPEED	900		// SP's bolt speed
+
+static int MapSentry_NPCTeam(const gentity_t* ent)
+{
+	return ent->NPC ? (int)ent->client->playerTeam : NPCTEAM_PLAYER;
+}
+
+static void MapSentry_AimPoint(const gentity_t* target, vec3_t org, const float drop)
+{
+	if (target->client)
+	{
+		VectorCopy(target->client->ps.origin, org);
+		org[2] += target->client->ps.viewheight - drop;
+	}
+	else
+	{
+		VectorCopy(target->r.currentOrigin, org);
+	}
+}
+
+static qboolean MapSentry_CanTarget(const gentity_t* self, const gentity_t* target)
+{
+	if (!target || !target->inuse || !target->client || target == self)
+	{
+		return qfalse;
+	}
+	if (!target->takedamage || target->health <= 0 || target->flags & FL_NOTARGET)
+	{
+		return qfalse;
+	}
+	if (!target->NPC && (target->client->sess.sessionTeam == TEAM_SPECTATOR
+		|| target->client->tempSpectate >= level.time || target->client->ps.pm_type == PM_SPECTATOR))
+	{
+		return qfalse;
+	}
+	if (target->s.eType == ET_NPC && target->s.NPC_class == CLASS_VEHICLE)
+	{
+		return qfalse;
+	}
+	if (MapSentry_NPCTeam(target) == self->genericValue11)
+	{
+		return qfalse;
+	}
+	return qtrue;
+}
+
+static qboolean MapSentry_CanSee(const gentity_t* self, const gentity_t* target)
+{
+	vec3_t eye, org;
+	trace_t tr;
+
+	VectorCopy(self->r.currentOrigin, eye);
+	eye[2] += 20;
+	MapSentry_AimPoint(target, org, 15);
+	trap->Trace(&tr, eye, NULL, NULL, org, self->s.number, MASK_SHOT, qfalse, 0, 0);
+	return !tr.allsolid && !tr.startsolid && (tr.fraction == 1.0f || tr.entityNum == target->s.number) ? qtrue : qfalse;
+}
+
+static void MapSentry_FindEnemy(gentity_t* self)
+{
+	static gentity_t* entity_list[MAX_GENTITIES];
+	float best_dist = self->radius * self->radius;
+	gentity_t* best = NULL;
+	vec3_t eye;
+
+	if (self->aimDebounceTime > level.time && self->painDebounceTime < level.time)
+	{
+		G_Sound(self, CHAN_BODY, G_SoundIndex("sound/chars/turret/ping.wav"));
+		self->painDebounceTime = level.time + 1000;
+	}
+
+	VectorCopy(self->r.currentOrigin, eye);
+	eye[2] += 20;
+
+	const int count = G_RadiusList(eye, self->radius, self, qtrue, entity_list);
+
+	for (int i = 0; i < count; i++)
+	{
+		gentity_t* target = entity_list[i];
+		vec3_t dir;
+
+		if (!MapSentry_CanTarget(self, target) || !trap->InPVS(eye, target->r.currentOrigin)
+			|| !MapSentry_CanSee(self, target))
+		{
+			continue;
+		}
+		VectorSubtract(target->r.currentOrigin, self->r.currentOrigin, dir);
+		if (VectorLengthSquared(dir) < best_dist)
+		{
+			best_dist = VectorLengthSquared(dir);
+			best = target;
+		}
+	}
+
+	if (!best)
+	{
+		return;
+	}
+	if (self->attackDebounceTime + 2000 < level.time)
+	{
+		G_Sound(self, CHAN_BODY, G_SoundIndex("sound/chars/turret/startup.wav"));
+		self->attackDebounceTime = level.time + 900 + Q_flrand(0.0f, 1.0f) * 200;
+	}
+	G_SetEnemy(self, best);
+	if (VALIDSTRING(self->target2))
+	{
+		G_UseTargets2(self, self, self->target2);
+	}
+}
+
+static void MapSentry_Fire(gentity_t* self)
+{
+	vec3_t muzzle, org, fwd;
+
+	VectorCopy(self->r.currentOrigin, muzzle);
+	muzzle[2] += 20;
+	MapSentry_AimPoint(self->enemy, org, 20);
+	VectorSubtract(org, muzzle, fwd);
+	VectorNormalize(fwd);
+	VectorMA(muzzle, 12, fwd, muzzle);
+
+	WP_FireTurretMissile(self, muzzle, fwd, qfalse, MAPSENTRY_DAMAGE, MAPSENTRY_SPEED, MOD_SENTRY, self);
+}
+
+static void MapSentry_Think(gentity_t* self)
+{
+	self->nextthink = level.time + FRAMETIME;
+
+	if (!self->damage)
+	{
+		// the unfolding animation (the client plays it), then to work
+		self->damage = 1;
+		self->nextthink = level.time + 1200;
+		return;
+	}
+	if (!self->count)
+	{
+		// out of shots
+		self->enemy = NULL;
+		self->s.bolt2 = ENTITYNUM_NONE;
+		self->s.fireflag = 0;
+		self->nextthink = 0;
+		return;
+	}
+
+	if (self->enemy)
+	{
+		if (!MapSentry_CanTarget(self, self->enemy) || !MapSentry_CanSee(self, self->enemy))
+		{
+			if (self->bounceCount < level.time)
+			{
+				// lost him (don't ping pong on and off)
+				self->enemy = NULL;
+				G_Sound(self, CHAN_BODY, G_SoundIndex("sound/chars/turret/shutdown.wav"));
+				self->aimDebounceTime = level.time + 5000; // the ping sound for 5 seconds
+			}
+		}
+		else
+		{
+			self->bounceCount = level.time + 500 + Q_flrand(0.0f, 1.0f) * 150;
+		}
+	}
+	if (!self->enemy)
+	{
+		MapSentry_FindEnemy(self);
+	}
+
+	self->s.bolt2 = self->enemy ? self->enemy->s.number : ENTITYNUM_NONE;
+	self->s.fireflag = 0;
+
+	if (self->enemy && self->attackDebounceTime < level.time && Q_flrand(0.0f, 1.0f) > 0.4f)
+	{
+		self->count--;
+		if (self->count)
+		{
+			MapSentry_Fire(self);
+			self->s.fireflag = 1;
+			self->attackDebounceTime = level.time + MAPSENTRY_DELAY;
+		}
+		else
+		{
+			G_Sound(self, CHAN_BODY, G_SoundIndex("sound/chars/turret/shutdown.wav"));
+			self->enemy = NULL;
+			self->s.bolt2 = ENTITYNUM_NONE;
+			self->nextthink = 0;
+		}
+	}
+}
+
+static void MapSentry_Use(gentity_t* self, gentity_t* other, gentity_t* activator)
+{
+	// toggle on and off
+	self->spawnflags ^= MAPSENTRY_START_OFF;
+
+	if (self->spawnflags & MAPSENTRY_START_OFF)
+	{
+		self->think = NULL;
+		self->nextthink = 0;
+		self->enemy = NULL;
+		self->s.bolt2 = ENTITYNUM_NONE;
+		self->s.fireflag = 0;
+	}
+	else
+	{
+		self->think = MapSentry_Think;
+		self->nextthink = level.time + 50;
+	}
+}
+
+static void MapSentry_Die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, int damage, int mod)
+{
+	vec3_t up = { 0, 0, 1 };
+
+	self->think = NULL;
+	self->use = NULL;
+	self->die = NULL;
+	self->takedamage = qfalse;
+	self->health = 0;
+
+	if (self->target)
+	{
+		G_UseTargets(self, attacker);
+	}
+
+	G_PlayEffect(EFFECT_EXPLOSION_PAS, self->r.currentOrigin, up);
+	if (self->splashDamage > 0 && self->splashRadius > 0)
+	{
+		g_radius_damage(self->r.currentOrigin, attacker, self->splashDamage, self->splashRadius, self, self,
+			MOD_UNKNOWN);
+	}
+	G_FreeEntity(self);
+}
+
+void SP_misc_sentry_turret(gentity_t* base)
+{
+	G_SetOrigin(base, base->s.origin);
+	G_SetAngles(base, base->s.angles);
+
+	base->s.modelIndex = G_model_index("models/items/psgun.glm");
+	base->s.modelGhoul2 = 1;
+	base->s.g2radius = 30;
+	base->s.eType = ET_GENERAL;
+	base->s.weapon = WP_TURRET; // the client registers the turret weapon's effects for it
+	base->s.bolt1 = 1; // a turret (the client aims it, cg_turret.c)
+	base->s.bolt2 = ENTITYNUM_NONE; // its enemy
+	base->s.fireflag = 0;
+	base->s.shouldtarget = qtrue;
+	base->s.owner = ENTITYNUM_NONE;
+	base->s.otherEntityNum = ENTITYNUM_NONE;
+	base->r.ownerNum = ENTITYNUM_NONE;
+
+	if (!base->radius)
+	{
+		base->radius = 512;
+	}
+	if (!base->count)
+	{
+		base->count = 150;
+	}
+	if (!base->health)
+	{
+		base->health = 50;
+	}
+	base->maxHealth = base->health;
+	G_SpawnInt("splashDamage", "0", &base->splashDamage);
+	G_SpawnInt("splashRadius", "0", &base->splashRadius);
+
+	// the NPC team it does not shoot (not a mover team: G_FindTeams would chain every "enemy" sentry together)
+	base->genericValue11 = NPCTEAM_NEUTRAL;
+	if (base->team && base->team[0])
+	{
+		const int t = G_NPCTeamForName(base->team);
+		if (t >= 0)
+		{
+			base->genericValue11 = t;
+		}
+	}
+	base->team = NULL;
+
+	base->damage = 0; // the unfolding animation flag
+	base->attackDebounceTime = 0;
+	base->bounceCount = 0;
+
+	base->r.contents = CONTENTS_SOLID;
+	base->s.solid = 2;
+	base->clipmask = MASK_SOLID;
+	VectorSet(base->r.mins, -8, -8, 0);
+	VectorSet(base->r.maxs, 8, 8, 18);
+
+	base->takedamage = qtrue;
+	base->die = MapSentry_Die;
+	base->use = MapSentry_Use;
+
+	RegisterItem(BG_FindItemForWeapon(WP_TURRET));
+	G_SoundIndex("sound/chars/turret/ping.wav");
+	G_SoundIndex("sound/chars/turret/startup.wav");
+	G_SoundIndex("sound/chars/turret/shutdown.wav");
+
+	if (!(base->spawnflags & MAPSENTRY_START_OFF))
+	{
+		base->think = MapSentry_Think;
+		base->nextthink = level.time + 1000;
+	}
+
+	trap->LinkEntity((sharedEntity_t*)base);
+}
+
 #define TURRET_AMMO_COUNT 40
 
 //---------------------------------

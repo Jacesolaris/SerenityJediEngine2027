@@ -1097,8 +1097,54 @@ static int R_GComputeFogNum(const trRefEntity_t* ent)
 #endif
 }
 
+// SJE: ProjectRadius as the scene's camera sees it (tr.refdef), whatever view is being built
+// (the camera view's projectionMatrix[5] is 1 / tan(fov_y / 2))
+static float G2_SceneProjectRadius(const float r, const vec3_t location)
+{
+	const float c = DotProduct(tr.refdef.viewaxis[0], tr.refdef.vieworg);
+	const float dist = DotProduct(tr.refdef.viewaxis[0], location) - c;
+	if (dist <= 0)
+		return 0;
+	const float t = tan(tr.refdef.fov_y * M_PI / 360.0f);
+	if (t <= 0.0f)
+		return 0;
+	float pr = fabs(r) / t / dist;
+	if (pr > 1.0f)
+		pr = 1.0f;
+	return pr;
+}
+
+// SJE r_meshClothShadowLod (rend2, with shadow map views: sun, lights, character shadows), 0 = as before:
+//  bit 1 = a character with mesh cloth is drawn into the shadow maps at the level of detail the scene's camera gives
+//          it (one cloth per character instead of one per level in use),
+//  bit 2 = the shadow map views give the cloth the camera's distance (r_meshClothLodNear / LodFar work with shadows on)
+static bool MC_ShadowLodBit(const int bit)
+{
+	static cvar_t* cv = nullptr;
+	if (!cv)
+	{
+#ifdef REND2_SP
+		cv = ri.Cvar_Get("r_meshClothShadowLod", "3", CVAR_ARCHIVE_ND);
+#else
+		cv = ri.Cvar_Get("r_meshClothShadowLod", "3", CVAR_ARCHIVE_ND, "Mesh cloth and shadow maps: 1 = caped characters cast their shadow with the mesh the camera sees (one cloth simulation per character), 2 = the cloth's distance bands work with shadows on, 3 = both, 0 = off");
+#endif
+	}
+	return cv && (cv->integer & bit) != 0;
+}
+// has this model mesh cloth? (MC_ModelHasCloth; the answer is kept with the model's name, as models come and go
+// at the same address, and forgotten with the cloth config and state)
+struct mcModelCloth_t
+{
+	char name[MAX_QPATH];
+	const void* header;
+	bool has;
+};
+static std::unordered_map<const model_t*, mcModelCloth_t> s_mcModelCloth;
+static bool MC_ModelHasCloth(const model_t* mod, int lod);
+
 // work out lod for this entity.
-static int G2_ComputeLOD(trRefEntity_t* ent, const model_t* currentModel, int lodBias)
+// sceneCamera (SJE): the level the scene's camera gives it, whatever view is being built
+static int G2_ComputeLOD(trRefEntity_t* ent, const model_t* currentModel, int lodBias, const bool sceneCamera = false)
 {
 	float flod = 0.0f, lodscale = 0.0f;
 	float projectedRadius = 0.0f;
@@ -1130,7 +1176,8 @@ static int G2_ComputeLOD(trRefEntity_t* ent, const model_t* currentModel, int lo
 		largestScale = 1;
 	}
 
-	projectedRadius = ProjectRadius(0.75 * largestScale * ent->e.radius, ent->e.origin);
+	projectedRadius = sceneCamera ? G2_SceneProjectRadius(0.75 * largestScale * ent->e.radius, ent->e.origin)
+		: ProjectRadius(0.75 * largestScale * ent->e.radius, ent->e.origin);
 
 	// we reduce the radius to make the LOD match other model types which use
 	// the actual bound box size
@@ -3459,6 +3506,20 @@ void R_AddGhoulSurfaces(trRefEntity_t* ent, int entityNum)
 		}
 
 		int whichLod = G2_ComputeLOD(ent, g2Info.currentModel, g2Info.mLodBias);
+		// SJE (r_meshClothShadowLod bit 1): a shadow map view picks its own level of detail of the model, by its own
+		// projection, and each level has its own mesh cloth: with sun shadows a cape was simulated once per level in
+		// use, up to three times a frame (8 Vaders: 24 simulations). A character with mesh cloth is drawn into the
+		// shadow maps at the level the scene's camera gives it: one cloth per character, and the shadow is that of
+		// the mesh in view. Models without mesh cloth are not touched.
+		if ((tr.viewParms.flags & VPF_DEPTHSHADOW) && g2Info.currentModel && g2Info.currentModel->numLods >= 2
+			&& r_meshCloth && r_meshCloth->integer && MC_ShadowLodBit(1))
+		{
+			const int camLod = G2_ComputeLOD(ent, g2Info.currentModel, g2Info.mLodBias, true);
+			if (camLod != whichLod && MC_ModelHasCloth(g2Info.currentModel, camLod))
+			{
+				whichLod = camLod;
+			}
+		}
 		G2_FindOverrideSurface(-1, g2Info.mSlist); //reset the quick surface override lookup;
 
 #ifdef _G2_GORE
@@ -3870,6 +3931,7 @@ exactly where the simulation did and every rend2 shader keeps working.
 */
 void R_MeshClothLoadConfig()
 {
+	s_mcModelCloth.clear();
 	char* buf = nullptr;
 	const long len = ri.FS_ReadFile("ext_data/meshcloth.dat", reinterpret_cast<void**>(&buf));
 	if (len > 0 && buf)
@@ -3886,10 +3948,49 @@ void R_MeshClothLoadConfig()
 
 static void MC_FreeRend2Buffers();
 
+// SJE (r_meshClothShadowLod bit 1): has this model mesh cloth? Asked once per model, by the surfaces of the given level
+// (the one about to be drawn).
+static bool MC_ModelHasCloth(const model_t* mod, const int lod)
+{
+	if (!mod || !mod->data.glm || !mod->data.glm->header)
+	{
+		return false;
+	}
+	const mdxmHeader_t* h = mod->data.glm->header;
+	const auto found = s_mcModelCloth.find(mod);
+	if (found != s_mcModelCloth.end() && found->second.header == h && !Q_stricmp(found->second.name, mod->name))
+	{
+		return found->second.has;
+	}
+	bool has = false;
+	if (lod >= 0 && lod < h->numLODs)
+	{
+		const mdxmHierarchyOffsets_t* ho = reinterpret_cast<const mdxmHierarchyOffsets_t*>(reinterpret_cast<const byte*>(h) + sizeof(mdxmHeader_t));
+		const byte* l = reinterpret_cast<const byte*>(h) + h->ofsLODs;
+		for (int i = 0; i < lod; i++)
+		{
+			l += reinterpret_cast<const mdxmLOD_t*>(l)->ofsEnd;
+		}
+		const mdxmLODSurfOffset_t* lo = reinterpret_cast<const mdxmLODSurfOffset_t*>(l + sizeof(mdxmLOD_t));
+		for (int i = 0; i < h->numSurfaces && !has; i++)
+		{
+			const mdxmSurface_t* surf = reinterpret_cast<const mdxmSurface_t*>(reinterpret_cast<const byte*>(lo) + lo->offsets[i]);
+			const mdxmSurfHierarchy_t* sh = reinterpret_cast<const mdxmSurfHierarchy_t*>(reinterpret_cast<const byte*>(ho) + ho->offsets[i]);
+			has = MC_IsClothSurface(surf, mod->name[0] ? mod->name : h->name, sh->name, h->name);
+		}
+	}
+	mcModelCloth_t& e = s_mcModelCloth[mod];
+	Q_strncpyz(e.name, mod->name, sizeof(e.name));
+	e.header = h;
+	e.has = has;
+	return has;
+}
+
 void R_MeshClothShutdown()
 {
 	MC_Clear();
 	MC_FreeRend2Buffers();
+	s_mcModelCloth.clear();
 }
 
 // Body capsules the cloth collides with, from _humanoid bone names.
@@ -3906,6 +4007,8 @@ struct mcBoneLookup_t
 {
 	const mdxaHeader_t* header;
 	int idx[MC_NUM_COLLIDERS][2];
+	int fing[2][12];	// SJE r_meshClothFist: the bones of each hand past its wrist (its fingers), left / right
+	int numFing[2];
 };
 
 static const mdxaSkel_t* MC_Skel(const mdxaHeader_t* h, const int i)
@@ -3940,6 +4043,29 @@ static const mcBoneLookup_t* MC_Lookup(const mdxaHeader_t* h)
 			}
 		}
 	}
+	// SJE r_meshClothFist: the bones of each hand past its wrist (finger joints, whatever they are called): bones
+	// below the forearm bone in the skeleton - the fingers hang on the forearm bone or on the hand bone, by skeleton -
+	// whose bind place lies beyond the wrist along the forearm
+	for (int hs = 0; hs < 2; hs++)
+	{
+		c.numFing[hs] = 0;
+		const int fb = c.idx[hs ? 10 : 8][0], hb = c.idx[hs ? 10 : 8][1];
+		if (fb < 0 || hb < 0) continue;
+		const mdxaBone_t& fm = MC_Skel(h, fb)->BasePoseMat;
+		const mdxaBone_t& hm = MC_Skel(h, hb)->BasePoseMat;
+		vec3_t along = { hm.matrix[0][3] - fm.matrix[0][3], hm.matrix[1][3] - fm.matrix[1][3], hm.matrix[2][3] - fm.matrix[2][3] };
+		if (VectorNormalize(along) < 0.5f) continue;
+		for (int i = 0; i < h->numBones && c.numFing[hs] < 12; i++)
+		{
+			if (i == fb || i == hb) continue;
+			int p = MC_Skel(h, i)->parent;
+			for (int up = 0; up < 6 && p >= 0 && p < h->numBones && p != fb; up++) p = MC_Skel(h, p)->parent;
+			if (p != fb) continue;
+			const mdxaBone_t& bm = MC_Skel(h, i)->BasePoseMat;
+			const vec3_t d = { bm.matrix[0][3] - hm.matrix[0][3], bm.matrix[1][3] - hm.matrix[1][3], bm.matrix[2][3] - hm.matrix[2][3] };
+			if (DotProduct(d, along) > 0.5f) c.fing[hs][c.numFing[hs]++] = i;
+		}
+	}
 	return &c;
 }
 
@@ -3964,6 +4090,15 @@ static const std::vector<int>& MC_BoneClass(const mdxaHeader_t* h)
 				cls[i] = 0;
 			}
 		}
+		// SJE r_meshClothShoulders: the shoulder bones (class 1: no fitted shape; what they carry - a shoulder
+		// plate - is kept under the drawn cloth)
+		for (const char* n : { "lclavical", "rclavical", "lhumerus", "rhumerus" })
+		{
+			if (!Q_stricmp(MC_Skel(h, i)->name, n))
+			{
+				cls[i] = 1;
+			}
+		}
 	}
 	return cache.emplace(h, std::move(cls)).first->second;
 }
@@ -3978,6 +4113,8 @@ static cvar_t* mc_hilt = nullptr;
 static cvar_t* mc_hiltLen = nullptr;
 static cvar_t* mc_hiltBack = nullptr;
 static cvar_t* mc_hiltRadius = nullptr;
+static cvar_t* mc_fist = nullptr;	// SJE r_meshClothFist
+static cvar_t* mc_subdivMean = nullptr;	// SJE r_meshClothSubdivMean (see MC_EdgePoint)
 
 // saber hilt collider: the hand bolt tag (*r_hand, *l_hand) is skinned like the engine skins it
 // for bolts; the hilt lies along the blade direction (the bolt's minus Y = the tag triangle's
@@ -4035,7 +4172,7 @@ static bool MC_HiltCapsule(const mdxmSurface_t* clothSurf, CBoneCache* bones, co
 		cap.b[r] = ent->e.origin[r] + axis[0][r] * lb[0] + axis[1][r] * lb[1] + axis[2][r] * lb[2];
 	}
 	cap.r = mc_hiltRadius && mc_hiltRadius->value > 0.1f ? mc_hiltRadius->value : 1.6f;
-	cap.hard = 1;
+	cap.hard = 4;	// a held thing: cloth is never modelled round it
 	return true;
 }
 
@@ -4096,11 +4233,87 @@ static cvar_t* MC_ClothCvar(const char* name, const char* value, const char* des
 //  r_meshClothFriction  scales every surface's friction / sfriction (1 = the config's, 0 = frictionless)
 //  r_meshClothLift      -2 = each surface's 'lift', -1 = no limit, N = units a cape may rise above its attached edge
 //  r_meshClothEdgeCol   1 = cloth edges are pushed off arms, fists and hilts too (no forearm through a cape)
+//  r_meshClothLayers    1 = a character's cloth layers keep their order: a cape stays over a robe (0 = off)
+//  r_meshClothBodyCarry 1 = the cloth is carried along with the body's own fast travel inside its animation,
+//                       e.g. the landing of a jump: no cape thrown up over the shoulders there (0 = off)
+//  r_meshClothLiftSlope 0.3 = the lift limit slopes down from the attached edge by this much per unit of cloth
+//                       length, so a cape thrown up streams out and droops instead of lying flat (0 = level)
+//  r_meshClothTwistFree 540 = deg/s of the body's turn about its upright axis the cloth lags by itself; the part of
+//                       a faster turn is carried along (a cape is not wound round its wearer in a spin)
+//  r_meshClothTwistLag  20 = degrees the cloth may trail behind such a fast turn before it is carried: in a fast
+//                       flick of the body there and back the cape trails and comes back by itself (under 0 = carried
+//                       at once, wherever it is: it goes round with the body like a part of it and is back with it)
+//  r_meshClothTwistCarry 1 = the part of that excess that is carried (0 = none)
+//  r_meshClothBreeze    1 = a light, slowly wandering breeze sways hanging cloth near the camera (strength;
+//                       0 = off: in still air the cloth hangs frozen). Cloth in the breeze does not sleep.
+//  r_meshClothShoulders 1 = the drawn cloth is kept over what the shoulder bones carry: no shoulder plate
+//                       through the cape when the arm swings back (needs r_meshClothFaceCol; 0 = off)
+//  r_meshClothOverArms 1 = a cape or cloak (cloth hanging from shoulder height) lies over arms and hands: a hand
+//                       put behind the back stays under it (needs r_meshClothFaceCol; 0 = off)
+//  r_meshClothCarryFloor 1 = the body carry (r_meshClothBodyCarry) takes worn cloth (a robe, a skirt, the strips
+//                       under it) down only as far as it has room above the floor: it is not thrown out over
+//                       the ground when its wearer drops into a crouch (0 = as before)
+//  r_meshClothShown     1 = what a character's skin has switched off takes no part in its cloth: the body shapes
+//                       are fitted to the switched-on surfaces only (one model, several outfits: no hidden hood
+//                       or padding under a cloak), hidden cloth holds no drawn cloth; 0 = as before
+//  r_meshClothWornAir   0.25 = cloth worn round the body (a robe, a skirt) catches at most this part of the
+//                       travel wind: its wearer stands in the wind's way (1 = all of it, as before)
+//  r_meshClothBillow    1 = a cape in the air stream of its wearer's travel fills out, most a third of the way
+//                       down its length (strength; 0 = off: the travel wind only drags it straight back)
+//  r_meshClothDragQuad  air resistance that grows with the square of the speed, 1/unit (0.025: a sprinting
+//                       character's cape streams out behind him and flaps; 0 = linear drag only, as before)
+//  r_meshClothFaceCol   1 = cloth triangles are kept out of the whole body and on their own side of it (no leg,
+//                       hip or arm slipping between a coarse cape's points; replaces r_meshClothEdgeCol), 0 = off
 //  r_meshClothHilt      1 = saber hilt colliders; r_meshClothHiltLen / HiltBack / HiltRadius set their size
+//  r_meshClothHeld      1 = things bolted to a character (saber hilts, blasters) push its cloth, shaped from their
+//                       own mesh (0 = off)
+//  r_meshClothBlade     1 = lit lightsaber blades push the cloth (0 = off)
+//  r_meshClothSubdiv    1 = cloth is drawn with its triangles split on a smooth curved patch, 2 = split twice
+//                       (0 = off)
+//  r_meshClothSettle    4 = cloth that starts over settles this many steps per 16 ms (for a cape of 200 points)
+//                       over the next frames (0 = all at once in one frame, as before)
+//  r_meshClothSettleCut 1 = cloth that starts over in the frame of a camera cut settles at once (0 = over the
+//                       next frames there too)
+//  r_meshClothResume    0 = off; N = cloth out of view for up to N ms carries on where it was instead of
+//                       settling anew
+//  r_meshClothShadowLod 3 = with shadow maps: 1 = a character with cloth casts its shadow with the mesh the camera
+//                       sees (one cloth simulation per character), 2 = the cloth's distance bands work with
+//                       shadows on, 3 = both, 0 = off
+//  r_meshClothSubdivMean 1 = cloth drawn split (r_meshClothSubdiv): the new points take the mean of their edge's
+//                       two normals, so strips and sheared cloth are not lit in patches (0 = as before)
+//  r_meshClothFist      1 = for a character with a cape or cloak the fist shape lies along the hand (towards its
+//                       finger bones), not along the forearm: with the wrist bent (a hand behind the back) the
+//                       fingers no longer reach out of it through the cape (0 = off)
 //  r_meshClothSleep     1 = cloth at rest on a character standing still stops simulating until something moves it
 //  r_meshClothSelfSub   1 = self-collision in every substep, with cloth-on-cloth friction (0 = once per step, old)
+//  r_meshClothRest      1 = cloth lying on a body that holds still is left to rest by the triangle test: cloth draped
+//                       round a leg is not thrown 'back to its own side', and cloth the animation partly holds is
+//                       not held further off an arm than the pose drapes it (0 = off)
+//  r_meshClothEase      1 = a point the shake watchdog let go comes back gently: while the pose holds it still the
+//                       body's triangle test moves it by a small step per call, not at full strength (0 = off)
+//  r_meshClothCalm      1 = cloth on a body that holds still comes to rest (a cape round a crouching figure): a
+//                       self-collision pair that shakes loses its closing speed (not where a limb moves the
+//                       cloth), and a point that only trembles in place counts as at rest (0 = off)
 //  r_meshClothBendModel 0 = bend links (default), 1 = isometric (cotangent) bending
 //  r_meshClothAero      1 = the air pushes each triangle (drag + lift), 0 = each point (default)
+static int R_RenderJobThreads();
+static int MC_ThreadMode();
+// SJE r_meshClothSettleCut: every view of the level, once a frame, before its cloth is prepared (see MC_ViewCut).
+// 1 = cloth that starts over in the frame of a camera cut settles at once (0 = spread over the next frames there too)
+static void MC_NoteView(const trRefdef_t& fd)
+{
+	static cvar_t* cv = nullptr;
+	if (!cv)
+	{
+		cv = MC_ClothCvar("r_meshClothSettleCut", "1", "Mesh cloth that starts over in the frame of a camera cut settles at once (0 = over the next frames there too)");
+	}
+	if (fd.rdflags & RDF_NOWORLDMODEL)
+	{
+		return;
+	}
+	MC_ViewCut(tr.frameCount, fd.time, fd.vieworg, fd.viewaxis[0], cv ? cv->integer : 1, MC_ThreadMode() > 0 ? R_RenderJobThreads() : 1);
+}
+
 static void MC_SolverParams(mcParams_t& prm)
 {
 	static cvar_t* xp = nullptr;
@@ -4108,8 +4321,26 @@ static void MC_SolverParams(mcParams_t& prm)
 	static cvar_t* fr = nullptr;
 	static cvar_t* li = nullptr;
 	static cvar_t* ec = nullptr;
+	static cvar_t* fc = nullptr;
+	static cvar_t* dq = nullptr;
+	static cvar_t* ly = nullptr;
+	static cvar_t* bcr = nullptr;
+	static cvar_t* lsl = nullptr;
+	static cvar_t* twf = nullptr;
+	static cvar_t* twl = nullptr;
+	static cvar_t* twc = nullptr;
+	static cvar_t* brz = nullptr;
+	static cvar_t* bil = nullptr;
+	static cvar_t* wna = nullptr;	// SJE r_meshClothWornAir
+	static cvar_t* shn = nullptr;	// SJE r_meshClothShown
+	static cvar_t* cfl = nullptr;	// SJE r_meshClothCarryFloor
+	static cvar_t* shd = nullptr;
+	static cvar_t* ova = nullptr;
 	static cvar_t* sl = nullptr;
 	static cvar_t* ss = nullptr;
+	static cvar_t* calm = nullptr;
+	static cvar_t* rst = nullptr;
+	static cvar_t* ese = nullptr;
 	static cvar_t* bm = nullptr;
 	static cvar_t* ae = nullptr;
 	if (!xp)
@@ -4119,10 +4350,30 @@ static void MC_SolverParams(mcParams_t& prm)
 		fr = MC_ClothCvar("r_meshClothFriction", "1", "Scales mesh cloth friction on the body and floor (0 frictionless)");
 		li = MC_ClothCvar("r_meshClothLift", "-2", "How high mesh cloth may rise above its attached edge: -2 per surface, -1 no limit, N units");
 		ec = MC_ClothCvar("r_meshClothEdgeCol", "1", "Mesh cloth edges collide with arms, fists and saber hilts (1 on, 0 off)");
+		fc = MC_ClothCvar("r_meshClothFaceCol", "1", "Mesh cloth triangles collide with the whole body (1 on, 0 off)");
+		dq = MC_ClothCvar("r_meshClothDragQuad", "0.025", "Mesh cloth air resistance that grows with the square of the speed (capes stream out when running); 0 off");
+		ly = MC_ClothCvar("r_meshClothLayers", "1", "A character's mesh cloth layers keep their order (a cape stays over a robe); 0 off");
+		bcr = MC_ClothCvar("r_meshClothBodyCarry", "1", "The mesh cloth is carried along with the body's own fast travel inside its animation (the landing of a jump); 0 off");
+		lsl = MC_ClothCvar("r_meshClothLiftSlope", "0.3", "The mesh cloth's lift limit drops by this much per unit of cloth length from the attached edge (no flat sheet at shoulder height in a jump); 0 level");
+		twf = MC_ClothCvar("r_meshClothTwistFree", "540", "Degrees per second of the body's turn the mesh cloth lags by itself; a faster turn's excess is carried along");
+		twl = MC_ClothCvar("r_meshClothTwistLag", "20", "Degrees the mesh cloth may trail behind a fast turn before it is carried along; under 0 at once, wherever the cloth is");
+		twc = MC_ClothCvar("r_meshClothTwistCarry", "1", "The part of a fast turn's excess the mesh cloth is carried along by; 0 none");
+		brz = MC_ClothCvar("r_meshClothBreeze", "1", "A light, slowly wandering breeze sways hanging mesh cloth near the camera (strength); 0 off");
+		bil = MC_ClothCvar("r_meshClothBillow", "1", "Mesh cloth fills out in the air stream of its wearer's travel, most a third of the way down its length (strength); 0 off");
+		wna = MC_ClothCvar("r_meshClothWornAir", "0.25", "Mesh cloth worn round the body (a robe, a skirt) catches at most this part of the travel wind; 1 = all of it, as before");
+		shn = MC_ClothCvar("r_meshClothShown", "1", "Mesh cloth: what a character's skin has switched off takes no part - body shapes fitted to the switched-on surfaces only, hidden cloth holds no drawn cloth; 0 = as before");
+		cfl = MC_ClothCvar("r_meshClothCarryFloor", "1", "Mesh cloth: the body carry takes worn cloth (a robe, a skirt, strips under it) down only as far as it has room above the floor, so it is not thrown out over the ground when its wearer drops into a crouch; 0 = as before");
+		shd = MC_ClothCvar("r_meshClothShoulders", "1", "Mesh cloth: the drawn cloth is kept over what the shoulder bones carry (no shoulder plate through a cape); 0 off");
+		ova = MC_ClothCvar("r_meshClothOverArms", "1", "Mesh cloth: a cape or cloak (hanging from shoulder height) lies over arms and hands, e.g. a hand behind the back; 0 off");
 		sl = MC_ClothCvar("r_meshClothSleep", "1", "Mesh cloth at rest sleeps until the pose, body, wind or a blast moves it (1 on, 0 off)");
 		ss = MC_ClothCvar("r_meshClothSelfSub", "1", "Mesh cloth self-collision in every substep with cloth-on-cloth friction (1 on, 0 once per step)");
+		calm = MC_ClothCvar("r_meshClothCalm", "1", "Mesh cloth on a body that holds still comes to rest: self-collision pairs that shake lose their closing speed, points trembling in place count as at rest; 0 off");
+		rst = MC_ClothCvar("r_meshClothRest", "1", "Mesh cloth lying on a body that holds still is left to rest by the triangle test (no throw back to the animated side for cloth draped round a shape, a collar not held off the arm further than the pose has it); 0 off");
+		ese = MC_ClothCvar("r_meshClothEase", "1", "Mesh cloth: a point the shake watchdog let go comes back gently while the pose holds it still (no throw of several units every few seconds where two body shapes dispute a piece of cloth); 0 off");
 		bm = MC_ClothCvar("r_meshClothBendModel", "0", "Mesh cloth bending: 0 bend links, 1 isometric (cotangent) bending");
 		ae = MC_ClothCvar("r_meshClothAero", "0", "Mesh cloth air: 0 per point, 1 per triangle (drag + lift)");
+		mc_fist = MC_ClothCvar("r_meshClothFist", "1", "Mesh cloth: the fist shape lies along the hand (towards its finger bones), not along the forearm, so the fingers of a bent hand stay under a cape lying over it; 0 off");
+		mc_subdivMean = MC_ClothCvar("r_meshClothSubdivMean", "1", "Mesh cloth drawn split (r_meshClothSubdiv): the new points take the mean of their edge's two normals - even shading on strips and sheared cloth; 0 = the curved patch's own normal, as before");
 		mc_hilt = MC_ClothCvar("r_meshClothHilt", "1", "Saber hilts push mesh cloth (1 on, 0 off)");
 		mc_hiltLen = MC_ClothCvar("r_meshClothHiltLen", "9", "Mesh cloth hilt collider length in front of the fist");
 		mc_hiltBack = MC_ClothCvar("r_meshClothHiltBack", "4", "Mesh cloth hilt collider length behind the fist");
@@ -4133,8 +4384,47 @@ static void MC_SolverParams(mcParams_t& prm)
 	prm.frictionScale = fr && fr->value > 0.0f ? fr->value : 0.0f;
 	prm.liftLimit = li ? li->value : -2.0f;
 	prm.edgeCol = ec ? ec->integer : 0;
+	prm.faceCol = fc ? fc->integer : 0;
+	prm.dragQuad = dq && dq->value > 0.0f ? dq->value : 0.0f;
+	prm.layers = ly ? ly->integer : 0;
+	prm.bodyCarry = bcr ? bcr->value : 1.0f;
+	prm.liftSlope = lsl ? lsl->value : 0.3f;
+	{
+		// SJE r_meshClothResume: cloth not simulated for up to this many ms (its character was out of view) carries
+		// on where it was instead of settling anew from the pose (0 = off, as before)
+		static cvar_t* rsm = nullptr;
+		if (!rsm)
+		{
+			rsm = MC_ClothCvar("r_meshClothResume", "0", "Mesh cloth out of view for up to this many ms carries on where it was instead of settling anew; 0 off");
+		}
+		prm.resumeMs = rsm ? rsm->integer : 0;
+	}
+	{
+		// SJE r_meshClothSettle: cloth that starts over settles a few steps per frame instead of all 40 in one frame
+		// (this many per 16 ms for a cape of 200 points; 0 = all at once, as before). See mcParams_t::settle.
+		static cvar_t* stl = nullptr;
+		if (!stl)
+		{
+			stl = MC_ClothCvar("r_meshClothSettle", "4", "Mesh cloth that starts over settles this many steps per 16 ms (for a cape of 200 points) over the next frames; 0 = all at once in one frame");
+		}
+		prm.settle = stl ? stl->value : 0.0f;
+		prm.settleJobs = MC_ThreadMode() > 0 ? R_RenderJobThreads() : 1;	// (r_meshClothThreads 0: all cloth on the main thread)
+	}
+	prm.twistFree = twf && twf->value > 0.0f ? twf->value : 540.0f;
+	prm.twistLag = twl ? twl->value : 20.0f;
+	prm.twistCarry = twc ? twc->value : 1.0f;
+	prm.breeze = brz && brz->value > 0.0f ? brz->value : 0.0f;
+	prm.billow = bil && bil->value > 0.0f ? bil->value : 0.0f;
+	prm.wornAir = wna ? (wna->value > 0.0f ? (wna->value < 1.0f ? wna->value : 1.0f) : 0.0f) : 0.25f;
+	prm.shown = shn ? shn->integer : 1;
+	prm.carryFloor = cfl ? cfl->integer : 1;
+	prm.shoulders = shd ? shd->integer : 1;
+	prm.overArms = ova ? ova->integer : 1;
 	prm.sleep = sl ? sl->integer : 0;
 	prm.selfSub = ss ? ss->integer : 0;
+	prm.calm = calm ? calm->integer : 1;
+	prm.rest = rst ? rst->integer : 1;
+	prm.ease = ese ? ese->integer : 1;
 	prm.bendModel = bm ? bm->integer : 0;
 	prm.aero = ae ? ae->integer : 0;
 }
@@ -4223,6 +4513,105 @@ static int MC_OthersNear(const trRefEntity_t* ent, mcCapsule_t* out)
 		MC_SetCharacters(tr.frameCount, reinterpret_cast<const float(*)[3]>(origins.data()), static_cast<int>(origins.size() / 3));
 	}
 	return MC_NearCharacters(ent->e.origin, out, MC_MAX_OTHERS);
+}
+
+// SJE: r_meshClothHeld (1 on, 0 off): the things bolted to this character - a saber hilt in the hand or on the
+// belt, a blaster, a jet pack - push its cloth, with shapes fitted from their own mesh (MC_HeldFit) and posed by
+// their own bones. Main thread (the bone matrices of a bolted model are looked up here).
+static int MC_HeldShapes(const trRefEntity_t* ent, const vec3_t axis[3], mcCapsule_t* out)
+{
+	static cvar_t* hc = nullptr;
+	if (!hc)
+	{
+		hc = MC_ClothCvar("r_meshClothHeld", "1", "Things bolted to a character (saber hilts, blasters) push its mesh cloth, shaped from their own mesh (1 on, 0 off)");
+	}
+	if (!hc->integer || !ent->e.ghoul2)
+	{
+		return 0;
+	}
+	CGhoul2Info_v& ghoul2 = *((CGhoul2Info_v*)ent->e.ghoul2);
+	if (!ghoul2.IsValid())
+	{
+		return 0;
+	}
+	int n = 0;
+	for (int i = 1; i < ghoul2.size() && n < MC_MAX_HELD; i++)
+	{
+		CGhoul2Info& held = ghoul2[i];
+		if (held.mModelindex == -1 || !held.mValid || held.mModelBoltLink == -1 || !held.mBoneCache || !held.currentModel)
+		{
+			continue;	// no model here, or not bolted to anything
+		}
+		if (held.mFlags & (GHOUL2_NOMODEL | GHOUL2_NORENDER))
+		{
+			continue;
+		}
+		const mdxmHeader_t* mdxm = held.currentModel->data.glm ? held.currentModel->data.glm->header : nullptr;
+		if (!mdxm)
+		{
+			continue;
+		}
+		n += MC_HeldShapesPose(MC_HeldFit(mdxm), MC_BoneFn, held.mBoneCache, ent->e.origin, axis, out + n, MC_MAX_HELD - n);
+	}
+	return n;
+}
+
+// SJE: r_meshClothBlade (1 on, 0 off): lit lightsaber blades near a character push its cloth (a thin capsule
+// along each blade), so a blade no longer passes through a cape. The blades are the scene's saber glow
+// entities - the game adds one per lit blade (base, direction, length) - so there is none while a saber is off.
+static int MC_BladesNear(const trRefEntity_t* ent, mcCapsule_t* out)
+{
+	static cvar_t* bc = nullptr;
+	if (!bc)
+	{
+		bc = MC_ClothCvar("r_meshClothBlade", "1", "Lit lightsaber blades push mesh cloth (1 on, 0 off)");
+	}
+	if (!bc->integer)
+	{
+		return 0;
+	}
+	int n = 0;
+	for (int i = 0; i < backEnd.refdef.num_entities && n < MC_MAX_BLADES; i++)
+	{
+		const trRefEntity_t* e = &backEnd.refdef.entities[i];
+		if (e->e.reType != RT_SABER_GLOW || e->e.saberLength < 4.0f)
+		{
+			continue;	// not a blade (stun and grapple start points use the type without a length)
+		}
+		vec3_t tip, ab, ao, d;
+		VectorMA(e->e.origin, e->e.saberLength, e->e.axis[0], tip);
+		// near this character? (its origin is at the hips; a cape reaches about 60 units from there)
+		VectorSubtract(tip, e->e.origin, ab);
+		VectorSubtract(ent->e.origin, e->e.origin, ao);
+		const float len2 = DotProduct(ab, ab);
+		float t = len2 > 1e-4f ? DotProduct(ao, ab) / len2 : 0.0f;
+		t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+		VectorMA(e->e.origin, t, ab, d);
+		VectorSubtract(d, ent->e.origin, d);
+		if (DotProduct(d, d) > 72.0f * 72.0f)
+		{
+			continue;
+		}
+		// the game adds the blade and its trail: not a second one at (nearly) the same place
+		bool dup = false;
+		for (int k = 0; k < n && !dup; k++)
+		{
+			vec3_t da, db;
+			VectorSubtract(out[k].a, e->e.origin, da);
+			VectorSubtract(out[k].b, tip, db);
+			dup = DotProduct(da, da) < 1.0f && DotProduct(db, db) < 4.0f;
+		}
+		if (dup)
+		{
+			continue;
+		}
+		VectorCopy(e->e.origin, out[n].a);
+		VectorCopy(tip, out[n].b);
+		out[n].r = 1.0f;
+		out[n].hard = 4;	// a held thing: cloth is never modelled round it
+		n++;
+	}
+	return n;
 }
 
 // the floor under a character, for its cloth: one trace per character per frame
@@ -4329,7 +4718,23 @@ struct mcR2Surf_t
 	IBO_t* ibo = nullptr;
 	int numIndexes = 0;
 	int sigVerts = -1, sigTris = -1, sigOfsVerts = -1;	// detects reused memory after a reload
+	// SJE: r_meshClothSubdiv: the triangles drawn split (levels times); after the surface's own vertices come the
+	// split points, each in the middle of the edge between two earlier vertices (edgeA / edgeB)
+	int levels = 0;
+	int drawVerts = 0;
+	std::vector<int> edgeA, edgeB;
 };
+
+// SJE: r_meshClothSubdiv: 0 = off, 1 = cloth triangles drawn split in four on a smooth curved patch, 2 = twice
+static int MC_R2SubdivLevels()
+{
+	static cvar_t* cv = nullptr;
+	if (!cv)
+	{
+		cv = MC_ClothCvar("r_meshClothSubdiv", "1", "Mesh cloth drawn with its triangles split on a smooth curved patch: 0 off, 1 on, 2 twice");
+	}
+	return cv->integer < 0 ? 0 : (cv->integer > 2 ? 2 : cv->integer);
+}
 
 // Per character and cloth surface: the dynamic vertex buffer.
 struct mcR2Inst_t
@@ -4362,15 +4767,16 @@ static mcR2Surf_t* MC_R2Surface(const mdxmSurface_t* surface)
 	{
 		return nullptr;
 	}
+	const int wantLevels = MC_R2SubdivLevels();
 	auto it = mcR2Surfs.find(surface);
 	if (it != mcR2Surfs.end() && it->second.sigVerts == surface->numVerts &&
-		it->second.sigTris == surface->numTriangles && it->second.sigOfsVerts == surface->ofsVerts)
+		it->second.sigTris == surface->numTriangles && it->second.sigOfsVerts == surface->ofsVerts && it->second.levels == wantLevels)
 	{
 		return it->second.ibo ? &it->second : nullptr;
 	}
 	if (it != mcR2Surfs.end())
 	{
-		// a different surface now lives at this address: forget its buffers
+		// a different surface now lives at this address, or r_meshClothSubdiv changed: forget its buffers
 		for (auto& in : mcR2Insts)
 		{
 			if (in.surface == surface) { in.surface = nullptr; in.key = nullptr; }
@@ -4381,6 +4787,7 @@ static mcR2Surf_t* MC_R2Surface(const mdxmSurface_t* surface)
 	s.sigVerts = surface->numVerts;
 	s.sigTris = surface->numTriangles;
 	s.sigOfsVerts = surface->ofsVerts;
+	s.levels = wantLevels;
 	if (surface->numVerts <= 0 || surface->numTriangles <= 0)
 	{
 		return nullptr;
@@ -4407,13 +4814,50 @@ static mcR2Surf_t* MC_R2Surface(const mdxmSurface_t* surface)
 		R_VboUnpackTangent(&s.bindTangent[static_cast<std::vector<float, std::allocator<float>>::size_type>(i) * 4], packed[i]);
 	}
 
-	s.numIndexes = surface->numTriangles * 3;
+	// SJE: r_meshClothSubdiv: each triangle split in four; neighbours share the point on their common edge
+	s.drawVerts = surface->numVerts;
+	for (int lv = 0; lv < wantLevels; lv++)
+	{
+		const int nt = static_cast<int>(idx.size() / 3);
+		if (s.drawVerts + 3 * nt >= SHADER_MAX_VERTEXES)
+		{
+			break;
+		}
+		std::unordered_map<unsigned long long, int> edges;
+		edges.reserve(static_cast<size_t>(nt) * 2);
+		auto edgePoint = [&](const int a, const int b) -> glIndex_t
+		{
+			const unsigned long long key = a < b ? (static_cast<unsigned long long>(a) << 32) | static_cast<unsigned>(b)
+				: (static_cast<unsigned long long>(b) << 32) | static_cast<unsigned>(a);
+			const auto e = edges.find(key);
+			if (e != edges.end())
+			{
+				return static_cast<glIndex_t>(e->second);
+			}
+			s.edgeA.push_back(a);
+			s.edgeB.push_back(b);
+			edges.emplace(key, s.drawVerts);
+			return static_cast<glIndex_t>(s.drawVerts++);
+		};
+		std::vector<glIndex_t> next;
+		next.reserve(idx.size() * 4);
+		for (int k = 0; k < nt; k++)
+		{
+			const glIndex_t a = idx[k * 3], b = idx[k * 3 + 1], c = idx[k * 3 + 2];
+			const glIndex_t ab = edgePoint(a, b), bc = edgePoint(b, c), ca = edgePoint(c, a);
+			const glIndex_t quad[12] = { a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca };
+			next.insert(next.end(), quad, quad + 12);
+		}
+		idx.swap(next);
+	}
+
+	s.numIndexes = static_cast<int>(idx.size());
 	s.ibo = R_CreateIBO(reinterpret_cast<byte*>(idx.data()), sizeof(glIndex_t) * s.numIndexes, VBO_USAGE_STATIC,
 		va("meshcloth_ibo_%d", (int)mcR2Surfs.size()));
 	return &s;
 }
 
-static mcR2Inst_t* MC_R2Instance(const void* key, const mdxmSurface_t* surface, const int timeMs)
+static mcR2Inst_t* MC_R2Instance(const void* key, const mdxmSurface_t* surface, const int drawVerts, const int timeMs)
 {
 	// never reallocate: the threaded pre-pass keeps pointers to instances until they are drawn
 	if (mcR2Insts.capacity() < static_cast<size_t>(MC_R2_MAX_INSTANCES))
@@ -4423,13 +4867,13 @@ static mcR2Inst_t* MC_R2Instance(const void* key, const mdxmSurface_t* surface, 
 	mcR2Inst_t* reuse = nullptr;
 	for (auto& in : mcR2Insts)
 	{
-		if (in.key == key && in.surface == surface)
+		if (in.key == key && in.surface == surface && in.numVerts == drawVerts)
 		{
 			in.lastUsedMs = timeMs;
 			return &in;
 		}
 		// a buffer of the same size whose character hasn't been drawn for 2 s
-		if (!reuse && in.numVerts == surface->numVerts && (!in.surface || timeMs - in.lastUsedMs > 2000 || timeMs < in.lastUsedMs))
+		if (!reuse && in.numVerts == drawVerts && (!in.surface || timeMs - in.lastUsedMs > 2000 || timeMs < in.lastUsedMs))
 		{
 			reuse = &in;
 		}
@@ -4441,11 +4885,11 @@ static mcR2Inst_t* MC_R2Instance(const void* key, const mdxmSurface_t* surface, 
 			return nullptr;
 		}
 		mcR2Inst_t in;
-		in.numVerts = surface->numVerts;
+		in.numVerts = drawVerts;
 		// the vertices, then the constant block the model VBOs end with (R_LoadMDXM): white vertex colour, lightmap
 		// coordinates and light direction, read with an instance step rate. Without it the colour attribute read the
 		// cloth positions: dark, see-through capes in rend2's main menu character views (DH 2026-10-25).
-		const int vertBytes = static_cast<int>(sizeof(g2GoreVert_t)) * surface->numVerts;
+		const int vertBytes = static_cast<int>(sizeof(g2GoreVert_t)) * drawVerts;
 		const int constBytes = static_cast<int>(sizeof(vec4_t) + sizeof(vec2_t) + sizeof(uint32_t));
 		in.vbo = R_CreateVBO(nullptr, vertBytes + constBytes, VBO_USAGE_DYNAMIC,
 			va("meshcloth_vbo_%d", (int)mcR2Insts.size()));
@@ -4561,6 +5005,20 @@ static void MC_LodParams(const trRefEntity_t* ent, mcParams_t& prm)
 	if (backEnd.viewParms.flags & VPF_DEPTHSHADOW)
 	{
 		prm.lodDist = -1.0f;	// shadow map view (sun, lights): keep the camera view's level of detail
+		// SJE (r_meshClothShadowLod bit 2): the shadow map views are drawn first in a frame and build the cloth; the
+		// camera view then finds it built. So with any such shadows on, the cloth never got a distance and stayed at
+		// full detail however far away. A shadow map view gives the distance from the scene's camera instead.
+		if (MC_ShadowLodBit(2))
+		{
+			VectorSubtract(ent->e.origin, backEnd.refdef.vieworg, d);
+			dist = VectorLength(d);
+			const float sceneFov = backEnd.refdef.fov_x;
+			if (sceneFov > 1.0f && sceneFov < 179.0f)
+			{
+				dist *= tanf(DEG2RAD(sceneFov * 0.5f));
+			}
+			prm.lodDist = dist;
+		}
 	}
 }
 
@@ -4578,13 +5036,98 @@ struct g2ClothPrep_t
 	int time = 0;
 	mcCapsule_t others[MC_MAX_OTHERS]{};	// nearby characters (r_meshClothOthers)
 	int numOthers = 0;
+	mcCapsule_t blades[MC_MAX_BLADES]{};	// lit lightsaber blades nearby (r_meshClothBlade)
+	int numBlades = 0;
+	mcCapsule_t held[MC_MAX_HELD]{};	// things bolted to the character (r_meshClothHeld)
+	int numHeld = 0;
 	const void* bodyFit = nullptr;	// r_meshClothBodyFit (MC_BodyFit, fitted on the main thread)
+	bool fistAlong = false;			// SJE r_meshClothFist: this character wears cloth hanging from shoulder height (MC_ClothHangsHigh)
+	const void* ownerBones = nullptr;	// SJE: whose this was prepared for (a character's other cloth surfaces take it over)
+	const void* ownerEnt = nullptr;
 	bool ok = false;	// false: no cloth state for this surface (skin it, don't simulate)
 };
 
-static void RB_MeshClothPrepare(CBoneCache* bones, const mdxmSurface_t* surface, const trRefEntity_t* ent, const int timeMs, g2ClothPrep_t& cp)
+// SJE r_meshClothShown: which surfaces of this character's model are switched on - the skin's "*off" lines and the
+// game's own switching, read from the ghoul2 surface list the way the renderer walks it (a switched-off surface
+// with NODESCENDANTS hides what hangs below it). One byte per surface index. Main thread.
+static bool MC_DrawnSurfaces(const trRefEntity_t* ent, const CBoneCache* bones, const mdxmSurface_t* surface, std::vector<unsigned char>& drawn)
+{
+	drawn.clear();
+	if (!ent || !ent->e.ghoul2 || !surface)
+	{
+		return false;
+	}
+	CGhoul2Info_v& ghoul2 = *((CGhoul2Info_v*)ent->e.ghoul2);
+	if (!ghoul2.IsValid())
+	{
+		return false;
+	}
+	for (int i = 0; i < ghoul2.size(); i++)
+	{
+		CGhoul2Info& g2 = ghoul2[i];
+		if (g2.mBoneCache != bones)
+		{
+			continue;
+		}
+		const auto mdxm = reinterpret_cast<const mdxmHeader_t*>(reinterpret_cast<const byte*>(surface) + surface->ofsHeader);
+		const auto ho = reinterpret_cast<const mdxmHierarchyOffsets_t*>(reinterpret_cast<const byte*>(mdxm) + sizeof(mdxmHeader_t));
+		if (mdxm->numSurfaces <= 0 || mdxm->numSurfaces > 4096)
+		{
+			return false;
+		}
+		drawn.assign(mdxm->numSurfaces, 0);
+		G2_FindOverrideSurface(-1, g2.mSlist);	// (starts the quick lookup for this list, as every user of it does)
+		static std::vector<int> stack;
+		stack.assign(1, g2.mSurfaceRoot);
+		int guard = 0;
+		while (!stack.empty() && guard++ < 8192)
+		{
+			const int s = stack.back();
+			stack.pop_back();
+			if (s < 0 || s >= mdxm->numSurfaces)
+			{
+				continue;
+			}
+			const auto sh = reinterpret_cast<const mdxmSurfHierarchy_t*>(reinterpret_cast<const byte*>(ho) + ho->offsets[s]);
+			int off = sh->flags;
+			const surfaceInfo_t* ov = G2_FindOverrideSurface(s, g2.mSlist);
+			if (ov)
+			{
+				off = ov->offFlags;
+			}
+			if (!off)
+			{
+				drawn[s] = 1;
+			}
+			if (off & G2SURFACEFLAG_NODESCENDANTS)
+			{
+				continue;
+			}
+			for (int c = 0; c < sh->numChildren; c++)
+			{
+				stack.push_back(sh->childIndexes[c]);
+			}
+		}
+		return true;
+	}
+	return false;
+}
+
+static void RB_MeshClothPrepare(CBoneCache* bones, const mdxmSurface_t* surface, const trRefEntity_t* ent, const int timeMs, g2ClothPrep_t& cp,
+	const g2ClothPrep_t* same = nullptr)
 {
 	cp.ok = MC_Prepare(surface, bones, timeMs, &cp.run);
+	// SJE: a character's cloth surfaces share one simulation (the first one drawn runs it, the others copy its
+	// result), so what was prepared for an earlier surface of the same character in this view serves this one too
+	if (same && cp.ok && same->ok && same->ownerBones == bones && same->ownerEnt == ent && same->run.instance == cp.run.instance)
+	{
+		const mcRun_t run = cp.run;
+		cp = *same;
+		cp.run = run;
+		return;
+	}
+	cp.ownerBones = bones;
+	cp.ownerEnt = ent;
 	cp.lk = *MC_Lookup(bones->header);
 	VectorCopy(ent->e.axis[0], cp.axis[0]);
 	VectorCopy(ent->e.axis[1], cp.axis[1]);
@@ -4621,12 +5164,20 @@ static void RB_MeshClothPrepare(CBoneCache* bones, const mdxmSurface_t* surface,
 	MC_LodParams(ent, prm);
 	MC_FloorUnder(ent, timeMs, prm);
 	cp.numOthers = MC_OthersNear(ent, cp.others);
+	cp.numBlades = MC_BladesNear(ent, cp.blades);
+	cp.numHeld = MC_HeldShapes(ent, cp.axis, cp.held);
 	// r_meshClothBodyFit (KatarnEngine): only for characters at full cloth detail (inside r_meshClothLodNear)
+	// SJE r_meshClothShown: the surfaces this character has switched on (main thread; kept for the fit below)
+	static std::vector<unsigned char> mcDrawn;
+	const bool mcDrawnOk = prm.shown != 0 && MC_DrawnSurfaces(ent, bones, surface, mcDrawn);
+	MC_Shown(surface, bones, mcDrawnOk ? mcDrawn.data() : nullptr, mcDrawnOk ? static_cast<int>(mcDrawn.size()) : 0);
 	cp.bodyFit = nullptr;
+	cp.fistAlong = false;
 	if (r_meshClothBodyFit && r_meshClothBodyFit->integer && !(prm.lodNear > 0.0f && prm.lodDist > prm.lodNear))
 	{
 		const std::vector<int>& cls = MC_BoneClass(bones->header);
-		cp.bodyFit = MC_BodyFit(surface, cls.data(), static_cast<int>(cls.size()));
+		cp.bodyFit = MC_BodyFit(surface, cls.data(), static_cast<int>(cls.size()), mcDrawnOk ? mcDrawn.data() : nullptr, mcDrawnOk ? static_cast<int>(mcDrawn.size()) : 0);
+		cp.fistAlong = cp.bodyFit != nullptr && MC_ClothHangsHigh(surface);
 	}
 }
 
@@ -4637,7 +5188,7 @@ static bool RB_MeshClothBuild(CBoneCache* bones, const mdxmSurface_t* surface, c
 	const vec3_t* axis = cp.axis;
 
 	// capsules: posed bone origin = skin matrix * bind position, then to world
-	mcCapsule_t caps[MC_NUM_COLLIDERS + 4 + MC_MAX_OTHERS + 96]{};	// + fitted body shapes (r_meshClothBodyFit)
+	mcCapsule_t caps[MC_NUM_COLLIDERS + 4 + MC_MAX_OTHERS + MC_MAX_BLADES + MC_MAX_HELD + 96]{};	// + fitted body shapes (r_meshClothBodyFit)
 	int ncaps = 0;
 	const mcBoneLookup_t* lk = &cp.lk;	// copied on the main thread (MC_Lookup is a shared cache)
 	for (int k = 0; k < MC_NUM_COLLIDERS; k++)
@@ -4669,7 +5220,46 @@ static bool RB_MeshClothBuild(CBoneCache* bones, const mdxmSurface_t* surface, c
 			const mcCapsule_t& fa = caps[ncaps - 1];
 			vec3_t dir;
 			VectorSubtract(fa.b, fa.a, dir);
-			const float len = VectorNormalize(dir);
+			float len = VectorNormalize(dir);
+			// SJE r_meshClothFist: the hand is not a piece of the forearm. With the wrist bent (a hand put behind the
+			// back, a hand on the hip) it points away from the forearm's line, and the fingers reached out of a fist
+			// shape laid along that line: finger joints showed as specks through a cape lying over the hand. The
+			// shape now runs from the wrist towards the middle of the hand's own bones (its finger joints, taken from
+			// the skeleton: MC_Lookup), with the same length and radius as before: turned with the wrist, no bigger
+			// (made as long as the fingers reach it pushed robes more and woke cloth at rest in a crouch). Only for a
+			// character whose cloth hangs from shoulder height or above (a cape, a cloak: cp.fistAlong) - the cloth
+			// that lies over a hand. Against robes and skirts, which a hand lies ON as the pose was made, the old shape
+			// stays: with the turned one a robed figure's cloth came to rest less often in a still crouch. Skeletons
+			// without bones past the wrist keep the old shape too.
+			const int hs = k == 8 ? 0 : 1;
+			if (mc_fist && mc_fist->integer && cp.fistAlong && lk->numFing[hs] > 0)
+			{
+				vec3_t mean = { 0.0f, 0.0f, 0.0f }, hd;
+				for (int f = 0; f < lk->numFing[hs]; f++)
+				{
+					const int bi = lk->fing[hs][f];
+					const float (*m)[4] = reinterpret_cast<const float(*)[4]>(bones->boneMatrices[bi]);
+					const mdxaBone_t& bp = MC_Skel(bones->header, bi)->BasePoseMat;
+					const vec3_t b = { bp.matrix[0][3], bp.matrix[1][3], bp.matrix[2][3] };
+					vec3_t local, fp;
+					for (int r = 0; r < 3; r++)
+					{
+						local[r] = m[r][0] * b[0] + m[r][1] * b[1] + m[r][2] * b[2] + m[r][3];
+					}
+					for (int r = 0; r < 3; r++)
+					{
+						fp[r] = ent->e.origin[r] + axis[0][r] * local[0] + axis[1][r] * local[1] + axis[2][r] * local[2];
+					}
+					VectorAdd(mean, fp, mean);
+				}
+				VectorScale(mean, 1.0f / lk->numFing[hs], mean);
+				VectorSubtract(mean, fa.b, hd);
+				if (VectorNormalize(hd) > 0.5f)
+				{
+					VectorCopy(hd, dir);
+					len = 1.0f;
+				}
+			}
 			if (len > 0.1f)
 			{
 				VectorCopy(fa.b, caps[ncaps].a);
@@ -4686,12 +5276,13 @@ static bool RB_MeshClothBuild(CBoneCache* bones, const mdxmSurface_t* surface, c
 	thread_local static std::vector<float> xyzBuf, nrmBuf, tanBuf;
 	thread_local static std::vector<int> mainBone;
 	const int n = surface->numVerts;
-	xyzBuf.resize(static_cast<std::vector<float, std::allocator<float>>::size_type>(n) * 4);
-	nrmBuf.resize(static_cast<std::vector<float, std::allocator<float>>::size_type>(n) * 4);
-	tanBuf.resize(static_cast<std::vector<float, std::allocator<float>>::size_type>(n) * 3);
+	const int nd = rs->drawVerts > n ? rs->drawVerts : n;	// SJE: + the split points (r_meshClothSubdiv)
+	xyzBuf.resize(static_cast<std::vector<float, std::allocator<float>>::size_type>(nd) * 4);
+	nrmBuf.resize(static_cast<std::vector<float, std::allocator<float>>::size_type>(nd) * 4);
+	tanBuf.resize(static_cast<std::vector<float, std::allocator<float>>::size_type>(nd) * 3);
 	float (*xyz)[4] = reinterpret_cast<float(*)[4]>(xyzBuf.data());
 	float (*nrm)[4] = reinterpret_cast<float(*)[4]>(nrmBuf.data());
-	float (*tan)[3] = reinterpret_cast<float(*)[3]>(tanBuf.data()); mainBone.resize(n); out.resize(n);
+	float (*tan)[3] = reinterpret_cast<float(*)[3]>(tanBuf.data()); mainBone.resize(nd); out.resize(nd);
 
 	const mdxmVertex_t* v = reinterpret_cast<const mdxmVertex_t*>(reinterpret_cast<const byte*>(surface) + surface->ofsVerts);
 	const mdxmVertexTexCoord_t* tc = reinterpret_cast<const mdxmVertexTexCoord_t*>(v + n);
@@ -4720,8 +5311,10 @@ static bool RB_MeshClothBuild(CBoneCache* bones, const mdxmSurface_t* surface, c
 		}
 	}
 
-	// saber hilts in both hands (r_meshClothHilt)
-	if (!mc_hilt || mc_hilt->integer)
+	// saber hilts in both hands (r_meshClothHilt): the old fixed capsules along the hand bolts. SJE: only where no
+	// held thing was shaped from its own mesh (r_meshClothHeld) - next to those they were phantoms, one in each
+	// hand, also the empty one, and not along the hilt
+	if ((!mc_hilt || mc_hilt->integer) && cp.numHeld == 0)
 	{
 		if (MC_HiltCapsule(surface, bones, "*r_hand", ent, axis, caps[ncaps])) ncaps++;
 		if (MC_HiltCapsule(surface, bones, "*l_hand", ent, axis, caps[ncaps])) ncaps++;
@@ -4730,6 +5323,16 @@ static bool RB_MeshClothBuild(CBoneCache* bones, const mdxmSurface_t* surface, c
 	for (int i = 0; i < cp.numOthers; i++)
 	{
 		caps[ncaps++] = cp.others[i];
+	}
+	// lit lightsaber blades (r_meshClothBlade)
+	for (int i = 0; i < cp.numBlades; i++)
+	{
+		caps[ncaps++] = cp.blades[i];
+	}
+	// things bolted to the character, shaped from their own mesh (r_meshClothHeld)
+	for (int i = 0; i < cp.numHeld; i++)
+	{
+		caps[ncaps++] = cp.held[i];
 	}
 	// the body's real shape, fitted from the model's own mesh (on top of the capsules above)
 	if (cp.bodyFit)
@@ -4743,8 +5346,35 @@ static bool RB_MeshClothBuild(CBoneCache* bones, const mdxmSurface_t* surface, c
 		MC_Run(&cp.run, surface, cp.time, ent->e.origin, axis, caps, ncaps, &cp.prm, MC_BoneFn, bones, xyz, nrm);
 	}
 
-	// express every vertex in its main bone's space, weight 1
+	// SJE: r_meshClothSubdiv: the split points, in order (one can lie between earlier split points), on the curved
+	// patch through their edge's ends (MC_EdgePoint); texture coordinates, tangent and main bone from the ends
+	thread_local static std::vector<float> uvBuf;
+	uvBuf.resize(static_cast<std::vector<float, std::allocator<float>>::size_type>(nd) * 3);
 	for (int i = 0; i < n; i++)
+	{
+		uvBuf[i * 3] = tc[i].texCoords[0];
+		uvBuf[i * 3 + 1] = tc[i].texCoords[1];
+		uvBuf[i * 3 + 2] = rs->bindTangent[i * 4 + 3];
+	}
+	for (int i = n; i < nd; i++)
+	{
+		const int a = rs->edgeA[i - n], b = rs->edgeB[i - n];
+		vec3_t na = { nrm[a][0], nrm[a][1], nrm[a][2] }, nb = { nrm[b][0], nrm[b][1], nrm[b][2] };
+		MC_Normalize(na);
+		MC_Normalize(nb);
+		MC_EdgePoint(xyz[a], na, xyz[b], nb, xyz[i], nrm[i], mc_subdivMean ? mc_subdivMean->integer : 1);
+		for (int r = 0; r < 3; r++)
+		{
+			tan[i][r] = tan[a][r] + tan[b][r];
+		}
+		mainBone[i] = mainBone[a];
+		uvBuf[i * 3] = 0.5f * (uvBuf[a * 3] + uvBuf[b * 3]);
+		uvBuf[i * 3 + 1] = 0.5f * (uvBuf[a * 3 + 1] + uvBuf[b * 3 + 1]);
+		uvBuf[i * 3 + 2] = uvBuf[a * 3 + 2];
+	}
+
+	// express every vertex in its main bone's space, weight 1
+	for (int i = 0; i < nd; i++)
 	{
 		const int bi = mainBone[i];
 		const float (*m)[4] = reinterpret_cast<const float(*)[4]>(bones->boneMatrices[bi]);
@@ -4771,11 +5401,11 @@ static bool RB_MeshClothBuild(CBoneCache* bones, const mdxmSurface_t* surface, c
 		MC_Mul3(inv, tt, lt);
 		MC_Normalize(lt);
 		o.normal = R_VboPackNormal(ln);
-		vec4_t lt4 = { lt[0], lt[1], lt[2], rs->bindTangent[i * 4 + 3] < 0.0f ? -1.0f : 1.0f };
+		vec4_t lt4 = { lt[0], lt[1], lt[2], uvBuf[i * 3 + 2] < 0.0f ? -1.0f : 1.0f };
 		o.tangents = R_VboPackTangent(lt4);
 
-		o.texCoords[0] = tc[i].texCoords[0];
-		o.texCoords[1] = tc[i].texCoords[1];
+		o.texCoords[0] = uvBuf[i * 3];
+		o.texCoords[1] = uvBuf[i * 3 + 1];
 		o.bonerefs[0] = (byte)bi;
 		o.bonerefs[1] = o.bonerefs[2] = o.bonerefs[3] = 0;
 		o.weights[0] = 255;
@@ -4826,7 +5456,7 @@ static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurfac
 		return nullptr;
 	}
 	const int timeMs = backEnd.refdef.time;
-	mcR2Inst_t* in = MC_R2Instance(bones, surface, timeMs);
+	mcR2Inst_t* in = MC_R2Instance(bones, surface, rs->drawVerts, timeMs);
 	if (!in)
 	{
 		return nullptr;
@@ -4849,7 +5479,7 @@ static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurfac
 		{
 			return nullptr;
 		}
-		RB_MeshClothUpload(in, in->pending, surface->numVerts);
+		RB_MeshClothUpload(in, in->pending, rs->drawVerts);
 		return in;
 	}
 
@@ -4862,7 +5492,7 @@ static mcR2Inst_t* RB_MeshClothUpdate(CRenderableSurface* surf, const mdxmSurfac
 	{
 		return nullptr;
 	}
-	RB_MeshClothUpload(in, out, surface->numVerts);
+	RB_MeshClothUpload(in, out, rs->drawVerts);
 	return in;
 }
 
@@ -4944,12 +5574,12 @@ static bool RB_MeshClothDraw(CRenderableSurface* surf)
 	tess.multiDrawFirstIndex[0] = (glIndex_t*)BUFFER_OFFSET(0);
 	tess.multiDrawLastIndex[0] = (glIndex_t*)BUFFER_OFFSET(rs->numIndexes * sizeof(glIndex_t));
 	tess.multiDrawMinIndex[0] = 0;
-	tess.multiDrawMaxIndex[0] = surface->numVerts - 1;
+	tess.multiDrawMaxIndex[0] = rs->drawVerts - 1;
 	tess.multiDrawPrimitives = 1;
 	backEnd.pc.c_multidraws++;
 
 	tess.numIndexes += rs->numIndexes;
-	tess.numVertexes += surface->numVerts;
+	tess.numVertexes += rs->drawVerts;
 	tess.useInternalVBO = qfalse;
 	tess.dlightBits |= surf->dlightBits;
 	glState.skeletalAnimation = qtrue;
@@ -4998,7 +5628,11 @@ static int R_RenderJobThreads()
 	const int want = r_threads ? r_threads->integer : 0;
 	if (want < 0)
 	{
-		return (std::min)(qjobs::Pool::DefaultThreads(), 7);
+		// SJE: on a CPU with 16 hardware threads or more, half of them less one (at most 15) instead of 7: a crowd of
+		// caped characters is one job each (16 capes: 6.1 ms on 7 workers, 4.0 ms on 15). Smaller CPUs as before.
+		const int hw = qjobs::Pool::DefaultThreads() + 1;
+		const int most = hw >= 16 ? (std::min)(hw / 2 - 1, 15) : 7;
+		return (std::min)(qjobs::Pool::DefaultThreads(), (std::max)(most, 7));
 	}
 	return (std::min)(want, qjobs::Pool::kMaxThreads);
 }
@@ -5018,6 +5652,7 @@ static void RB_G2R2ClothGroups(const int begin, const int end)
 // called by RB_DrawSurfs (backEnd.refdef is already this view's) before anything is drawn
 void RB_G2PrepareDrawSurfs(drawSurf_t* drawSurfs, const int numDrawSurfs)
 {
+	MC_NoteView(backEnd.refdef);
 	const int threads = R_RenderJobThreads();
 	if (threads <= 0 && s_g2Pool)
 	{
@@ -5027,10 +5662,11 @@ void RB_G2PrepareDrawSurfs(drawSurf_t* drawSurfs, const int numDrawSurfs)
 	{
 		return;
 	}
-	if (backEnd.viewParms.flags & VPF_DEPTHSHADOW)
-	{
-		return;	// shadow map views reuse last frame's cloth (RB_MeshClothUpdate); the main view simulates it
-	}
+	// SJE: shadow map views (sun, lights, character shadows) are drawn before the camera view and simulate for
+	// themselves (RB_MeshClothUpdate). This pre-pass used to leave them out, so with any such shadows on, all cloth
+	// was built in their draw loop, on the main thread, and nothing was left for the workers (8 Vaders: 19 ms of
+	// the frame). Their cloth is built here too now - the same surfaces with the same input, only on the workers.
+	const bool shadowView = (backEnd.viewParms.flags & VPF_DEPTHSHADOW) != 0;
 
 	PROFILE_ZONE("Mesh cloth (threaded)");
 
@@ -5068,6 +5704,12 @@ void RB_G2PrepareDrawSurfs(drawSurf_t* drawSurfs, const int numDrawSurfs)
 		{
 			continue;
 		}
+		// a shadow map view draws only what its depth pass takes (RB_SubmitDrawSurfsForDepthFill); the rest of its
+		// list is left to the view that draws it, as before
+		if (shadowView && (!shader || shader->sort != SS_OPAQUE || shader->useDistortion || shader->depthPrepass == DEPTHPREPASS_SKIP))
+		{
+			continue;
+		}
 		const mdxmSurface_t* surface = cs->surfaceData;
 		const auto mdxm = reinterpret_cast<const mdxmHeader_t*>(reinterpret_cast<const byte*>(surface) + surface->ofsHeader);
 		const auto ho = reinterpret_cast<const mdxmHierarchyOffsets_t*>(reinterpret_cast<const byte*>(mdxm) + sizeof(mdxmHeader_t));
@@ -5095,13 +5737,21 @@ void RB_G2PrepareDrawSurfs(drawSurf_t* drawSurfs, const int numDrawSurfs)
 		{
 			continue;
 		}
-		mcR2Inst_t* in = MC_R2Instance(cs->boneCache, surface, timeMs);
+		mcR2Inst_t* in = MC_R2Instance(cs->boneCache, surface, rs->drawVerts, timeMs);
 		if (!in || in->uploadedFrame == frame || in->pendingFrame == frame)
 		{
 			continue;	// no buffer, or already done this frame
 		}
 		g2ClothPrep_t cp;
-		RB_MeshClothPrepare(cs->boneCache, surface, candEnt[c], timeMs, cp);
+		const g2ClothPrep_t* same = nullptr;
+		for (size_t q = s_r2ClothPrep.size(); q-- > 0 && !same; )
+		{
+			if (s_r2ClothPrep[q].ownerBones == cs->boneCache && s_r2ClothPrep[q].ownerEnt == candEnt[c])
+			{
+				same = &s_r2ClothPrep[q];
+			}
+		}
+		RB_MeshClothPrepare(cs->boneCache, surface, candEnt[c], timeMs, cp, same);
 		in->pendingFrame = frame;
 		in->pendingOk = false;
 		s_r2ClothJobs.push_back({ cs->boneCache, surface, rs, candEnt[c], in, static_cast<int>(s_r2ClothPrep.size()) });

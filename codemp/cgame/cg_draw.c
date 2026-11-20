@@ -5682,6 +5682,51 @@ static int impactSoundDebounceTime = 0;
 #define	RADAR_ASTEROID_RANGE				10000.0f
 #define	RADAR_MIN_ASTEROID_SURF_WARN_DIST	1200.0f
 
+// The radar's (and the crosshair's) colour for an NPC or player, by its team, as SP (2026-11-18): green an ally, red an
+// enemy, yellow a neutral, magenta a loner. An NPC's team is its s.teamowner (its playerTeam, NPC.c); in a mission the
+// players are all on one side. qfalse: no team to go by (the gametype's colour, as before).
+static qboolean CG_TeamColorForEnt(const centity_t* cent, vec4_t colour)
+{
+	int c;
+
+	if (cent->currentState.number < MAX_CLIENTS)
+	{
+		if (cgs.gametype != GT_SINGLE_PLAYER)
+		{
+			return qfalse;
+		}
+		c = COLOR_GREEN;
+	}
+	else
+	{
+		if (cent->currentState.eType != ET_NPC || cent->currentState.NPC_class == CLASS_VEHICLE
+			|| cgs.gametype == GT_SIEGE)
+		{
+			return qfalse;
+		}
+		switch (cent->currentState.teamowner)
+		{
+		case NPCTEAM_PLAYER:
+			c = COLOR_GREEN;
+			break;
+		case NPCTEAM_ENEMY:
+			c = COLOR_RED;
+			break;
+		case NPCTEAM_NEUTRAL:
+			c = COLOR_YELLOW;
+			break;
+		case NPCTEAM_SOLO:
+			c = COLOR_MAGENTA;
+			break;
+		default:
+			return qfalse;
+		}
+	}
+	VectorCopy(g_color_table[c], colour);
+	colour[3] = 1.0f;
+	return qtrue;
+}
+
 static float cg_draw_radar(float y)
 {
 	vec4_t color = { 0 };
@@ -5991,9 +6036,17 @@ static float cg_draw_radar(float y)
 			else
 			{
 				// Normal NPCs...
-				vec4_t colour;
+				vec4_t colour, base;
 
-				VectorCopy4(team_color, colour);
+				if (cent->currentState.eFlags & EF_DEAD)
+				{
+					break; // (no dead ones, as SP)
+				}
+				if (!CG_TeamColorForEnt(cent, base))
+				{
+					VectorCopy4(team_color, base);
+				}
+				VectorCopy4(base, colour);
 
 				arrow_base_scale = 8.0f;
 				z_scale = 1.0f;
@@ -6003,9 +6056,9 @@ static float cg_draw_radar(float y)
 				{
 					float f = (cent->vChatTime + 2000 - cg.time) / 3000.0f;
 					arrow_base_scale = 8.0f + 4.0f * f;
-					colour[0] = team_color[0] + (1.0f - team_color[0]) * f;
-					colour[1] = team_color[1] + (1.0f - team_color[1]) * f;
-					colour[2] = team_color[2] + (1.0f - team_color[2]) * f;
+					colour[0] = base[0] + (1.0f - base[0]) * f;
+					colour[1] = base[1] + (1.0f - base[1]) * f;
+					colour[2] = base[2] + (1.0f - base[2]) * f;
 				}
 
 				trap->R_SetColor(colour);
@@ -6275,7 +6328,7 @@ static float cg_draw_radar(float y)
 
 		case ET_PLAYER:
 		{
-			vec4_t colour;
+			vec4_t colour, base;
 
 			cl = &cgs.clientinfo[cent->currentState.number];
 
@@ -6285,7 +6338,11 @@ static float cg_draw_radar(float y)
 				continue;
 			}
 
-			VectorCopy4(team_color, colour);
+			if (!CG_TeamColorForEnt(cent, base))
+			{
+				VectorCopy4(team_color, base);
+			}
+			VectorCopy4(base, colour);
 
 			arrow_base_scale = 8.0f;
 			z_scale = 1.0f;
@@ -6295,9 +6352,9 @@ static float cg_draw_radar(float y)
 			{
 				float f = (cent->vChatTime + 2000 - cg.time) / 3000.0f;
 				arrow_base_scale = 8.0f + 4.0f * f;
-				colour[0] = team_color[0] + (1.0f - team_color[0]) * f;
-				colour[1] = team_color[1] + (1.0f - team_color[1]) * f;
-				colour[2] = team_color[2] + (1.0f - team_color[2]) * f;
+				colour[0] = base[0] + (1.0f - base[0]) * f;
+				colour[1] = base[1] + (1.0f - base[1]) * f;
+				colour[2] = base[2] + (1.0f - base[2]) * f;
 			}
 
 			trap->R_SetColor(colour);
@@ -8387,7 +8444,8 @@ static void CG_DrawCrosshair(vec3_t world_point, const int ch_ent_valid)
 			}
 			else if (crossEnt->currentState.number < MAX_CLIENTS)
 			{
-				if (cgs.gametype >= GT_TEAM &&
+				if (cgs.gametype == GT_SINGLE_PLAYER // (missions: the players are on one side, 2026-11-18)
+					|| cgs.gametype >= GT_TEAM &&
 					cgs.clientinfo[crossEnt->currentState.number].team == cgs.clientinfo[cg.snap->ps.clientNum].team)
 				{
 					//Allies are green
@@ -8506,6 +8564,13 @@ static void CG_DrawCrosshair(vec3_t world_point, const int ch_ent_valid)
 							ecolor[1] = 0.0f; //G
 							ecolor[2] = 0.0f; //B
 						}
+					}
+					else if (cgs.gametype != GT_SIEGE && crossEnt->currentState.teamowner == NPCTEAM_NEUTRAL)
+					{
+						// a neutral: yellow, as SP (2026-11-18)
+						ecolor[0] = 1.0f; //R
+						ecolor[1] = 1.0f; //G
+						ecolor[2] = 0.1f; //B
 					}
 					else if (crossEnt->currentState.teamowner != pl_team)
 					{

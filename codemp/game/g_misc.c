@@ -5530,28 +5530,537 @@ void SP_misc_camera(gentity_t* self)
 	self->nextthink = level.time + START_TIME_LINK_ENTS;
 }
 
+/*
+-------------------------
+misc_spotlight (SP's g_turret.cpp, 2026-11-19, DH: artus_mine's search lights were missing in MP)
+
+MP had it as a security camera (camera_aim): no light, and using it (artus_mine's switch, "search_light") put the
+player in its camera view. As SP: it keeps pointing at its target (a func_train going round), the client draws its
+light cone and a light where it lands (EF_ALT_FIRING, s.angles2[0] = the beam's length, cg_ents.c), and a player in
+that light (140 units) fires its target2. Using it turns it off or on.
+
+  START_OFF - starts off
+  targetname - toggles it on/off
+  target - what it points at
+  target2 - what to use when it finds a player
+-------------------------
+*/
+static void spotlight_think(gentity_t* ent)
+{
+	vec3_t dir, end;
+	trace_t tr;
+	int i;
+
+	if (!ent->genericValue1 || !ent->enemy || !ent->enemy->inuse)
+	{
+		ent->s.eFlags &= ~EF_ALT_FIRING;
+		return;
+	}
+
+	// the client draws the light cone
+	ent->s.eFlags |= EF_ALT_FIRING;
+
+	VectorSubtract(ent->enemy->r.currentOrigin, ent->r.currentOrigin, dir);
+	VectorNormalize(dir);
+	vectoangles(dir, ent->s.apos.trBase);
+	ent->s.apos.trType = TR_INTERPOLATE;
+	VectorCopy(ent->s.apos.trBase, ent->r.currentAngles);
+
+	VectorMA(ent->r.currentOrigin, 2048, dir, end); // just pick some max trace distance
+	trap->Trace(&tr, ent->r.currentOrigin, vec3_origin, vec3_origin, end, ent->s.number, CONTENTS_SOLID, qfalse, 0, 0);
+
+	ent->radius = tr.fraction * 2048.0f;
+	ent->s.angles2[0] = ent->radius;
+
+	if (tr.fraction < 1.0f && ent->target2)
+	{
+		for (i = 0; i < MAX_CLIENTS; i++)
+		{
+			gentity_t* player = &g_entities[i];
+
+			if (!player->inuse || !player->client || player->health <= 0
+				|| player->client->sess.sessionTeam == TEAM_SPECTATOR)
+			{
+				continue;
+			}
+			if (DistanceSquared(tr.endpos, player->r.currentOrigin) < 140 * 140)
+			{
+				// found a player in the light
+				G_UseTargets2(ent, player, ent->target2);
+				break;
+			}
+		}
+	}
+
+	ent->nextthink = level.time + 50;
+}
+
+static void spotlight_use(gentity_t* self, gentity_t* other, gentity_t* activator)
+{
+	if (!self->genericValue1)
+	{
+		self->genericValue1 = 1;
+		self->think = spotlight_think;
+		self->nextthink = level.time + FRAMETIME;
+	}
+	else
+	{
+		self->genericValue1 = 0;
+		self->s.eFlags &= ~EF_ALT_FIRING;
+	}
+}
+
+static void spotlight_link(gentity_t* ent)
+{
+	gentity_t* target = G_Find(NULL, FOFS(targetname), ent->target);
+
+	if (!target)
+	{
+		Com_Printf(S_COLOR_RED "ERROR: spotlight_link: bogus target %s\n", ent->target);
+		G_FreeEntity(ent);
+		return;
+	}
+
+	ent->enemy = target;
+	ent->think = spotlight_think;
+
+	if (ent->spawnflags & 1)
+	{
+		// start off
+		ent->genericValue1 = 0;
+		ent->s.eFlags &= ~EF_ALT_FIRING;
+	}
+	else
+	{
+		ent->genericValue1 = 1;
+		ent->nextthink = level.time + FRAMETIME;
+	}
+}
+
 void SP_misc_spotlight(gentity_t* self)
 {
-	//racc - acts a lot like a misc_camera.
-	G_SpawnFloat("wait", "0.5", &self->wait);
+	if (!self->target)
+	{
+		Com_Printf(S_COLOR_RED "ERROR: misc_spotlight must have a target\n");
+		G_FreeEntity(self);
+		return;
+	}
+
+	G_SetAngles(self, self->s.angles);
+	G_SetOrigin(self, self->s.origin);
 
 	self->s.modelIndex = G_model_index("models/map_objects/imp_mine/spotlight.md3");
-	G_SoundIndex("sound/movers/objects/cameramove_lp2");
 
-	G_SetOrigin(self, self->s.origin);
-	G_SetAngles(self, self->s.angles);
-	self->s.apos.trType = TR_LINEAR_STOP; //TR_INTERPOLATE;//
-	self->alt_fire = qtrue;
-	VectorSet(self->r.mins, -8, -8, -12);
-	VectorSet(self->r.maxs, 8, 8, 0);
-	self->r.contents = CONTENTS_SOLID;
+	G_SpawnInt("health", "300", &self->health);
+
+	// the light cone, drawn by the client
+	G_EffectIndex("env/light_cone");
+
+	VectorSet(self->r.mins, -10, -10, 0);
+	VectorSet(self->r.maxs, 10, 10, 10);
+	self->r.contents = CONTENTS_BODY;
+	self->use = spotlight_use;
+
+	// the thing it points at may not have spawned yet
+	self->think = spotlight_link;
+	self->nextthink = level.time + 100;
+
 	trap->LinkEntity((sharedEntity_t*)self);
+}
 
-	self->use = NULL;
-	self->use = camera_use;
+/*QUAKED misc_model_ghoul (1 0 0) (-16 -16 -37) (16 16 32)
+SP's (2026-11-19: artus_mine's comlink on the table had no spawn function in MP): a ghoul2 model that sits there.
+"model" - the .glm model
+*/
+void SP_misc_model_ghoul(gentity_t* ent)
+{
+	if (!ent->model || !ent->model[0])
+	{
+		Com_Printf(S_COLOR_RED "ERROR: misc_model_ghoul at %s has no model\n", vtos(ent->s.origin));
+		G_FreeEntity(ent);
+		return;
+	}
 
-	self->think = camera_aim;
-	self->nextthink = level.time + START_TIME_LINK_ENTS;
+	ent->s.modelIndex = G_model_index(ent->model);
+	ent->s.modelGhoul2 = 1;
+	ent->s.g2radius = 64;
+
+	G_SetOrigin(ent, ent->s.origin);
+	G_SetAngles(ent, ent->s.angles);
+	VectorSet(ent->r.mins, -16, -16, -16);
+	VectorSet(ent->r.maxs, 16, 16, 16);
+	trap->LinkEntity((sharedEntity_t*)ent);
+}
+
+/*QUAKED fx_target_beam (1 0.5 0.5) (-8 -8 -8) (8 8 8) STARTOFF OPEN NO_KNOCKBACK ONE_SHOT NO_IMPACT
+SP's (g_fx.cpp, 2026-11-19: kejim_base's laser grid, lasers_good / lasers_bad, had no spawn function in MP): a beam
+from it to its target (an info_null or a moving entity) that damages what it hits each frame.
+STARTOFF - must be used before it's on
+OPEN - drawn all the way to the target, whatever the trace hits
+NO_KNOCKBACK - its damage does no knockback
+ONE_SHOT - fires once each time it is used
+NO_IMPACT - no impact effect
+"fxFile2" - the impact effect (default "env/targ_beam_impact")
+"wait" - if always on, seconds between blasts (default / min one frame), -1 never again
+"random" - seconds added to / taken from "wait"
+"damage" - damage per frame
+"target" - what it points at (you MUST have this)
+SP draws it with an event each frame it fires. Here it is an ET_BEAM entity (s.generic1 = 1) the client draws while it
+is firing (cg_ents.c CG_TargetBeam): s.time when it last fired, s.origin2 the end, s.angles2 the impact normal and
+s.time2 the impact effect. Its damage is its own, not whoever switched it on (a player switching it would otherwise
+make it harmless to his team mates).
+*/
+#define TARGET_BEAM_MARK	1
+
+static void fx_target_beam_think(gentity_t* self);
+
+static void fx_target_beam_set_debounce(gentity_t* self)
+{
+	const int rnd = (int)self->random;
+
+	if (self->wait >= FRAMETIME)
+	{
+		self->attackDebounceTime = level.time + (int)self->wait + Q_irand(-rnd, rnd);
+	}
+	else if (self->wait < 0)
+	{
+		self->use = NULL;
+	}
+	else
+	{
+		self->attackDebounceTime = level.time + FRAMETIME + Q_irand(-rnd, rnd);
+	}
+}
+
+static void fx_target_beam_fire(gentity_t* self)
+{
+	trace_t tr;
+	vec3_t dir, org, end;
+
+	if (self->enemy && self->enemy->inuse)
+	{
+		VectorCopy(self->enemy->r.currentOrigin, org);
+	}
+	else
+	{
+		// an info_null (gone after the first second): the point it was at
+		self->enemy = NULL;
+		VectorCopy(self->pos2, org);
+	}
+
+	VectorSubtract(org, self->r.currentOrigin, dir);
+	VectorNormalize(dir);
+
+	trap->Trace(&tr, self->r.currentOrigin, NULL, NULL, org, self->s.number, MASK_SHOT, qfalse, 0, 0);
+
+	if (self->spawnflags & 2)
+	{
+		VectorCopy(org, end); // OPEN
+	}
+	else
+	{
+		VectorCopy(tr.endpos, end);
+	}
+
+	if (tr.fraction < 1.0f && tr.entityNum < ENTITYNUM_WORLD && self->damage)
+	{
+		gentity_t* victim = &g_entities[tr.entityNum];
+
+		if (victim->inuse && victim->takedamage)
+		{
+			G_Damage(victim, self, self, dir, tr.endpos, self->damage, self->spawnflags & 4 ? DAMAGE_NO_KNOCKBACK : 0,
+				MOD_UNKNOWN);
+		}
+	}
+
+	VectorCopy(end, self->s.origin2);
+	if (self->spawnflags & 2)
+	{
+		VectorScale(dir, -1, self->s.angles2);
+	}
+	else
+	{
+		VectorCopy(tr.plane.normal, self->s.angles2);
+	}
+	self->s.time = level.time;
+
+	self->think = fx_target_beam_think;
+	self->nextthink = level.time + FRAMETIME;
+}
+
+static void fx_target_beam_think(gentity_t* self)
+{
+	if (self->attackDebounceTime > level.time)
+	{
+		self->nextthink = level.time + FRAMETIME;
+		return;
+	}
+
+	fx_target_beam_set_debounce(self);
+	fx_target_beam_fire(self);
+}
+
+static void fx_target_beam_use(gentity_t* self, gentity_t* other, gentity_t* activator)
+{
+	if (self->spawnflags & 8)
+	{
+		// ONE_SHOT
+		fx_target_beam_fire(self);
+		self->think = NULL;
+		self->nextthink = 0;
+	}
+	else if (!self->think)
+	{
+		self->think = fx_target_beam_think;
+		self->nextthink = level.time + 50;
+	}
+	else
+	{
+		self->think = NULL;
+		self->nextthink = 0;
+	}
+
+	self->activator = activator;
+}
+
+static void fx_target_beam_link(gentity_t* self)
+{
+	gentity_t* target = self->target && self->target[0] ? G_Find(NULL, FOFS(targetname), self->target) : NULL;
+	vec3_t dir;
+
+	if (!target)
+	{
+		Com_Printf("fx_target_beam at %s: unable to find target %s\n", vtos(self->s.origin), self->target ? self->target : "(none)");
+		G_FreeEntity(self);
+		return;
+	}
+
+	self->attackDebounceTime = level.time;
+
+	if (!target->classname || Q_stricmp("info_null", target->classname))
+	{
+		self->enemy = target; // follows it
+	}
+	VectorCopy(target->r.currentOrigin, self->pos2);
+	VectorCopy(target->r.currentOrigin, self->s.origin2);
+	VectorSubtract(target->r.currentOrigin, self->r.currentOrigin, dir);
+	VectorNormalize(dir);
+	VectorCopy(dir, self->s.angles2);
+
+	self->think = NULL;
+	self->nextthink = 0;
+	if (!(self->spawnflags & 1) && !(self->spawnflags & 8))
+	{
+		// on (not STARTOFF or ONE_SHOT)
+		self->think = fx_target_beam_think;
+		self->nextthink = level.time + FRAMETIME;
+	}
+
+	self->use = fx_target_beam_use;
+	trap->LinkEntity((sharedEntity_t*)self);
+}
+
+void SP_fx_target_beam(gentity_t* ent)
+{
+	char* fx2 = NULL;
+
+	G_SetOrigin(ent, ent->s.origin);
+
+	ent->wait *= 1000;
+	ent->random *= 1000;
+
+	G_SpawnInt("damage", "0", &ent->damage);
+
+	ent->s.eType = ET_BEAM;
+	ent->s.generic1 = TARGET_BEAM_MARK;
+	ent->s.time = 0;
+	ent->s.time2 = 0;
+	if (!(ent->spawnflags & 16))
+	{
+		G_SpawnString("fxFile2", "env/targ_beam_impact", &fx2);
+		ent->s.time2 = G_EffectIndex(fx2);
+	}
+
+	ent->activator = ent;
+	ent->r.contents = 0;
+	VectorSet(ent->r.mins, -8, -8, -8);
+	VectorSet(ent->r.maxs, 8, 8, 8);
+
+	ent->think = fx_target_beam_link;
+	ent->nextthink = level.time + START_TIME_LINK_ENTS;
+
+	trap->LinkEntity((sharedEntity_t*)ent);
+}
+
+/*QUAKED fx_cloudlayer (1 0.3 0.5) (-8 -8 -8) (8 8 8) TUBE ALT
+SP's (g_fx.cpp, 2026-11-19: bespin_undercity's clouds below had no spawn function in MP): a scalable scrolling cloud
+layer.
+TUBE - with a tube opening in the middle, must have an INNER radius also
+ALT - a slightly different shader, good for two layers sort of close together
+"radius" - outer radius (default 2048)
+"random" - inner radius (default 128), only for TUBE
+"wait" - curvature out to the edge (default 0): 1 = small up, 3 = up more, -1 = small down, -3 = down more
+An ET_BEAM entity with s.generic1 2 the client draws (cg_ents.c CG_Clouds, the renderer's RT_CLOUDS): s.angles2 holds
+radius, inner radius and curvature, s.time2 the TUBE / ALT flags. Sent to everyone (it is huge and well below them).
+*/
+void SP_fx_cloudlayer(gentity_t* ent)
+{
+	// this effect is never played, it just caches the shaders the cgame needs (as SP)
+	G_EffectIndex("world/haze_cache");
+
+	G_SpawnFloat("radius", "2048", &ent->radius);
+	G_SpawnFloat("random", "128", &ent->random);
+	G_SpawnFloat("wait", "0", &ent->wait);
+
+	G_SetOrigin(ent, ent->s.origin);
+
+	ent->s.eType = ET_BEAM;
+	ent->s.generic1 = 2; // a cloud layer
+	ent->s.angles2[0] = ent->radius;
+	ent->s.angles2[1] = ent->random;
+	ent->s.angles2[2] = ent->wait;
+	ent->s.time2 = ent->spawnflags & 3;
+
+	ent->r.contents = 0;
+	ent->r.svFlags |= SVF_BROADCAST;
+	VectorSet(ent->r.maxs, 200, 200, 200);
+	VectorScale(ent->r.maxs, -1, ent->r.mins);
+
+	trap->LinkEntity((sharedEntity_t*)ent);
+}
+
+/*QUAKED misc_model_welder (1 0 0) (-16 -16 -16) (16 16 16) START_OFF
+SP's (2026-11-19: cairn_assembly's welding arm had no spawn function in MP).
+model="models/map_objects/cairn/welder.md3"
+When on, sparks and burns (10 within 45) at its *flash point every 200 ms.
+START_OFF - starts off, using it toggles it on / off
+The scripts swing it around with move (it becomes a mover, cg_ents.c CG_Mover draws its ghoul2 model); the *flash
+point is found on the server's copy of the model.
+*/
+#define WELDER_START_OFF	1
+
+static void welder_think(gentity_t* self)
+{
+	mdxaBone_t boltMatrix;
+	vec3_t org, dir, ang;
+
+	self->nextthink = level.time + 200;
+
+	if (!self->ghoul2 || self->genericValue6 < 0)
+	{
+		return;
+	}
+
+	trap->G2API_GetBoltMatrix(self->ghoul2, 0, self->genericValue6, &boltMatrix, self->r.currentAngles,
+		self->r.currentOrigin, level.time, NULL, self->modelScale);
+	BG_GiveMeVectorFromMatrix(&boltMatrix, ORIGIN, org);
+
+	// the sparks face inwards
+	VectorSubtract(self->r.currentOrigin, org, dir);
+	VectorNormalize(dir);
+	vectoangles(dir, ang);
+
+	G_Sound(self, CHAN_AUTO, self->noise_index);
+	G_PlayEffectID(self->genericValue7, org, ang);
+	g_radius_damage(org, self, 10, 45, self, self, MOD_UNKNOWN);
+}
+
+static void welder_use(gentity_t* self, gentity_t* other, gentity_t* activator)
+{
+	// toggle on and off
+	self->spawnflags ^= WELDER_START_OFF;
+
+	if (self->spawnflags & WELDER_START_OFF)
+	{
+		self->nextthink = 0;
+	}
+	else
+	{
+		self->nextthink = level.time + FRAMETIME;
+	}
+}
+
+void SP_misc_model_welder(gentity_t* ent)
+{
+	G_SetOrigin(ent, ent->s.origin);
+	G_SetAngles(ent, ent->s.angles);
+
+	ent->s.eType = ET_GENERAL;
+	ent->s.modelIndex = G_model_index("models/map_objects/cairn/welder.glm");
+	ent->s.modelGhoul2 = 1;
+	ent->s.g2radius = 255; // its arm reaches about 352 from its origin (SP's 400 is more than the net field holds)
+	VectorSet(ent->modelScale, 1, 1, 1);
+
+	// it swings round its origin: the whole circle, for its PVS
+	VectorSet(ent->r.mins, -384, -384, -16);
+	VectorSet(ent->r.maxs, 384, 384, 64);
+	ent->r.contents = 0;
+	ent->takedamage = qfalse;
+
+	ent->noise_index = G_SoundIndex("sound/movers/objects/welding.wav");
+	ent->genericValue7 = G_EffectIndex("sparks/blueWeldSparks");
+
+	trap->G2API_InitGhoul2Model(&ent->ghoul2, "models/map_objects/cairn/welder.glm", 0, 0, 0, 0, 0);
+	ent->genericValue6 = ent->ghoul2 ? trap->G2API_AddBolt(ent->ghoul2, 0, "*flash") : -1;
+
+	ent->use = welder_use;
+	ent->think = welder_think;
+	ent->nextthink = ent->spawnflags & WELDER_START_OFF ? 0 : level.time + 1000;
+
+	trap->LinkEntity((sharedEntity_t*)ent);
+}
+
+/*QUAKED misc_model_jabba_cam (1 0 0) ( 0 -8 0) (60 8 16) EXTENDED
+SP's (2026-11-19: ns_hideout's door camera had no spawn function in MP).
+model="models/map_objects/nar_shaddar/jabacam.md3"
+The eye camera that pops out of Jabba's front door.
+EXTENDED - starts out
+"targetname" - toggles it out / in
+SP plays its glm's pop out animation; here it shows (out) or hides (in).
+*/
+static void jabba_cam_use(gentity_t* self, gentity_t* other, gentity_t* activator)
+{
+	self->spawnflags ^= 1;
+
+	if (self->spawnflags & 1)
+	{
+		self->s.eFlags &= ~EF_NODRAW;
+	}
+	else
+	{
+		self->s.eFlags |= EF_NODRAW;
+	}
+}
+
+void SP_misc_model_jabba_cam(gentity_t* ent)
+{
+	G_SetOrigin(ent, ent->s.origin);
+	G_SetAngles(ent, ent->s.angles);
+
+	ent->s.eType = ET_GENERAL;
+	if (ent->model && ent->model[0])
+	{
+		ent->s.modelIndex = G_model_index(ent->model);
+	}
+	else
+	{
+		ent->s.modelIndex = G_model_index("models/map_objects/nar_shaddar/jabacam/jabacam.glm");
+		ent->s.modelGhoul2 = 1;
+		ent->s.g2radius = 150;
+	}
+
+	VectorSet(ent->r.mins, -60, -8, 0);
+	VectorSet(ent->r.maxs, 60, 8, 16);
+	ent->r.contents = 0;
+	ent->takedamage = qfalse;
+
+	if (!(ent->spawnflags & 1))
+	{
+		ent->s.eFlags |= EF_NODRAW;
+	}
+	ent->use = jabba_cam_use;
+
+	trap->LinkEntity((sharedEntity_t*)ent);
 }
 
 /*QUAKED misc_security_panel (0 .5 .8) (-8 -8 -8) (8 8 8) x x x x x x x INACTIVE

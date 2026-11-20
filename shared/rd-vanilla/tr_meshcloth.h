@@ -79,6 +79,8 @@ struct mcCapsule_t {
 	// 2 = the same, for the shoulders (used by grid-simulated cloth only, so older capes keep their tuning)
 	// 3 = body shape fitted from the mesh (MC_BodyShapesPose, r_meshClothBodyFit): pushes hanging cloth fully out,
 	//     no edge or drawn-point pushes
+	// 4 = SJE: a thing held in the hand (saber hilt, lit blade): as 1, and cloth is never taken to be modelled
+	//     round it (as a sleeve is round an arm), so it is always kept clear of it
 };
 
 struct mcParams_t {
@@ -89,6 +91,26 @@ struct mcParams_t {
 	float	inertia;		// 0..1 how much of the character's own travel the cloth feels
 	float	maxAccel;		// units/s^2 of character acceleration the cloth feels (0 = no limit)
 	float	airDrag;		// 1/s drag on all motion relative to the air: capes trail when running and lift when falling
+	int		layers = 0;		// SJE r_meshClothLayers: 1 = a character's cloth layers keep their order (a cape stays over a robe)
+	float	twistFree = 540.0f;	// SJE r_meshClothTwistFree: deg/s of the attached edge's turn about up that the cloth lags by itself
+	float	twistLag = 20.0f;	// SJE r_meshClothTwistLag: degrees the free cloth may be behind a faster turn before it is carried along
+							// (under 0 = carried at once, wherever the cloth is: as before). For a flick: in a turn that goes on
+							// in one direction the allowance runs out (MC_TWIST_FLICK0 / 1).
+	float	twistCarry = 1.0f;	// SJE r_meshClothTwistCarry: the part of the excess that is carried (1 = all)
+	int		resumeMs = 0;		// SJE r_meshClothResume: cloth not simulated for up to this long carries on where it was, moved with its
+							// character, instead of settling anew from the pose (0 = off)
+	float	settle = 0.0f;		// SJE r_meshClothSettle: cloth that starts over (first seen, back in view, back in range) used to settle
+							// with MC_SETTLE_STEPS steps in that one frame (30 ms for a cape, up to 160 ms for a robe). Over 0: at
+							// most this many of those steps per 16 ms for a cloth of 200 points (heavier cloth fewer), over the
+							// next frames; meanwhile the cloth is drawn in its animated pose, then eased into the simulation.
+							// 0 = all at once, as before
+	int		settleJobs = 1;		// ... and the number of job workers: more cloth settling at once than they take without the frame
+							// growing shares the frame's steps
+	float	bodyCarry = 1.0f;	// SJE r_meshClothBodyCarry: over 0 = the cloth is carried along with the body's own fast travel
+							// inside its animation (a landing brings the body down 40-65 units in a few frames)
+	float	dragQuad = 0.0f;	// SJE r_meshClothDragQuad: air resistance through the cloth that grows with the square of the
+							//   speed (1/unit), as real air does: a cape streams out behind a runner and falls back
+							//   when he stops, instead of lying against him at any speed. 0 = off (linear drag only)
 	float	wind[3];		// world wind velocity, units/s (still air = 0 0 0)
 	float	gust;			// 0..1 how much the wind strength varies over time
 	float	flutter;		// 0..1 how much the wind ripples across the cloth (r_meshClothFlutter; 0 = it pushes it evenly)
@@ -97,9 +119,39 @@ struct mcParams_t {
 	int		xpbdIters = 1;	// r_meshClothXPBDIter: XPBD solver passes per substep
 	float	frictionScale = 1.0f;	// r_meshClothFriction: multiplies every surface's friction (0 = frictionless)
 	float	liftLimit = -2.0f;	// r_meshClothLift: overrides every surface's 'lift': -2 = use the config, -1 = no limit, N = units
+	float	liftSlope = 0.3f;	// SJE r_meshClothLiftSlope: the lift limit drops by this much per unit of cloth length from the
+							// attached edge (0 = level with it, as before): no flat sheet at shoulder height in a jump
+	float	breeze = 1.0f;	// SJE r_meshClothBreeze: a light, slowly wandering breeze sways hanging cloth near the camera
+							// (1 = about a unit at the hem of a long cape, 0 = off: still air, the cloth hangs frozen)
+	float	billow = 1.0f;	// SJE r_meshClothBillow: a cape in the air stream of its wearer's travel fills out (pushed
+							// outwards, most a third of the way down its length; 0 = off: only dragged straight back)
+	float	wornAir = 0.25f;	// SJE r_meshClothWornAir: cloth worn round the body (a robe, a skirt: it wraps its wearer, who
+							//   stands in the wind's way) and loose layers under it catch at most this part of the travel
+							//   wind (dragQuad, billow), whatever their tether; 1 = all of it, as before
+	int		shown = 1;		// SJE r_meshClothShown: 1 = what the character's skin has switched off takes no part: the body
+							//   shapes are fitted to the switched-on surfaces only, and switched-off cloth surfaces hold no
+							//   drawn cloth through the layer rule; 0 = as before (the model's own flags, all cloth)
+	int		carryFloor = 1;	// SJE r_meshClothCarryFloor: 1 = the body carry (bodyCarry) takes cloth worn round the body (a robe,
+							//   a skirt) and loose layers under it down only as far as its lowest point has room above the
+							//   floor: not into the ground when its wearer drops into a crouch; 0 = as before
+	int		shoulders = 1;	// SJE r_meshClothShoulders: 1 = the drawn cloth is kept over what the shoulder bones carry
+							//   (a shoulder plate turns with the arm, into the cape lying over it); with faceCol only
+	int		overArms = 1;	// SJE r_meshClothOverArms: 1 = cloth that hangs from shoulder height (a cape, a cloak) lies over
+							//   arms and hands: a hand put behind the back stays under it; with faceCol only
 	int		edgeCol = 0;	// r_meshClothEdgeCol: 1 = cloth edges are also pushed off arms, fists and hilts
+	int		faceCol = 0;	// r_meshClothFaceCol: 1 = the cloth's triangles (not only their corners) are kept out of the whole
+							//   body and on their own side of it (replaces edgeCol: the triangles' edges are tested too)
 	int		sleep = 0;		// r_meshClothSleep: 1 = cloth at rest on a character standing still stops simulating until something moves it
 	int		selfSub = 0;	// r_meshClothSelfSub: 1 = self-collision ('self' surfaces) in every substep, with cloth-on-cloth friction
+	int		rest = 1;		// SJE r_meshClothRest: 1 = cloth lying on a body that holds still is left to rest by the triangle test:
+							//   no throw 'back to its own side' for cloth that lay clear on a shape's far side when the step began,
+							//   and cloth the animation partly holds is not held further off an arm than the pose drapes it
+	int		ease = 1;		// SJE r_meshClothEase: 1 = a point the shake watchdog let go comes back gently: while the pose holds it
+							//   still the body's triangle test moves it by a small step per call, not at full strength (no throw
+							//   of several units every few seconds where two body shapes dispute a piece of cloth)
+	int		calm = 1;		// SJE r_meshClothCalm: 1 = cloth on a body that holds still comes to rest: a self-collision pair that
+							//   shakes loses its closing speed (not where a limb moves the cloth), and a point that only
+							//   trembles in place counts as at rest. 0 = off
 	int		bendModel = 0;	// r_meshClothBendModel: 0 = bend links (default), 1 = isometric (cotangent) bending
 	int		aero = 0;		// r_meshClothAero: 1 = the air pushes each triangle (drag + lift, area-weighted) instead of each point
 	int		floor;			// 1: floorPt / floorN hold the floor plane under the character (world)
@@ -171,6 +223,14 @@ struct mcRun_t {
 
 bool MC_Prepare(const void* surface, const void* instanceKey, int timeMs, mcRun_t* run);
 
+// SJE r_meshClothSettleCut: where a view of the level looks from, told once per view and frame, before that frame's
+// MC_Prepare calls (main thread). A view that is near none of the views of the frame before is a camera cut (a
+// cutscene's change of camera, a teleport, the first frame after a menu): cloth that starts over in that frame or
+// the next one settles at once, as it did before r_meshClothSettle, up to an allowance - the frame of a cut hides
+// the cost, and cloth seen changing from its pose into its hanging shape after every cut is what shows.
+// mode 0 = off; jobs = the number of job workers (the allowance grows with them).
+void MC_ViewCut(int frame, int timeMs, const float* viewOrigin, const float* viewForward, int mode, int jobs);
+
 void MC_Run(const mcRun_t* run, const void* surface, int timeMs,
 	const vec3_t origin, const vec3_t axis[3],
 	const mcCapsule_t* capsulesWorld, int numCapsules,
@@ -194,12 +254,66 @@ void MC_SetCharacters(int frameId, const float (*origins)[3], int count);
 bool MC_CharactersListed(int frameId);
 int  MC_NearCharacters(const float origin[3], mcCapsule_t* out, int max);
 const int MC_MAX_OTHERS = 4;
+const int MC_MAX_HELD = 6;		// SJE: fitted shapes of the things bolted to a character (r_meshClothHeld)
+const int MC_MAX_BLADES = 4;	// SJE: lit lightsaber blades near a character that push its cloth (r_meshClothBlade)
 
 // r_meshClothBodyFit: collision shapes fitted to the model's own (non-cloth) mesh for the cloth group of
 // clothSurface: each torso, hip, leg, neck and head bone's vertices cut into height slices, each slice a "stadium"
 // (flat front and back, round sides). boneClass[bone]: 0 = fit this bone, -1 = skip. Fitted on the first call per
 // model. Main thread only. Returns a handle for MC_BodyShapesPose, or nullptr.
-const void* MC_BodyFit(const void* clothSurface, const int* boneClass, int numBones);
+// SJE r_meshClothShown: 'drawn' = one byte per surface of the model (by its index): 1 = switched on for this
+// character (nullptr: not known - the model's own flags decide, as before). One fit per set of them.
+const void* MC_BodyFit(const void* clothSurface, const int* boneClass, int numBones, const unsigned char* drawn = nullptr, int numDrawn = 0);
+// SJE r_meshClothShown: tells a character's cloth which of the model's surfaces are switched on (after MC_Prepare,
+// main thread; nullptr: all). Layer pairs with a switched-off cloth surface are skipped.
+void MC_Shown(const void* clothSurface, const void* instanceKey, const unsigned char* drawn, int numDrawn);
+// SJE r_meshClothFist: does this surface's cloth hang from shoulder height or above anywhere (a cape, a cloak)?
+// Main thread, after MC_BodyFit.
+bool MC_ClothHangsHigh(const void* clothSurface);
 // Any thread: the fitted shapes posed by the bone matrices, in world space (hard 3). Returns the number written.
 int MC_BodyShapesPose(const void* fit, mcBoneFn_t boneFn, void* boneCtx, const vec3_t origin, const vec3_t axis[3],
 	mcCapsule_t* out, int maxOut);
+
+// SJE: r_meshClothHeld: collision shapes fitted from the mesh of a thing bolted to a character (saber hilt, blaster,
+// jet pack), per model. mdxmHeader: the bolted model's mesh header. Fitted on the first call (main thread only);
+// returns a handle for MC_HeldShapesPose, or nullptr (nothing to fit, or not a held thing: longer than 64 units).
+const void* MC_HeldFit(const void* mdxmHeader);
+// Any thread: those shapes posed by the bolted model's own bone matrices, in world space (hard 4).
+int MC_HeldShapesPose(const void* fit, mcBoneFn_t boneFn, void* boneCtx, const vec3_t origin, const vec3_t axis[3],
+	mcCapsule_t* out, int maxOut);
+
+// SJE: r_meshClothSubdiv: the point drawn in the middle of a cloth edge (pa pb, normals na nb, unit length) when its
+// triangles are drawn split in four. It lies on the smooth curved patch through the corners and their normals (PN
+// triangles, Vlachos, Peters, Boyd & Mitchell 2001): the edge's cubic Bezier curve has its middle at
+// (pa + pb) / 2 - (wab na + wba nb) / 8 with wab = (pb - pa) . na, and the patch's quadratic normal there. Both are the
+// same if the normals point the other way, so single-sided, double-sided and layered capes curve alike.
+// SJE r_meshClothSubdivMean (mean != 0): the new point's normal is the mean of the two ends' normals. The curved
+// patch's own normal mirrors the summed normals in the plane across the edge; that is right where the surface bends
+// along the edge (the two normals lean apart or together), but where both lean the SAME way along the edge - cloth
+// sheared in its plane, a narrow strip, a normal taken from stretched triangles - it leans the new point's normal the
+// other way, and the surface is lit in light and dark patches that are not folds (seen on the front strips of a
+// tunic). Where the surface does bend along the edge the two are the same. The new point's place is not changed.
+inline void MC_EdgePoint(const float* pa, const float* na, const float* pb, const float* nb, float* p, float* n, const int mean = 0)
+{
+	const float e[3] = { pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2] };
+	const float ns[3] = { na[0] + nb[0], na[1] + nb[1], na[2] + nb[2] };
+	const float wab = e[0] * na[0] + e[1] * na[1] + e[2] * na[2];
+	const float wba = -(e[0] * nb[0] + e[1] * nb[1] + e[2] * nb[2]);
+	const float ee = e[0] * e[0] + e[1] * e[1] + e[2] * e[2];
+	const float v = (!mean && ee > 1e-8f) ? 2.0f * (e[0] * ns[0] + e[1] * ns[1] + e[2] * ns[2]) / ee : 0.0f;
+	for (int k = 0; k < 3; k++)
+	{
+		p[k] = 0.5f * (pa[k] + pb[k]) - 0.125f * (wab * na[k] + wba * nb[k]);
+		n[k] = ns[k] - v * e[k];
+	}
+	const float l2 = n[0] * n[0] + n[1] * n[1] + n[2] * n[2];
+	if (l2 > 1e-8f)
+	{
+		const float il = 1.0f / sqrtf(l2);
+		n[0] *= il; n[1] *= il; n[2] *= il;
+	}
+	else
+	{
+		n[0] = na[0]; n[1] = na[1]; n[2] = na[2];
+	}
+}

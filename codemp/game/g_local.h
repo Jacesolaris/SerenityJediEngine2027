@@ -1611,6 +1611,7 @@ qboolean G_EntitiesFree(void);
 qboolean G_ActivateBehavior(gentity_t* self, int bset);
 void G_EmplacedChairThink(gentity_t* ent); // g_weapon.c: SP emplaced gun chairs (2026-11-18)
 qboolean G_IsOutcastSPMap(const char* mapname); // g_main.c: a Jedi Outcast SP map (2026-11-18)
+int G_NPCTeamForName(const char* name); // NPC_stats.c: a team name ("enemy", "TEAM_ENEMY", "NPCTEAM_ENEMY") to its NPCTEAM_, -1 if none (2026-11-19)
 
 void GetAnglesForDirection(const vec3_t p1, const vec3_t p2, vec3_t out);
 

@@ -32,6 +32,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 extern void G_NextTestAxes();
 extern void G_ChangePlayerModel(gentity_t* ent, const char* newModel);
+extern void G_ChangePlayerModelAndSabers(gentity_t* ent, const char* new_model);
 extern void G_InitPlayerFromCvars(gentity_t* ent);
 extern void Q3_SetViewEntity(int entID, const char* name);
 extern qboolean G_ClearViewEntity(gentity_t* ent);
@@ -1621,7 +1622,7 @@ static void Svcmd_PlayerModel_f()
 		}
 		else if (gi.argc() == 2)
 		{
-			G_ChangePlayerModel(&g_entities[0], gi.argv(1));
+			G_ChangePlayerModelAndSabers(&g_entities[0], gi.argv(1)); // (the old sabers out, a lit one lit again, MD 2026-11-19)
 		}
 		else if (gi.argc() == 5)
 		{
@@ -1647,7 +1648,7 @@ static void Svcmd_PlayerModel_f()
 		}
 		else if (gi.argc() == 2)
 		{
-			G_ChangePlayerModel(&g_entities[0], gi.argv(1));
+			G_ChangePlayerModelAndSabers(&g_entities[0], gi.argv(1)); // (the old sabers out, a lit one lit again, MD 2026-11-19)
 		}
 		else if (gi.argc() == 5)
 		{
@@ -1671,7 +1672,7 @@ static void Svcmd_PlayerModel_f()
 		}
 		else if (gi.argc() == 2)
 		{
-			G_ChangePlayerModel(&g_entities[0], gi.argv(1));
+			G_ChangePlayerModelAndSabers(&g_entities[0], gi.argv(1)); // (the old sabers out, a lit one lit again, MD 2026-11-19)
 		}
 		else if (gi.argc() == 5)
 		{

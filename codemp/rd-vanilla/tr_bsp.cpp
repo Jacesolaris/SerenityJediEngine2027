@@ -1884,6 +1884,7 @@ static void R_LoadEntities(const lump_t* l, world_t& worldData) {
 
 	VectorSet(tr.sunAmbient, 1, 1, 1);
 	tr.distanceCull = 6000;//DEFAULT_DISTANCE_CULL;
+	tr.distanceCullMap = tr.distanceCull;	// r_distanceCull: RE_BeginFrame takes this or the cvar
 
 	p = reinterpret_cast<char*>(fileBase + l->fileofs);
 
@@ -1950,6 +1951,7 @@ static void R_LoadEntities(const lump_t* l, world_t& worldData) {
 			{
 				ri.Printf(PRINT_DEVELOPER, "WARNING: bad worldspawn value '%s'\n", value);
 			}
+			tr.distanceCullMap = tr.distanceCull;
 			continue;
 		}
 		// check for a different grid size

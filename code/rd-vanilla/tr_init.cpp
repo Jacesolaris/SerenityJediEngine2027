@@ -123,6 +123,8 @@ PFNGLTEXSUBIMAGE3DPROC qglTexSubImage3D;				// SJE: renderer-only GL capabilitie
 cvar_t* r_dynamicGlowBloomThreshold;	// SJE: bloom bright-pass threshold (0-0.95)
 cvar_t* r_ext_alpha_to_coverage;		// SJE: anti-aliased cut-out textures when multisampling
 cvar_t* r_gammaShaders;				// SJE: gamma/overbright as a post-process (ported from MP)
+cvar_t* r_distanceCull;				// view distance override, 0 = the map's own (as in rend2)
+cvar_t* r_voidFog;					// where a world view draws nothing: sky / fog colour instead of black
 cvar_t* r_Dynamic_AMD_Fix;
 
 cvar_t* r_ignoreGLErrors;
@@ -138,6 +140,7 @@ cvar_t* r_shadows;
 cvar_t* r_shadowRange;
 cvar_t* r_flares;
 cvar_t* r_meshCloth;
+cvar_t* r_meshClothSubdiv;
 cvar_t* r_meshClothGravity;
 cvar_t* r_meshClothDrag;
 cvar_t* r_meshClothIter;
@@ -1751,6 +1754,13 @@ static void R_Register()
 	ri.Cvar_CheckRange(r_dynamicGlowBloomThreshold, 0.f, 0.95f, qfalse);
 	r_ext_alpha_to_coverage = ri.Cvar_Get("r_ext_alpha_to_coverage", "1", CVAR_ARCHIVE_ND);
 	r_gammaShaders = ri.Cvar_Get("r_gammaShaders", "1", CVAR_ARCHIVE_ND | CVAR_LATCH);
+	// r_distanceCull: over 0 = the view distance in map units, whatever the map's worldspawn "distanceCull" says
+	// (a map with too short a value cuts its far terrain and sky off: holes at the horizon and overhead). 0 = the map's.
+	r_distanceCull = ri.Cvar_Get("r_distanceCull", "0", CVAR_ARCHIVE_ND);
+	// r_voidFog: 1 = where the view distance cuts the world off, the sky is still drawn behind the hole, and what is
+	// left shows the colour of the fog the view point is in - not the black every frame starts from (0 = as before).
+	// Maps with a global fog are left as they were: they already clear to their fog colour.
+	r_voidFog = ri.Cvar_Get("r_voidFog", "1", CVAR_ARCHIVE_ND);
 	r_Dynamic_AMD_Fix = ri.Cvar_Get("r_Dynamic_AMD_Fix", "1", CVAR_ARCHIVE_ND);
 
 	r_picmip = ri.Cvar_Get("r_picmip", "0", CVAR_ARCHIVE | CVAR_LATCH);
@@ -1857,6 +1867,7 @@ static void R_Register()
 	r_noportals = ri.Cvar_Get("r_noportals", "0", CVAR_CHEAT);
 	r_shadows = ri.Cvar_Get("cg_shadows", "2", 0);
 	r_meshCloth = ri.Cvar_Get("r_meshCloth", "1", CVAR_ARCHIVE);
+	r_meshClothSubdiv = ri.Cvar_Get("r_meshClothSubdiv", "1", CVAR_ARCHIVE_ND);	// SJE: cloth drawn with its triangles split on a smooth curved patch (0 off, 1 on, 2 twice)
 	r_meshClothGravity = ri.Cvar_Get("r_meshClothGravity", "700", CVAR_ARCHIVE);
 	r_meshClothDrag = ri.Cvar_Get("r_meshClothDrag", "1.4", CVAR_ARCHIVE);
 	r_meshClothIter = ri.Cvar_Get("r_meshClothIter", "6", CVAR_ARCHIVE);

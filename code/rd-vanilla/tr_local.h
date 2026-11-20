@@ -490,6 +490,7 @@ typedef struct {
 	vec3_t		pvsOrigin;			// may be different than or.origin for portals
 	qboolean	isPortal;			// true if this view is through a portal
 	qboolean	isMirror;			// the portal is a mirror, invert the face culling
+	qboolean	hadPortal;			// a mirror / portal view was drawn for this view: its picture has to stay (r_voidFog)
 	int			frameSceneNum;		// copied from tr.frameSceneNum
 	int			frameCount;			// copied from tr.frameCount
 	cplane_t	portalPlane;		// clip anything behind this if mirroring
@@ -1042,6 +1043,7 @@ using trGlobals_t = struct {
 	float					rangedFog;
 
 	float					distanceCull;
+	float					distanceCullMap;	// what the map asked for (worldspawn "distanceCull" or the default); r_distanceCull overrides it
 };
 
 int		 R_Images_StartIteration();
@@ -1155,6 +1157,8 @@ extern cvar_t* r_dynamicGlowBloom;
 extern cvar_t* r_dynamicGlowBloomThreshold;
 extern cvar_t* r_ext_alpha_to_coverage;
 extern cvar_t* r_gammaShaders;
+extern cvar_t* r_distanceCull;
+extern cvar_t* r_voidFog;
 extern cvar_t* r_Dynamic_AMD_Fix;
 
 extern	cvar_t* r_nobind;						// turns off binding to appropriate textures
@@ -1180,6 +1184,7 @@ extern	cvar_t* r_clear;						// force screen clear every frame
 
 extern	cvar_t* r_shadows;
 extern	cvar_t* r_meshCloth;			// simulate robe surfaces listed in ext_data/meshcloth.dat
+extern	cvar_t* r_meshClothSubdiv;		// SJE: draw cloth with its triangles split on a smooth curved patch (0 off, 1 on, 2 twice)
 extern	cvar_t* r_meshClothGravity;
 extern	cvar_t* r_meshClothDrag;
 extern	cvar_t* r_meshClothIter;

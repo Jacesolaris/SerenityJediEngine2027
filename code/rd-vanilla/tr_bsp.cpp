@@ -1237,6 +1237,7 @@ static void R_LoadEntities(const lump_t* l, world_t& worldData)
 
 	VectorSet(tr.sunAmbient, 1.0f, 1.0f, 1.0f);
 	tr.distanceCull = 12000.0f;
+	tr.distanceCullMap = tr.distanceCull;	// r_distanceCull: RE_BeginFrame takes this or the cvar
 
 	p = reinterpret_cast<const char*>(fileBase + l->fileofs);
 
@@ -1286,6 +1287,7 @@ static void R_LoadEntities(const lump_t* l, world_t& worldData)
 			{
 				Com_Printf("R_LoadEntities WARNING: failed to parse distanceCull '%s'\n", value);
 			}
+			tr.distanceCullMap = tr.distanceCull;
 			continue;
 		}
 

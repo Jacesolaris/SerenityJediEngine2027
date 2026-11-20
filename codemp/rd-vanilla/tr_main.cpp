@@ -1256,6 +1256,7 @@ static void R_AddEntitySurfaces(void)
 		case RT_ORIENTEDLINE:
 		case RT_CYLINDER:
 		case RT_LATHE:
+		case RT_CLOUDS: // (2026-11-19: MP's fx_cloudlayer; it was a "Bad reType" error drop)
 		case RT_LIGHTNING:
 		case RT_SABER_GLOW:
 			// self blood sprites, talk balloons, etc should not be drawn in the primary

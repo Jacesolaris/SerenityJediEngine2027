@@ -2934,12 +2934,128 @@ static void G_ForceSafeModelChangeState(gentity_t* ent)
 	ent->client->ps.torsoAnimTimer = 0;
 }
 
+// A character change can replace the sabers (NPC file, or the menu character's cvars) while the on / off flag of
+// every blade is kept by blade number. So a lit single saber became a staff with one blade, or two sabers with one
+// lit. The saber set is remembered before the change and settled after it:
+// - another set (other saber, blade count, one / two sabers): all its blades get one state, on if the old weapon
+//   was lit, off if it was not. A blade that comes on starts at no length: it grows out of the hilt and the client
+//   game plays the on sound, as on any ignite. Blades the new set does not have are off.
+// - the same set (the same character picked again, a savegame's autoload): every blade is as it was, also one that
+//   was put out on purpose.
+struct saberSetBefore_t
+{
+	qboolean on;
+	qboolean dual;
+	int blades[MAX_SABERS];
+	char name[MAX_SABERS][MAX_QPATH];
+	qboolean active[MAX_SABERS][MAX_BLADES];
+	float length[MAX_SABERS][MAX_BLADES];
+};
+
+static void G_RememberSaberSet(gentity_t* ent, saberSetBefore_t* before)
+{
+	before->on = ent->client->ps.SaberActive();
+	before->dual = ent->client->ps.dualSabers;
+	for (int saber_num = 0; saber_num < MAX_SABERS; saber_num++)
+	{
+		const saberInfo_t& saber = ent->client->ps.saber[saber_num];
+
+		before->blades[saber_num] = saber.numBlades;
+		Q_strncpyz(before->name[saber_num], saber.name ? saber.name : "", sizeof before->name[saber_num]);
+		for (int blade_num = 0; blade_num < MAX_BLADES; blade_num++)
+		{
+			before->active[saber_num][blade_num] = saber.blade[blade_num].active;
+			before->length[saber_num][blade_num] = saber.blade[blade_num].length;
+		}
+	}
+}
+
+static void G_SettleSaberBlades(gentity_t* ent, const saberSetBefore_t* before)
+{
+	qboolean changed = static_cast<qboolean>(before->dual != ent->client->ps.dualSabers);
+
+	for (int saber_num = 0; saber_num < MAX_SABERS && !changed; saber_num++)
+	{
+		const saberInfo_t& saber = ent->client->ps.saber[saber_num];
+
+		if (saber_num > 0 && !ent->client->ps.dualSabers)
+		{
+			break;
+		}
+		if (before->blades[saber_num] != saber.numBlades || Q_stricmp(before->name[saber_num], saber.name ? saber.name : ""))
+		{
+			changed = qtrue;
+		}
+	}
+	for (int saber_num = 0; saber_num < MAX_SABERS; saber_num++)
+	{
+		saberInfo_t& saber = ent->client->ps.saber[saber_num];
+		const bool saber_used = saber_num == 0 || ent->client->ps.dualSabers;
+
+		for (int blade_num = 0; blade_num < MAX_BLADES; blade_num++)
+		{
+			const bool blade_there = saber_used && blade_num < saber.numBlades;
+
+			if (!changed && blade_there)
+			{
+				//the same saber: as it was
+				saber.blade[blade_num].active = before->active[saber_num][blade_num];
+				saber.blade[blade_num].length = before->length[saber_num][blade_num];
+				continue;
+			}
+
+			const bool blade_on = blade_there && before->on;
+
+			if (blade_on != (saber.blade[blade_num].active != qfalse))
+			{
+				saber.blade[blade_num].active = blade_on ? qtrue : qfalse;
+				saber.blade[blade_num].length = 0.0f;
+			}
+		}
+	}
+}
+
+// The playermodel command (console, character menu): the old sabers are removed first, so nothing of them is left
+// in the hands, then the new character is set. If the weapon was lit, the new saber set is in hand and lit as
+// well, all its blades; before, it came up dark and the saber key had to be pressed. A saber that was off or put
+// away stays off, and so does the new one after a change while the saber was thrown.
+void G_ChangePlayerModelAndSabers(gentity_t* ent, const char* new_model)
+{
+	if (!ent || !ent->client || !new_model)
+	{
+		return;
+	}
+
+	saberSetBefore_t sabers_before;
+	G_RememberSaberSet(ent, &sabers_before);
+	const qboolean saber_thrown = ent->client->ps.saberInFlight;
+
+	WP_RemoveSaber(ent, 0);
+	WP_RemoveSecondSaber(ent, 1);
+	G_ChangePlayerModel(ent, new_model);
+
+	if (saber_thrown)
+	{
+		return;
+	}
+	if (ent->client->ps.weapon != WP_SABER)
+	{
+		//the new character does not hold a saber
+		sabers_before.on = qfalse;
+		memset(sabers_before.active, 0, sizeof sabers_before.active);
+	}
+	G_SettleSaberBlades(ent, &sabers_before);
+}
+
 void G_ChangePlayerModel(gentity_t* ent, const char* newModel)
 {
 	if (!ent || !ent->client || !newModel)
 	{
 		return;
 	}
+
+	saberSetBefore_t sabers_before;
+	G_RememberSaberSet(ent, &sabers_before);
 
 	if (cg_trueguns.integer > 0)
 	{
@@ -2978,6 +3094,7 @@ void G_ChangePlayerModel(gentity_t* ent, const char* newModel)
 		if (Q_stricmp("player", newModel) == 0)
 		{
 			G_InitPlayerFromCvars(ent);
+			G_SettleSaberBlades(ent, &sabers_before);
 			return;
 		}
 
@@ -3012,6 +3129,7 @@ void G_ChangePlayerModel(gentity_t* ent, const char* newModel)
 		{
 			if (NPC_ParseParms(ent->NPC_type, ent))
 			{
+				G_SettleSaberBlades(ent, &sabers_before);
 				G_AddWeaponModels(ent);
 
 				NPC_SetAnim(ent, SETANIM_LEGS, ent->client->ps.legsAnim, SETANIM_FLAG_NORMAL | SETANIM_FLAG_RESTART);
@@ -3163,6 +3281,7 @@ void G_ChangePlayerModel(gentity_t* ent, const char* newModel)
 		if (Q_stricmp("player", newModel) == 0)
 		{
 			G_InitPlayerFromCvars(ent);
+			G_SettleSaberBlades(ent, &sabers_before);
 			return;
 		}
 
@@ -3197,6 +3316,7 @@ void G_ChangePlayerModel(gentity_t* ent, const char* newModel)
 		{
 			if (NPC_ParseParms(ent->NPC_type, ent))
 			{
+				G_SettleSaberBlades(ent, &sabers_before);
 				G_AddWeaponModels(ent);
 
 				NPC_SetAnim(ent, SETANIM_LEGS, ent->client->ps.legsAnim, SETANIM_FLAG_NORMAL | SETANIM_FLAG_RESTART);

@@ -2885,6 +2885,19 @@ qboolean WP_SaberParseParms(const char* SaberName, saberInfo_t* saber, const qbo
 	return qtrue;
 }
 
+// Every blade of a saber off and drawn in. WP_RemoveSaber puts the defaults back first and those have one blade, so
+// its Deactivate() and SetLength() only reached blade 0: the second blade of a staff stayed "on". A single saber
+// never shows that, but the on / off flags are kept per blade number while the saber is replaced, and the next
+// staff came up with its second blade lit and its first one dark, until the saber was put away and drawn again.
+static void WP_SaberAllBladesOff(saberInfo_t* saber)
+{
+	for (auto& blade : saber->blade)
+	{
+		blade.active = qfalse;
+		blade.length = 0.0f;
+	}
+}
+
 void WP_RemoveSaber(gentity_t* ent, const int saberNum)
 {
 	if (!ent || !ent->client)
@@ -2897,6 +2910,7 @@ void WP_RemoveSaber(gentity_t* ent, const int saberNum)
 	ent->client->ps.dualSabers = qfalse;
 	ent->client->ps.saber[saberNum].Deactivate();
 	ent->client->ps.saber[saberNum].SetLength(0.0f);
+	WP_SaberAllBladesOff(&ent->client->ps.saber[saberNum]);
 	if (ent->weaponModel[saberNum] > 0)
 	{
 		gi.G2API_SetSkin(&ent->ghoul2[ent->weaponModel[saberNum]], -1, 0);
@@ -2934,6 +2948,7 @@ void WP_RemoveSecondSaber(gentity_t* ent, const int saberNum)
 	ent->client->ps.dualSabers = qfalse;
 	ent->client->ps.saber[saberNum].Deactivate();
 	ent->client->ps.saber[saberNum].SetLength(0.0f);
+	WP_SaberAllBladesOff(&ent->client->ps.saber[saberNum]);
 	if (ent->weaponModel[saberNum] > 0)
 	{
 		gi.G2API_SetSkin(&ent->ghoul2[ent->weaponModel[saberNum]], -1, 0);
