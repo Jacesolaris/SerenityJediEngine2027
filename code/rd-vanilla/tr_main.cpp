@@ -586,6 +586,10 @@ void R_SetupFrustum()
 
 	// this is the far plane
 	VectorScale(tr.viewParms.ori.axis[0], -1.0f, tr.viewParms.frustum[4].normal);
+	// a view without the world (menus, icons) has no map view distance: SetFarClip's 2048. tr.distanceCull is 0
+	// until the first map is loaded, which put the far plane on the view point and culled every md3 in the menus
+	// (the quit menu's logo); ghoul2 models use a sphere test without the far plane and were drawn
+	const float farCull = (tr.refdef.rdflags & RDF_NOWORLDMODEL) != 0 || tr.distanceCull <= 0.0f ? 2048.0f : tr.distanceCull;
 
 	for (int i = 0; i < 5; i++)
 	{
@@ -594,7 +598,7 @@ void R_SetupFrustum()
 		if (i == 4)
 		{
 			// far plane does not go through the view point, it goes alot farther..
-			tr.viewParms.frustum[i].dist -= tr.distanceCull * 1.02f; // a little slack so we don't cull stuff
+			tr.viewParms.frustum[i].dist -= farCull * 1.02f; // a little slack so we don't cull stuff
 		}
 		SetPlaneSignbits(&tr.viewParms.frustum[i]);
 	}

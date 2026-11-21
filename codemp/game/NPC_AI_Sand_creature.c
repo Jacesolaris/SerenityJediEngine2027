@@ -416,9 +416,10 @@ static void SandCreature_CheckMovingEnts(void)
 		}
 		else
 		{
-			if (radius_ents[i]->client->ps.eFlags & EF2_HELD_BY_MONSTER)
+			if (radius_ents[i]->client->ps.eFlags2 & EF2_HELD_BY_MONSTER)
 			{
-				//can't be one being held
+				//can't be one being held (SJE: eFlags2, the held flag's field - eFlags bit 0 is EF_G2ANIMATING,
+				//so a victim a wampa or the rancor held could be grabbed again, as SP's double wampa grab)
 				continue;
 			}
 
@@ -536,9 +537,9 @@ static void SandCreature_Chase(void)
 
 	if (NPCS.NPC->enemy->client)
 	{
-		if (NPCS.NPC->enemy->client->ps.eFlags & EF2_HELD_BY_MONSTER)
+		if (NPCS.NPC->enemy->client->ps.eFlags2 & EF2_HELD_BY_MONSTER)
 		{
-			//was picked up by another monster, forget about him
+			//was picked up by another monster, forget about him (SJE: eFlags2, as above)
 			NPCS.NPC->enemy = NULL;
 			NPCS.NPC->NPC->aiFlags2 &= ~NPCAI2_LOCKEDENEMY;
 			return;

@@ -5722,7 +5722,7 @@ static qboolean CG_TeamColorForEnt(const centity_t* cent, vec4_t colour)
 			return qfalse;
 		}
 	}
-	VectorCopy(g_color_table[c], colour);
+	VectorCopy(g_color_table[ColorIndex(c)], colour); // (2026-11-20: c is a colour code, '1'; g_color_table[c] read past the table: no colour, the icons unseen)
 	colour[3] = 1.0f;
 	return qtrue;
 }

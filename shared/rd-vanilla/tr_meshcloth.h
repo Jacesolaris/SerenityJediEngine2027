@@ -37,7 +37,7 @@ from a config text (ext_data/meshcloth.dat), one line per surface:
   smooth   0..1 smooths small creases out of the drawn cloth (visual only).
 		   Default 0.5.
   maxaccel units/s^2: the character's acceleration the cloth feels, at
-		   most (Battlefront II's MaxAcceleration; 20 m/s^2 is about 790).
+		   most (20 m/s^2 is about 790).
 		   0 = no limit. Default: the r_meshClothMaxAccel console value.
   maxspin  degrees/s: how fast the attached edge may turn before the cloth
 		   is carried round with it instead of winding up (fast saber spins).
@@ -57,6 +57,32 @@ from a config text (ext_data/meshcloth.dat), one line per surface:
 		   from (stops capes flipping over the head on spawns and fast
 		   turns). Default 2. 'lift off' = no limit: capes can blow up and
 		   over the head (also needs a long enough tether).
+
+SJE: heavy-cape options (each off unless given):
+  damp H V  0..0.9 share of the cloth's speed taken away per 16 ms,
+		   sideways (H) and up-down (V), measured in a frame that travels with
+		   the character over the ground (not up and down) but does not turn
+		   with him, on top of the solver's own damping: a swing dies out
+		   instead of wobbling, his run is not damped, a turn still flares the
+		   cloth, in a jump it lags and settles by its own weight.
+  ring D   second tether level: every point more than D units (along the
+		   cloth) below the attached edge is tied, with no stretch, to the
+		   nearest point of the row D units down, so the lower cloth swings
+		   round that ring as one piece.
+  bell B   0..1 the free cloth's animated spot (what 'tether' and 'spring'
+		   measure from) is its bind shape carried by the hip bone alone - a
+		   rigid bell that turns with the hips, not with the legs - blended in
+		   by B x the point's freedom (0 at the attached edge).
+  spring S A  pull per 16 ms toward the animated spot: S at the attached
+		   edge, S x exp(-A x metres along the cloth) further down (one metre =
+		   39.37 units). Spots under the floor are lifted onto it first. It
+		   lets go while the wearer runs (from 100 units/s on, fully at 190),
+		   jumps or falls, and takes hold again slowly after a run.
+  wrap     (no value; cloth on a grid, 'proxy N', only) every drawn vertex
+		   is bound to its nearest grid triangles (up to 4) in the bind pose
+		   and drawn from their blend: the hem and the grid points are drawn
+		   where the grid has them (otherwise a blend of nearby grid points,
+		   smoothed).
 
 Optional (SJE 2026-11-01): r_meshClothSleep 1 (default) lets cloth at rest sleep until the pose, the
 body, wind or a blast moves it; r_meshClothSelfSub 1 (default) solves self-collision in every substep,
@@ -134,6 +160,13 @@ struct mcParams_t {
 	int		carryFloor = 1;	// SJE r_meshClothCarryFloor: 1 = the body carry (bodyCarry) takes cloth worn round the body (a robe,
 							//   a skirt) and loose layers under it down only as far as its lowest point has room above the
 							//   floor: not into the ground when its wearer drops into a crouch; 0 = as before
+	float	noRoom = 1.0f;	// SJE r_meshClothNoRoom: over 0 = cloth worn round the body (a robe, a skirt) and loose layers
+							//   under it take the shape their wearer's pose gives them while they have no room to hang
+							//   (crouching, kneeling, sitting, lying: the attached edge is nearer the floor than the cloth is
+							//   long); the value scales the pull. 0 = as before
+	int		garment = 1;	// SJE r_meshClothGarment: 1 = a body part that is itself a skirt (a tube round both legs, not made
+							//   cloth: an inner robe) takes no part in the body fit - stiff, it swings with the legs and its
+							//   fitted shapes shook the cloth worn over it at a run; 0 = as before
 	int		shoulders = 1;	// SJE r_meshClothShoulders: 1 = the drawn cloth is kept over what the shoulder bones carry
 							//   (a shoulder plate turns with the arm, into the cape lying over it); with faceCol only
 	int		overArms = 1;	// SJE r_meshClothOverArms: 1 = cloth that hangs from shoulder height (a cape, a cloak) lies over
@@ -153,6 +186,12 @@ struct mcParams_t {
 							//   shakes loses its closing speed (not where a limb moves the cloth), and a point that only
 							//   trembles in place counts as at rest. 0 = off
 	int		bendModel = 0;	// r_meshClothBendModel: 0 = bend links (default), 1 = isometric (cotangent) bending
+	float	fine = 0.0f;	// SJE r_meshClothFine: self-colliding cloth (a cape, a cloak) whose spacing (the median length of
+							//   its edges, units) is under this counts as fine. Then (1) with bendModel 0 its loose sheets bend
+							//   by their curvature - bend links hold less the finer the mesh is - (2) the layer rule measures a
+							//   heap pose by the cloth area under the floor, not by the points, and (3) its self-collision keeps
+							//   two points only as far apart as the pose lays them, a touching pair losing its closing speed.
+							//   0 = off (as before)
 	int		aero = 0;		// r_meshClothAero: 1 = the air pushes each triangle (drag + lift, area-weighted) instead of each point
 	int		floor;			// 1: floorPt / floorN hold the floor plane under the character (world)
 	float	floorPt[3];
@@ -168,6 +207,7 @@ struct mcParams_t {
 	float	waterZ = 0.0f;
 	float	waterDrag = 0.0f;	// 1/s drag on cloth below waterZ; it also floats up gently there
 	float	wet = 0.0f;		// 0..1 how soaked the cloth is: wet cloth weighs up to twice as much
+	int		hipBone = -1;	// SJE: the skeleton's hip bone (pelvis), for cloth lines with 'bell'; -1 = none
 };
 
 // Per character (instanceKey), eased over time, for the glue (main thread):
@@ -263,7 +303,7 @@ const int MC_MAX_BLADES = 4;	// SJE: lit lightsaber blades near a character that
 // model. Main thread only. Returns a handle for MC_BodyShapesPose, or nullptr.
 // SJE r_meshClothShown: 'drawn' = one byte per surface of the model (by its index): 1 = switched on for this
 // character (nullptr: not known - the model's own flags decide, as before). One fit per set of them.
-const void* MC_BodyFit(const void* clothSurface, const int* boneClass, int numBones, const unsigned char* drawn = nullptr, int numDrawn = 0);
+const void* MC_BodyFit(const void* clothSurface, const int* boneClass, int numBones, const unsigned char* drawn = nullptr, int numDrawn = 0, int garment = 0);
 // SJE r_meshClothShown: tells a character's cloth which of the model's surfaces are switched on (after MC_Prepare,
 // main thread; nullptr: all). Layer pairs with a switched-off cloth surface are skipped.
 void MC_Shown(const void* clothSurface, const void* instanceKey, const unsigned char* drawn, int numDrawn);

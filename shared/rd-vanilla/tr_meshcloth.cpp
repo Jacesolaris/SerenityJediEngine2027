@@ -60,6 +60,9 @@ namespace {
 	const float	MC_TWIST_FLICK0 = 150.0f;	// SJE: degrees of fast turn in one go up to which the cloth has its whole lag allowance
 	const float	MC_TWIST_FLICK1 = 300.0f;	// ... and from which it has none (r_meshClothTwistLag: the allowance is for a flick, not a spin)
 	const float	MC_FLOOR_GAP = 0.8f;		// units cloth keeps above the floor
+	const float	MC_NOROOM_FROM = 0.8f;	// SJE r_meshClothNoRoom: worn cloth is drawn to its pose from where its attached edge is
+	const float	MC_NOROOM_SPAN = 0.3f;	// ... under this part of its length above the floor, in full this much further down,
+	const float	MC_NOROOM_SHAPE = 0.05f;	// ... by this part of its distance per 16 ms step
 	const float	MC_WELD = 0.01f;
 	const int	MC_SETTLE_STEPS = 40;
 	const int	MC_SHOW_STEPS = 16;		// SJE r_meshClothSettle: steps over which settled cloth is eased in from the animated pose
@@ -106,6 +109,12 @@ namespace {
 		float			friction = 0.3f;	// 0..1 kinetic friction against the body and floor
 		float			sfriction = 0.5f;	// static friction: contacts sliding slower than this x the push stick
 		float			lift = 2.0f;		// units a free point may rise above the attached edge it hangs from; <0 = no limit
+		// SJE: heavy-cape options (all off unless the line asks for them; see MC_LoadConfig)
+		float			dampH = 0.0f, dampV = 0.0f;	// 'damp H V': share of the cloth's speed (in a frame travelling with the character over the ground) taken per 16 ms, sideways / up-down
+		float			ring = 0.0f;		// 'ring D': second tether level - every point further down is tied rigidly to the nearest point D units (along the cloth) below the attached edge
+		float			bell = 0.0f;		// 'bell B': 0..1 the free cloth's animated spot is its bind shape carried by the hip bone alone (a rigid bell), blended in by B x freedom
+		float			spring = 0.0f, springFade = 0.0f;	// 'spring S A': pull per 16 ms toward the animated spot, S x exp(-A x metres along the cloth from the attached edge)
+		bool			wrap = false;		// 'wrap': cloth on a grid ('proxy N') is drawn from the grid's triangles (each drawn vertex bound to the nearest few)
 	};
 
 	// SJE: r_meshClothLayers: a cloth point and a triangle of another cloth surface it lies over or under in the
@@ -130,6 +139,9 @@ namespace {
 		float	room;					// how far the triangle may be moved in all (to the model's next surface on the other side)
 	};
 
+	const int MC_WRAP_K = 4;	// SJE 'wrap': grid triangles each drawn vertex is blended from
+	const float MC_SPRING_BACK = 0.6f;	// SJE 'spring': seconds (time constant) it takes to take hold again after a run
+
 	struct mcGroup_t {
 		std::vector<const mdxmSurface_t*>	surfs;
 		std::vector<const mcDef_t*>		defs;
@@ -150,6 +162,13 @@ namespace {
 		float								selfThick = 1.2f;	// self-collision distance (largest thickness of the self-colliding surfaces)
 		std::vector<char>					hangs;			// per particle: hanging cloth ("above" rule: capes, robes, skirts)
 		std::vector<char>					hardCol;		// per particle: arms/hands always push it out (not for sleeves, which wrap the arms)
+		// SJE: heavy-cape options (per particle; empty unless a line of the group asks for one - anyHeavy)
+		std::vector<float>					dampH, dampV, bellW, springS, springA, ringD;
+		bool								anyHeavy = false, anyDamp = false, anyBell = false, anySpring = false, anyRing = false;
+		mutable std::vector<int>			ringAnchor;		// per particle: the ring point it is tied to (-1 none; ComputeRing, lazy)
+		mutable std::vector<float>			ringLen;		// ... its bind distance along the cloth to it
+		mutable std::vector<float>			springK;		// per particle: spring per 16 ms (ComputeRing, lazy)
+		mutable bool						ringBuilt = false;
 		bool								anySmooth = false;
 		bool								anySelf = false;
 		std::vector<int>					lraAnchor;		// nearest attached particle along the cloth (-1 none)
@@ -161,6 +180,7 @@ namespace {
 		mutable std::vector<float>			rootS;			// SJE: the same as a part of its sheet's length: 0 at the edge, 1 at the hem (lazy)
 		mutable std::vector<int>			sheetOf;		// SJE per particle: the sheet it belongs to - all cloth joined to it by links (ComputeRootDist, lazy)
 		mutable int							numSheets = 0;
+		mutable std::vector<float>			sheetLen;		// SJE per sheet: its length = the longest bind distance from its attached edge (ComputeRootDist, lazy)
 		mutable std::vector<unsigned char>	high;			// SJE per particle: 1 = it hangs from shoulder height or above (BuildPlatePairs, main thread; read only once plateBuilt is set)
 		mutable std::vector<unsigned char>	wrap;			// SJE per particle: 1 = its surface wraps round the body at its height (ComputeWrap, lazy)
 		mutable std::vector<unsigned char>	under;			// SJE per particle: 1 = a loose layer the model has UNDER worn cloth there (ComputeLayerPairs, lazy)
@@ -178,6 +198,17 @@ namespace {
 		mutable std::vector<float>			bendW;			// 4 cotangent weights per stencil (they sum to 0)
 		mutable std::vector<float>			bendAlpha;		// per stencil: XPBD compliance (-1 = no bending resistance)
 		mutable std::vector<float>			bendBs;			// per stencil: 0..1 bend stiffness (old projection)
+		mutable std::vector<float>			bendDen;		// per stencil: its weights squared, summed over its free points
+		// SJE r_meshClothFine: the cloth's spacing - the median bind length of the edges of what is simulated
+		// (the grid's, for cloth on a grid) - and which stencils lie on a loose sheet that collides with itself (a
+		// cape, a cloak: no point of theirs is worn round the body, ComputeWrap, and all four take part in the
+		// self-collision), with the bend links those stencils stand in for. Built with the stencils.
+		mutable float						spacing = -1.0f;
+		mutable std::vector<float>			partArea;		// per particle: the cloth area it stands for (bind pose)
+		mutable std::vector<char>			bendLoose;		// per stencil
+		mutable std::vector<int>			bendLooseIdx;	// the loose stencils that bend (in order)
+		mutable std::vector<char>			linkLoose;		// per link
+		mutable bool						anyLoose = false;
 		mutable std::vector<mcLayerPair_t>	layerPairs;	// SJE: r_meshClothLayers (lazy, main thread)
 		mutable bool						layerBuilt = false;
 		mutable bool						bendBuilt = false;
@@ -196,6 +227,11 @@ namespace {
 		std::vector<float>					drawW;			// 4 per drawn point: their weights
 		std::vector<int>					seedDraw;		// per particle: the drawn point it sits on
 		std::vector<int>					drawLinkA, drawLinkB;	// edges between drawn points (grid only: smoothing)
+		// SJE 'wrap' (grid only): per drawn point the grid triangles it is drawn from (-1 none), its
+		// place in each triangle's plane (3 barycentric weights, may be a little outside) and its distance off the plane
+		bool								wrapOn = false;
+		std::vector<int>					wrapTri;		// 'wrap': per drawn vertex MC_WRAP_K grid triangles (-1: none)
+		std::vector<float>					wrapBc, wrapH, wrapW, wrapA;	// ... where it lies in each (3 each), how far off each, each one's share, its bind size (twice its area)
 	};
 
 	struct mcSurfEntry_t {
@@ -292,6 +328,14 @@ namespace {
 		const mcCapsule_t* faceCapsFrom = nullptr;	// the body shapes then (valid during the step)
 		// SJE: per-triangle air (r_meshClothAero), isometric bending multipliers (one per stencil)
 		std::vector<float>	aeroDv, aeroW, bendLambda;
+		// SJE: heavy-cape options ('bell', 'damp', 'spring'; only for groups that use them):
+		std::vector<float>	bellNow, bellPrev, bellSim;	// the hip-carried bind shape (world, 3 per particle) this frame, the last, at the last step
+		std::vector<float>	bellFrom, bellTo;		// ... at the start and the end of the 16 ms step being run (Simulate sets them)
+		std::vector<float>	anchor;					// per substep: each point's animated spot ('bell' blended in, never under the floor)
+		bool				bellOk = false;			// bellFrom / bellTo hold this step's hip-carried shape
+		float				springRun = 0.0f;		// 'spring': 0..1, how far the wearer's run has let it go (eased in and out)
+		std::vector<float>	bendH0, bendH1, bendH;	// SJE: per stencil, the animated cloth's curvature at the step's start, at its end, in this substep
+		std::vector<float>	bendTgt1;				// SJE: the animated cloth bendH1 was worked out from (a step starts where the last one ended)
 	};
 
 	std::vector<mcDef_t>										g_defs;
@@ -575,8 +619,13 @@ namespace {
 			g->weight.push_back(r->weight[s]); g->thick.push_back(r->thick[s]);
 			g->lift.push_back(r->lift[s]); g->stretchG.push_back(r->stretchG[s]); g->fricK.push_back(r->fricK[s]); g->fricS.push_back(r->fricS[s]);
 			g->hangs.push_back(r->hangs[s]); g->hardCol.push_back(r->hardCol[s]);
+			if (r->anyHeavy) {	// SJE: heavy-cape options, from the grid point's own vertex
+				g->dampH.push_back(r->dampH[s]); g->dampV.push_back(r->dampV[s]); g->bellW.push_back(r->bellW[s]);
+				g->springS.push_back(r->springS[s]); g->springA.push_back(r->springA[s]); g->ringD.push_back(r->ringD[s]);
+			}
 			mcCopy(&r->bindPos[s * 3], &g->bindPos[i * 3]);
 		}
+		g->anyHeavy = r->anyHeavy; g->anyDamp = r->anyDamp; g->anyBell = r->anyBell; g->anySpring = r->anySpring; g->anyRing = r->anyRing;
 		// grid links and triangles
 		std::unordered_map<unsigned long long, char> haveLink;
 		std::unordered_map<unsigned long long, int> edgeOther;
@@ -621,6 +670,15 @@ namespace {
 		g->proxied = true;
 		g->numDraw = n;
 		g->vertToDraw = r->vertToParticle;
+		// SJE: ... and every vertex has its grid particle (the one whose region its point lies in). The rules added
+		// later read this table for the grid as for a plain group (which surfaces are sewn together, which
+		// surfaces use a particle); without it a model with "proxy" and two cloth surfaces read past an empty
+		// table and crashed when it was loaded.
+		g->vertToParticle.assign(r->vertToParticle.size(), -1);
+		for (size_t v = 0; v < r->vertToParticle.size(); v++) {
+			const int rp = r->vertToParticle[v];
+			if (rp >= 0 && rp < n) g->vertToParticle[v] = region[rp];
+		}
 		g->drawFree = r->freedom;
 		g->drawHangs = r->hangs;
 		g->drawTris = r->tris;
@@ -680,6 +738,87 @@ namespace {
 			}
 			for (int j = 0; j < k; j++) g->drawW[v * 4 + j] /= tot;
 		}
+		// SJE 'wrap': every drawn vertex is bound to the grid triangles nearest to it in the bind
+		// pose (up to MC_WRAP_K that face the same way) - where it lies in each triangle's plane (barycentric, also a
+		// little outside: the hem beyond the last grid row) and how far off it - and drawn from their blend as they are
+		// now. The blend above, smoothed after, drew the hem up to several units inside the grid's own hem in a swing.
+		// From the nearest triangle alone the dense cape showed the grid's flat facets and the creases between
+		// them - corners in its outline on the round shoulders and back. Only the grid's own region and its
+		// neighbours are looked at (the same sheet).
+		for (const mcDef_t* d : r->defs) if (d->wrap) g->wrapOn = true;
+		if (g->wrapOn) {
+			std::vector<std::vector<int>> triOf(m);
+			const int nt = (int)(g->tris.size() / 3);
+			for (int t = 0; t < nt; t++) for (int k = 0; k < 3; k++) triOf[g->tris[t * 3 + k]].push_back(t);
+			// the grid's spacing: how far apart the blended triangles may lie and still count nearly as much
+			float spacing = 0.0f; int nl = 0;
+			for (size_t l = 0; l < g->linkA.size(); l++) {
+				if (g->linkBend[l]) continue;
+				vec3_t dl; mcSub(&g->bindPos[g->linkA[l] * 3], &g->bindPos[g->linkB[l] * 3], dl);
+				spacing += mcLen(dl); nl++;
+			}
+			spacing = nl ? spacing / nl : 1.0f;
+			const float soft = 0.25f * spacing * spacing;	// (half a spacing, squared)
+			g->wrapTri.assign((size_t)n * MC_WRAP_K, -1);
+			g->wrapBc.assign((size_t)n * MC_WRAP_K * 3, 0.0f);
+			g->wrapH.assign((size_t)n * MC_WRAP_K, 0.0f);
+			g->wrapW.assign((size_t)n * MC_WRAP_K, 0.0f);
+			g->wrapA.assign((size_t)n * MC_WRAP_K, 0.0f);
+			struct wrapCand_t { float dist; int t; float bc[3]; float h; vec3_t nf; float area; };
+			std::vector<int> cand;
+			std::vector<wrapCand_t> found;
+			for (int v = 0; v < n; v++) {
+				const float* p = &r->bindPos[v * 3];
+				cand.clear(); found.clear();
+				const int own = region[v];
+				for (int t : triOf[own]) cand.push_back(t);
+				for (int q : nbr[own]) for (int t : triOf[q]) cand.push_back(t);
+				std::sort(cand.begin(), cand.end());
+				cand.erase(std::unique(cand.begin(), cand.end()), cand.end());
+				for (int t : cand) {
+					const float* a = &g->bindPos[g->tris[t * 3] * 3], * b = &g->bindPos[g->tris[t * 3 + 1] * 3], * c = &g->bindPos[g->tris[t * 3 + 2] * 3];
+					vec3_t e0, e1, ep, nf;
+					mcSub(b, a, e0); mcSub(c, a, e1); mcSub(p, a, ep);
+					mcCross(e0, e1, nf);
+					const float area = mcNorm(nf);
+					if (area < 1e-6f) continue;
+					const float d00 = mcDot(e0, e0), d01 = mcDot(e0, e1), d11 = mcDot(e1, e1), d20 = mcDot(ep, e0), d21 = mcDot(ep, e1);
+					const float den = d00 * d11 - d01 * d01;
+					if (fabsf(den) < 1e-9f) continue;
+					const float bv = (d11 * d20 - d01 * d21) / den, bw = (d00 * d21 - d01 * d20) / den, bu = 1.0f - bv - bw;
+					// distance to the triangle itself (barycentric clamped), to choose the nearest
+					float cu = bu < 0.0f ? 0.0f : bu, cv = bv < 0.0f ? 0.0f : bv, cw = bw < 0.0f ? 0.0f : bw;
+					const float cs = cu + cv + cw;
+					cu /= cs; cv /= cs; cw /= cs;
+					vec3_t q;
+					for (int k = 0; k < 3; k++) q[k] = cu * a[k] + cv * b[k] + cw * c[k];
+					vec3_t dq; mcSub(p, q, dq);
+					wrapCand_t wc;
+					wc.area = area;
+					wc.dist = mcDot(dq, dq); wc.t = t; wc.bc[0] = bu; wc.bc[1] = bv; wc.bc[2] = bw;
+					wc.h = mcDot(ep, nf);	// (off the plane, along the triangle's normal)
+					mcCopy(nf, wc.nf);
+					found.push_back(wc);
+				}
+				if (found.empty()) continue;
+				std::sort(found.begin(), found.end(), [](const wrapCand_t& x, const wrapCand_t& y) { return x.dist < y.dist; });
+				// the nearest, and up to three more that face the same way (not a fold of the sheet, not another layer)
+				float tot = 0.0f;
+				int k = 0;
+				for (size_t j = 0; j < found.size() && k < MC_WRAP_K; j++) {
+					if (j > 0 && (mcDot(found[j].nf, found[0].nf) < 0.7f || found[j].dist > 4.0f * spacing * spacing)) continue;
+					const size_t s = (size_t)v * MC_WRAP_K + k;
+					g->wrapTri[s] = found[j].t;
+					for (int e = 0; e < 3; e++) g->wrapBc[s * 3 + e] = found[j].bc[e];
+					g->wrapH[s] = found[j].h;
+					g->wrapA[s] = found[j].area;
+					g->wrapW[s] = 1.0f / (found[j].dist + soft);
+					tot += g->wrapW[s];
+					k++;
+				}
+				for (int j = 0; j < k; j++) g->wrapW[(size_t)v * MC_WRAP_K + j] /= tot;
+			}
+		}
 		delete r;
 		return g;
 	}
@@ -731,6 +870,14 @@ namespace {
 			g->numVerts += g->surfs[si]->numVerts;
 		}
 		g->vertToParticle.assign(g->numVerts, -1);
+		// SJE: heavy-cape options - only a group with a line that asks for one gets them (anyHeavy)
+		for (const mcDef_t* d : g->defs) {
+			if (d->dampH > 0.0f || d->dampV > 0.0f) g->anyDamp = true;
+			if (d->bell > 0.0f) g->anyBell = true;
+			if (d->spring > 0.0f) g->anySpring = true;
+			if (d->ring > 0.0f) g->anyRing = true;
+		}
+		g->anyHeavy = g->anyDamp || g->anyBell || g->anySpring || g->anyRing;
 		for (size_t si = 0; si < g->surfs.size(); si++) {
 			const mdxmSurface_t* s = g->surfs[si];
 			const mdxmVertex_t* v = Verts(s);
@@ -760,6 +907,11 @@ namespace {
 					g->thick.push_back(g->defs[si]->thickness);
 					g->hardCol.push_back(g->defs[si]->rule == MC_RULE_SEGMENT ? 0 : 1);
 					g->hangs.push_back(g->defs[si]->rule == MC_RULE_ABOVE ? 1 : 0);
+					if (g->anyHeavy) {
+						const mcDef_t* d = g->defs[si];
+						g->dampH.push_back(d->dampH); g->dampV.push_back(d->dampV); g->bellW.push_back(d->bell);
+						g->springS.push_back(d->spring); g->springA.push_back(d->springFade); g->ringD.push_back(d->ring);
+					}
 					if (g->defs[si]->smooth > 0.0f) g->anySmooth = true;
 					if (g->defs[si]->self) {
 						if (!g->anySelf || g->defs[si]->thickness > g->selfThick) g->selfThick = g->defs[si]->thickness;
@@ -773,6 +925,14 @@ namespace {
 					if (g->defs[si]->tether < g->tether[p]) g->tether[p] = g->defs[si]->tether;
 					if (g->defs[si]->shape > g->shape[p]) g->shape[p] = g->defs[si]->shape;
 					if (g->defs[si]->bend > g->bend[p]) g->bend[p] = g->defs[si]->bend;
+					if (g->anyHeavy) {	// SJE: heavy-cape options: the stronger one wins
+						const mcDef_t* d = g->defs[si];
+						if (d->dampH > g->dampH[p]) g->dampH[p] = d->dampH;
+						if (d->dampV > g->dampV[p]) g->dampV[p] = d->dampV;
+						if (d->bell > g->bellW[p]) g->bellW[p] = d->bell;
+						if (d->spring > g->springS[p]) { g->springS[p] = d->spring; g->springA[p] = d->springFade; }
+						if (d->ring > 0.0f && (g->ringD[p] <= 0.0f || d->ring < g->ringD[p])) g->ringD[p] = d->ring;
+					}
 				}
 				g->vertToParticle[g->vertBase[si] + i] = p;
 			}
@@ -1031,8 +1191,36 @@ namespace {
 	static void ComputeBendStencils(const mcGroup_t* g) {
 		if (g->bendBuilt) return;
 		g->bendBuilt = true;
-		g->bendSt.clear(); g->bendW.clear(); g->bendAlpha.clear(); g->bendBs.clear();
+		g->bendSt.clear(); g->bendW.clear(); g->bendAlpha.clear(); g->bendBs.clear(); g->bendDen.clear();
+		g->bendLoose.clear(); g->bendLooseIdx.clear(); g->linkLoose.assign(g->linkA.size(), 0); g->anyLoose = false;
 		if ((int)g->bindPos.size() < g->numParticles * 3) return;
+		const bool wrapOk = (int)g->wrap.size() == g->numParticles;
+		std::unordered_map<unsigned long long, char> looseLink;	// the two opposite points of every loose stencil
+		{
+			// SJE r_meshClothFine: the sheet's spacing
+			std::vector<float> len;
+			len.reserve(g->linkA.size());
+			for (size_t l = 0; l < g->linkA.size(); l++) {
+				if (g->linkBend[l]) continue;
+				vec3_t d;
+				mcSub(&g->bindPos[g->linkA[l] * 3], &g->bindPos[g->linkB[l] * 3], d);
+				len.push_back(mcLen(d));
+			}
+			if (!len.empty()) {
+				std::nth_element(len.begin(), len.begin() + len.size() / 2, len.end());
+				g->spacing = len[len.size() / 2];
+			}
+			// ... and the cloth area each point stands for (a third of each of its triangles)
+			g->partArea.assign((size_t)g->numParticles, 0.0f);
+			for (size_t t = 0; t + 2 < g->tris.size(); t += 3) {
+				const int a = g->tris[t], b = g->tris[t + 1], c = g->tris[t + 2];
+				if (a < 0 || b < 0 || c < 0 || a >= g->numParticles || b >= g->numParticles || c >= g->numParticles) continue;
+				vec3_t e1, e2, n;
+				mcSub(&g->bindPos[b * 3], &g->bindPos[a * 3], e1); mcSub(&g->bindPos[c * 3], &g->bindPos[a * 3], e2); mcCross(e1, e2, n);
+				const float third = mcLen(n) * (0.5f / 3.0f);
+				g->partArea[a] += third; g->partArea[b] += third; g->partArea[c] += third;
+			}
+		}
 		std::unordered_map<unsigned long long, int> firstTri;	// edge -> opposite point of the first triangle on it
 		std::unordered_map<unsigned long long, char> usedEdge;
 		auto ekey = [](int a, int b) { if (a > b) { const int t = a; a = b; b = t; } return ((unsigned long long)a << 32) | (unsigned)b; };
@@ -1059,37 +1247,61 @@ namespace {
 				const float c01 = CotAngle(e0, e1), c02 = CotAngle(e0, e2), c03 = CotAngle(ne0, e3), c04 = CotAngle(ne0, e4);
 				const int st[4] = { x0, x1, x2, x3 };
 				const float w[4] = { c03 + c04, c01 + c02, -c01 - c03, -c02 - c04 };
-				float bs = 0.0f;
-				for (int j = 0; j < 4; j++) { g->bendSt.push_back(st[j]); g->bendW.push_back(w[j]); bs += 0.25f * g->bend[st[j]]; }
+				float bs = 0.0f, den = 0.0f;
+				for (int j = 0; j < 4; j++) {
+					g->bendSt.push_back(st[j]); g->bendW.push_back(w[j]); bs += 0.25f * g->bend[st[j]];
+					if (g->freedom[st[j]] > 0.0f) den += w[j] * w[j];
+				}
+				g->bendDen.push_back(den);
 				g->bendBs.push_back(bs);
 				g->bendAlpha.push_back(BendCompliance(bs));
+				// SJE r_meshClothFine: a stencil of a loose sheet that collides with itself. Not cloth without self-collision:
+				// head tails, strips, flaps and hip cloths of the game's dense models went calmer in motion with the
+				// stencils but restless where a pose was held (a crouch: Shaak Ti's head tails 0.19 -> 1.9 degrees a step,
+				// pushed to and fro by the layer rule; Bultar, Jaro Tapal, Ahsoka crouching), and none of them has the
+				// folds of a cape that the bend links fail to hold. They keep their bend links.
+				const bool selfOk = (int)g->selfCol.size() == g->numParticles && g->selfCol[x0] && g->selfCol[x1] && g->selfCol[x2] && g->selfCol[x3];
+				const bool loose = (!wrapOk || (!g->wrap[x0] && !g->wrap[x1] && !g->wrap[x2] && !g->wrap[x3])) && selfOk;
+				g->bendLoose.push_back(loose ? 1 : 0);
+				if (loose && bs > 0.0f && den >= 1e-6f) {
+					looseLink[ekey(x2, x3)] = 1; g->anyLoose = true;
+					if (g->bendAlpha.back() >= 0.0f) g->bendLooseIdx.push_back((int)g->bendLoose.size() - 1);
+				}
 			}
+		}
+		for (size_t l = 0; l < g->linkA.size(); l++) {
+			if (g->linkBend[l] && looseLink.count(ekey(g->linkA[l], g->linkB[l]))) g->linkLoose[l] = 1;
 		}
 	}
 
 	// Solver settings for one substep, from mcParams_t
 	struct mcSolve_t {
-		float	bendScale;	// exponent for the old projection's bend (1 / substeps)
-		float	h;			// substep length (s)
-		int		xpbd;		// 1: XPBD, 0: old projection
-		int		xpbdIters;	// XPBD passes per substep
-		float	liftLimit;	// -2 = per surface, -1 = no limit, N = units
-		float	liftSlope;	// SJE: the lift limit drops by this much per unit of cloth length from the attached edge
+		float	bendScale = 1.0f;	// exponent for the old projection's bend (1 / substeps)
+		float	h = 0.0f;			// substep length (s)
+		int		xpbd = 0;		// 1: XPBD, 0: old projection
+		int		xpbdIters = 0;	// XPBD passes per substep
+		float	liftLimit = -1.0f;	// -2 = per surface, -1 = no limit, N = units
+		float	liftSlope = 0.0f;	// SJE: the lift limit drops by this much per unit of cloth length from the attached edge
 		int		floorOk = 0;	// SJE: the floor under the character (the sloped lift limit never lies under it)
 		float	floorPt[3] = { 0.0f, 0.0f, 0.0f }, floorN[3] = { 0.0f, 0.0f, 1.0f };
-		int		edgeCol;	// 1: cloth edges against arms, fists and hilts
-		int		faceCol;	// SJE: 1: cloth triangles against every body shape (FaceCollide; replaces edgeCol)
-		int		faceNow;	// SJE: run it in this substep (every other one, and the last)
-		int		overArms;	// SJE r_meshClothOverArms: cloth hanging from shoulder height lies over arms and hands
-		int		rest;		// SJE r_meshClothRest: 1 = on
-		int		ease;		// SJE r_meshClothEase: 1 = on
-		float	tetherK;	// SJE: fraction of the over-tether distance reeled in per substep (per-step constant)
-		const float* bendK;	// SJE: per link, old projection's bend fraction per substep (nullptr = work it out)
-		int		bendModel;	// SJE: 1 = isometric bending stencils instead of the bend links
+		int		edgeCol = 0;	// 1: cloth edges against arms, fists and hilts
+		int		faceCol = 0;	// SJE: 1: cloth triangles against every body shape (FaceCollide; replaces edgeCol)
+		int		faceNow = 0;	// SJE: run it in this substep (every other one, and the last)
+		int		overArms = 0;	// SJE r_meshClothOverArms: cloth hanging from shoulder height lies over arms and hands
+		int		rest = 0;		// SJE r_meshClothRest: 1 = on
+		int		ease = 0;		// SJE r_meshClothEase: 1 = on
+		float	tetherK = 0.0f;	// SJE: fraction of the over-tether distance reeled in per substep (per-step constant)
+		const float* bendK = nullptr;	// SJE: per link, old projection's bend fraction per substep (nullptr = work it out)
+		int		bendModel = 0;	// SJE: 1 = isometric bending stencils instead of the bend links; 2 = for loose cloth only, each
+							//   stencil as soft as the surface's 'bend' says, whatever its shape (r_meshClothFine)
+		const float* bendH = nullptr;	// SJE: per stencil, the animated cloth's curvature in this substep (MC_BEND_NONE = none)
+		float	bendTrip = 0.0f;	// SJE: the shake watchdog's trip count (bendModel 2: a stencil with a shaking point lets go)
 		const int* ptStart = nullptr;			// SJE: per point, the body shapes it can reach in this step (BuildPointCaps):
 		const unsigned char* ptIdx = nullptr;	// ... ptIdx[ptStart[p]] to ptIdx[ptStart[p + 1] - 1]; nullptr = test all shapes
 		const float* ptFrom = nullptr;			// ... where the points were when the lists were built (3 per point)
 		const float* ptAllow = nullptr;			// ... and how far from there each list holds
+		int		bell = 0;		// SJE 'bell': the tether measures from in->anchor for points with a bell weight
+		int		ring = 0;		// SJE 'ring': the second tether level (ringAnchor / ringLen)
 	};
 
 	// SJE: isometric bending (r_meshClothBendModel 1). The curvature vector of each stencil, H(x) = sum w_i x_i,
@@ -1106,33 +1318,76 @@ namespace {
 		mcAdd(n1, n2, n);
 		mcNorm(n);
 	}
+	const float MC_BEND_NONE = 1e30f;	// no curvature to hold: the animated stencil is folded flat onto itself
+	// one stencil's curvature along its own normal, for the points in 'pos' (3 per particle); false = no normal
+	static inline bool StencilCurve(const mcGroup_t* g, size_t s, const float* pos, float* n, float* h) {
+		const int* st = &g->bendSt[s * 4];
+		const float* w = &g->bendW[s * 4];
+		const float* x[4] = { pos + st[0] * 3, pos + st[1] * 3, pos + st[2] * 3, pos + st[3] * 3 };
+		vec3_t H = { 0, 0, 0 };
+		for (int j = 0; j < 4; j++) mcMA(H, w[j], x[j], H);
+		StencilNormal(x[0], x[1], x[2], x[3], n);
+		if (mcDot(n, n) < 0.5f) return false;	// folded flat onto itself
+		*h = mcDot(H, n);
+		return true;
+	}
+	// SJE: the animated cloth's curvature per stencil. Worked out for the two ends of a step (Step) and blended
+	// for each substep, instead of once per stencil in every pass of every substep: a third of the stencils' cost.
+	static void BendTargets(const mcGroup_t* g, const std::vector<float>& tgt, std::vector<float>& out, bool looseOnly) {
+		const size_t ns = g->bendAlpha.size();
+		if (looseOnly) {
+			// only the loose stencils that bend (bendLooseIdx); the others hold nothing
+			out.assign(ns, MC_BEND_NONE);
+			for (const int s : g->bendLooseIdx) {
+				vec3_t n;
+				float h = 0.0f;
+				if (StencilCurve(g, (size_t)s, tgt.data(), n, &h)) out[s] = h;
+			}
+			return;
+		}
+		out.resize(ns);
+		for (size_t s = 0; s < ns; s++) {
+			vec3_t n;
+			float h = 0.0f;
+			out[s] = g->bendAlpha[s] >= 0.0f && StencilCurve(g, s, tgt.data(), n, &h) ? h : MC_BEND_NONE;
+		}
+	}
+	// SJE r_meshClothFine (bendModel 2): the stencils of loose cloth only, and each stencil gives by what its
+	// surface's 'bend' says. As the stencils were (bendModel 1) the give was added to the stencil's squared weights:
+	// a stencil of two even triangles took a quarter to a half of its fold out per substep, one with a thin triangle
+	// (weights up to 40) all of it - rigid, and rigid against the body's shapes: flaps, head tails and hip cloths
+	// lying on a crouching body shook for as long as the pose was held, a robe even standing. Now the give counts
+	// against the stencil's own squared weights (as a link's does against its two ends), so every stencil takes
+	// the same part of its fold out per substep; and a stencil with a point the shake watchdog has tripped lets go,
+	// as the layer rule and the triangle test do.
 	static void SolveBendStencils(const mcGroup_t* g, mcInstance_t* in, const mcSolve_t& sv) {
 		const size_t ns = g->bendAlpha.size();
-		if (!ns || g->bendSt.size() != ns * 4 || g->bendW.size() != ns * 4) return;
+		if (!ns || !sv.bendH || g->bendSt.size() != ns * 4 || g->bendW.size() != ns * 4 || g->bendDen.size() != ns) return;
 		if (in->bendLambda.size() != ns) in->bendLambda.resize(ns);
 		std::fill(in->bendLambda.begin(), in->bendLambda.end(), 0.0f);
 		const float ih2 = 1.0f / (sv.h * sv.h);
 		const int iters = !sv.xpbd ? 1 : (sv.xpbdIters < 1 ? 1 : (sv.xpbdIters > 8 ? 8 : sv.xpbdIters));
+		const bool fine = sv.bendModel == 2 && g->bendLoose.size() == ns;
+		const bool watch = fine && sv.bendTrip > 0.0f && in->fight.size() == (size_t)g->numParticles;
+		const size_t nl = fine ? g->bendLooseIdx.size() : ns;	// (fine: only the loose stencils, in the same order)
 		for (int it = 0; it < iters; it++) {
-			for (size_t s = 0; s < ns; s++) {
-				const float alpha = g->bendAlpha[s];
-				if (alpha < 0.0f) continue;
+			for (size_t k = 0; k < nl; k++) {
+				const size_t s = fine ? (size_t)g->bendLooseIdx[k] : k;
+				const float alpha = g->bendAlpha[s], den = g->bendDen[s], ht = sv.bendH[s];
+				if (alpha < 0.0f || den < 1e-6f || ht >= MC_BEND_NONE) continue;
+				if (fine && !g->bendLoose[s]) continue;
 				const int* st = &g->bendSt[s * 4];
+				if (watch && (in->fight[st[0]] >= sv.bendTrip || in->fight[st[1]] >= sv.bendTrip || in->fight[st[2]] >= sv.bendTrip || in->fight[st[3]] >= sv.bendTrip)) continue;
 				const float* w = &g->bendW[s * 4];
-				float wi[4], den = 0.0f;
-				for (int j = 0; j < 4; j++) { wi[j] = g->freedom[st[j]] > 0.0f ? 1.0f : 0.0f; den += wi[j] * w[j] * w[j]; }
-				if (den < 1e-6f) continue;
-				const float* x[4] = { &in->p[st[0] * 3], &in->p[st[1] * 3], &in->p[st[2] * 3], &in->p[st[3] * 3] };
-				const float* t[4] = { &in->target[st[0] * 3], &in->target[st[1] * 3], &in->target[st[2] * 3], &in->target[st[3] * 3] };
-				vec3_t H = { 0, 0, 0 }, Ht = { 0, 0, 0 }, nx, nt;
-				for (int j = 0; j < 4; j++) { mcMA(H, w[j], x[j], H); mcMA(Ht, w[j], t[j], Ht); }
-				StencilNormal(x[0], x[1], x[2], x[3], nx);
-				StencilNormal(t[0], t[1], t[2], t[3], nt);
-				if (mcDot(nx, nx) < 0.5f || mcDot(nt, nt) < 0.5f) continue;	// folded flat onto itself: no normal
-				const float C = mcDot(H, nx) - mcDot(Ht, nt);
+				float wi[4];
+				for (int j = 0; j < 4; j++) wi[j] = g->freedom[st[j]] > 0.0f ? 1.0f : 0.0f;
+				vec3_t nx;
+				float hx = 0.0f;
+				if (!StencilCurve(g, s, in->p.data(), nx, &hx)) continue;
+				const float C = hx - ht;
 				float dl;
 				if (sv.xpbd) {
-					const float at = alpha * ih2;
+					const float at = fine ? alpha * ih2 * 0.5f * den : alpha * ih2;
 					dl = (-C - at * in->bendLambda[s]) / (den + at);
 					in->bendLambda[s] += dl;
 				}
@@ -1177,12 +1432,24 @@ namespace {
 	// triangle test's limb pairs): there the limb rules decide where the cloth goes, and it may have to pass its
 	// own folds on the way. With the closing speed taken out of every touching pair, the cape that is brought out
 	// over a hand behind the back was held back by its own folds and the hand lay on top again.
-	static void SolveSelfPairs(const mcGroup_t* g, mcInstance_t* in, float frictionScale, bool calm, float trip) {
+	// SJE r_meshClothFine ('fine': the cloth's spacing is under r_meshClothFine). In a crouch the skinned cape is
+	// crushed between the body and the ground, and the links take their lengths from that crushed shape: they pull
+	// the cloth into folds tighter than the thickness, the self-collision pushed it out again, and as the separation
+	// keeps the speed the pair had ('a separation, not a throw') the two points pressed into each other in every
+	// substep with about 100 units/s - stored, never at rest, and let out in a jolt every second or so that woke
+	// the whole cape (a dense cape never came to rest in a crouch; 2.5 - 4 times the normal cape's tilt per step).
+	// In a fine mesh such pairs are only a few edges apart (the dense Vader cape: 6 - 7 units of cloth that the
+	// crouching pose lays 1.3 - 2.5 units apart); in a coarse mesh no points are that close. So in fine cloth:
+	// - a pair the POSE lays closer together than the thickness is kept apart only as far as the pose has it;
+	// - every touching pair loses its closing speed, not only one that shakes (but not where a limb moved the
+	//   cloth): the speed the links put into a pressed pair is not stored.
+	static void SolveSelfPairs(const mcGroup_t* g, mcInstance_t* in, float frictionScale, bool calm, float trip, bool fine = false) {
 		if (in->selfPairs.empty()) return;
 		const bool watch = calm && in->fight.size() == (size_t)g->numParticles;
 		const bool limbs = in->limbPush.size() == (size_t)g->numParticles;
 		const float thick = g->selfThick * in->linkScale;
 		if (!(thick > 0.05f) || thick > 64.0f) return;
+		const bool pose = fine && in->target.size() == in->p.size();
 		for (size_t i = 0; i + 1 < in->selfPairs.size(); i += 2) {
 			const int p = in->selfPairs[i], q = in->selfPairs[i + 1];
 			float* a = &in->p[p * 3], * b = &in->p[q * 3];
@@ -1190,16 +1457,27 @@ namespace {
 			mcSub(a, b, d);
 			const float len = mcLen(d);
 			if (len >= thick || len < 1e-5f) continue;
+			float apart = thick;	// the distance the pair is kept at
+			if (pose) {
+				vec3_t dt;
+				mcSub(&in->target[p * 3], &in->target[q * 3], dt);
+				const float t2 = mcDot(dt, dt);
+				if (t2 < thick * thick) {
+					apart = sqrtf(t2);
+					if (len >= apart) continue;
+				}
+			}
 			const bool hot = watch && (in->fight[p] >= trip || in->fight[q] >= trip)	// it shakes here ...
 				&& !(limbs && (in->limbPush[p] || in->limbPush[q]));					// ... and no limb is moving this cloth
-			const float corr = 0.5f * (thick - len) / len;
+			const float corr = 0.5f * (apart - len) / len;
 			mcMA(a, corr, d, a);
 			mcMA(b, -corr, d, b);
 			// a separation, not a throw
 			float* pa = &in->prev[p * 3], * pb = &in->prev[q * 3];
 			mcMA(pa, corr, d, pa);
 			mcMA(pb, -corr, d, pb);
-			if (hot) {
+			const bool calmFine = fine && !(limbs && (in->limbPush[p] || in->limbPush[q]));
+			if (hot || calmFine) {
 				// the pair's closing speed ends at the contact
 				vec3_t n, va0, vb0;
 				mcScale(d, 1.0f / len, n);
@@ -1251,7 +1529,7 @@ namespace {
 				for (size_t l = 0; l < g->linkA.size(); l++) {
 					const float alpha = g->linkAlpha[l];
 					if (alpha < 0.0f) continue;
-					if (sv.bendModel && g->linkBend[l]) continue;	// SJE: the stencils below bend it instead
+					if (g->linkBend[l] && (sv.bendModel == 1 || (sv.bendModel == 2 && g->linkLoose[l]))) continue;	// SJE: the stencils below bend it instead
 					const int a = g->linkA[l], b = g->linkB[l];
 					const float wa = g->freedom[a] > 0.0f ? 1.0f : 0.0f, wb = g->freedom[b] > 0.0f ? 1.0f : 0.0f;
 					if (wa + wb == 0.0f) continue;
@@ -1287,7 +1565,7 @@ namespace {
 				if (len < 1e-5f) continue;
 				float k = (len - rest) / (len * (wa + wb));
 				if (g->linkBend[l]) {
-					if (sv.bendModel) continue;	// SJE: the stencils below bend it instead
+					if (sv.bendModel == 1 || (sv.bendModel == 2 && g->linkLoose[l])) continue;	// SJE: the stencils below bend it instead
 					// the fraction of the fold removed per substep, so that one
 					// 16 ms step removes 'bend' of it whatever the substep count
 					// (SJE: worked out once per step in Step, not per link per substep)
@@ -1326,6 +1604,21 @@ namespace {
 				maxLen *= 1.03f;
 				const float len = mcLen(d);
 				if (len > maxLen && len > 1e-5f) mcMA(&in->p[an * 3], maxLen / len, d, pp);
+			}
+			// SJE 'ring': the second tether level - no further from its ring point than the cloth
+			// between them is long (or the pose has them, where that is more), no stretch allowed
+			if (sv.ring) {
+				const int rn = g->ringAnchor[p];
+				if (rn >= 0) {
+					vec3_t d, dt;
+					mcSub(pp, &in->p[rn * 3], d);
+					mcSub(t, &in->target[rn * 3], dt);
+					float maxLen = g->ringLen[p] * in->linkScale;
+					const float animLen = mcLen(dt);
+					if (animLen > maxLen) maxLen = animLen;
+					const float len = mcLen(d);
+					if (len > maxLen && len > 1e-5f) mcMA(&in->p[rn * 3], maxLen / len, d, pp);
+				}
 			}
 			// never higher than both the attached edge it hangs from and its
 			// animated spot: stops a fast turn or a spawn from flipping a cape
@@ -1389,7 +1682,8 @@ namespace {
 			// starting a saber move) while the cape was out at the limit, e.g.
 			// lifted up during a fall. A hard stop remains at twice the limit.
 			vec3_t d;
-			mcSub(pp, t, d);
+			const float* ta = sv.bell && g->bellW[p] > 0.0f ? &in->anchor[p * 3] : t;	// SJE 'bell': measured from the hip-carried shape
+			mcSub(pp, ta, d);
 			float maxLen = f * g->tether[p];
 			if (g->reach > 0.0f && (int)g->rootDist.size() == g->numParticles) {
 				const float rl = g->reach * g->rootDist[p] * in->linkScale;
@@ -1400,7 +1694,7 @@ namespace {
 				const float k = sv.tetherK;	// ~15% per 16/6 ms, frame-rate independent (SJE: per-step constant)
 				float target = len - (len - maxLen) * k;
 				if (target > 2.0f * maxLen) target = 2.0f * maxLen;
-				mcMA(t, target / len, d, pp);
+				mcMA(ta, target / len, d, pp);
 #ifdef MC_DEBUG
 				g_mcDbgTether++;
 #endif
@@ -1920,7 +2214,28 @@ namespace {
 		// only the last hem points do. In a heap the rule pushed one layer under the other, into the floor, the
 		// floor pushed it back, and cape and robe shook for as long as the crouch lasted.
 		float pile = 0.0f;
-		if (prm->floor) {
+		// SJE r_meshClothFine: "a good part of the free cloth" is a part of its AREA. Counted in points it depends on
+		// where the mesh is fine: of Vader's cape, standing, 7.8 % of the points are under the floor (the hem row of a
+		// floor-length cape: the rule is off), of the same cape with every triangle split in four 4.7 % (the rule is
+		// on) - the hem is one row of points either way, the rest of the cape has four times as many. So the fine
+		// cape was held to the layer order standing, stopping, turning and getting up, where the coarse one is left
+		// alone, and it shook there. By area the fine cape measures 7.6 %: what the coarse one's points say. Coarser
+		// cloth keeps the count of points it was tuned with.
+		// (Only for fine cloth that collides with itself, as the stencils: the game's other fine cloth keeps its count.)
+		if (prm->floor && prm->fine > 0.0f && g->spacing > 0.0f && g->spacing < prm->fine && g->anySelf && (int)g->partArea.size() == g->numParticles) {
+			float under = 0.0f, all = 0.0f;
+			for (int p = 0; p < g->numParticles; p++) {
+				if (g->freedom[p] <= 0.0f) continue;
+				all += g->partArea[p];
+				vec3_t df;
+				mcSub(&in->target[p * 3], prm->floorPt, df);
+				if (mcDot(df, prm->floorN) < -MC_LAYER_UNDER) under += g->partArea[p];
+			}
+			if (all > 0.0f) pile = (under / all - MC_LAYER_PILE) / (0.5f * MC_LAYER_PILE);
+			if (pile < 0.0f) pile = 0.0f;
+			if (pile > 1.0f) pile = 1.0f;
+		}
+		else if (prm->floor) {
 			int under = 0, nfree = 0;
 			for (int p = 0; p < g->numParticles; p++) {
 				if (g->freedom[p] <= 0.0f) continue;
@@ -2072,6 +2387,16 @@ namespace {
 			}
 			move[c] = (capsEnd && capsEnd[c].r > caps[c].r ? capsEnd[c].r : caps[c].r) + m;
 		}
+		// SJE: a shape's middle and half length: a point further from the middle than the half length plus its
+		// reach cannot be within reach of the axis, so the exact test below is only made for shapes near the
+		// point (with a dense cape most point / shape tests were of shapes far away). The list is the same.
+		float mid[MC_NEAR_CAPS][3], half[MC_NEAR_CAPS];
+		for (int c = 0; c < ncaps; c++) {
+			vec3_t ab;
+			mcSub(caps[c].b, caps[c].a, ab);
+			half[c] = 0.5f * mcLen(ab);
+			for (int k = 0; k < 3; k++) mid[c][k] = 0.5f * (caps[c].a[k] + caps[c].b[k]);
+		}
 		const bool kick = in->impulse.size() == in->p.size();
 		for (int p = 0; p < np; p++) {
 			in->ptCapStart[p] = (int)in->ptCaps.size();
@@ -2089,10 +2414,13 @@ namespace {
 			// (0.26: the point test's resting distance of 0.25, and rounding)
 			const float travel = (MC_MARGIN > 0.5f * g->thick[p] ? MC_MARGIN : 0.5f * g->thick[p]) + 0.26f + allow;
 			for (int c = 0; c < ncaps; c++) {
+				const float reach = move[c] + travel;
+				const float far = reach + half[c];
+				mcSub(x, mid[c], d);
+				if (mcDot(d, d) > far * far * 1.0005f + 0.01f) continue;	// out of reach for sure (see above)
 				vec3_t q;
 				ClosestOnAxis(caps[c], x, q);
 				mcSub(x, q, d);
-				const float reach = move[c] + travel;
 				if (mcDot(d, d) <= reach * reach) in->ptCaps.push_back((unsigned char)c);
 			}
 		}
@@ -2687,6 +3015,22 @@ namespace {
 			cells.push_back({ key(cellOf(v, 0), cellOf(v, 1), cellOf(v, 2)), p });
 		}
 		std::sort(cells.begin(), cells.end(), [](const cellEntry_t& x, const cellEntry_t& y) { return x.key < y.key; });
+		// SJE: where each cell's run starts in the sorted list, found through a small hash table instead of a
+		// binary search per neighbour cell (27 searches per point were a third of a dense cape's step set-up).
+		// The runs and their order are the same, so the pairs come out in the same order as before.
+		thread_local static std::vector<int> slot;
+		size_t tabSize = 64;
+		while (tabSize < cells.size() * 2) tabSize <<= 1;
+		slot.assign(tabSize, -1);
+		const size_t tabMask = tabSize - 1;
+		auto slotOf = [&](long long k) { return (size_t)(((unsigned long long)k * 0x9E3779B97F4A7C15ULL) >> 20) & tabMask; };
+		for (size_t i = 0; i < cells.size(); i++) {
+			if (i > 0 && cells[i].key == cells[i - 1].key) continue;
+			size_t s = slotOf(cells[i].key);
+			while (slot[s] >= 0) s = (s + 1) & tabMask;
+			slot[s] = (int)i;
+		}
+		const cellEntry_t* const cellEnd = cells.data() + cells.size();
 		const size_t maxPairs = 65536 * 2;	// safety cap (a broken scale bunching the whole cloth together)
 		for (int p = 0; p < g->numParticles && in->selfPairs.size() < maxPairs; p++) {
 			if (g->freedom[p] <= 0.0f || !g->selfCol[p]) continue;
@@ -2694,8 +3038,10 @@ namespace {
 			const long long cx = cellOf(a, 0), cy = cellOf(a, 1), cz = cellOf(a, 2);
 			for (long long dx = -1; dx <= 1; dx++) for (long long dy = -1; dy <= 1; dy++) for (long long dz = -1; dz <= 1; dz++) {
 				const long long k = key(cx + dx, cy + dy, cz + dz);
-				auto it = std::lower_bound(cells.begin(), cells.end(), k, [](const cellEntry_t& e, long long v) { return e.key < v; });
-				for (; it != cells.end() && it->key == k; ++it) {
+				size_t s = slotOf(k);
+				while (slot[s] >= 0 && cells[slot[s]].key != k) s = (s + 1) & tabMask;
+				if (slot[s] < 0) continue;
+				for (const cellEntry_t* it = cells.data() + slot[s]; it != cellEnd && it->key == k; ++it) {
 					const int q = it->p;
 					if (q <= p) continue;
 					vec3_t bd;
@@ -2800,6 +3146,65 @@ namespace {
 			g->rootS.swap(part);
 			g->numSheets = (int)longest.size();	// SJE r_meshClothCarryFloor
 			g->sheetOf.swap(sheet);
+			g->sheetLen.swap(longest);	// SJE r_meshClothNoRoom
+		}
+	}
+
+	// SJE: heavy-cape options, worked out once per group (lazy, main thread, after ComputeRootDist).
+	// 'spring S A': each point's pull per 16 ms toward its animated spot, S x exp(-A x its distance along the cloth from
+	// the attached edge in metres, 39.37 units each) - strong near the collar, weak at the hem.
+	// 'ring D': the second tether level. The upper cloth hangs from the attached edge; every point lower down is also tied,
+	// with no stretch allowed, to a ring of points further down, so the lower cape keeps its length from that ring and
+	// swings round it as one piece instead of stretching. The ring is the first row of
+	// points D units (bind, along the cloth) below the attached edge; every point further down is tied to the ring point
+	// nearest to it along the cloth, at most that bind distance away (or the pose's, where the pose is longer). The
+	// first level is the long range attachment every free point has to the attached edge (lraAnchor).
+	static void ComputeRing(const mcGroup_t* g) {
+		if (g->ringBuilt || !g->anyHeavy) return;
+		g->ringBuilt = true;
+		const int n = g->numParticles;
+		if ((int)g->rootDist.size() != n || (int)g->ringD.size() != n || (int)g->springS.size() != n) return;
+		g->springK.assign(n, 0.0f);
+		for (int p = 0; p < n; p++) {
+			if (g->springS[p] <= 0.0f || g->freedom[p] <= 0.0f) continue;
+			g->springK[p] = g->springS[p] * expf(-g->springA[p] * g->rootDist[p] * (1.0f / 39.37f));
+		}
+		g->ringAnchor.assign(n, -1);
+		g->ringLen.assign(n, 0.0f);
+		if (!g->anyRing) return;
+		std::vector<std::vector<std::pair<int, float>>> adj(n);
+		for (size_t l = 0; l < g->linkA.size(); l++) {
+			if (g->linkBend[l]) continue;
+			const int a = g->linkA[l], b = g->linkB[l];
+			vec3_t d; mcSub(&g->bindPos[a * 3], &g->bindPos[b * 3], d);
+			const float len = mcLen(d);
+			adj[a].push_back({ b, len }); adj[b].push_back({ a, len });
+		}
+		auto lower = [&](int p) { return g->ringD[p] > 0.0f && g->freedom[p] > 0.0f && g->rootDist[p] >= g->ringD[p]; };
+		std::vector<float> dist(n, 1e30f);
+		std::vector<int> from(n, -1);
+		std::priority_queue<std::pair<float, int>, std::vector<std::pair<float, int>>, std::greater<std::pair<float, int>>> q;
+		for (int p = 0; p < n; p++) {
+			if (!lower(p)) continue;
+			bool edge = false;
+			for (const auto& e : adj[p]) if (g->rootDist[e.first] < g->ringD[p]) { edge = true; break; }
+			if (!edge) continue;
+			dist[p] = 0.0f; from[p] = p;
+			q.push({ 0.0f, p });
+		}
+		while (!q.empty()) {
+			const auto top = q.top(); q.pop();
+			if (top.first > dist[top.second]) continue;
+			for (const auto& e : adj[top.second]) {
+				if (!lower(e.first)) continue;
+				const float nd = top.first + e.second;
+				if (nd < dist[e.first]) { dist[e.first] = nd; from[e.first] = from[top.second]; q.push({ nd, e.first }); }
+			}
+		}
+		for (int p = 0; p < n; p++) {
+			if (from[p] < 0 || from[p] == p) continue;
+			g->ringAnchor[p] = from[p];
+			g->ringLen[p] = dist[p];
 		}
 	}
 
@@ -3116,10 +3521,72 @@ namespace {
 		solve.overArms = prm->overArms;
 		solve.rest = prm->rest != 0;
 		solve.ease = prm->ease != 0;
+		// SJE: heavy-cape options ('damp', 'spring', 'bell', 'ring'; only groups with a line that asks for one).
+		// Per substep each point gets its animated spot (in->anchor): the animated pose, with the hip-carried shape
+		// blended in where the line has 'bell' (BellPose), never under the floor.
+		const bool heavy = g->anyHeavy && (int)g->dampH.size() == g->numParticles && (int)g->springK.size() == g->numParticles;
+		const bool bellStep = heavy && g->anyBell && in->bellOk && in->bellFrom.size() == tgtTo.size() && in->bellTo.size() == tgtTo.size();
+		solve.bell = bellStep ? 1 : 0;
+		solve.ring = heavy && g->anyRing && (int)g->ringAnchor.size() == g->numParticles && (int)g->ringLen.size() == g->numParticles ? 1 : 0;
+		thread_local static std::vector<float> kDampH, kDampV, kSpring;
+		if (heavy) {
+			const float isub = 1.0f / sub;
+			// 'spring' lets go while its wearer runs: held to the hips the cape hung straight down in a run (the
+			// travel wind could not stream it back); standing, walking, turning and swinging the saber it pulls in
+			// full. Walking pace (100 units/s) and below: all of it; 190 and up (a run): none. It lets go over about
+			// 0.15 s when a run starts; after a run it takes hold again slowly (MC_SPRING_BACK): taken up in 0.15 s,
+			// the cape streaming behind was yanked to the hips when he stopped - the hem swung from 15 units behind
+			// to 6 in front and 9 to the side within 0.3 s, then snapped into the pose. Slowly, it glides forward
+			// on its own.
+			{
+				const float vu = mcDot(in->originVel, in->up);
+				vec3_t vh;
+				mcMA(in->originVel, -vu, in->up, vh);
+				float want = MCDBG_OFF("NOSPRINGRUN") ? 0.0f : Clamp01((mcLen(vh) - 100.0f) * (1.0f / 90.0f));
+				// ... and while he jumps or falls (up-down 100 units/s and more: lets go fully at 190): held to the hips
+				// in a jump from standing the cape stayed glued to him in the air and on landing - its hem rose 5 units
+				// over the pose where a free cape rises 21
+				const float wj = Clamp01((fabsf(vu) - 100.0f) * (1.0f / 90.0f));
+				if (wj > want) want = wj;
+				const float tau = want > in->springRun ? 0.15f : MC_SPRING_BACK;
+				in->springRun += (want - in->springRun) * (1.0f - expf(-MC_DT / tau));
+			}
+			kDampH.resize(g->numParticles); kDampV.resize(g->numParticles); kSpring.resize(g->numParticles);
+			for (int p = 0; p < g->numParticles; p++) {
+				kDampH[p] = g->dampH[p] > 0.0f ? 1.0f - powf(1.0f - g->dampH[p], isub) : 0.0f;
+				kDampV[p] = g->dampV[p] > 0.0f ? 1.0f - powf(1.0f - g->dampV[p], isub) : 0.0f;
+				const float ks = g->springK[p] * (1.0f - in->springRun);
+				kSpring[p] = ks > 0.0f ? 1.0f - powf(1.0f - ks, isub) : 0.0f;
+			}
+			in->anchor.resize(tgtTo.size());
+		}
 		// SJE: per-step constants. These powf()s ran per particle (tether, spread, shape) or per bend link in
 		// every substep; they only depend on the substep count and the static settings.
 		solve.tetherK = 1.0f - powf(0.85f, bendScale * 6.0f);
-		solve.bendModel = prm->bendModel == 1 && !g->bendAlpha.empty() ? 1 : 0;
+		// SJE r_meshClothFine: in cloth finer than this, loose sheets that collide with themselves (a cape, a cloak)
+		// bend by their curvature. A bend link's answer to a fold grows with the square of the fold's angle per edge,
+		// and a mesh twice as fine has half the angle per edge for the same fold: the finer the mesh, the less its
+		// bend links hold, and a fine cape ripples and does not come to rest where a coarse one of the same shape
+		// lies still. The curvature stencils answer in proportion to the angle, whatever the spacing. Coarser cloth
+		// keeps the bend links it was tuned with, and so does cloth worn round the body (a skirt, a robe: the pose
+		// crushes it against the legs in every stride, and its bend links let that pass) and cloth without
+		// self-collision (ComputeBendStencils).
+		const bool fineCloth = prm->bendModel == 0 && prm->fine > 0.0f && g->spacing > 0.0f && g->spacing < prm->fine && g->anyLoose;
+		// SJE r_meshClothFine: fine cloth's self-collision (SolveSelfPairs)
+		const bool fineSelf = prm->fine > 0.0f && g->spacing > 0.0f && g->spacing < prm->fine && g->anySelf;
+		solve.bendModel = g->bendAlpha.empty() ? 0 : (prm->bendModel == 1 ? 1 : (fineCloth ? 2 : 0));
+		solve.bendTrip = MC_FIGHT_TRIP;
+		// (bend model 1 works its target out in every substep, as it always did)
+		const bool bendEnds = solve.bendModel == 2 && tgtFrom.size() == in->p.size() && tgtTo.size() == in->p.size();
+		if (bendEnds) {
+			// the start of this step is normally the end of the last: then its curvature is known already
+			if (in->bendH1.size() == g->bendAlpha.size() && in->bendTgt1.size() == tgtFrom.size()
+				&& memcmp(in->bendTgt1.data(), tgtFrom.data(), tgtFrom.size() * sizeof(float)) == 0) in->bendH0.swap(in->bendH1);
+			else BendTargets(g, tgtFrom, in->bendH0, true);
+			BendTargets(g, tgtTo, in->bendH1, true);
+			in->bendTgt1.assign(tgtTo.begin(), tgtTo.end());
+			in->bendH.resize(in->bendH0.size());
+		}
 		solve.bendK = nullptr;
 		if (!(solve.xpbd && g->linkAlpha.size() == g->linkA.size()) && !solve.bendModel) {
 			std::vector<float>& kb = in->kBendLink;
@@ -3141,6 +3608,57 @@ namespace {
 				const float sp = g->spread[p], sh = g->shape[p] * prm->shapeScale;
 				ksp[p] = sp > 0.0f ? 1.0f - powf(1.0f - Clamp01(sp), isub) : 0.0f;
 				ksh[p] = sh > 0.0f ? 1.0f - powf(1.0f - Clamp01(sh), isub) : 0.0f;
+			}
+			// SJE r_meshClothNoRoom: worn cloth that has no room to hang takes the shape its wearer's pose gives it.
+			// A robe, a skirt or the strips under it are about as long as their wearer's legs. When he crouches, kneels,
+			// sits or lies, their attached edge comes down to half the cloth's length above the floor and the rest has
+			// nowhere to hang: it was laid on the ground as it fell, crumpled and twisted over itself (strips three
+			// points wide fold like paper and read as torn), spread out round the legs, and went on working against
+			// floor and legs for seconds. The pose says where such cloth belongs then: it is skinned to the legs, the
+			// modeller draped it over the knees. So it is drawn towards its animated shape, the more the less room it
+			// has: not at all while its attached edge is higher over the floor than MC_NOROOM_FROM of the room it needs
+			// (standing, walking, running, in the air: as before, bit for bit), in full from MC_NOROOM_FROM -
+			// MC_NOROOM_SPAN down. The room it needs is the sheet's length, or the height its attached edge stands at
+			// in the bind pose where that is less (a robe with a train lies on the ground while its wearer stands and
+			// is not short of room for that; a short skirt has room in a crouch too). Body tests, floor and layers act
+			// as ever. Not capes and cloaks: they are skinned to the back, their pose in a crouch is a board through
+			// the floor; they pile up behind their wearer as before.
+			if (prm->noRoom > 0.0f && prm->floor && g->numSheets > 0 && (int)g->sheetOf.size() == g->numParticles
+				&& (int)g->sheetLen.size() == g->numSheets && (int)g->wrap.size() == g->numParticles
+				&& (int)g->under.size() == g->numParticles && tgtTo.size() == (size_t)g->numParticles * 3
+				&& g->bindPos.size() >= (size_t)g->numParticles * 3) {
+				thread_local static std::vector<float> edgeH, edgeB, crowd;
+				thread_local static std::vector<int> edgeN;
+				edgeH.assign((size_t)g->numSheets, 0.0f);
+				edgeB.assign((size_t)g->numSheets, 0.0f);
+				edgeN.assign((size_t)g->numSheets, 0);
+				for (int p = 0; p < g->numParticles; p++) {
+					if (g->freedom[p] > 0.0f) continue;
+					vec3_t fr;
+					mcSub(&tgtTo[p * 3], prm->floorPt, fr);
+					edgeH[g->sheetOf[p]] += mcDot(fr, prm->floorN);
+					edgeB[g->sheetOf[p]] += g->bindPos[(size_t)p * 3 + 2];	// (bind-pose model units, feet at 0)
+					edgeN[g->sheetOf[p]]++;
+				}
+				crowd.assign((size_t)g->numSheets, 0.0f);
+				bool any = false;
+				const float ls = in->linkScale > 1e-3f ? in->linkScale : 1.0f;
+				for (int sh = 0; sh < g->numSheets; sh++) {
+					if (!edgeN[sh]) continue;
+					float need = g->sheetLen[sh];
+					const float stood = edgeB[sh] / edgeN[sh];
+					if (stood > 1.0f && stood < need) need = stood;
+					need *= ls;
+					if (need < 4.0f) continue;
+					crowd[sh] = Clamp01((MC_NOROOM_FROM * need - edgeH[sh] / edgeN[sh]) / (MC_NOROOM_SPAN * need));
+					if (crowd[sh] > 0.0f) any = true;
+				}
+				if (any) for (int p = 0; p < g->numParticles; p++) {
+					const float c = crowd[g->sheetOf[p]];
+					if (c <= 0.0f || g->freedom[p] <= 0.0f || !(g->wrap[p] || g->under[p])) continue;
+					const float pull = Clamp01(g->shape[p] * prm->shapeScale + prm->noRoom * MC_NOROOM_SHAPE * c);
+					ksh[p] = pull > 0.0f ? 1.0f - powf(1.0f - pull, isub) : 0.0f;
+				}
 			}
 		}
 		std::vector<float>& n = in->scratchN;
@@ -3322,6 +3840,38 @@ namespace {
 			const float t1 = (float)(s + 1) / sub;
 			if (s > 0) in->targetSub.assign(in->target.begin(), in->target.end());
 			for (size_t i = 0; i < tgtTo.size(); i++) in->target[i] = tgtFrom[i] + (tgtTo[i] - tgtFrom[i]) * t1;
+			if (heavy) {
+				// SJE: each point's animated spot at the end of this substep ('bell' blended in)
+				for (int p = 0; p < g->numParticles; p++) {
+					float* A = &in->anchor[p * 3];
+					mcCopy(&in->target[p * 3], A);
+					if (g->freedom[p] <= 0.0f) continue;
+					if (bellStep && g->bellW[p] > 0.0f) {
+						const float w = Clamp01(g->bellW[p] * g->freedom[p]);
+						const float* bf = &in->bellFrom[p * 3], * bt = &in->bellTo[p * 3];
+						for (int k = 0; k < 3; k++) A[k] += w * (bf[k] + (bt[k] - bf[k]) * t1 - A[k]);
+					}
+					// never under the floor: a crouch takes the pose (and the hip-carried bell) down through it, and a
+					// spring or tether toward a spot under the ground fought the floor every substep
+					if (prm->floor) {
+						vec3_t fr;
+						mcSub(A, prm->floorPt, fr);
+						const float u = mcDot(fr, prm->floorN) - MC_FLOOR_GAP;
+						if (u < 0.0f) mcMA(A, -u, prm->floorN, A);
+					}
+				}
+			}
+			if (solve.bendModel) {
+				// SJE: the curvature the stencils hold in this substep
+				if (bendEnds) {
+					for (size_t b = 0; b < in->bendH.size(); b++) {
+						const float h0 = in->bendH0[b], h1 = in->bendH1[b];
+						in->bendH[b] = h0 >= MC_BEND_NONE || h1 >= MC_BEND_NONE ? MC_BEND_NONE : h0 + (h1 - h0) * t1;
+					}
+				}
+				else BendTargets(g, in->target, in->bendH, solve.bendModel == 2);
+				solve.bendH = in->bendH.data();
+			}
 			std::fill(in->push.begin(), in->push.end(), 0.0f);
 			std::fill(in->contact.begin(), in->contact.end(), 0);
 			ParticleNormals(g, in->p, n);
@@ -3338,6 +3888,24 @@ namespace {
 				mcSub(pp, pv, v);
 				mcScale(v, damp, v);
 				if (s == 0 && in->impulse.size() == in->p.size()) mcMA(v, h, &in->impulse[p * 3], v);
+				if (heavy && (kDampH[p] > 0.0f || kDampV[p] > 0.0f)) {
+					// SJE 'damp': the cloth's speed in a frame that travels with the character but
+					// does not turn with him dies out, sideways and up-down apart. So his run is not damped (no head wind
+					// that streams the cape back), a swing after a stop or a turn dies out in about half a second, and
+					// in a turn or a saber swing the cape still lags and flares. (Damped against its animated spot
+					// instead, the cape was dragged round with every turn: it hardly flared.)
+					vec3_t va, r, rh;
+					mcScale(in->originVel, h, va);
+					// the frame travels with him over the ground only, not up and down: travelling with his jumps it
+					// glued the cape to him in the air and on landing; so a jump or a fall has the cape lag and settle
+					// by its own weight, as without 'damp'
+					mcMA(va, -mcDot(va, in->up), in->up, va);
+					mcSub(v, va, r);
+					const float rv = mcDot(r, in->up);
+					mcMA(r, -rv, in->up, rh);
+					mcMA(v, -kDampH[p], rh, v);
+					mcMA(v, -kDampV[p] * rv, in->up, v);
+				}
 				// under water (r_meshClothWater): heavy drag instead of the air, and the cloth floats up a little
 				const bool underWater = prm->water && pp[2] < prm->waterZ;
 				if (underWater) {
@@ -3450,6 +4018,12 @@ namespace {
 					mcSub(&in->target[p * 3], pp, d);
 					mcMA(pp, k, d, pp);
 				}
+				if (heavy && kSpring[p] > 0.0f) {
+					// SJE 'spring': pulled toward its animated spot, strong near the attached edge
+					vec3_t d;
+					mcSub(&in->anchor[p * 3], pp, d);
+					mcMA(pp, kSpring[p], d, pp);
+				}
 			}
 			const mcCapsule_t* cs = caps;
 			if (capsFrom) {
@@ -3464,7 +4038,7 @@ namespace {
 			}
 			solve.faceNow = (s & 1) || s == sub - 1;
 			SolveConstraints(g, in, cs, ncaps, solve);
-			if (selfSub) SolveSelfPairs(g, in, prm->frictionScale, prm->calm != 0, MC_FIGHT_TRIP);
+			if (selfSub) SolveSelfPairs(g, in, prm->frictionScale, prm->calm != 0, MC_FIGHT_TRIP, fineSelf);
 			if (prm->layers && !g->layerPairs.empty()) SolveLayerPairs(g, in, prm);	// SJE: cloth layers keep their order
 			FloorCollide(g, in, prm);
 			ContactVelocity(g, in, prm->frictionScale);
@@ -3645,6 +4219,26 @@ namespace {
 		return true;
 	}
 
+	// SJE 'bell': the group's bind shape carried by the hip bone alone, in world space: a rigid bell that turns with the
+	// pelvis and never walks with the legs. Without it the animated shape is wherever the model's own skinning puts it - a cape skinned
+	// partly to thighs and shins swings with every stride. The points of a line with 'bell' measure their tether and
+	// spring from this shape instead, blended in by B x their freedom (Step). Clears bellNow where not used.
+	static void BellPose(const mcGroup_t* g, mcInstance_t* in, const mcParams_t* prm, mcBoneFn_t boneFn, void* boneCtx,
+		const vec3_t origin, const vec3_t axis[3]) {
+		if (!g->anyBell || prm->hipBone < 0 || (int)g->bellW.size() != g->numParticles || (int)g->bindPos.size() < g->numParticles * 3) {
+			in->bellNow.clear();
+			return;
+		}
+		const float (*m)[4] = boneFn(boneCtx, prm->hipBone);
+		in->bellNow.resize((size_t)g->numParticles * 3);
+		for (int p = 0; p < g->numParticles; p++) {
+			const float* b = &g->bindPos[p * 3];
+			vec3_t l;
+			for (int r = 0; r < 3; r++) l[r] = m[r][0] * b[0] + m[r][1] * b[1] + m[r][2] * b[2] + m[r][3];
+			ToWorld(l, origin, axis, &in->bellNow[p * 3]);
+		}
+	}
+
 	void Simulate(const mcGroup_t* g, mcInstance_t* in, int timeMs, const vec3_t origin, const vec3_t axis[3],
 		const mcCapsule_t* caps, int ncaps, const mcParams_t* prm, mcBoneFn_t boneFn, void* boneCtx) {
 		ComputeRootDist(g);
@@ -3666,6 +4260,15 @@ namespace {
 			}
 		}
 		for (int p = 0; p < g->numParticles; p++) mcCopy(&drawTarget[g->seedDraw[p] * 3], &target[p * 3]);
+		// SJE 'bell' (only groups with a line that asks for it): this frame's hip-carried shape. The
+		// steps below take it from where the last step left it to here, as the animated pose (bellFrom / bellTo).
+		in->bellOk = false;
+		if (g->anyBell) BellPose(g, in, prm, boneFn, boneCtx, origin, axis);
+		auto bellAtOnce = [&]() {	// settling, sleeping: every step at this frame's shape
+			if (in->bellNow.empty()) return;
+			in->bellPrev = in->bellNow; in->bellSim = in->bellNow; in->bellFrom = in->bellNow; in->bellTo = in->bellNow;
+			in->bellOk = true;
+		};
 
 		if (in->active) {
 			const int dt = timeMs - in->lastTime;
@@ -3783,6 +4386,7 @@ namespace {
 				mcCopy(origin, in->lastOrigin);
 			}
 			UpdateSide(g, in, target);
+			if (g->anyBell) bellAtOnce();	// SJE 'bell'
 			int steps = in->settleLeft;	// (switched off meanwhile: the rest at once)
 			if (spread) {
 				// (the workers share memory and cores: a crowd's steps take about a third of the workers' count at once)
@@ -3862,6 +4466,7 @@ namespace {
 			mcNorm(in->up);
 
 			UpdateSide(g, in, target);
+			if (g->anyBell) bellAtOnce();	// SJE 'bell'
 			// let the cloth fall into its hanging shape before it is first seen,
 			// instead of starting in the modelled (often flared) pose
 			for (int k = 0; k < MC_SETTLE_STEPS; k++) Step(g, in, target, target, nearCaps, nnear, prm);
@@ -3890,10 +4495,17 @@ namespace {
 			in->target.assign(target.begin(), target.end());
 			in->lastTime = timeMs;
 			in->accum = 0;
+			if (g->anyBell) bellAtOnce();	// SJE 'bell'
 		}
 		else {
 			mcCopy(axis[2], in->up);
 			mcNorm(in->up);
+			// SJE 'bell': the hip-carried shape of the last frame and of the last step (first time: this frame's)
+			const bool bellRun = !in->bellNow.empty();
+			if (bellRun && (in->bellPrev.size() != in->bellNow.size() || in->bellSim.size() != in->bellNow.size())) {
+				in->bellPrev = in->bellNow;
+				in->bellSim = in->bellNow;
+			}
 
 			// inertia scale (as in game cloth tools): only part of the
 			// character's travel through the world reaches the cloth, so a
@@ -3936,7 +4548,7 @@ namespace {
 			}
 			if (mcDot(dO, dO) < MC_TELEPORT * MC_TELEPORT && odt > 0) {
 				const float dt = odt * 0.001f;
-				// max acceleration (Battlefront II's cloth "MaxAcceleration"):
+				// max acceleration:
 				// the cloth feels the character's speeding up, stopping and
 				// turning only up to a limit; any harder jolt carries it along
 				// instead of whipping it
@@ -4009,6 +4621,10 @@ namespace {
 					// attachment for a moment and yanks it
 					mcAdd(&in->targetPrev[p * 3], shift, &in->targetPrev[p * 3]);
 					if (in->simTarget.size() == in->targetPrev.size()) mcAdd(&in->simTarget[p * 3], shift, &in->simTarget[p * 3]);
+					if (bellRun) {	// SJE 'bell': the hip-carried shape is carried along as the animated pose is
+						mcAdd(&in->bellPrev[p * 3], shift, &in->bellPrev[p * 3]);
+						mcAdd(&in->bellSim[p * 3], shift, &in->bellSim[p * 3]);
+					}
 					if (g->freedom[p] <= 0.0f) continue;
 					vec3_t shiftP;
 					mcCopy(shift, shiftP);
@@ -4051,6 +4667,7 @@ namespace {
 				std::vector<float>& from = in->scratchFrom, & to = in->scratchTo;
 				if (in->simTarget.size() != target.size()) in->simTarget.assign(in->targetPrev.begin(), in->targetPrev.end());
 				to.assign(in->simTarget.begin(), in->simTarget.end());
+				if (bellRun) in->bellTo.assign(in->bellSim.begin(), in->bellSim.end());	// SJE 'bell'
 				float tPrev = 0.0f;
 				for (int s = 0; s < steps; s++) {
 					// each step ends at a fixed 16 ms tick of the simulation clock;
@@ -4061,6 +4678,12 @@ namespace {
 					from.swap(to);
 					to.resize(target.size());
 					for (size_t i = 0; i < target.size(); i++) to[i] = in->targetPrev[i] + (target[i] - in->targetPrev[i]) * t1;
+					if (bellRun) {	// SJE 'bell': the hip-carried shape over the same step
+						in->bellFrom.swap(in->bellTo);
+						in->bellTo.resize(target.size());
+						for (size_t i = 0; i < target.size(); i++) in->bellTo[i] = in->bellPrev[i] + (in->bellNow[i] - in->bellPrev[i]) * t1;
+						in->bellOk = true;
+					}
 					capsAt(tPrev, stepFrom);
 					capsAt(t1, stepTo);
 					Step(g, in, from, to, stepTo, nnear, prm, sweep ? stepFrom : nullptr);
@@ -4075,6 +4698,10 @@ namespace {
 				}
 				// without a step the simulation clock stays put and keeps its pose sample
 				if (steps > 0) in->simTarget.assign(to.begin(), to.end());
+				if (bellRun) {	// SJE 'bell'
+					if (steps > 0) in->bellSim.assign(in->bellTo.begin(), in->bellTo.end());
+					in->bellPrev.assign(in->bellNow.begin(), in->bellNow.end());
+				}
 				if (in->showSteps < MC_SHOW_STEPS) in->showSteps += steps;	// SJE r_meshClothSettle
 				in->targetPrev.assign(target.begin(), target.end());
 				in->lastTime = timeMs;
@@ -4159,9 +4786,48 @@ namespace {
 		// grid offsets -> every drawn point (identity without a grid)
 		std::vector<float>& out = in->drawOut;
 		out.resize((size_t)g->numDraw * 3);
+		// SJE 'wrap': the grid points where they are drawn now (animated place + offset), for drawing from the triangles
+		const bool wrapDraw = g->proxied && g->wrapOn && g->wrapTri.size() == (size_t)g->numDraw * MC_WRAP_K && g->wrapW.size() == g->wrapTri.size();
+		thread_local static std::vector<float> wrapP;
+		if (wrapDraw) {
+			wrapP.resize((size_t)g->numParticles * 3);
+			for (int q = 0; q < g->numParticles; q++) mcAdd(&target[q * 3], &off[q * 3], &wrapP[q * 3]);
+		}
 		for (int d = 0; d < g->numDraw; d++) {
 			vec3_t o = { 0, 0, 0 };
-			if (g->drawFree[d] > 0.0f) {
+			if (wrapDraw && g->drawFree[d] > 0.0f && g->wrapTri[(size_t)d * MC_WRAP_K] >= 0) {
+				// the blend of its grid triangles as they are now (each: where it lay in the triangle's plane, and as far
+				// off it along the triangle's normal), shared by how near each lay in the bind pose
+				vec3_t pos = { 0, 0, 0 };
+				float fq = 0.0f, wUsed = 0.0f;
+				// (a grid triangle squeezed to under a quarter of its bind size in a fast swing has an unsteady normal - a
+				// point drawn from it along that normal can be flung off for a frame: such a triangle is left out of the
+				// blend while it is squeezed; the nearest one is always used)
+				const bool wrapGuard = g->wrapA.size() == g->wrapTri.size();
+				for (int j = 0; j < MC_WRAP_K; j++) {
+					const size_t s = (size_t)d * MC_WRAP_K + j;
+					if (g->wrapTri[s] < 0) break;
+					const int* tc = &g->tris[g->wrapTri[s] * 3];
+					const float* bc = &g->wrapBc[s * 3];
+					const float* pa = &wrapP[tc[0] * 3], * pb = &wrapP[tc[1] * 3], * pc = &wrapP[tc[2] * 3];
+					vec3_t e0, e1, nf;
+					mcSub(pb, pa, e0); mcSub(pc, pa, e1); mcCross(e0, e1, nf);
+					const float areaNow = mcNorm(nf);
+					if (areaNow < 1e-6f) nf[0] = nf[1] = nf[2] = 0.0f;
+					if (j > 0 && wrapGuard && areaNow < 0.25f * g->wrapA[s]) continue;
+					const float w = g->wrapW[s];
+					wUsed += w;
+					for (int k = 0; k < 3; k++) pos[k] += w * (bc[0] * pa[k] + bc[1] * pb[k] + bc[2] * pc[k] + g->wrapH[s] * nf[k]);
+					// near the attached edge a point may be less free than the grid triangle's corners (as below)
+					float tq = 0.0f, ws = 0.0f;
+					for (int k = 0; k < 3; k++) { const float bk = bc[k] > 0.0f ? bc[k] : 0.0f; tq += bk * g->freedom[tc[k]]; ws += bk; }
+					fq += w * (ws > 1e-6f ? tq / ws : 0.0f);
+				}
+				if (wUsed > 1e-6f && wUsed < 0.9999f) { mcScale(pos, 1.0f / wUsed, pos); fq /= wUsed; }
+				mcSub(pos, &drawTarget[d * 3], o);
+				if (fq > g->drawFree[d]) mcScale(o, g->drawFree[d] / fq, o);
+			}
+			else if (g->drawFree[d] > 0.0f) {
 				float fq = 0.0f;
 				for (int j = 0; j < 4; j++) {
 					const int q = g->drawIdx[d * 4 + j];
@@ -4202,7 +4868,8 @@ namespace {
 		pushLimbs();
 		// the weights change from one grid region to the next: a few smoothing
 		// passes over the drawn mesh make the offsets continuous (grid points stay put)
-		if (g->proxied) {
+		// (SJE 'wrap': drawn from the grid's triangles the cloth is continuous already: not smoothed)
+		if (g->proxied && !wrapDraw) {
 			std::vector<float>& acc = in->scratchTarget2;
 			std::vector<float>& cnt = in->scratchCnt;
 			for (int pass = 0; pass < 3; pass++) {
@@ -4220,6 +4887,76 @@ namespace {
 			}
 		}
 		pushLimbs();
+		// SJE: ... and drawn TRIANGLES are kept off them too (cloth on a grid). The dense cape drawn from the grid has
+		// small triangles (about 1.8 units); a hand or the hilt in the middle of one touched none of its corners, so the
+		// point push did not see it: in a running turn the cape swung sideways over Vader's sword hand and the hand with
+		// the hilt came out through it (drawn triangles through a hand or arm 3-31 per measure against 2-3 of the
+		// grid's). A triangle a limb or a held thing goes into is moved off it along the line from the shape's axis to
+		// the triangle (its animated side where the axis goes right through), its free corners shared by how near the
+		// touch lies to each. The moves are gathered per drawn point and their sum is held to the same short nudge a
+		// point gets (1.5 units), so nothing tears: added straight onto the point, the moves of all its triangles - up
+		// to six - from every limb shape near it summed up, and in a saber swing single points shot out of the
+		// shoulder by many units for a frame or two (thin spikes).
+		thread_local static std::vector<float> triMove;
+		if (nl && g->proxied) {
+			triMove.assign((size_t)g->numDraw * 3, 0.0f);
+			const int ndt = (int)(g->drawTris.size() / 3);
+			for (int c = 0; c < nl; c++) {
+				const mcCapsule_t& cap = limbs[c];
+				const float reach = cap.r + MC_MARGIN;
+				float lo[3], hi[3];
+				for (int k = 0; k < 3; k++) {
+					lo[k] = (cap.a[k] < cap.b[k] ? cap.a[k] : cap.b[k]) - reach;
+					hi[k] = (cap.a[k] > cap.b[k] ? cap.a[k] : cap.b[k]) + reach;
+				}
+				for (int t = 0; t < ndt; t++) {
+					const int id[3] = { g->drawTris[t * 3], g->drawTris[t * 3 + 1], g->drawTris[t * 3 + 2] };
+					const float fr[3] = { g->drawFree[id[0]], g->drawFree[id[1]], g->drawFree[id[2]] };
+					if (fr[0] <= 0.0f && fr[1] <= 0.0f && fr[2] <= 0.0f) continue;
+					vec3_t P[3];
+					for (int k = 0; k < 3; k++) mcAdd(&drawTarget[id[k] * 3], &out[id[k] * 3], P[k]);
+					bool away = false;
+					for (int a = 0; a < 3 && !away; a++) {
+						const float mn = P[0][a] < P[1][a] ? (P[0][a] < P[2][a] ? P[0][a] : P[2][a]) : (P[1][a] < P[2][a] ? P[1][a] : P[2][a]);
+						const float mx = P[0][a] > P[1][a] ? (P[0][a] > P[2][a] ? P[0][a] : P[2][a]) : (P[1][a] > P[2][a] ? P[1][a] : P[2][a]);
+						away = mx < lo[a] || mn > hi[a];
+					}
+					if (away) continue;
+					float bc[3], tt;
+					const float dd = ClosestSegTri(P[0], P[1], P[2], cap.a, cap.b, bc, tt);
+					float need = reach - dd;
+					if (need <= 0.0f) continue;
+					if (need > 1.5f) need = 1.5f;
+					// the direction: from the axis to the touch; right through, the side the animated triangle is on
+					vec3_t q, s, dir, ab;
+					for (int k = 0; k < 3; k++) q[k] = bc[0] * P[0][k] + bc[1] * P[1][k] + bc[2] * P[2][k];
+					mcSub(cap.b, cap.a, ab);
+					mcMA(cap.a, tt, ab, s);
+					mcSub(q, s, dir);
+					if (mcNorm(dir) < 1e-3f) {
+						vec3_t qa, sa;
+						for (int k = 0; k < 3; k++) qa[k] = bc[0] * drawTarget[id[0] * 3 + k] + bc[1] * drawTarget[id[1] * 3 + k] + bc[2] * drawTarget[id[2] * 3 + k];
+						ClosestOnAxis(cap, qa, sa);
+						mcSub(qa, sa, dir);
+						if (mcNorm(dir) < 1e-3f) continue;
+					}
+					float den = 0.0f;
+					for (int k = 0; k < 3; k++) if (fr[k] > 0.0f) den += bc[k] * bc[k];
+					if (den < 1e-4f) continue;
+					for (int k = 0; k < 3; k++) {
+						if (fr[k] <= 0.0f || bc[k] <= 0.0f) continue;
+						float* to = &triMove[(size_t)id[k] * 3];
+						mcMA(to, need * bc[k] / den, dir, to);
+					}
+				}
+			}
+			for (int d = 0; d < g->numDraw; d++) {
+				float* m = &triMove[(size_t)d * 3];
+				const float ml = mcLen(m);
+				if (ml < 1e-6f) continue;
+				mcMA(&out[d * 3], ml > 1.5f ? 1.5f / ml : 1.0f, m, &out[d * 3]);
+			}
+		}
 		for (int d = 0; d < g->numDraw; d++) mcAdd(&drawTarget[d * 3], &out[d * 3], &out[d * 3]);
 		// SJE r_meshClothShoulders: the drawn cloth is kept over what the shoulder bones carry. A shoulder plate
 		// rides the clavicle and the upper arm; when the arm swings back (a run, a jump) it turns into the cape
@@ -4230,6 +4967,9 @@ namespace {
 		// pose (by a small gap), that triangle's corners are moved out along its normal, shared by how near each
 		// is. The simulation is not touched: nothing pulls against the attached edge, nothing can shake.
 		in->drawPushed.assign((size_t)g->numDraw, 0);
+		// Not for cloth simulated on a grid ("proxy N"): its drawn points follow the grid and are not smoothed after this
+		// push, so each pushed triangle of the dense drawn mesh stood off on its own - boxy corners on both shoulders of
+		// the dense Vader, standing still, for 4 % fewer body points through the cape.
 		if (prm->shoulders && (prm->faceCol & 1) && !g->proxied && g->plateBuilt && !g->platePairs.empty()) {
 			const float ls = in->linkScale > 1e-3f ? in->linkScale : 1.0f;
 			const size_t np = g->platePairs.size();
@@ -4416,6 +5156,20 @@ int MC_LoadConfig(const char* text) {
 			else if (!Q_stricmp(tok, "stretch")) { d.stretch = Clamp01((float)atof(COM_ParseExt(&p, qfalse))); if (d.stretch > 0.95f) d.stretch = 0.95f; }
 			else if (!Q_stricmp(tok, "friction")) d.friction = Clamp01((float)atof(COM_ParseExt(&p, qfalse)));
 			else if (!Q_stricmp(tok, "sfriction")) { d.sfriction = (float)atof(COM_ParseExt(&p, qfalse)); if (d.sfriction < 0.0f) d.sfriction = 0.0f; if (d.sfriction > 4.0f) d.sfriction = 4.0f; }
+			// SJE: heavy-cape options (each off unless given)
+			else if (!Q_stricmp(tok, "damp")) {
+				d.dampH = (float)atof(COM_ParseExt(&p, qfalse)); d.dampV = (float)atof(COM_ParseExt(&p, qfalse));
+				d.dampH = d.dampH < 0.0f ? 0.0f : (d.dampH > 0.9f ? 0.9f : d.dampH);
+				d.dampV = d.dampV < 0.0f ? 0.0f : (d.dampV > 0.9f ? 0.9f : d.dampV);
+			}
+			else if (!Q_stricmp(tok, "ring")) { d.ring = (float)atof(COM_ParseExt(&p, qfalse)); if (d.ring < 0.0f) d.ring = 0.0f; }
+			else if (!Q_stricmp(tok, "bell")) d.bell = Clamp01((float)atof(COM_ParseExt(&p, qfalse)));
+			else if (!Q_stricmp(tok, "wrap")) d.wrap = true;
+			else if (!Q_stricmp(tok, "spring")) {
+				d.spring = (float)atof(COM_ParseExt(&p, qfalse)); d.springFade = (float)atof(COM_ParseExt(&p, qfalse));
+				d.spring = d.spring < 0.0f ? 0.0f : (d.spring > 0.9f ? 0.9f : d.spring);
+				if (d.springFade < 0.0f) d.springFade = 0.0f;
+			}
 		}
 		if (d.tether < 0.0f) d.tether = 0.0f;
 		g_defs.push_back(d);
@@ -4461,10 +5215,51 @@ namespace {
 		mcCopy(v, axis);
 	}
 
+	// SJE r_meshClothGarment: is this body surface itself a skirt? Some models wear a second, inner robe or the lower
+	// half of a coat as a plain body part: a tube round both legs, bound to the hips and half to each leg. Skinned, it
+	// is stiff and swings with the legs. Fitted like the body (r_meshClothBodyFit) it gave shapes as wide as the cloth
+	// worn over it, at the hips and down both legs, and at a run they shook that cloth at every step (a floor-length
+	// robe: its points' change of move from step to step 1.6 units, a fifth of them turning round; 0.8 and a
+	// twentieth without those shapes, as for other robes). Such a part is no body for cloth to lie on: it is left out
+	// of the fit. The legs under it (their own surfaces, the leg capsules) hold the cloth as on any robed figure.
+	// A skirt here: reaches under the knees (its lower edge under MC_GARMENT_LOW of the model's height), begins at
+	// the waist or lower (its upper edge under MC_GARMENT_TOP: a whole robe from the shoulders down is the body a
+	// cape lies on, and stays), is tall (MC_GARMENT_TALL), and in the lowest part of its own height
+	// (MC_GARMENT_BAND) its vertices lie all round the model's upright axis - in each of eight sectors. Two trouser
+	// legs in one surface leave the sectors in front and behind empty; shorts and knee-length tunics end too high;
+	// one leg lies on one side. (Of 273 models with cloth lines 13 have such a part, by their own flags.)
+	const float MC_GARMENT_LOW = 0.25f, MC_GARMENT_TOP = 0.70f, MC_GARMENT_TALL = 0.20f, MC_GARMENT_BAND = 0.30f;
+	bool FitGarment(const mdxmSurface_t* s, const float top) {
+		if (s->numVerts < 24 || top < 1.0f) return false;
+		const mdxmVertex_t* v = Verts(s);
+		float lo = 1e9f, hi = -1e9f;
+		for (int i = 0; i < s->numVerts; i++) {
+			const float z = v[i].vertCoords[2];
+			if (z < lo) lo = z;
+			if (z > hi) hi = z;
+		}
+		if (lo > MC_GARMENT_LOW * top || hi > MC_GARMENT_TOP * top || hi - lo < MC_GARMENT_TALL * top) return false;
+		float band = lo + MC_GARMENT_BAND * (hi - lo);
+		if (band > MC_GARMENT_LOW * top) band = MC_GARMENT_LOW * top;
+		int sect[8] = {}, n = 0;
+		for (int i = 0; i < s->numVerts; i++) {
+			if (v[i].vertCoords[2] > band) continue;
+			const float x = v[i].vertCoords[0], y = v[i].vertCoords[1];
+			if (x * x + y * y < 1.0f) continue;
+			// (sectors centred on the axes: straight in front, front-left, left ...)
+			const int k = (int)floorf((atan2f(y, x) + 3.14159265f + 0.39269908f) * (8.0f / 6.2831853f));
+			sect[k & 7]++;
+			n++;
+		}
+		if (n < 12) return false;
+		for (int k = 0; k < 8; k++) if (!sect[k]) return false;
+		return true;
+	}
+
 	// SJE r_meshClothShown: 'drawn' (one byte per surface index; nullptr = not known) says which surfaces this
 	// character has switched on. Without it the model's own flags decide - and a model that holds several outfits
 	// has most of them on: a hood, a scarf, hip padding the skin does not draw then pushed the cloth off the body.
-	void FitBody(const mcGroup_t* g, const int* boneClass, int numBones, std::vector<mcFitShape_t>& out, const unsigned char* drawn = nullptr, const int numDrawn = 0) {
+	void FitBody(const mcGroup_t* g, const int* boneClass, int numBones, std::vector<mcFitShape_t>& out, const unsigned char* drawn = nullptr, const int numDrawn = 0, const int garment = 0) {
 		out.clear();
 		if (g->surfs.empty()) return;
 		const mdxmHeader_t* h = HeaderOf(g->surfs[0]);
@@ -4472,6 +5267,11 @@ namespace {
 		char folder[MAX_QPATH];
 		ModelFolder(h->name, folder, sizeof(folder));
 		std::unordered_map<int, std::vector<float>> pts;	// bone -> bind positions
+		float top = 0.0f;	// SJE r_meshClothGarment: the model's height (bind pose: upright, feet at 0)
+		if (garment) for (const mdxmSurface_t* s : LodSurfaces(g->surfs[0])) {
+			const mdxmVertex_t* v = Verts(s);
+			for (int i = 0; i < s->numVerts; i++) if (v[i].vertCoords[2] > top) top = v[i].vertCoords[2];
+		}
 		for (const mdxmSurface_t* s : LodSurfaces(g->surfs[0])) {
 			if (std::find(g->surfs.begin(), g->surfs.end(), s) != g->surfs.end()) continue;	// cloth isn't body
 			const auto sit = g_surfs.find(s);
@@ -4480,6 +5280,9 @@ namespace {
 			if (drawn ? !(s->thisSurfaceIndex >= 0 && s->thisSurfaceIndex < numDrawn && drawn[s->thisSurfaceIndex]) : (sh->flags & (G2SURFACEFLAG_OFF | G2SURFACEFLAG_ISBOLT)) != 0) continue;
 			if (strstr(sh->name, "_cap_") || strstr(sh->name, "_off")) continue;
 			if (FindDef(folder, sh->name)) continue;	// a cloth surface (meshcloth.cfg)
+			if (garment && FitGarment(s, top)) {	// SJE r_meshClothGarment: a stiff skirt is no body
+				continue;
+			}
 			const int* refs = reinterpret_cast<const int*>(reinterpret_cast<const byte*>(s) + s->ofsBoneReferences);
 			const mdxmVertex_t* v = Verts(s);
 			for (int i = 0; i < s->numVerts; i++) {
@@ -4727,7 +5530,7 @@ void MC_Shown(const void* clothSurface, const void* instanceKey, const unsigned 
 	iit->second->offMask = off;
 }
 
-const void* MC_BodyFit(const void* clothSurface, const int* boneClass, int numBones, const unsigned char* drawn, const int numDrawn) {
+const void* MC_BodyFit(const void* clothSurface, const int* boneClass, int numBones, const unsigned char* drawn, const int numDrawn, const int garment) {
 	const auto sit = g_surfs.find(static_cast<const mdxmSurface_t*>(clothSurface));
 	if (sit == g_surfs.end() || !sit->second.group) return nullptr;
 	const mcGroup_t* g = sit->second.group;
@@ -4739,10 +5542,11 @@ const void* MC_BodyFit(const void* clothSurface, const int* boneClass, int numBo
 	// SJE r_meshClothShown: one fit per set of switched-on surfaces (a model's skins: a handful)
 	unsigned long long key = (1469598103934665603ULL ^ (unsigned long long)(size_t)g) * 1099511628211ULL;
 	if (drawn) for (int i = 0; i < numDrawn; i++) key = (key ^ (unsigned long long)(drawn[i] ? 2 : 1)) * 1099511628211ULL;
+	if (garment) key = (key ^ 7ULL) * 1099511628211ULL;	// SJE r_meshClothGarment: its own fit
 	auto fit = g_fits.find(key);
 	if (fit == g_fits.end()) {
 		std::vector<mcFitShape_t> shapes;
-		FitBody(g, boneClass, numBones, shapes, drawn, numDrawn);
+		FitBody(g, boneClass, numBones, shapes, drawn, numDrawn, garment);
 		fit = g_fits.emplace(key, std::move(shapes)).first;
 	}
 	return fit->second.empty() ? nullptr : &fit->second;
@@ -5047,6 +5851,7 @@ bool MC_Prepare(const void* surfacePtr, const void* instanceKey, int timeMs, mcR
 	// the group's lazily built data is shared by every character with this model: build it
 	// here, on the main thread, so MC_Run (maybe on a job worker) only ever reads the group
 	ComputeRootDist(g);
+	ComputeRing(g);	// SJE: 'ring' and 'spring' (only groups that use them)
 	ComputeWrap(g);	// SJE
 	ComputeLayerPairs(g);	// SJE: r_meshClothLayers
 	ComputeLinkAlpha(g);

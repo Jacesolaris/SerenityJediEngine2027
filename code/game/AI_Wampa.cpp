@@ -741,6 +741,14 @@ static qboolean Wampa_TryGrab()
 	{
 		return qfalse;
 	}
+	// Not a victim another wampa, the rancor or the sand creature already holds. Two wampas swiping at the player at
+	// the same moment both grabbed him: he belonged to the second (his activator), the first went on holding him -
+	// it mauled him wherever he was, put him into the hanging pain anim, and could not die (it "could not release"
+	// him), even after the second one was killed and had let him go. The MP wampa has this test (G_MonsterCanGrab).
+	if (NPC->enemy->client->ps.eFlags & (EF_HELD_BY_WAMPA | EF_HELD_BY_RANCOR | EF_HELD_BY_SAND_CREATURE))
+	{
+		return qfalse;
+	}
 
 	const float enemy_dist = NPC_EnemyRangeFromBolt(NPC->handRBolt);
 	if (enemy_dist <= radius
@@ -843,6 +851,20 @@ void NPC_BSWampa_Default()
 			//wtf?
 			NPC->count = 0;
 			NPC->activator = nullptr;
+		}
+		else if ((!(NPC->activator->client->ps.eFlags & EF_HELD_BY_WAMPA)
+			|| (NPC->activator->activator != NPC
+				&& NPC->activator->activator
+				&& NPC->activator->activator->client
+				&& NPC->activator->activator->count
+				&& NPC->activator->activator->activator == NPC->activator)))
+		{
+			// the victim is not held by me any more (it was let go, or another wampa holds it): let go of it without
+			// touching it - the hand comes down, no maul, no hanging anim, and I can be killed again
+			NPC->count = 0;
+			NPC->activator = nullptr;
+			NPC_SetAnim(NPC, SETANIM_BOTH, BOTH_STAND2TO1, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+			TIMER_Set(NPC, "attacking", -level.time);
 		}
 		else
 		{
