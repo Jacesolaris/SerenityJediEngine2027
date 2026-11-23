@@ -2588,7 +2588,13 @@ void G_SetSabersFromCVars(gentity_t* ent)
 	else if (g_saber_color->string)
 	{
 		//FIXME: how to specify color for each blade and/or color for second saber?
-		const saber_colors_t color = TranslateSaberColor(g_saber_color->string);
+		saber_colors_t color = TranslateSaberColor(g_saber_color->string);
+		// SJE: custom RGB black ("x000000") is what the menu wrote for an empty colour (a fresh profile): the saber came up
+		// as a white core without colour or glow. Taken as the default yellow; a black saber by name is SABER_BLACK.
+		if (color == static_cast<saber_colors_t>(1 << 24))
+		{
+			color = SABER_YELLOW;
+		}
 		for (auto& n : ent->client->ps.saber[0].blade)
 		{
 			n.color = color;
@@ -2635,7 +2641,11 @@ void G_SetSabersFromCVars(gentity_t* ent)
 				else if (g_saber2_color->string)
 				{
 					//FIXME: how to specify color for each blade and/or color for second saber?
-					const saber_colors_t color = TranslateSaberColor(g_saber2_color->string);
+					saber_colors_t color = TranslateSaberColor(g_saber2_color->string);
+					if (color == static_cast<saber_colors_t>(1 << 24))	// SJE: custom RGB black = an empty menu colour
+					{
+						color = SABER_YELLOW;
+					}
 					for (auto& n : ent->client->ps.saber[1].blade)
 					{
 						n.color = color;
@@ -3019,6 +3029,7 @@ static void G_SettleSaberBlades(gentity_t* ent, const saberSetBefore_t* before)
 // in the hands, then the new character is set. If the weapon was lit, the new saber set is in hand and lit as
 // well, all its blades; before, it came up dark and the saber key had to be pressed. A saber that was off or put
 // away stays off, and so does the new one after a change while the saber was thrown.
+extern void WP_SaberCatch(gentity_t* self, gentity_t* saber, qboolean switch_to_saber);
 void G_ChangePlayerModelAndSabers(gentity_t* ent, const char* new_model)
 {
 	if (!ent || !ent->client || !new_model)
@@ -3029,10 +3040,29 @@ void G_ChangePlayerModelAndSabers(gentity_t* ent, const char* new_model)
 	saberSetBefore_t sabers_before;
 	G_RememberSaberSet(ent, &sabers_before);
 	const qboolean saber_thrown = ent->client->ps.saberInFlight;
+	if (saber_thrown)
+	{
+		// SJE: the thrown saber is caught back at once. Left 'in flight' it never came back to the new character and
+		// the saber key did nothing (still in flight a minute later).
+		const int sn = ent->client->ps.saberEntityNum;
+		if (sn > 0 && sn < ENTITYNUM_WORLD && g_entities[sn].inuse)
+		{
+			WP_SaberCatch(ent, &g_entities[sn], qfalse);
+		}
+		ent->client->ps.saberInFlight = qfalse;
+	}
+	// SJE: the new character's saber styles, not those of every character before (the console command piled them up:
+	// Dooku 49, after Vader and Maul 191). Kept if the new set brings none. The character menu sets its own after this.
+	const int styles_before = ent->client->ps.saberStylesKnown;
+	ent->client->ps.saberStylesKnown = 0;
 
 	WP_RemoveSaber(ent, 0);
 	WP_RemoveSecondSaber(ent, 1);
 	G_ChangePlayerModel(ent, new_model);
+	if (!ent->client->ps.saberStylesKnown)
+	{
+		ent->client->ps.saberStylesKnown = styles_before;
+	}
 
 	if (saber_thrown)
 	{

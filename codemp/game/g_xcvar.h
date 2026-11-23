@@ -133,7 +133,22 @@ XCVAR_DEF(g_maxHolocronCarry, "3", NULL, CVAR_LATCH, qfalse)
 XCVAR_DEF(g_motd, "", NULL, CVAR_NONE, qfalse)
 XCVAR_DEF(g_needpass, "0", NULL, CVAR_SERVERINFO | CVAR_ROM, qfalse)
 XCVAR_DEF(g_noSpecMove, "0", NULL, CVAR_SERVERINFO, qtrue)
-XCVAR_DEF(g_npcspskill, "5", NULL, CVAR_ARCHIVE | CVAR_INTERNAL, qfalse)
+XCVAR_DEF(g_saberAIAdaptTypes, "1", NULL, CVAR_ARCHIVE, qfalse) // the adaptive read also counts lunges, DFAs and back attacks (w_saberblocking.c)
+XCVAR_DEF(g_saberAITurtleBreak, "1", NULL, CVAR_ARCHIVE, qfalse) // saber NPCs / bots work harder to open a player who holds block (w_saberblocking.c)
+XCVAR_DEF(g_saberAISpamPunish, "1", NULL, CVAR_ARCHIVE, qfalse) // 4+ swings in 3 s: saber NPCs / bots keep their guard
+XCVAR_DEF(g_saberAIFinisher, "1", NULL, CVAR_ARCHIVE, qfalse) // saber NPCs attack out of a parry when the enemy is worn down
+XCVAR_DEF(g_dynamicDifficulty, "0", NULL, CVAR_ARCHIVE, qfalse) // Missions: NPC skill +-1 step by how the human players do (w_saberblocking.c G_DynSkill)
+XCVAR_DEF(g_dynamicDifficultyDebug, "0", NULL, 0, qfalse)
+XCVAR_DEF(g_npcEvasionFix, "1", NULL, CVAR_ARCHIVE, qfalse)
+// 2026-11-23: registered at game start too (the code reads them through its own Cvar_Register getters), so they exist
+// with their defaults and the setup menu shows them
+XCVAR_DEF(g_squadCasualtyReact, "1", NULL, CVAR_ARCHIVE, qfalse)
+XCVAR_DEF(g_npcReactionDelay, "1", NULL, CVAR_ARCHIVE, qfalse)
+XCVAR_DEF(g_npcLastKnownSearch, "1", NULL, CVAR_ARCHIVE, qfalse)
+XCVAR_DEF(g_npcDangerAvoid, "1", NULL, CVAR_ARCHIVE, qfalse)
+XCVAR_DEF(g_saberAIRhythm, "1", NULL, CVAR_ARCHIVE, qfalse)
+XCVAR_DEF(g_allyTactics, "1", NULL, CVAR_ARCHIVE, qfalse) // gunner NPCs dodge now and then instead of fleeing every frame they are aimed at (NPC_AI_Jedi.c NPC_GunnerEvasion)
+XCVAR_DEF(g_npcspskill, "2", CVU_NPCSkill, CVAR_ARCHIVE | CVAR_INTERNAL, qfalse) // NPC difficulty 0-3 (g_cvar.c CVU_NPCSkill); bots use g_spSkill
 XCVAR_DEF(g_password, "", NULL, CVAR_NONE, qfalse)
 XCVAR_DEF(g_powerDuelEndHealth, "90", NULL, CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_powerDuelStartHealth, "150", NULL, CVAR_ARCHIVE, qtrue)

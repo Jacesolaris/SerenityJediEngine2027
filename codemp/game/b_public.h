@@ -96,12 +96,14 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #define	SCF_NO_ALERT_TALK	0x02000000	//Will not say alert sounds, but still can be woken up by alerts
 #define SCF_NAV_CAN_FLY		0x04000000	//Navigation allows connections through air
-#define SCF_FLY_WITH_JET	0x08000000	//Must Fly With A Jet
+#define SCF_FLY_WITH_JET	0x08000000	//Must Fly With A Jet (never set or tested in MP: the bit is SCF_IGNORE_ENEMIES there)
 #define	SCF_PILOT			0x10000000	//Can pilot a vehicle
 #define	SCF_NAV_CAN_JUMP	0x20000000	//Can attempt to jump when blocked
 #define	SCF_FIRE_WEAPON_NO_ANIM	0x40000000	//Fire weapon but don't play weapon firing anim
 #define	SCF_SAFE_REMOVE		0x80000000	//Remove NPC when it's safe (when player isn't looking)
-#define SCF_IGNORE_ENEMIES	0x020000000	//will ignore all enemies.
+// SCF_IGNORE_ENEMIES was 0x020000000 = SCF_NAV_CAN_JUMP (2026-11-22): MP howlers (NAV_CAN_JUMP) ignored every enemy and
+// ICARUS SET_IGNORE_ENEMIES turned on nav jumping. scriptFlags is full, so it takes MP's unused SCF_FLY_WITH_JET bit.
+#define SCF_IGNORE_ENEMIES	0x08000000	//will ignore all enemies.
 
 //#ifdef __DEBUG
 

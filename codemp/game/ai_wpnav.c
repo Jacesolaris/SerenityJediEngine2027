@@ -1915,13 +1915,20 @@ static void CalculateWeightGoals(void)
 			{
 				weight = 3;
 			}
+			else if (ent->item && (ent->item->giType == IT_HEALTH || ent->item->giType == IT_ARMOR))
+			{
+				// 2026-11-22: health and shield pickups are goals too (bots never went for them). Low base weight;
+				// ai_main.c only wants them with bot_selfPreserve when hurt (bot_has_associated / bot_goal_hurt_bonus)
+				weight = 1;
+			}
 		}
 
 		if (ent && weight)
 		{
 			const int wpindex = GetNearestVisibleWPToItem(ent->s.pos.trBase, ent->s.number);
 
-			if (wpindex != -1 && gWPArray[wpindex] && gWPArray[wpindex]->inuse)
+			if (wpindex != -1 && gWPArray[wpindex] && gWPArray[wpindex]->inuse
+				&& !(weight == 1 && gWPArray[wpindex]->flags & WPFLAG_GOALPOINT)) // a health pickup never takes another item's goal
 			{
 				//found the waypoint nearest the center of this object
 				gWPArray[wpindex]->weight = weight;

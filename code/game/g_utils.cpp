@@ -1166,12 +1166,16 @@ G_FreeEntity
 Marks the entity as free
 =================
 */
+extern void G_ForgetAlertOwner(const gentity_t* owner);
+
 void G_FreeEntity(gentity_t* ed)
 {
 	gi.unlinkentity(ed); // unlink from world
 
 	// Free the Game Element (the entity) and delete the Icarus ID.
 	Quake3Game()->FreeEntity(ed);
+
+	G_ForgetAlertOwner(ed); // JA:R fix: no NPC reacts to a stale alert from this slot's next owner
 
 	if (ed->wayedge != 0)
 	{

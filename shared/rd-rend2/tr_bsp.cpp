@@ -3715,6 +3715,12 @@ static void R_MergeLeafSurfaces(world_t* worldData)
 			if (ShaderRequiresCPUDeforms(shader1))
 				continue;
 
+			// JA:R fix: world surfaces live in several VBOs (split at 64 MB); only
+			// merge surfaces that share one, or the merged IBO indexes the wrong buffer
+			vbo = ((srfBspSurface_t*)surf1->data)->vbo;
+			if (!vbo)
+				continue;
+
 			fogIndex1 = surf1->fogIndex;
 			cubemapIndex1 = surf1->cubemapIndex;
 
@@ -3743,6 +3749,9 @@ static void R_MergeLeafSurfaces(world_t* worldData)
 				shader2 = surf2->shader;
 
 				if (shader1 != shader2)
+					continue;
+
+				if (((srfBspSurface_t*)surf2->data)->vbo != vbo)
 					continue;
 
 				fogIndex2 = surf2->fogIndex;

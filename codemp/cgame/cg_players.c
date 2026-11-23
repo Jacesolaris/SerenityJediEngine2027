@@ -2625,7 +2625,8 @@ static void player_foot_step(const vec3_t origin,
 	VectorCopy(origin, end);
 	end[2] -= FOOTSTEP_DISTANCE;
 
-	trap->CM_Trace(&trace, origin, end, mins, maxs, 0, MASK_PLAYERSOLID, 0);
+	// TaystJK fix: CG_Trace also hits func_ entities (lifts, doors, bridges), the world-only CM_Trace missed them
+	CG_Trace(&trace, origin, mins, maxs, end, cent->currentState.number, MASK_PLAYERSOLID);
 
 	// No ground hit → no footstep
 	if (trace.fraction >= 1.0f)
@@ -15174,6 +15175,7 @@ int CG_HandleAppendedSkin(const char* modelName)
 
 //Create a temporary ghoul2 instance and get the gla name so we can try loading animation data and sounds.
 void BG_GetVehicleModelName(char* modelName, const char* vehicleName, size_t len);
+const char* BG_VehicleSkinName(const char* skinList, int entNum);
 void BG_GetVehicleSkinName(char* skinname, int len);
 
 void CG_CacheG2AnimInfo(const char* modelName)
@@ -15297,6 +15299,43 @@ extern void G_CreateFighterNPC(Vehicle_t** p_veh, const char* strType);
 
 extern playerState_t* cgSendPS[MAX_GENTITIES];
 
+// TaystJK fix: NPC entity slots are reused, so recompute the lumbar / face bone flags for
+// the model now in the slot instead of keeping the previous NPC's qtrue (wrong torso / face anims).
+static void CG_UpdateNPCBoneAvailability(centity_t* cent)
+{
+	if (cent->currentState.eType != ET_NPC)
+	{
+		return;
+	}
+
+	if (cent->currentState.NPC_class == CLASS_VEHICLE)
+	{
+		cent->noLumbar = qtrue;
+		cent->noFace = qtrue;
+		return;
+	}
+
+	cent->noLumbar = qfalse;
+	cent->noFace = qfalse;
+
+	if (!cent->ghoul2)
+	{
+		return;
+	}
+
+	if (trap->G2API_AddBolt(cent->ghoul2, 0, "lower_lumbar") == -1)
+	{
+		//check now to see if we have this bone for setting anims and such
+		cent->noLumbar = qtrue;
+	}
+
+	if (trap->G2API_AddBolt(cent->ghoul2, 0, "face") == -1)
+	{
+		//check now to see if we have this bone for setting anims and such
+		cent->noFace = qtrue;
+	}
+}
+
 static void CG_G2AnimEntModelLoad(centity_t* cent)
 {
 	const char* c_model_name = CG_ConfigString(CS_MODELS + cent->currentState.modelIndex);
@@ -15359,7 +15398,7 @@ static void CG_G2AnimEntModelLoad(centity_t* cent)
 			{
 				//use a custom skin
 				skin_id = trap->R_RegisterSkin(va("models/players/%s/model_%s.skin", modelName,
-					cent->m_pVehicle->m_pVehicleInfo->skin));
+					BG_VehicleSkinName(cent->m_pVehicle->m_pVehicleInfo->skin, cent->currentState.number)));
 			}
 			else
 			{
@@ -15548,26 +15587,8 @@ static void CG_G2AnimEntModelLoad(centity_t* cent)
 				trap->G2API_AddBolt(cent->ghoul2, 0, "Motion");
 			}
 
-			// If this is a not vehicle...
-			if (cent->currentState.NPC_class != CLASS_VEHICLE)
-			{
-				if (trap->G2API_AddBolt(cent->ghoul2, 0, "lower_lumbar") == -1)
-				{
-					//check now to see if we have this bone for setting anims and such
-					cent->noLumbar = qtrue;
-				}
-
-				if (trap->G2API_AddBolt(cent->ghoul2, 0, "face") == -1)
-				{
-					//check now to see if we have this bone for setting anims and such
-					cent->noFace = qtrue;
-				}
-			}
-			else
-			{
-				cent->noLumbar = qtrue;
-				cent->noFace = qtrue;
-			}
+			// lumbar / face bone flags, reset for this model (vehicles have neither)
+			CG_UpdateNPCBoneAvailability(cent);
 
 			if (cent->localAnimIndex != -1)
 			{
@@ -23351,6 +23372,7 @@ void CG_ResetPlayerEntity(centity_t* cent)
 		//already set.
 		cent->npcLocalSurfOff = 0;
 		cent->npcLocalSurfOn = 0;
+		CG_UpdateNPCBoneAvailability(cent); // TaystJK fix: don't keep the previous NPC's bone flags
 	}
 	else
 	{

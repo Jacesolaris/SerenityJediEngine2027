@@ -379,22 +379,78 @@ extern void cancel_firing(gentity_t* ent);
 // An explosion (a splash weapon's missile hit something): tell the renderer, whose mesh cloth then blows the
 // capes and robes near it outwards (renderer command meshcloth_blast). Sized roughly like each weapon's blast.
 // cg_clothExplosion scales it, 0 = off.
-static void CG_ClothBlast(const int weapon, const qboolean altFire, const vec3_t origin)
+// CG_ClothBlastSize: the blast of a weapon's missile (qfalse: it has none here). The game asks it too (G_MissileImpacted),
+// so its radius damage does not blow the cloth a second time as a map explosion (CG_ClothMapBlast below).
+qboolean CG_ClothBlastSize(const int weapon, const qboolean altFire, float* radius, float* strength)
 {
-	float radius = 0.0f, strength = 0.0f;
+	*radius = 0.0f;
+	*strength = 0.0f;
 	switch (weapon)
 	{
-	case WP_ROCKET_LAUNCHER:	radius = 200.0f; strength = 800.0f; break;
-	case WP_THERMAL:			radius = 280.0f; strength = 1000.0f; break;
+	case WP_ROCKET_LAUNCHER:	*radius = 200.0f; *strength = 800.0f; break;
+	case WP_THERMAL:			*radius = 280.0f; *strength = 1000.0f; break;
 	case WP_TRIP_MINE:
-	case WP_DET_PACK:			radius = 280.0f; strength = 1100.0f; break;
-	case WP_CONCUSSION:			if (!altFire) { radius = 200.0f; strength = 800.0f; } break;
-	case WP_REPEATER:			if (altFire) { radius = 160.0f; strength = 600.0f; } break;
-	case WP_FLECHETTE:			if (altFire) { radius = 160.0f; strength = 600.0f; } break;
-	case WP_DEMP2:				if (altFire) { radius = 200.0f; strength = 500.0f; } break;
+	case WP_DET_PACK:			*radius = 280.0f; *strength = 1100.0f; break;
+	case WP_CONCUSSION:			if (!altFire) { *radius = 200.0f; *strength = 800.0f; } break;
+	case WP_REPEATER:			if (altFire) { *radius = 160.0f; *strength = 600.0f; } break;
+	case WP_FLECHETTE:			if (altFire) { *radius = 160.0f; *strength = 600.0f; } break;
+	case WP_DEMP2:				if (altFire) { *radius = 200.0f; *strength = 500.0f; } break;
 	default: break;
 	}
-	if (radius <= 0.0f || cg_clothExplosion.value <= 0.0f)
+	return *radius > 0.0f ? qtrue : qfalse;
+}
+
+// SJE cg_clothMapExplosion (1 = on, other values scale it, 0 = off; cg_clothExplosion scales it too): an explosion that
+// belongs to the map - an exploding crate or barrel, a breakable model or brush, a map effect that does damage, a turret,
+// a vehicle: anything with radius damage (g_combat.cpp G_RadiusDamage calls this) - blows the capes and robes near it
+// outwards like a splash weapon's blast, sized by the damage's radius and strength. Not a missile's own blast, which
+// CG_ClothBlast sends from its impact event (the game leaves those out). Lasting damage (gas, fire, lava) and tiny pops
+// are not blasts; one within 48 units and 300 ms of another is the same explosion (a chain of hits, a trail).
+// Only while the cgame runs (the game may explode things before it starts).
+static qboolean cg_clothMapBlastUp = qfalse;
+
+void CG_ClothMapBlastUp(const qboolean up)
+{
+	cg_clothMapBlastUp = up;
+}
+
+void CG_ClothMapBlast(const vec3_t origin, const float damage, const float radius, const int mod)
+{
+	if (!cg_clothMapBlastUp || cg_clothMapExplosion.value <= 0.0f || cg_clothExplosion.value <= 0.0f)
+	{
+		return;
+	}
+	if (mod == MOD_GAS || mod == MOD_BURNING || mod == MOD_LAVA || damage < 5.0f || radius < 24.0f)
+	{
+		return;
+	}
+	static vec3_t recentOrg[8];
+	static int recentTime[8] = { -1, -1, -1, -1, -1, -1, -1, -1 };
+	static int recentNext = 0;
+	for (int i = 0; i < 8; i++)
+	{
+		if (recentTime[i] >= 0 && cg.time >= recentTime[i] && cg.time - recentTime[i] < 300 &&
+			DistanceSquared(recentOrg[i], origin) < 48.0f * 48.0f)
+		{
+			return;
+		}
+	}
+	VectorCopy(origin, recentOrg[recentNext]);
+	recentTime[recentNext] = cg.time;
+	recentNext = (recentNext + 1) % 8;
+	// as the weapons' blasts: a rocket (100 damage, radius 160) blows like CG_ClothBlast's rocket (800, 200)
+	float r = radius * 1.25f;
+	r = r < 64.0f ? 64.0f : (r > 512.0f ? 512.0f : r);
+	float s = 400.0f + 4.0f * damage;
+	s = s > 1200.0f ? 1200.0f : s;
+	cgi_SendConsoleCommand(va("meshcloth_blast %.0f %.0f %.0f %.0f %.0f\n", origin[0], origin[1], origin[2],
+		s * cg_clothExplosion.value * cg_clothMapExplosion.value, r));
+}
+
+static void CG_ClothBlast(const int weapon, const qboolean altFire, const vec3_t origin)
+{
+	float radius, strength;
+	if (!CG_ClothBlastSize(weapon, altFire, &radius, &strength) || cg_clothExplosion.value <= 0.0f)
 	{
 		return;
 	}

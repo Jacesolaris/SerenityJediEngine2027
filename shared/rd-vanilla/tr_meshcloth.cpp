@@ -112,6 +112,7 @@ namespace {
 		// SJE: heavy-cape options (all off unless the line asks for them; see MC_LoadConfig)
 		float			dampH = 0.0f, dampV = 0.0f;	// 'damp H V': share of the cloth's speed (in a frame travelling with the character over the ground) taken per 16 ms, sideways / up-down
 		float			ring = 0.0f;		// 'ring D': second tether level - every point further down is tied rigidly to the nearest point D units (along the cloth) below the attached edge
+		float			armGap = 0.0f;	// SJE 'armgap G': arms keep G units more off this cloth, push it out in bigger steps, every substep (a cloak over the arms)
 		float			bell = 0.0f;		// 'bell B': 0..1 the free cloth's animated spot is its bind shape carried by the hip bone alone (a rigid bell), blended in by B x freedom
 		float			spring = 0.0f, springFade = 0.0f;	// 'spring S A': pull per 16 ms toward the animated spot, S x exp(-A x metres along the cloth from the attached edge)
 		bool			wrap = false;		// 'wrap': cloth on a grid ('proxy N') is drawn from the grid's triangles (each drawn vertex bound to the nearest few)
@@ -141,6 +142,17 @@ namespace {
 
 	const int MC_WRAP_K = 4;	// SJE 'wrap': grid triangles each drawn vertex is blended from
 	const float MC_SPRING_BACK = 0.6f;	// SJE 'spring': seconds (time constant) it takes to take hold again after a run
+	const float MC_WIND_DAMP = 0.15f;	// SJE 'damp' in wind of 500 units/s and more: this share of itself (the cape can flap)
+	const float MC_WIND_FLUTTER = 0.9f;	// SJE: ripple strength (as r_meshClothFlutter) the cloth gets in wind of 1500 units/s and more
+	const float MC_STORM_WEIGHT = 1.5f;	// SJE: in a storm lighter cloth is blown as cloth of this weight (the heavy cape's)
+	const float MC_WIND_TAIL = 0.4f;	// SJE: wind from behind pushes cloth by this share of its forward part
+	const float MC_LIFT_FALL0 = 150.0f;	// SJE r_meshClothLiftAir: air from below (a fall, an updraft) from which the lift limit opens
+	const float MC_LIFT_FALL1 = 600.0f;	// ... and from which it is fully open (units/s)
+	const float MC_LIFT_WIND0 = 500.0f;	// SJE: the same for wind over the ground (the strong weather wind gives 1000-1600)
+	const float MC_LIFT_WIND1 = 1200.0f;
+	const float MC_LIFT_OPEN = 1.0f;	// SJE: fully open, a point may rise this part of its cloth length above the attached edge
+	const float MC_LIFT_BEHIND = 8.0f;	// SJE: ... but only behind that edge: fully from this far behind it, not at all in front
+	const float MC_LIFT_CLOSE = 2.0f;	// SJE: when the air stops the opening closes by this much per second (no snap on landing)
 
 	struct mcGroup_t {
 		std::vector<const mdxmSurface_t*>	surfs;
@@ -165,6 +177,7 @@ namespace {
 		// SJE: heavy-cape options (per particle; empty unless a line of the group asks for one - anyHeavy)
 		std::vector<float>					dampH, dampV, bellW, springS, springA, ringD;
 		bool								anyHeavy = false, anyDamp = false, anyBell = false, anySpring = false, anyRing = false;
+		float								armGap = 0.0f;	// SJE 'armgap': the largest of the group's lines (0 = none)
 		mutable std::vector<int>			ringAnchor;		// per particle: the ring point it is tied to (-1 none; ComputeRing, lazy)
 		mutable std::vector<float>			ringLen;		// ... its bind distance along the cloth to it
 		mutable std::vector<float>			springK;		// per particle: spring per 16 ms (ComputeRing, lazy)
@@ -184,6 +197,10 @@ namespace {
 		mutable std::vector<unsigned char>	high;			// SJE per particle: 1 = it hangs from shoulder height or above (BuildPlatePairs, main thread; read only once plateBuilt is set)
 		mutable std::vector<unsigned char>	wrap;			// SJE per particle: 1 = its surface wraps round the body at its height (ComputeWrap, lazy)
 		mutable std::vector<unsigned char>	under;			// SJE per particle: 1 = a loose layer the model has UNDER worn cloth there (ComputeLayerPairs, lazy)
+		mutable std::vector<int>			insidePts;		// SJE r_meshClothInside: the free points of loose layers under worn cloth (BuildInside, lazy)
+		mutable std::vector<int>			insideTris;		// SJE r_meshClothInside: the triangles of the worn tube
+		mutable std::vector<unsigned>		insideSewn;		// SJE r_meshClothInside: per surface, the surfaces sewn to it (bits)
+		mutable bool						insideBuilt = false;
 		mutable std::vector<unsigned>		partUse;		// SJE r_meshClothShown: per particle: the group's surfaces (bits) with a vertex on it (ComputeLayerPairs, lazily)
 		mutable std::vector<mcPlatePair_t>	platePairs;		// SJE r_meshClothShoulders: plate vertices under the cloth (MC_BodyFit, main thread)
 		mutable bool						plateBuilt = false;
@@ -272,6 +289,8 @@ namespace {
 		vec3_t				originVel = {};		// its velocity (units/s)
 		vec3_t				up = {};				// the character's up direction (world)
 		vec3_t				side = {};			// the character's left direction (world)
+		vec3_t				fwd = {};			// SJE: the character's facing (world, its entity axis; wind from behind)
+		float				liftAir = 0.0f;		// SJE r_meshClothLiftAir: the lift limit's opening (closes slowly, Step)
 		std::vector<float>	pinPrev;		// attached particles' animated positions last frame
 		float				twistRun = 0.0f;	// SJE: how far the attached edge has turned fast in one direction in one go (radians, signed)
 		int					pinTime = 0;
@@ -308,6 +327,7 @@ namespace {
 		std::vector<unsigned char>	eased;		// SJE r_meshClothEase: 1 = the shake watchdog let this point go and gave it back while the pose holds it still (FightUpdate)
 		std::vector<unsigned char>	quiet;		// SJE r_meshClothEase: steps running in which the point lay at rest against a pose that holds it still (FightUpdate, up to 255)
 		std::vector<unsigned char>	letgo;		// SJE r_meshClothEase: steps left of the let-go after the watchdog tripped for this point (MC_FIGHT_RAMP .. 0)
+		std::vector<unsigned char>	limbThrown;	// SJE r_meshClothLimbLie: > 0 = an arm's triangle test threw this point within the last steps
 		std::vector<unsigned char>	thrown;		// SJE r_meshClothRest: > 0 = the body's triangle test threw this point 'back to its own side' within the last steps
 		std::vector<unsigned char>	limbPush;	// SJE r_meshClothCalm: > 0 = an arm, a hand or a held thing moved this point within the last steps (FaceCollide)
 		std::vector<float>	restLo, restHi;		// SJE r_meshClothCalm: the box every point has filled since the rest count began (world, 3 per particle)
@@ -625,7 +645,7 @@ namespace {
 			}
 			mcCopy(&r->bindPos[s * 3], &g->bindPos[i * 3]);
 		}
-		g->anyHeavy = r->anyHeavy; g->anyDamp = r->anyDamp; g->anyBell = r->anyBell; g->anySpring = r->anySpring; g->anyRing = r->anyRing;
+		g->anyHeavy = r->anyHeavy; g->anyDamp = r->anyDamp; g->anyBell = r->anyBell; g->anySpring = r->anySpring; g->anyRing = r->anyRing; g->armGap = r->armGap;
 		// grid links and triangles
 		std::unordered_map<unsigned long long, char> haveLink;
 		std::unordered_map<unsigned long long, int> edgeOther;
@@ -876,6 +896,7 @@ namespace {
 			if (d->bell > 0.0f) g->anyBell = true;
 			if (d->spring > 0.0f) g->anySpring = true;
 			if (d->ring > 0.0f) g->anyRing = true;
+			if (d->armGap > g->armGap) g->armGap = d->armGap;	// SJE 'armgap'
 		}
 		g->anyHeavy = g->anyDamp || g->anyBell || g->anySpring || g->anyRing;
 		for (size_t si = 0; si < g->surfs.size(); si++) {
@@ -1144,7 +1165,7 @@ namespace {
 	}
 
 	static void EdgeCollide(const mcGroup_t* g, mcInstance_t* in, const mcCapsule_t* caps, int ncaps);
-	static void FaceCollide(const mcGroup_t* g, mcInstance_t* in, const mcCapsule_t* caps, int ncaps, int overArms, int rest, int ease);
+	static void FaceCollide(const mcGroup_t* g, mcInstance_t* in, const mcCapsule_t* caps, int ncaps, int overArms, int rest, int ease, int lie, int armOn);
 
 	// XPBD compliance (Macklin, Mueller & Chentanez 2016) from a 0..1 'give': the fraction of a
 	// constraint's error left over per substep at the reference 6 substeps per 16 ms. Calibrated
@@ -1290,6 +1311,8 @@ namespace {
 		int		overArms = 0;	// SJE r_meshClothOverArms: cloth hanging from shoulder height lies over arms and hands
 		int		rest = 0;		// SJE r_meshClothRest: 1 = on
 		int		ease = 0;		// SJE r_meshClothEase: 1 = on
+		int		limbLie = 0;	// SJE r_meshClothLimbLie: cloth lying against a still arm is not thrown again (FaceCollide)
+		int		armGapOn = 0;	// SJE r_meshClothArmGap: honour the lines' 'armgap'
 		float	tetherK = 0.0f;	// SJE: fraction of the over-tether distance reeled in per substep (per-step constant)
 		const float* bendK = nullptr;	// SJE: per link, old projection's bend fraction per substep (nullptr = work it out)
 		int		bendModel = 0;	// SJE: 1 = isometric bending stencils instead of the bend links; 2 = for loose cloth only, each
@@ -1302,6 +1325,10 @@ namespace {
 		const float* ptAllow = nullptr;			// ... and how far from there each list holds
 		int		bell = 0;		// SJE 'bell': the tether measures from in->anchor for points with a bell weight
 		int		ring = 0;		// SJE 'ring': the second tether level (ringAnchor / ringLen)
+		float	liftAir = 0.0f;	// SJE r_meshClothLiftAir: 0..1 how far the lift limit is open (air from below, strong wind)
+		float	liftFwd[3] = { 0.0f, 0.0f, 0.0f };	// SJE: the character's facing over the ground (open only behind the edge)
+		const unsigned char* liftWrap = nullptr;	// SJE: worn cloth keeps the limit (g->wrap / g->under; nullptr = not known)
+		const unsigned char* liftUnder = nullptr;
 	};
 
 	// SJE: isometric bending (r_meshClothBendModel 1). The curvature vector of each stencil, H(x) = sum w_i x_i,
@@ -1632,6 +1659,18 @@ namespace {
 				// out behind and droops to its hem.
 				const float hp = mcDot(pp, in->up), ha = mcDot(&in->p[an * 3], in->up) - sv.liftSlope * g->lraLen[p] * in->linkScale, ht = mcDot(t, in->up);
 				float lim = (ha > ht ? ha : ht) + liftL * in->linkScale;
+				// SJE r_meshClothLiftAir: air from below (a fall, an updraft) or strong wind opens the limit, up to MC_LIFT_OPEN
+				// of the point's cloth length above the edge, so a cape's hem may flip up and stream out above the shoulders
+				// (closed, it held the hem a part of the cape's length under the shoulders in every jump and in any wind).
+				// Only behind the edge the point hangs from (fully MC_LIFT_BEHIND behind it, not at all in front): a cape never
+				// tips forward over its wearer's head. Worn cloth (robes, layers under them) keeps the limit. Closed (runs,
+				// turns, spawns): as before.
+				if (sv.liftAir > 0.0f && !(sv.liftWrap && (sv.liftWrap[p] || sv.liftUnder[p]))) {
+					vec3_t ra;
+					mcSub(pp, &in->p[an * 3], ra);
+					const float behind = -mcDot(ra, sv.liftFwd), bw = MC_LIFT_BEHIND * in->linkScale;
+					if (behind > 0.0f) lim += sv.liftAir * (behind < bw ? behind / bw : 1.0f) * (sv.liftSlope + MC_LIFT_OPEN) * g->lraLen[p] * in->linkScale;
+				}
 				// SJE: ... but the sloped limit never lies under the floor. In a low pose (lying, sitting, kneeling) the
 				// attached edge is near the ground and the limit, lower by a part of the cloth's length, under it:
 				// every substep the hem was pushed 6-13 units down to it, the body tests ran with the cloth under the
@@ -1700,7 +1739,7 @@ namespace {
 #endif
 			}
 		}
-		if (sv.faceCol & 1) { if (sv.faceNow) FaceCollide(g, in, caps, ncaps, sv.overArms, sv.rest, sv.ease); }	// SJE: triangles against the whole body (covers the edges too)
+		if (sv.faceCol & 1) { if (sv.faceNow) FaceCollide(g, in, caps, ncaps, sv.overArms, sv.rest, sv.ease, sv.limbLie, sv.armGapOn); }	// SJE: triangles against the whole body (covers the edges too)
 		else if (sv.edgeCol && !MCDBG_OFF("NOEDGECOL")) EdgeCollide(g, in, caps, ncaps);
 	}
 
@@ -1810,6 +1849,9 @@ namespace {
 	const float MC_FACE_REST = 0.25f;	// SJE: a limb rests against a body shape if it moves less than this against it in a step
 	const float MC_FACE_OUTSIDE = 0.3f;	// SJE: cloth lies over a limb if it is on its own outer side of it by this (cosine against its outward normal)
 	const float MC_FACE_TIGHT = 0.75f;	// ... if the cloth lies this near the body shape (skin-tight), or
+	const float MC_LIE_EPS = 0.05f;	// SJE r_meshClothLimbLie: a triangle this near its clearance off an arm (or further) lies against it
+	const float MC_LIE_MOVE = 1.0f;	// ... if no corner has moved more than this since the step began
+	const float MC_ARMGAP_STEP = 3.0f;	// SJE 'armgap': arms push such cloth out up to this many times MC_FACE_STEP per substep
 	const float MC_FACE_SLACK = 16.0f;	// ... if the cloth there is nearer than this to its attached edge (bind units along the cloth)
 	// SJE: the body's own travel inside its animation (the attached edge's centre against the character's origin).
 	// Slower than MC_BODY_SLOW units/s (a stride's bob, a lean, a swing) the cloth feels all of it; from
@@ -2015,6 +2057,143 @@ namespace {
 			}
 		}
 		g->wrap.swap(wrap);
+	}
+
+	// SJE r_meshClothInside: a loose layer the model has under worn cloth (g->under: Obi-Wan's tunic strips under his robe)
+	// stays inside that cloth. The layer rule keeps a point on its side of the few triangles it lies under in the bind pose,
+	// while it stays near them; blown about in a storm (or flung in a swing) the strips left those triangles behind, went
+	// between the legs and out through the robe's back, and showed outside it (front strips through the back of the robe in
+	// a head wind). Once a step: a free point of such a layer whose line from the character's upright axis passes through a
+	// triangle of the worn tube (g->wrap; another surface, not sewn to it) is put back just inside that triangle and loses
+	// its speed outwards, by at most MC_INSIDE_STEP a step - unless the animated cloth has it outside there too (the model's
+	// own drape) or it lies near its animated place (MC_INSIDE_FAR). Only in strong air (MC_INSIDE_WIND); cloth with no such
+	// layer is not touched.
+	const int MC_INSIDE_SECTORS = 16;	// sectors round the upright axis (a point's line is tested against its sector's triangles)
+	const float MC_INSIDE_STEP = 4.0f;	// the largest move back per step
+	const float MC_INSIDE_WIND = 500.0f;	// ... and only in air this strong (units/s): without wind, in runs, crouches and backwards walks, it
+										// made the strips stretch more than it helped (strips stretched 1.57 -> 2.0, 99th percentile)
+	const float MC_INSIDE_FAR = 5.0f;	// only points this far from their animated place: blown or flung out (in a storm the strips
+										// outside the robe lay 13 units off it, half of them; pressed out by a crouch 1.7 - acting there
+										// too made the strips of a crouching figure restless)
+	static bool InsideSegTri(const float* a, const float* b, const float* p0, const float* p1, const float* p2, float& t) {
+		vec3_t e1, e2, d, h, s, q;
+		mcSub(p1, p0, e1); mcSub(p2, p0, e2); mcSub(b, a, d);
+		mcCross(d, e2, h);
+		const float det = mcDot(e1, h);
+		if (fabsf(det) < 1e-9f) return false;
+		const float inv = 1.0f / det;
+		mcSub(a, p0, s);
+		const float u = mcDot(s, h) * inv;
+		if (u < 0.0f || u > 1.0f) return false;
+		mcCross(s, e1, q);
+		const float v = mcDot(d, q) * inv;
+		if (v < 0.0f || u + v > 1.0f) return false;
+		t = mcDot(e2, q) * inv;
+		return t > 0.0f && t < 1.0f;
+	}
+	static void BuildInside(const mcGroup_t* g) {
+		g->insideBuilt = true;
+		g->insidePts.clear();
+		g->insideTris.clear();
+		g->insideSewn.clear();
+		const int np = g->numParticles, ns = (int)g->surfs.size(), nt = (int)(g->tris.size() / 3);
+		if ((int)g->under.size() != np || (int)g->wrap.size() != np || ns < 2 || ns > 32 || g->vertBase.size() < (size_t)ns) return;
+		for (int p = 0; p < np; p++) if (g->under[p] && !g->wrap[p] && g->freedom[p] > 0.0f) g->insidePts.push_back(p);
+		if (g->insidePts.empty()) return;
+		g->insideSewn.assign((size_t)ns, 0u);
+		for (int si = 0; si < ns; si++) {
+			g->insideSewn[si] |= 1u << si;
+			for (int i = 0; i < g->surfs[si]->numVerts; i++) {
+				const int p = g->vertToParticle[g->vertBase[si] + i];
+				if (p < 0 || p >= np) continue;
+				const int sj = g->partSurf[p];
+				if (sj >= 0 && sj < ns && sj != si) { g->insideSewn[si] |= 1u << sj; g->insideSewn[sj] |= 1u << si; }
+			}
+		}
+		for (int t = 0; t < nt; t++) {
+			const int a = g->tris[t * 3], b = g->tris[t * 3 + 1], c = g->tris[t * 3 + 2];
+			if (a == b || b == c || a == c || !g->wrap[a] || !g->wrap[b] || !g->wrap[c]) continue;
+			g->insideTris.push_back(t);
+		}
+	}
+	static void KeepInside(const mcGroup_t* g, mcInstance_t* in) {
+		if (!g->insideBuilt) BuildInside(g);
+		if (g->insidePts.empty() || g->insideTris.empty()) return;
+		vec3_t up, e1, e2, tmp = { 1.0f, 0.0f, 0.0f };
+		mcCopy(in->up, up);
+		if (mcNorm(up) < 0.5f) return;
+		if (fabsf(up[0]) > 0.9f) { tmp[0] = 0.0f; tmp[1] = 1.0f; }
+		mcCross(up, tmp, e1);
+		mcNorm(e1);
+		mcCross(up, e1, e2);
+		const float* org = in->lastOrigin;
+		const float PI2 = 6.2831853f, secW = PI2 / MC_INSIDE_SECTORS;
+		thread_local static std::vector<int> bins[MC_INSIDE_SECTORS];
+		for (auto& b : bins) b.clear();
+		for (const int t : g->insideTris) {
+			float az[3];
+			for (int k = 0; k < 3; k++) {
+				vec3_t d;
+				mcSub(&in->p[g->tris[t * 3 + k] * 3], org, d);
+				az[k] = atan2f(mcDot(d, e2), mcDot(d, e1));
+			}
+			std::sort(az, az + 3);
+			// the smallest arc round the axis that holds the three corners: all but the largest gap between them
+			const float g0 = az[1] - az[0], g1 = az[2] - az[1], g2 = az[0] + PI2 - az[2];
+			float from = az[0], arc = az[2] - az[0];
+			if (g0 >= g1 && g0 >= g2) { from = az[1]; arc = PI2 - g0; }
+			else if (g1 >= g0 && g1 >= g2) { from = az[2]; arc = PI2 - g1; }
+			if (arc > 3.1415927f) { for (auto& b : bins) b.push_back(t); continue; }
+			const int s0 = (int)floorf((from + 3.1415927f) / secW), s1 = (int)floorf((from + arc + 3.1415927f) / secW);
+			for (int s = s0; s <= s1; s++) bins[((s % MC_INSIDE_SECTORS) + MC_INSIDE_SECTORS) % MC_INSIDE_SECTORS].push_back(t);
+		}
+		const float margin = MC_MARGIN * in->linkScale;
+		for (const int p : g->insidePts) {
+			float* x = &in->p[p * 3];
+			vec3_t d, a, v;
+			mcSub(x, &in->target[p * 3], d);
+			if (mcDot(d, d) < MC_INSIDE_FAR * MC_INSIDE_FAR * in->linkScale * in->linkScale) continue;	// near its animated place
+			mcSub(x, org, d);
+			mcMA(org, mcDot(d, up), up, a);
+			mcSub(x, a, v);
+			const float r = mcLen(v);
+			if (r < 0.5f) continue;
+			int s = (int)floorf((atan2f(mcDot(v, e2), mcDot(v, e1)) + 3.1415927f) / secW);
+			s = s < 0 ? 0 : (s >= MC_INSIDE_SECTORS ? MC_INSIDE_SECTORS - 1 : s);
+			const unsigned sewn = g->insideSewn[g->partSurf[p]];
+			float best = 2.0f;
+			int bt = -1;
+			for (const int t : bins[s]) {
+				const int ia = g->tris[t * 3], ib = g->tris[t * 3 + 1], ic = g->tris[t * 3 + 2];
+				if (sewn & (1u << g->partSurf[ia])) continue;
+				float tt;
+				if (InsideSegTri(a, x, &in->p[ia * 3], &in->p[ib * 3], &in->p[ic * 3], tt) && tt < best) { best = tt; bt = t; }
+			}
+			if (bt < 0) continue;
+			{	// the animated cloth has it outside there too: the model drapes it so
+				const float* y = &in->target[p * 3];
+				vec3_t dy, ay;
+				mcSub(y, org, dy);
+				mcMA(org, mcDot(dy, up), up, ay);
+				const int ia = g->tris[bt * 3], ib = g->tris[bt * 3 + 1], ic = g->tris[bt * 3 + 2];
+				float tt;
+				if (InsideSegTri(ay, y, &in->target[ia * 3], &in->target[ib * 3], &in->target[ic * 3], tt)) continue;
+			}
+			vec3_t vn, mv;
+			mcScale(v, 1.0f / r, vn);
+			float keep = best * r - margin;
+			if (keep < 0.5f * best * r) keep = 0.5f * best * r;
+			float back = r - keep;
+			if (back > MC_INSIDE_STEP * in->linkScale) back = MC_INSIDE_STEP * in->linkScale;
+			mcScale(vn, -back, mv);
+			mcAdd(x, mv, x);
+			float* pv = &in->prev[p * 3];
+			mcAdd(pv, mv, pv);	// a move, not a speed
+			vec3_t vel;
+			mcSub(x, pv, vel);
+			const float vo = mcDot(vel, vn);
+			if (vo > 0.0f) mcMA(pv, vo, vn, pv);	// and no speed outwards
+		}
 	}
 
 	// SJE: watchdog against shaking. After every step, for every point the animation holds still: has it moved
@@ -2509,7 +2688,9 @@ namespace {
 		std::stable_partition(out.begin(), out.end(), [caps](const mcFacePair_t& fp) { return caps[fp.cap].hard != 1 && caps[fp.cap].hard != 2 && caps[fp.cap].hard != 4; });
 	}
 
-	static void FaceCollide(const mcGroup_t* g, mcInstance_t* in, const mcCapsule_t* caps, int ncaps, int overArms, int rest, int ease) {
+	static void FaceCollide(const mcGroup_t* g, mcInstance_t* in, const mcCapsule_t* caps, int ncaps, int overArms, int rest, int ease, int lie, int armOn) {
+		// SJE 'armgap' (r_meshClothArmGap): a cloak over the arms is kept further off them and pushed out harder
+		const float armG = armOn && g->armGap > 0.0f ? g->armGap * in->linkScale : 0.0f;
 		if (in->facePairs.empty()) return;
 		const int nt = (int)(g->tris.size() / 3);
 		std::vector<float>& sph = in->triSphere;
@@ -2548,7 +2729,7 @@ namespace {
 			float* x[3] = { &in->p[id[0] * 3], &in->p[id[1] * 3], &in->p[id[2] * 3] };
 			// held things are kept a little further off: cloth pressed against a hilt or a blade by the travel wind
 			// (a cape edge swinging round the saber hand, walking backwards) sat up to 0.6 units in their surface
-			const float minD = cap.r + margin + (tool ? MC_FACE_TOOL : 0.0f);
+			const float minD = cap.r + margin + (tool ? MC_FACE_TOOL : 0.0f) + (limb && !tool ? armG : 0.0f);	// SJE 'armgap'
 			float* S = &sph[(size_t)(fp.tri / 3) * 5];
 			if (S[3] < 0.0f) {
 				S[0] = S[1] = S[2] = 0.0f;
@@ -2785,6 +2966,30 @@ namespace {
 			float depth;
 			vec3_t dir;
 			bool through = ref && (dist < 1e-4f || side < -0.3f * dist);
+			// SJE r_meshClothLimbLie: cloth that lies against an arm is not thrown again and again. A crouching figure's cloak lies
+			// between his arm (resting on the knee) and his body: the test takes it for caught under the arm and throws it out over
+			// the arm ('bring'), or takes a triangle at the clearance for 'through' when its closest point flips round the arm; the
+			// links pull it straight back, and the throw came again every 2-3 steps - a point flew 3 units to and fro, the cloak
+			// buzzed and never slept (Kylo). As r_meshClothRest does for the body: the first throw is made as before; a
+			// triangle an arm threw lately that lies about where it lay when the step began, not inside the clearance, while the
+			// pose holds it still and the arm holds still, is where the cloth lies - the throw did not hold. A moving arm or pose,
+			// blades and hilts, and cloth that really went in are thrown as before.
+			if (through && lie && (cap.hard == 1 || cap.hard == 2) && poseStill && in->faceCapsFrom && in->faceStart.size() == in->p.size()
+				&& in->limbThrown.size() == (size_t)g->numParticles && (in->limbThrown[id[0]] || in->limbThrown[id[1]] || in->limbThrown[id[2]])
+				&& dist >= lim - MC_LIE_EPS * in->linkScale) {
+				const mcCapsule_t& c0 = in->faceCapsFrom[fp.cap];
+				const float sl2 = MC_FACE_REST * MC_FACE_REST * in->linkScale * in->linkScale, ml2 = MC_LIE_MOVE * MC_LIE_MOVE * in->linkScale * in->linkScale;
+				vec3_t da, db;
+				mcSub(cap.a, c0.a, da);
+				mcSub(cap.b, c0.b, db);
+				bool lies = mcDot(da, da) <= sl2 && mcDot(db, db) <= sl2;
+				for (int k = 0; k < 3 && lies; k++) {
+					vec3_t dk;
+					mcSub(x[k], &in->faceStart[id[k] * 3], dk);
+					if (mcDot(dk, dk) > ml2) lies = false;
+				}
+				if (lies) through = false;
+			}
 			// SJE r_meshClothRest: 'gone through' is a triangle found on the far side of a shape from where the animation
 			// has the cloth; it is thrown back along that direction, up to MC_FACE_STEP at a time. Cloth draped round a
 			// thin shape of a body that holds still (a cape lying over the calf and heel of a crouching figure, the
@@ -2843,7 +3048,8 @@ namespace {
 				mcScale(nv, 1.0f / dist, dir);
 			}
 			if (depth <= 0.0f) continue;
-			if (depth > MC_FACE_STEP) depth = MC_FACE_STEP;
+			const float fStep = limb && !tool ? MC_FACE_STEP * (armG > 0.0f ? MC_ARMGAP_STEP : 1.0f) : MC_FACE_STEP;	// SJE 'armgap'
+			if (depth > fStep) depth = fStep;
 			// shared by the free corners by their weight in the closest point; where it is mostly at attached
 			// corners, the animation holds it
 			float kk[3], ksum = 0.0f, den = 0.0f;
@@ -2858,7 +3064,7 @@ namespace {
 				// a hand on the hip threw the robe's top corners out). The body and the shoulders keep it: the cape
 				// over the shoulder armour hangs from attached corners and has to be lifted clear by the free one.
 				if (hand && mv > depth) mv = depth;
-				if (mv > MC_FACE_STEP) mv = MC_FACE_STEP;
+				if (mv > fStep) mv = fStep;
 				mv *= sc[k];	// SJE r_meshClothEase: a point that is being let go
 				// SJE r_meshClothEase: a point the shake watchdog let go (FightUpdate) was given back after about 3 s at the
 				// test's full strength. Where the cloth had come to rest in a place two body shapes dispute (the strip under
@@ -2878,6 +3084,7 @@ namespace {
 				mcMA(pu, mv, dir, pu);
 				if (!in->contact[id[k]]) in->contact[id[k]] = 1;
 				if (through && !limb && in->thrown.size() == (size_t)g->numParticles) in->thrown[id[k]] = MC_THROWN_STEPS;	// SJE r_meshClothRest
+				if (through && lie && (cap.hard == 1 || cap.hard == 2) && in->limbThrown.size() == (size_t)g->numParticles) in->limbThrown[id[k]] = MC_THROWN_STEPS;	// SJE r_meshClothLimbLie
 				if (limb && in->limbPush.size() == (size_t)g->numParticles) in->limbPush[id[k]] = MC_LIMB_STEPS;	// SJE r_meshClothCalm (SolveSelfPairs)
 				mcCopy(dir, &in->contactN[id[k] * 3]);
 			}
@@ -3521,7 +3728,9 @@ namespace {
 		solve.overArms = prm->overArms;
 		solve.rest = prm->rest != 0;
 		solve.ease = prm->ease != 0;
+		solve.limbLie = prm->limbLie;
 		// SJE: heavy-cape options ('damp', 'spring', 'bell', 'ring'; only groups with a line that asks for one).
+		solve.armGapOn = prm->armGap;	// SJE r_meshClothArmGap
 		// Per substep each point gets its animated spot (in->anchor): the animated pose, with the hip-carried shape
 		// blended in where the line has 'bell' (BellPose), never under the floor.
 		const bool heavy = g->anyHeavy && (int)g->dampH.size() == g->numParticles && (int)g->springK.size() == g->numParticles;
@@ -3548,13 +3757,34 @@ namespace {
 				// over the pose where a free cape rises 21
 				const float wj = Clamp01((fabsf(vu) - 100.0f) * (1.0f / 90.0f));
 				if (wj > want) want = wj;
+				// ... and in wind (the map's weather wind, a level wind, a pusher's air stream), by the same measure: air
+				// going past at walking pace and more lets it go as a run does. Held to the hips, a standing character's
+				// cape hung still in a storm and only blew while he moved. No wind (most maps): nothing changes.
+				{
+					vec3_t air;
+					mcAdd(prm->wind, prm->zoneWind, air);
+					const float ww = Clamp01((mcLen(air) - 100.0f) * (1.0f / 90.0f));
+					if (ww > want) want = ww;
+				}
 				const float tau = want > in->springRun ? 0.15f : MC_SPRING_BACK;
 				in->springRun += (want - in->springRun) * (1.0f - expf(-MC_DT / tau));
 			}
+			// in wind 'damp' gives way (to MC_WIND_DAMP of itself from 500 units/s of air on): it calms the cape's swing
+			// after a stop or a turn, but in wind it also killed the flapping - the cape stood blown out to one side
+			// and stayed there.
+			// No wind: x 1, nothing changes.
+			float dampW = 1.0f;
+			{
+				vec3_t air;
+				mcAdd(prm->wind, prm->zoneWind, air);
+				const float wk = Clamp01((mcLen(air) - 100.0f) * (1.0f / 400.0f));
+				float lo = MC_WIND_DAMP;
+				dampW = 1.0f - wk * (1.0f - lo);
+			}
 			kDampH.resize(g->numParticles); kDampV.resize(g->numParticles); kSpring.resize(g->numParticles);
 			for (int p = 0; p < g->numParticles; p++) {
-				kDampH[p] = g->dampH[p] > 0.0f ? 1.0f - powf(1.0f - g->dampH[p], isub) : 0.0f;
-				kDampV[p] = g->dampV[p] > 0.0f ? 1.0f - powf(1.0f - g->dampV[p], isub) : 0.0f;
+				kDampH[p] = g->dampH[p] > 0.0f ? 1.0f - powf(1.0f - g->dampH[p] * dampW, isub) : 0.0f;
+				kDampV[p] = g->dampV[p] > 0.0f ? 1.0f - powf(1.0f - g->dampV[p] * dampW, isub) : 0.0f;
 				const float ks = g->springK[p] * (1.0f - in->springRun);
 				kSpring[p] = ks > 0.0f ? 1.0f - powf(1.0f - ks, isub) : 0.0f;
 			}
@@ -3668,16 +3898,70 @@ namespace {
 			const float t = prm->timeSec;
 			const float gs = 1.0f + prm->gust * (0.6f * sinf(t * 1.3f) + 0.4f * sinf(t * 3.7f + 1.1f));
 			mcScale(prm->wind, gs, windNow);
+			// SJE r_meshClothFans: the air of pushers / jump pads, not gusted (it outruns the push by a set amount)
+			if (mcDot(prm->zoneWind, prm->zoneWind) > 0.0f) mcAdd(windNow, prm->zoneWind, windNow);
+			// wind from behind pushes the cloth only by MC_WIND_TAIL of its forward part: in full it pressed a cape onto
+			// its wearer's back and legs, where body and wind fought every step - the cape shook and its edges
+			// stretched to more than twice their length
+			float tail = MC_WIND_TAIL;
+			if (tail < 1.0f && mcDot(windNow, windNow) > 1e-4f) {
+				// the character's facing over the ground (its entity axis: the cape's attached edge gives the shoulder
+				// line only roughly - on a collar it can lie front to back)
+				vec3_t fwd;
+				mcMA(in->fwd, -mcDot(in->fwd, in->up), in->up, fwd);
+				const float fl = mcLen(fwd);
+				const float wf = fl > 1e-3f ? mcDot(windNow, fwd) / fl : 0.0f;
+				if (wf > 0.0f) mcMA(windNow, -(1.0f - tail) * wf / fl, fwd, windNow);
+			}
+		}
+		// SJE r_meshClothLiftAir: how far the lift limit opens in this step (SolveConstraints): air from below - the
+		// character's fall against the air, or an updraft - from MC_LIFT_FALL0 to MC_LIFT_FALL1 units/s, or wind over the
+		// ground from MC_LIFT_WIND0 to MC_LIFT_WIND1 (not the character's travel: a run keeps its look). It opens at once
+		// and closes by MC_LIFT_CLOSE per second, so a landing does not snap a raised cape down. No fall, no wind: closed.
+		{
+			float open = 0.0f;
+			if (prm->liftAir > 0.0f) {
+				vec3_t air, ah;
+				mcSub(windNow, in->originVel, air);
+				const float up = mcDot(air, in->up);
+				mcMA(windNow, -mcDot(windNow, in->up), in->up, ah);
+				const float kf = Clamp01((up - MC_LIFT_FALL0) * (1.0f / (MC_LIFT_FALL1 - MC_LIFT_FALL0)));
+				const float kw = Clamp01((mcLen(ah) - MC_LIFT_WIND0) * (1.0f / (MC_LIFT_WIND1 - MC_LIFT_WIND0)));
+				open = Clamp01(prm->liftAir) * (kf > kw ? kf : kw);
+			}
+			const float shut = in->liftAir - MC_LIFT_CLOSE * MC_DT;
+			in->liftAir = open > shut ? open : (shut > 0.0f ? shut : 0.0f);
+			solve.liftAir = in->liftAir;
+			if (solve.liftAir > 0.0f) {
+				mcMA(in->fwd, -mcDot(in->fwd, in->up), in->up, solve.liftFwd);
+				const float fl = mcLen(solve.liftFwd);
+				if (fl > 1e-3f) mcScale(solve.liftFwd, 1.0f / fl, solve.liftFwd); else solve.liftAir = 0.0f;
+				if ((int)g->wrap.size() == g->numParticles && (int)g->under.size() == g->numParticles) { solve.liftWrap = g->wrap.data(); solve.liftUnder = g->under.data(); }
+			}
 		}
 		// flutter (r_meshClothFlutter): the wind's strength also varies across the cloth, in ripples that travel
 		// along it (a phase from each particle's position and the time), so wind flaps a cape instead of
 		// pushing it as one stiff sheet. Worked out once per step, only when there is wind.
+		// SJE: strong wind flaps the cloth harder - the ripples grow to MC_WIND_FLUTTER from 500 to 1500 units/s of wind
+		// (with the gentle flutter alone a blown cape stood out to one side and hardly moved). No wind: as before.
+		float flutA = Clamp01(prm->flutter);
+		{
+			float boost = MC_WIND_FLUTTER;
+			const float wb = boost * Clamp01((mcLen(windNow) - 500.0f) * (1.0f / 1000.0f));
+			if (prm->flutter > 0.0f && wb > flutA) flutA = Clamp01(wb);
+		}
+		// SJE: in a storm (the strong weather wind, MC_STRONG_WIND and up) cloth lighter than MC_STORM_WEIGHT is blown as hard
+		// as cloth of that weight, not harder: the storm's strength was set on the heavy cape (weight 1.5); a robe of
+		// weight 1 took half as much again and tore into jagged strips in saber swings and jumps (t1_rail).
+		// Weaker wind and no wind: as before.
+		float stormW = MC_STORM_WEIGHT;
+		const float stormK = Clamp01((mcLen(prm->wind) - MC_STRONG_WIND) * (1.0f / 600.0f));
 		thread_local static std::vector<float> windF;
 		const bool flutter = prm->flutter > 0.0f && mcDot(windNow, windNow) > 1e-4f;
 		if (flutter) {
 			windF.resize(g->numParticles);
 			const float t = prm->timeSec;
-			const float a = Clamp01(prm->flutter);
+			const float a = flutA;
 			for (int p = 0; p < g->numParticles; p++) {
 				const float* pp = &in->p[p * 3];
 				const float ph = t * 7.3f + pp[0] * 0.045f + pp[1] * 0.037f + pp[2] * 0.051f;
@@ -3703,7 +3987,9 @@ namespace {
 			// falling: only part of it counts. All of it throws a cape up to its lift limit, where it piles
 			// up behind the shoulders; with part of it the cape goes light and fills out as its wearer drops
 			const float down = mcDot(airH, in->up);
-			if (down < 0.0f) mcMA(airH, -down * (1.0f - MC_AIR_FALL), in->up, airH);
+			// SJE r_meshClothLiftAir: ... while the lift limit is open (a long fall) more of it counts, up to all of it
+			const float fallK = MC_AIR_FALL + (1.0f - MC_AIR_FALL) * solve.liftAir;
+			if (down < 0.0f) mcMA(airH, -down * (1.0f - fallK), in->up, airH);
 			const float U = mcLen(airH);
 			mcScale(airH, (U > MC_AIR_MAX ? MC_AIR_MAX / U : 1.0f) * h, airH);
 		}
@@ -3711,7 +3997,7 @@ namespace {
 			vec3_t air;
 			mcSub(in->originVel, windNow, air);
 			const float U = mcLen(air);
-			const float a = Clamp01(prm->flutter) * Clamp01((U - 40.0f) / 120.0f);	// none in still air
+			const float a = flutA * Clamp01((U - 40.0f) / 120.0f);	// none in still air
 			if (a > 0.01f) {
 				ripple = true;
 				float hz = 0.012f * U;
@@ -3836,6 +4122,8 @@ namespace {
 		else for (unsigned char& lp : in->limbPush) if (lp) lp--;
 		if (in->thrown.size() != (size_t)g->numParticles) in->thrown.assign((size_t)g->numParticles, 0);	// SJE r_meshClothRest
 		else for (unsigned char& th : in->thrown) if (th) th--;
+		if (in->limbThrown.size() != (size_t)g->numParticles) in->limbThrown.assign((size_t)g->numParticles, 0);	// SJE r_meshClothLimbLie
+		else for (unsigned char& th : in->limbThrown) if (th) th--;
 		for (int s = 0; s < sub; s++) {
 			const float t1 = (float)(s + 1) / sub;
 			if (s > 0) in->targetSub.assign(in->target.begin(), in->target.end());
@@ -3926,7 +4214,13 @@ namespace {
 				if (!underWater) {
 					const float invW = 1.0f / (g->weight[p] * (1.0f + Clamp01(prm->wet)));
 					vec3_t rel;
-					mcMA(v, flutter ? -h * windF[p] : -h, windNow, rel);		// v is per substep, wind is per second
+					float ws = 1.0f;	// SJE: light cloth in a storm (stormK above)
+					if (stormK > 0.0f && g->weight[p] < stormW) ws = 1.0f - stormK * (1.0f - g->weight[p] / stormW);
+					// ... and a layer the model has under other cloth (tunic strips under a robe) is in that cloth's lee: it gets
+					// the wind as it gets the travel air (r_meshClothWornAir). In full the storm blew Ben's tunic strips out from
+					// under his robe as jagged pieces stretched to three times their length. No wind: no effect.
+					if (wornCap && g->under[p]) ws *= prm->wornAir;
+					mcMA(v, (flutter ? -h * windF[p] : -h) * ws, windNow, rel);		// v is per substep, wind is per second
 					const float* nn = &n[p * 3];
 					const float vn = mcDot(rel, nn);
 					float kn = prm->drag * h * invW;
@@ -4036,12 +4330,17 @@ namespace {
 				}
 				cs = capsSub;
 			}
-			solve.faceNow = (s & 1) || s == sub - 1;
+			solve.faceNow = (s & 1) || s == sub - 1 || (solve.armGapOn && g->armGap > 0.0f);	// SJE 'armgap'
 			SolveConstraints(g, in, cs, ncaps, solve);
 			if (selfSub) SolveSelfPairs(g, in, prm->frictionScale, prm->calm != 0, MC_FIGHT_TRIP, fineSelf);
 			if (prm->layers && !g->layerPairs.empty()) SolveLayerPairs(g, in, prm);	// SJE: cloth layers keep their order
 			FloorCollide(g, in, prm);
 			ContactVelocity(g, in, prm->frictionScale);
+		}
+		if (prm->inside) {	// SJE r_meshClothInside: in strong air only (a storm, a level wind, a pusher's air stream)
+			vec3_t air;
+			mcAdd(prm->wind, prm->zoneWind, air);
+			if (mcDot(air, air) > MC_INSIDE_WIND * MC_INSIDE_WIND) KeepInside(g, in);
 		}
 		in->impulse.clear();
 		if (!selfSub) SelfCollide(g, in);
@@ -4063,6 +4362,7 @@ namespace {
 	}
 	static bool RestPoseHolds(const mcInstance_t* in, const std::vector<float>& target, const float* capSig, const mcParams_t* prm) {
 		if (mcDot(prm->wind, prm->wind) > 1e-4f) return false;
+		if (mcDot(prm->zoneWind, prm->zoneWind) > 1e-4f) return false;	// SJE r_meshClothFans
 		if (in->restRef.size() != target.size()) return false;
 		for (int k = 0; k < 8; k++) if (fabsf(capSig[k] - in->restCaps[k]) > MC_REST_DRIFT) return false;
 		const float d2 = MC_REST_DRIFT * MC_REST_DRIFT;
@@ -4076,6 +4376,10 @@ namespace {
 	static void TrackRest(const mcGroup_t* g, mcInstance_t* in, const std::vector<float>& target, const float* capSig,
 		const mcParams_t* prm, int steps) {
 		bool still = RestPoseHolds(in, target, capSig, prm) && in->pCurStep.size() == in->p.size() && in->pPrevStep.size() == in->p.size();
+		// SJE r_meshClothSleepShown: cloth this character's skin has switched off (r_meshClothShown: a point no switched-on surface
+		// uses) is simulated with the rest but nobody sees it, and it holds nothing: it does not keep the drawn cloth awake. Kylo's
+		// hidden robe went on settling under his cloak in a still crouch long after the cloak was at rest.
+		const unsigned offR = prm->sleepShown && prm->shown && in->offMask && (int)g->partUse.size() == g->numParticles ? in->offMask : 0u;
 		if (still) {
 			// SJE r_meshClothBreeze: in the breeze the cloth is only at rest if the breeze does not move it either
 			const float lim = BreezeNow(prm) > 0.0f && in->breezeTaut < 1.0f ? MC_BREEZE_STILL : MC_REST_SPEED;
@@ -4090,6 +4394,7 @@ namespace {
 			const float span2 = MC_REST_SPAN * MC_REST_SPAN * in->linkScale * in->linkScale;
 			for (int p = 0; p < g->numParticles && still; p++) {
 				if (g->freedom[p] <= 0.0f) continue;
+				if (offR && !(g->partUse[p] & ~offR)) continue;	// SJE r_meshClothSleepShown
 				const float* c = &in->pCurStep[p * 3];
 				if (place) {
 					float* lo = &in->restLo[p * 3], * hi = &in->restHi[p * 3];
@@ -4241,6 +4546,7 @@ namespace {
 
 	void Simulate(const mcGroup_t* g, mcInstance_t* in, int timeMs, const vec3_t origin, const vec3_t axis[3],
 		const mcCapsule_t* caps, int ncaps, const mcParams_t* prm, mcBoneFn_t boneFn, void* boneCtx) {
+		mcCopy(axis[0], in->fwd);
 		ComputeRootDist(g);
 		// animated (target) positions of every particle, and skinned normals of every vertex
 		std::vector<float>& target = in->scratchTarget;
@@ -5164,6 +5470,7 @@ int MC_LoadConfig(const char* text) {
 			}
 			else if (!Q_stricmp(tok, "ring")) { d.ring = (float)atof(COM_ParseExt(&p, qfalse)); if (d.ring < 0.0f) d.ring = 0.0f; }
 			else if (!Q_stricmp(tok, "bell")) d.bell = Clamp01((float)atof(COM_ParseExt(&p, qfalse)));
+			else if (!Q_stricmp(tok, "armgap")) { d.armGap = (float)atof(COM_ParseExt(&p, qfalse)); if (d.armGap < 0.0f) d.armGap = 0.0f; if (d.armGap > 4.0f) d.armGap = 4.0f; }	// SJE
 			else if (!Q_stricmp(tok, "wrap")) d.wrap = true;
 			else if (!Q_stricmp(tok, "spring")) {
 				d.spring = (float)atof(COM_ParseExt(&p, qfalse)); d.springFade = (float)atof(COM_ParseExt(&p, qfalse));
@@ -5929,7 +6236,16 @@ void MC_Apply(const void* surfacePtr, const void* instanceKey, int timeMs,
 	MC_Run(&run, surfacePtr, timeMs, origin, axis, caps, ncaps, prm, boneFn, boneCtx, xyz, normal);
 }
 
+// SJE r_meshClothBlastGain: a blast wave throws light cloth far harder than the body it knocks back. At 1 an exploding
+// crate (600 / 160) moved Vader's cape 3.5 units at 90 units off - his heavy cape's damping and spring swallowed the push
+// while the game threw him away; at 3 it is blown 12 units (stretch as before). Set each frame by the glue.
+static float g_blastGain = 3.0f;
+void MC_SetBlastGain(float gain) {
+	g_blastGain = gain > 0.0f ? gain : 0.0f;
+}
+
 void MC_Blast(const float center[3], float strength, float radius, mcVisibleFn_t visible) {
+	strength *= g_blastGain;	// SJE r_meshClothBlastGain
 	if (radius <= 1.0f) return;
 	for (auto& kv : g_instances) {
 		mcInstance_t* in = kv.second;
@@ -6044,11 +6360,252 @@ void MC_WeatherState(const void* instanceKey, int timeMs, bool outside, float we
 	*wetOut = w.wet;
 }
 
+// SJE r_meshClothStrongWind (see tr_meshcloth.h). Main thread only.
+// A map's strong wind is a speed for its rain and snow (t1_rail's train roof: 5000 units/s): the cloth got all of it and
+// was torn into strips. Over MC_STRONG_WIND (where the game braces its characters against the wind) it rises slowly with
+// the map's speed, up to MC_STRONG_WIND_MAX: strongly blown from that side, still one sheet (the 0.5 gusts on top).
+// Soaked cloth weighs twice as much and the air moves it half as far (t1_rail rains: its heavy cape hardly stirred):
+// the strong wind on it is raised by its wetness, so it is blown as clearly as dry cloth - growing in from nothing at
+// MC_STRONG_WIND to all of it at twice that, so a gusting wind that crosses MC_STRONG_WIND does not jump.
+const float MC_STRONG_WIND_K = 0.15f;		// cloth wind per unit of map wind above MC_STRONG_WIND
+const float MC_STRONG_WIND_MAX = 1600.0f;	// units/s at most (dry cloth)
+float MC_StrongWindSpeed(float mapSpeed, float wet) {
+	if (mapSpeed <= MC_STRONG_WIND) return mapSpeed;
+	float v = MC_STRONG_WIND + MC_STRONG_WIND_K * (mapSpeed - MC_STRONG_WIND);
+	if (v > MC_STRONG_WIND_MAX) v = MC_STRONG_WIND_MAX;
+	return v * (1.0f + Clamp01(wet) * Clamp01((mapSpeed - MC_STRONG_WIND) / MC_STRONG_WIND));
+}
+
+struct mcEase_t {
+	float	value = 0.0f;
+	int		time = 0;
+};
+static std::unordered_map<const void*, mcEase_t> g_strongOut;
+
+float MC_StrongWindOutside(const void* instanceKey, int timeMs, bool outside) {
+	const float o = outside ? 1.0f : 0.0f;
+	auto found = g_strongOut.find(instanceKey);
+	if (found == g_strongOut.end()) {
+		if (g_strongOut.size() > 512) {
+			for (auto it = g_strongOut.begin(); it != g_strongOut.end(); ) {
+				if (timeMs - it->second.time > MC_FORGET_MS || timeMs < it->second.time) it = g_strongOut.erase(it);
+				else ++it;
+			}
+		}
+		mcEase_t e;
+		e.value = o;	// a new character starts where it is, no fade
+		e.time = timeMs;
+		found = g_strongOut.emplace(instanceKey, e).first;
+	}
+	mcEase_t& e = found->second;
+	float dt = (timeMs - e.time) * 0.001f;
+	if (dt < 0.0f || dt > 1.0f) dt = 1.0f;	// a reload or a long pause: catch up at once
+	e.time = timeMs;
+	const float os = dt / 0.4f;
+	e.value = e.value < o ? (e.value + os > o ? o : e.value + os) : (e.value - os < o ? o : e.value - os);
+	return e.value;
+}
+
+// SJE r_meshClothFans: wind zones (see tr_meshcloth.h). Main thread only.
+struct mcZone_t {
+	float	mins[3], maxs[3], air[3];
+	float	ahead[3];	// how far the stream runs ahead of the push it gives (air - the push's velocity)
+	bool	hasAhead;	// false: not told (the stream against the character's own motion is taken instead)
+};
+static std::vector<mcZone_t> g_zones;
+struct mcZoneMem_t {
+	float	rel[3] = { 0.0f, 0.0f, 0.0f };	// the air against its own motion when it was last in a zone
+	int		left = -1;						// when it was last in one (-1: not yet)
+	float	org[3] = { 0.0f, 0.0f, 0.0f };	// the middle of its box, last time
+	float	vel[3] = { 0.0f, 0.0f, 0.0f };	// its velocity (from the last frames, smoothed)
+	int		time = -1;						// ... when
+};
+static std::unordered_map<const void*, mcZoneMem_t> g_zoneMem;
+const int MC_MAX_ZONES = 256;
+const int MC_ZONE_HOLD_MS = 800;	// a character a pusher threw out of its zone keeps the stream this long (a jump pad's
+const int MC_ZONE_FADE_MS = 600;	//   trigger is a thin slab: it is out of it the frame after the throw), then it fades out
+const float MC_ZONE_SWEEP_SPEED = 3000.0f;	// units/s: a move between two frames further than this is a teleport
+
+void MC_WindZoneAdd(const float mins[3], const float maxs[3], const float air[3], const float pushSpeed) {
+	if ((int)g_zones.size() >= MC_MAX_ZONES) return;
+	mcZone_t z;
+	for (int k = 0; k < 3; k++) {
+		z.mins[k] = mins[k] < maxs[k] ? mins[k] : maxs[k];
+		z.maxs[k] = mins[k] < maxs[k] ? maxs[k] : mins[k];
+		z.air[k] = air[k];
+	}
+	const float a = mcLen(z.air);
+	z.hasAhead = pushSpeed >= 0.0f && a > 1e-3f;
+	mcScale(z.air, z.hasAhead ? (a - (pushSpeed < a ? pushSpeed : a)) / a : 1.0f, z.ahead);
+	g_zones.push_back(z);
+}
+
+void MC_WindZonesClear(void) {
+	g_zones.clear();	// the characters' memory stays: one a pusher just threw keeps its stream when the set changes
+}
+
+int MC_WindZoneCount(void) {
+	return (int)g_zones.size();
+}
+
+// does the segment from a to b (a box's middle; h: its half size) touch the zone? (slabs of the zone grown by h)
+static bool MC_ZoneSwept(const mcZone_t& z, const float a[3], const float b[3], const float h[3]) {
+	float t0 = 0.0f, t1 = 1.0f;
+	for (int k = 0; k < 3; k++) {
+		const float lo = z.mins[k] - h[k], hi = z.maxs[k] + h[k], d = b[k] - a[k];
+		if (fabsf(d) < 1e-6f) {
+			if (a[k] < lo || a[k] > hi) return false;
+			continue;
+		}
+		float u0 = (lo - a[k]) / d, u1 = (hi - a[k]) / d;
+		if (u0 > u1) { const float s = u0; u0 = u1; u1 = s; }
+		if (u0 > t0) t0 = u0;
+		if (u1 < t1) t1 = u1;
+		if (t0 > t1) return false;
+	}
+	return true;
+}
+
+bool MC_ZoneAir(const void* instanceKey, int timeMs, const float mins[3], const float maxs[3], float air[3]) {
+	air[0] = air[1] = air[2] = 0.0f;
+	if (g_zones.empty() && g_zoneMem.empty()) return false;
+	auto found = g_zoneMem.find(instanceKey);
+	if (g_zones.empty()) {
+		// no zones (now): only a character that a pusher just threw keeps its stream; the others are let go of
+		if (found == g_zoneMem.end()) return false;
+		if (found->second.left < 0 || timeMs < found->second.time || timeMs - found->second.left >= MC_ZONE_HOLD_MS + MC_ZONE_FADE_MS) {
+			g_zoneMem.erase(found);
+			return false;
+		}
+	}
+	if (found == g_zoneMem.end()) {
+		if (g_zoneMem.size() > 512) {
+			for (auto it = g_zoneMem.begin(); it != g_zoneMem.end(); ) {
+				if (timeMs - it->second.time > MC_FORGET_MS || timeMs < it->second.time) it = g_zoneMem.erase(it);
+				else ++it;
+			}
+		}
+		found = g_zoneMem.emplace(instanceKey, mcZoneMem_t()).first;
+	}
+	mcZoneMem_t& m = found->second;
+	if (m.time >= 0 && timeMs < m.time) m = mcZoneMem_t();	// the time went back (a new map, a load): start over
+	float c[3], h[3];
+	for (int k = 0; k < 3; k++) {
+		c[k] = 0.5f * (mins[k] + maxs[k]);
+		h[k] = 0.5f * (maxs[k] - mins[k]);
+	}
+	// swept from where it was last frame: a jump pad's trigger is a thin slab, and a character thrown at 2000 units/s is
+	// through it between two frames. Not across a teleport (further than it could have flown) or a long gap.
+	const float* from = c;
+	const int dtMs = timeMs - m.time;
+	if (m.time >= 0 && dtMs > 0 && dtMs <= 200) {
+		vec3_t dv;
+		mcSub(c, m.org, dv);
+		const float reach = MC_ZONE_SWEEP_SPEED * dtMs * 0.001f + 64.0f;
+		if (mcDot(dv, dv) <= reach * reach) {
+			from = m.org;
+			mcScale(dv, 1000.0f / dtMs, dv);
+			for (int k = 0; k < 3; k++) m.vel[k] = 0.5f * (m.vel[k] + dv[k]);
+		}
+		else {
+			m.vel[0] = m.vel[1] = m.vel[2] = 0.0f;	// a teleport
+		}
+	}
+	else if (dtMs != 0) {
+		m.vel[0] = m.vel[1] = m.vel[2] = 0.0f;	// first seen, or after a gap
+	}
+	// the strongest of the zones it touches: pushers that overlap are one stream (a shaft has one pusher for the player
+	// and one for the others, both blowing up it)
+	bool in = false;
+	float best = -1.0f;
+	const mcZone_t* bestZone = nullptr;
+	for (const mcZone_t& z : g_zones) {
+		if (!MC_ZoneSwept(z, from, c, h)) continue;
+		const float s = mcDot(z.air, z.air);
+		if (s > best) {
+			best = s;
+			bestZone = &z;
+			mcCopy(z.air, air);
+		}
+		in = true;
+	}
+	mcCopy(c, m.org);
+	m.time = timeMs;
+	if (in) {
+		// how far the stream runs ahead of the push: as the cgame told it, else the stream against its own motion now
+		// (which depends on when it leaves: a character that falls onto a pad and is out of it as soon as it is thrown
+		// would keep the stream against its fall)
+		if (bestZone && bestZone->hasAhead) mcCopy(bestZone->ahead, m.rel);
+		else mcSub(air, m.vel, m.rel);
+		m.left = timeMs;
+		return true;
+	}
+	const int since = timeMs - m.left;
+	if (m.left < 0 || since < 0 || since >= MC_ZONE_HOLD_MS + MC_ZONE_FADE_MS) {
+		m.left = -1;
+		return false;
+	}
+	// thrown out of it: the stream goes along with it, still running ahead of it by as much (whatever its flight does
+	// to its speed), then fades out to still air
+	float k = since <= MC_ZONE_HOLD_MS ? 1.0f : 1.0f - (float)(since - MC_ZONE_HOLD_MS) / (float)MC_ZONE_FADE_MS;
+	k = k * k * (3.0f - 2.0f * k);
+	mcAdd(m.vel, m.rel, air);
+	mcScale(air, k, air);
+	return true;
+}
+
+// SJE r_meshClothLevelWind: ext_data/meshcloth_wind.dat (see tr_meshcloth.h)
+static void MC_BareMapName(const char* in, char* out, const int outSize) {
+	const char* s = in;
+	if (!Q_stricmpn(s, "maps/", 5) || !Q_stricmpn(s, "maps\\", 5)) s += 5;
+	Q_strncpyz(out, s, outSize);
+	const int n = (int)strlen(out);
+	if (n > 4 && !Q_stricmp(out + n - 4, ".bsp")) out[n - 4] = 0;
+}
+
+void MC_LevelWindParse(const char* text, const char* mapName, mcLevelWind_t* out) {
+	*out = mcLevelWind_t();
+	if (!text || !mapName || !mapName[0]) return;
+	char want[MAX_QPATH];
+	MC_BareMapName(mapName, want, sizeof(want));
+#ifdef MC_MP
+	COM_BeginParseSession("meshcloth_wind");
+#else
+	COM_ParseSession session;	// the SP parser refuses to run outside a session
+#endif
+	const char* p = text;
+	while (p) {
+		const char* tok = COM_ParseExt(&p, qtrue);
+		if (!tok[0]) break;
+		if (tok[0] == '#') { while (COM_ParseExt(&p, qfalse)[0]) {} continue; }
+		char name[MAX_QPATH];
+		MC_BareMapName(tok, name, sizeof(name));
+		mcLevelWind_t w;
+		int k;
+		for (k = 0; k < 3; k++) {
+			tok = COM_ParseExt(&p, qfalse);
+			if (!tok[0]) break;
+			w.wind[k] = (float)atof(tok);
+		}
+		if (k < 3) continue;
+		w.found = 1;
+		while ((tok = COM_ParseExt(&p, qfalse))[0]) {
+			if (!Q_stricmp(tok, "outside")) w.outside = 1;
+			else if (!Q_stricmp(tok, "only")) w.only = 1;
+			else if ((tok[0] >= '0' && tok[0] <= '9') || tok[0] == '.') w.gust = Clamp01((float)atof(tok));
+		}
+		if (!Q_stricmp(name, want)) *out = w;	// the last line for the map counts
+	}
+}
+
 // MC_SetCharacters / MC_NearCharacters (r_meshClothOthers): other characters push cloth. Main thread.
 static std::vector<float> g_charOrigins;
+static std::vector<float> g_charScales;	// SJE r_meshClothShapeScale: the size each character is drawn at (empty = all 1)
 static int g_charFrame = -1;
 
-void MC_SetCharacters(int frameId, const float (*origins)[3], int count) {
+void MC_SetCharacters(int frameId, const float (*origins)[3], int count, const float* scales) {
+	if (scales && count > 0) g_charScales.assign(scales, scales + count);
+	else g_charScales.clear();
 	g_charFrame = frameId;
 	g_charOrigins.assign(&origins[0][0], &origins[0][0] + count * 3);
 }
@@ -6069,10 +6626,12 @@ int MC_NearCharacters(const float origin[3], mcCapsule_t* out, int max) {
 		const float d2 = dx * dx + dy * dy;
 		if (d2 < 1.0f && fabsf(dz) < 1.0f) continue;	// this character itself
 		if (d2 > NEAR * NEAR || fabsf(dz) > 64.0f) continue;
+		// SJE r_meshClothShapeScale: the column follows the other's drawn size (Yoda at 45 % stood as a full-size column)
+		const float s = (int)g_charScales.size() == count ? g_charScales[i] : 1.0f;
 		mcCapsule_t& c = out[n++];
-		c.a[0] = o[0]; c.a[1] = o[1]; c.a[2] = o[2] - 12.0f;
-		c.b[0] = o[0]; c.b[1] = o[1]; c.b[2] = o[2] + 28.0f;
-		c.r = 12.0f;
+		c.a[0] = o[0]; c.a[1] = o[1]; c.a[2] = o[2] - 12.0f * s;
+		c.b[0] = o[0]; c.b[1] = o[1]; c.b[2] = o[2] + 28.0f * s;
+		c.r = 12.0f * s;
 		c.hard = 0;
 	}
 	return n;

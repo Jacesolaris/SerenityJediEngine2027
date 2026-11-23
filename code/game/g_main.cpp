@@ -967,6 +967,21 @@ static void G_InitCvars()
 	g_SaberPerfectBlockingTimerHard = gi.cvar("g_SaberPerfectBlockingTimerHard", "80", CVAR_ARCHIVE);
 	g_saberHitConfirm = gi.cvar("g_saberHitConfirm", "0", CVAR_ARCHIVE);
 	g_saberAIAdapt = gi.cvar("g_saberAIAdapt", "1", CVAR_ARCHIVE);
+	// 2026-11-23: the AI cvars of changelog 473-485 are read through local gi.cvar getters; register them here as well,
+	// so they exist with their defaults (and the setup menu shows them) from the start of the game
+	gi.cvar("g_npcEvasionFix", "1", CVAR_ARCHIVE);
+	gi.cvar("g_saberAITurtleBreak", "1", CVAR_ARCHIVE);
+	gi.cvar("g_saberAISpamPunish", "1", CVAR_ARCHIVE);
+	gi.cvar("g_saberAIFinisher", "1", CVAR_ARCHIVE);
+	gi.cvar("g_saberAIAdaptTypes", "1", CVAR_ARCHIVE);
+	gi.cvar("g_saberAIRhythm", "1", CVAR_ARCHIVE);
+	gi.cvar("g_squadCasualtyReact", "1", CVAR_ARCHIVE);
+	gi.cvar("g_npcReactionDelay", "1", CVAR_ARCHIVE);
+	gi.cvar("g_npcLastKnownSearch", "1", CVAR_ARCHIVE);
+	gi.cvar("g_npcDangerAvoid", "1", CVAR_ARCHIVE);
+	gi.cvar("g_allyTactics", "1", CVAR_ARCHIVE);
+	gi.cvar("g_dynamicDifficulty", "0", CVAR_ARCHIVE);
+	gi.cvar("g_dynamicDifficultyDebug", "0", 0);
 	g_saberAIRecover = gi.cvar("g_saberAIRecover", "1", CVAR_ARCHIVE);
 	g_saberAITactics = gi.cvar("g_saberAITactics", "1", CVAR_ARCHIVE);
 	g_saberNPCBlockBox = gi.cvar("g_saberNPCBlockBox", "1", CVAR_ARCHIVE);

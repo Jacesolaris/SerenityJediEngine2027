@@ -305,6 +305,8 @@ vmCvar_t cg_drawTimer;
 vmCvar_t cg_drawFPS;
 vmCvar_t cg_clothForcePush;
 vmCvar_t cg_clothExplosion;
+vmCvar_t cg_clothFans;
+vmCvar_t cg_clothMapExplosion;
 vmCvar_t cg_traceCull;
 vmCvar_t cg_drawSnapshot;
 vmCvar_t cg_drawAmmoWarning;
@@ -553,6 +555,8 @@ static cvarTable_t cvarTable[] = {
 	{ &cg_drawFPS, "cg_drawFPS", "1", CVAR_ARCHIVE },
 	{ &cg_clothForcePush, "cg_clothForcePush", "1", CVAR_ARCHIVE },	// force push/pull blows capes and robes (0 = off, 2 = twice as strong)
 	{ &cg_clothExplosion, "cg_clothExplosion", "1", CVAR_ARCHIVE },	// explosions blow capes and robes (0 = off, 2 = twice as strong)
+	{ &cg_clothMapExplosion, "cg_clothMapExplosion", "1", CVAR_ARCHIVE },	// the map's explosions (crates, barrels, breakables) blow capes and robes (0 = off, 2 = twice as strong)
+	{ &cg_clothFans, "cg_clothFans", "1", CVAR_ARCHIVE },	// the map's pushers (jump pads, air streams) blow capes and robes (0 = off, 2 = stream twice as far ahead of the push)
 	{ &cg_traceCull, "cg_traceCull", "1", CVAR_ARCHIVE },	// cgame traces skip entities their move can't reach (0 = test them all, as before)
 	{ &cg_drawSnapshot, "cg_drawSnapshot", "0", CVAR_ARCHIVE },
 	{ &cg_drawAmmoWarning, "cg_drawAmmoWarning", "1", CVAR_ARCHIVE },
@@ -2818,6 +2822,8 @@ void CG_Init(const int serverCommandSequence)
 {
 	cgs.serverCommandSequence = serverCommandSequence;
 	CG_MDWheel_Reset();
+	CG_ClothWindZonesReset();	// a new map or renderer: the pushers' wind zones are sent again (cg_clothFans)
+	CG_ClothMapBlastUp(qtrue);	// the map's explosions may blow mesh cloth now (cg_clothMapExplosion)
 
 	// Wall marks and local entities keep the renderer's shader handles. This also runs after vid_restart (the SP cgame is
 	// not unloaded), where the new renderer - e.g. vanilla -> rend2 - numbers its shaders differently: marks made before
@@ -2923,6 +2929,7 @@ Called before every level change or subsystem restart
 */
 void CG_Shutdown()
 {
+	CG_ClothMapBlastUp(qfalse);	// the cgame stops: the game's explosions no longer blow mesh cloth through it
 	in_camera = false;
 	CG_MDWheel_Reset();
 	FX_Free();

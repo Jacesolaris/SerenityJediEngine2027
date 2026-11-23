@@ -780,6 +780,26 @@ void IT_LoadWeatherParms(void)
 	// cloud per command). Maps without a file are left alone, as before.
 	if (gi.FS_ReadFile(va("Weather/%s.cfg", mapname.string), nullptr) > 0)
 	{
-		gi.SendConsoleCommand(va("weather clear\nexecq Weather/%s\n", mapname.string));
+		// SJE: the clear also takes away the map's own wind (fx_wind, fx_wind_zone). The vanilla renderer kept reporting
+		// the last wind after a clear (Bug 50), so the map's wind seemed to stay - t1_rail's head wind on the train roof,
+		// where the game braces the player against it, came only from that. Now that a clear really clears, the map's wind
+		// commands are sent again after the file: the file replaces the map's rain / snow / fog, not its wind.
+		char cmds[4096];
+		Com_sprintf(cmds, sizeof cmds, "weather clear\nexecq Weather/%s\n", mapname.string);
+		for (int i = 1; i < MAX_WORLD_FX; i++)
+		{
+			char fx[MAX_STRING_CHARS];
+			gi.GetConfigstring(CS_WORLD_FX + i, fx, sizeof fx);
+			if (!fx[0])
+			{
+				break;
+			}
+			if (!Q_stricmp(fx, "wind") || !Q_stricmp(fx, "gustingwind") || !Q_stricmp(fx, "swirlingwind") ||
+				!Q_stricmpn(fx, "constantwind ", 13) || !Q_stricmpn(fx, "windzone ", 9))
+			{
+				Q_strcat(cmds, sizeof cmds, va("weather %s\n", fx));
+			}
+		}
+		gi.SendConsoleCommand(cmds);
 	}
 }

@@ -648,6 +648,13 @@ public:
 	////////////////////////////////////////////////////////////////////////////////////
 	// PointOutside - Test to see if a given point is outside
 	////////////////////////////////////////////////////////////////////////////////////
+	// SJE mesh cloth (r_meshClothBreezeInside): inside by the map's own weather volumes - false on a map without them
+	// (there PointOutside counts all of the map as inside or as outside, which says nothing about a room)
+	bool InsideMarked(const CVec3& pos)
+	{
+		return mCacheInit && !PointOutside(pos);
+	}
+
 	bool PointOutside(const CVec3& pos)
 	{
 		if (!mCacheInit)
@@ -724,6 +731,13 @@ bool R_IsOutside(vec3_t pos)
 {
 	WE_LOCK();
 	return mOutside.PointOutside(pos);
+}
+
+// SJE mesh cloth (r_meshClothBreezeInside): inside a volume the map marks as inside (false on a map without them)
+bool R_IsInsideMarked(vec3_t pos)
+{
+	WE_LOCK();
+	return mOutside.InsideMarked(pos);
 }
 
 static bool R_IsShaking()

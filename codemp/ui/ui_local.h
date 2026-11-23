@@ -250,7 +250,7 @@ typedef struct serverStatusInfo_s {
 	char address[MAX_ADDRESSLENGTH];
 	char* lines[MAX_SERVERSTATUS_LINES][4];
 	char text[MAX_SERVERSTATUS_TEXT];
-	char pings[MAX_CLIENTS * 3];
+	char pings[MAX_SERVERSTATUS_LINES * 3]; // TaystJK fix: one entry per status line (was MAX_CLIENTS: overflow on big servers)
 	int numLines;
 } serverStatusInfo_t;
 

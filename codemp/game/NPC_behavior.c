@@ -606,6 +606,103 @@ void NPC_BSFollowLeader_LookAtLeader(void)
 	NPC_UpdateAngles(qtrue, qtrue);
 }
 
+// g_allyTactics (2026-11-22, AI audit item 20; archived, 1 = on, 0 = the old behaviour): a following ally
+// (NPC_BSFollowLeader) with a player leader (1) steps sideways out of his line of fire when it stands in front of him
+// (within 400 units, 40 units of his aim line) while he holds a gun, and (2) shouts a warning and turns on an enemy
+// that is close behind him (within 256 units, out of his view, in the ally's sight), at most every 20 s.
+extern void G_AddVoiceEvent(const gentity_t* self, int event, int speak_debounce_time);
+static void NPC_FollowLeader_AllyTactics(void)
+{
+	static vmCvar_t g_allyTactics;
+	static qboolean registered = qfalse;
+	gentity_t* leader;
+	vec3_t fwd, lright;
+	int lw;
+
+	if (!registered)
+	{
+		trap->Cvar_Register(&g_allyTactics, "g_allyTactics", "1", CVAR_ARCHIVE);
+		registered = qtrue;
+	}
+	else
+	{
+		trap->Cvar_Update(&g_allyTactics);
+	}
+	if (!g_allyTactics.integer || !NPCS.NPC || !NPCS.NPC->client)
+	{
+		return;
+	}
+	leader = NPCS.NPC->client->leader;
+	if (!leader || !leader->client || leader->health <= 0 || leader->s.number >= MAX_CLIENTS || (leader->r.svFlags & SVF_BOT))
+	{
+		return; // only for a human player leader
+	}
+	AngleVectors(leader->client->ps.viewangles, fwd, lright, NULL);
+
+	// (1) out of the player's line of fire
+	lw = leader->client->ps.weapon;
+	if (lw != WP_NONE && lw != WP_SABER && lw != WP_MELEE)
+	{
+		vec3_t to_me, closest, off;
+		float along;
+		VectorSubtract(NPCS.NPC->r.currentOrigin, leader->r.currentOrigin, to_me);
+		along = DotProduct(to_me, fwd);
+		if (along > 0.0f && along < 400.0f)
+		{
+			VectorMA(leader->r.currentOrigin, along, fwd, closest);
+			VectorSubtract(NPCS.NPC->r.currentOrigin, closest, off);
+			off[2] = 0.0f;
+			if (VectorLengthSquared(off) < 40.0f * 40.0f)
+			{
+				vec3_t want, my_fwd, my_right;
+				float r, f;
+				VectorScale(lright, DotProduct(off, lright) >= 0.0f ? 1.0f : -1.0f, want);
+				AngleVectors(NPCS.NPC->client->ps.viewangles, my_fwd, my_right, NULL);
+				r = DotProduct(want, my_right);
+				f = DotProduct(want, my_fwd);
+				NPCS.ucmd.rightmove = r > 0.3f ? 127 : r < -0.3f ? -127 : 0;
+				NPCS.ucmd.forwardmove = f > 0.3f ? 127 : f < -0.3f ? -127 : 0;
+			}
+		}
+	}
+
+	// (2) "behind you": an enemy close behind the player
+	if (TIMER_Done(NPCS.NPC, "allyWarn"))
+	{
+		static int list[MAX_GENTITIES];
+		vec3_t mins, maxs;
+		int i, num;
+		for (i = 0; i < 3; i++)
+		{
+			mins[i] = leader->r.currentOrigin[i] - 256.0f;
+			maxs[i] = leader->r.currentOrigin[i] + 256.0f;
+		}
+		num = trap->EntitiesInBox(mins, maxs, list, MAX_GENTITIES);
+		for (i = 0; i < num; i++)
+		{
+			gentity_t* e = &g_entities[list[i]];
+			vec3_t to_e;
+			if (!e->inuse || !e->client || e->health <= 0 || e == NPCS.NPC || e == leader
+				|| e->client->playerTeam != NPCS.NPC->client->enemyTeam)
+			{
+				continue;
+			}
+			VectorSubtract(e->r.currentOrigin, leader->r.currentOrigin, to_e);
+			if (DotProduct(to_e, fwd) >= 0.0f || !NPC_ClearLOS4(e))
+			{
+				continue;
+			}
+			G_AddVoiceEvent(NPCS.NPC, Q_irand(EV_DETECTED1, EV_DETECTED5), 3000);
+			if (!NPCS.NPC->enemy)
+			{
+				G_SetEnemy(NPCS.NPC, e);
+			}
+			TIMER_Set(NPCS.NPC, "allyWarn", 20000);
+			break;
+		}
+	}
+}
+
 void NPC_BSFollowLeader(void)
 {
 	// If In A Jump, Return
@@ -696,6 +793,7 @@ void NPC_BSFollowLeader(void)
 			NPC_MoveDirClear(NPCS.ucmd.forwardmove, NPCS.ucmd.rightmove, qtrue);
 		}
 	}
+	NPC_FollowLeader_AllyTactics(); // g_allyTactics (2026-11-22)
 }
 
 #define	APEX_HEIGHT		200.0f

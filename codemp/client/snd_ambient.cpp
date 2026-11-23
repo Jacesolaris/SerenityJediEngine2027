@@ -930,7 +930,12 @@ void AS_Init(void)
 	{
 		numSets = 0;
 
-		pMap = new namePrecache_m;
+		// TaystJK fix: keep the level's ambient-set precache list across snd_restart
+		// (AS_Free leaves it alone; a new map was leaked here and the list lost)
+		if (!pMap)
+		{
+			pMap = new namePrecache_m;
+		}
 
 		//Setup the structure
 		aSets = new CSetGroup();

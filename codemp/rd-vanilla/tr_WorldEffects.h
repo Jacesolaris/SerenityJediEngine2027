@@ -36,6 +36,7 @@ bool R_GetWindSpeed(float& windSpeed);
 bool R_GetWindVectorAt(vec3_t windVector, vec3_t atpoint);
 bool R_GetWindGusting(vec3_t atpoint);
 bool R_IsOutside(vec3_t pos);
+bool R_IsInsideMarked(vec3_t pos);
 
 float R_IsOutsideCausingPain(vec3_t pos);
 

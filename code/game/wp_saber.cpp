@@ -220,6 +220,7 @@ extern qboolean npc_is_dark_jedi(const gentity_t* self);
 extern qboolean npc_is_light_jedi(const gentity_t* self);
 extern qboolean PM_SaberInMassiveBounce(const int anim);
 extern void npc_check_speak(gentity_t* speaker_npc);
+extern int G_DynSkill(int base); // wp_saberblocking.cpp (g_dynamicDifficulty)
 extern qboolean PM_SaberInKillMove(int move);
 //////////////////////////////////////////////////
 extern qboolean sab_beh_block_vs_attack(gentity_t* blocker, gentity_t* attacker, int saberNum, int bladeNum, vec3_t hit_loc);
@@ -4445,7 +4446,7 @@ static qboolean WP_SaberDamageForTrace(const int ignore, vec3_t start, vec3_t en
 						attacker->client->NPC_class == CLASS_ALORA ||
 						(attacker->NPC &&
 							(attacker->NPC->aiFlags & NPCAI_BOSS_CHARACTER ||
-								attacker->NPC->aiFlags & NPCAI_BOSS_SERENITYJEDIENGINE)))))
+								NPC_IsSJEBoss(attacker))))))
 			{
 				useRadiusForDamage = SABER_RADIUS_DAMAGE_DIST;
 			}
@@ -9735,7 +9736,7 @@ static void WP_SaberImpact(gentity_t* owner, gentity_t* saber, trace_t* trace)
 		other->health > 0 &&
 		((other->NPC &&
 			((other->NPC->aiFlags & NPCAI_BOSS_CHARACTER) ||
-				(other->NPC->aiFlags & NPCAI_BOSS_SERENITYJEDIENGINE))) ||
+				(NPC_IsSJEBoss(other)))) ||
 			other->client->NPC_class == CLASS_BOBAFETT ||
 			other->client->ps.powerups[PW_GALAK_SHIELD] > 0))
 	{
@@ -16429,7 +16430,7 @@ static void WP_SaberBlasterAI(gentity_t* ent, usercmd_t* ucmd)
 		return;
 	}
 
-	const int skill = g_spskill->integer < 0 ? 0 : g_spskill->integer > 3 ? 3 : g_spskill->integer;
+	const int skill = G_DynSkill(g_spskill->integer < 0 ? 0 : g_spskill->integer > 3 ? 3 : g_spskill->integer);
 	const float range = g_saberBlasterAimRange->value;
 	qboolean want_gun;
 	if (saberBlasterAIGun[ent_num])

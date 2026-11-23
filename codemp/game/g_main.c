@@ -690,6 +690,8 @@ void G_InitGame(int levelTime, int randomSeed, int restart)
 
 	extern void G_FighterRoute_Load(void);
 	G_FighterRoute_Load(); // the ships' route on a space map, the AI pilots' bookkeeping (ai_fighter.c)
+	extern void Pilot_Reset(void);
+	Pilot_Reset(); // the swoop pilots' bookkeeping (AI_Vehicle.c)
 
 	// make sure we have flags for CTF, etc
 	if (level.gametype >= GT_TEAM)
@@ -4559,6 +4561,8 @@ void G_RunFrame(const int levelTime)
 	G_Pazaak_RunFrame();
 	extern void G_FighterRoute_Frame(void);
 	G_FighterRoute_Frame(); // AI pilots for the empty ships, ship_wp_show (ai_fighter.c)
+	extern void Pilot_Update(void);
+	Pilot_Update(); // free swoops for the swoop pilots, fly-by sounds (AI_Vehicle.c)
 
 	if (level.gametype == GT_SINGLE_PLAYER) // (DH 2026-11-02: also at g_allowNPC 0, the needed NPCs walk)
 	{

@@ -585,6 +585,92 @@ static void NPC_BSFollowLeader_LookAtLeader()
 	NPC_UpdateAngles(qtrue, qtrue);
 }
 
+// g_allyTactics (2026-11-22, AI audit item 20; archived, 1 = on, 0 = the old behaviour): a following ally
+// (NPC_BSFollowLeader) with a player leader (1) steps sideways out of his line of fire when it stands in front of him
+// (within 400 units, 40 units of his aim line) while he holds a gun, and (2) shouts a warning and turns on an enemy
+// that is close behind him (within 256 units, out of his view, in the ally's sight), at most every 20 s.
+extern qboolean G_ControlledByPlayer(const gentity_t* self);
+extern void G_AddVoiceEvent(const gentity_t* self, int event, int speak_debounce_time);
+static void NPC_FollowLeader_AllyTactics(void)
+{
+	static cvar_t* g_allyTactics = nullptr;
+	if (!g_allyTactics)
+	{
+		g_allyTactics = gi.cvar("g_allyTactics", "1", CVAR_ARCHIVE);
+	}
+	if (!g_allyTactics || !g_allyTactics->integer || !NPC || !NPC->client)
+	{
+		return;
+	}
+	gentity_t* leader = NPC->client->leader;
+	if (!leader || !leader->client || leader->health <= 0 || (leader->s.number >= MAX_CLIENTS && !G_ControlledByPlayer(leader)))
+	{
+		return; // only for a player leader
+	}
+	vec3_t fwd, lright;
+	AngleVectors(leader->client->ps.viewangles, fwd, lright, nullptr);
+
+	// (1) out of the player's line of fire
+	const int lw = leader->client->ps.weapon;
+	if (lw != WP_NONE && lw != WP_SABER && lw != WP_MELEE)
+	{
+		vec3_t to_me, closest, off;
+		VectorSubtract(NPC->currentOrigin, leader->currentOrigin, to_me);
+		const float along = DotProduct(to_me, fwd);
+		if (along > 0.0f && along < 400.0f)
+		{
+			VectorMA(leader->currentOrigin, along, fwd, closest);
+			VectorSubtract(NPC->currentOrigin, closest, off);
+			off[2] = 0.0f;
+			if (VectorLengthSquared(off) < 40.0f * 40.0f)
+			{
+				vec3_t want, my_fwd, my_right;
+				VectorScale(lright, DotProduct(off, lright) >= 0.0f ? 1.0f : -1.0f, want);
+				AngleVectors(NPC->client->ps.viewangles, my_fwd, my_right, nullptr);
+				const float r = DotProduct(want, my_right);
+				const float f = DotProduct(want, my_fwd);
+				ucmd.rightmove = r > 0.3f ? 127 : r < -0.3f ? -127 : 0;
+				ucmd.forwardmove = f > 0.3f ? 127 : f < -0.3f ? -127 : 0;
+			}
+		}
+	}
+
+	// (2) "behind you": an enemy close behind the player
+	if (TIMER_Done(NPC, "allyWarn"))
+	{
+		static gentity_t* list[MAX_GENTITIES];
+		vec3_t mins, maxs;
+		for (int i = 0; i < 3; i++)
+		{
+			mins[i] = leader->currentOrigin[i] - 256.0f;
+			maxs[i] = leader->currentOrigin[i] + 256.0f;
+		}
+		const int num = gi.EntitiesInBox(mins, maxs, list, MAX_GENTITIES);
+		for (int i = 0; i < num; i++)
+		{
+			gentity_t* e = list[i];
+			vec3_t to_e;
+			if (!e || !e->inuse || !e->client || e->health <= 0 || e == NPC || e == leader
+				|| e->client->playerTeam != NPC->client->enemyTeam)
+			{
+				continue;
+			}
+			VectorSubtract(e->currentOrigin, leader->currentOrigin, to_e);
+			if (DotProduct(to_e, fwd) >= 0.0f || !NPC_ClearLOS(e))
+			{
+				continue;
+			}
+			G_AddVoiceEvent(NPC, Q_irand(EV_DETECTED1, EV_DETECTED5), 3000);
+			if (!NPC->enemy)
+			{
+				G_SetEnemy(NPC, e);
+			}
+			TIMER_Set(NPC, "allyWarn", 20000);
+			break;
+		}
+	}
+}
+
 void NPC_BSFollowLeader()
 {
 	// If In A Jump, Return
@@ -662,6 +748,7 @@ void NPC_BSFollowLeader()
 		}
 	}
 	STEER::DeActivate(NPC, &ucmd);
+	NPC_FollowLeader_AllyTactics(); // g_allyTactics (2026-11-22)
 }
 
 constexpr auto APEX_HEIGHT = 200.0f;

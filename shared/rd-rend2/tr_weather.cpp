@@ -718,6 +718,7 @@ void RE_WorldEffectCommand(const char* command)
 		tr.weatherSystem->activeWindObjects = 0;
 		VectorClear(tr.weatherSystem->constWindDirection);	// constantwind adds up: a reloaded map doubled it
 		VectorClear(tr.weatherSystem->windDirection);
+		tr.weatherSystem->swirlSpeed = 0.0f;	// SJE r_weatherSwirlingWind
 		tr.weatherSystem->frozen = false;
 		tr.weatherSystem->pain = 0.0f;	// no acid rain left
 	}
@@ -729,6 +730,7 @@ void RE_WorldEffectCommand(const char* command)
 		tr.weatherSystem->activeWindObjects = 0;
 		VectorClear(tr.weatherSystem->constWindDirection);	// constantwind adds up: a reloaded map doubled it
 		VectorClear(tr.weatherSystem->windDirection);
+		tr.weatherSystem->swirlSpeed = 0.0f;	// SJE r_weatherSwirlingWind
 		tr.weatherSystem->frozen = false;
 		tr.weatherSystem->pain = 0.0f;	// no acid rain left
 	}
@@ -815,6 +817,28 @@ void RE_WorldEffectCommand(const char* command)
 		currentWindObject->minVelocity[2] = -0.1f;
 		currentWindObject->targetVelocityTimeRemaining = 0;
 		tr.weatherSystem->activeWindObjects++;
+	}
+
+	// Swirling Wind (SJE: fx_wind spawnflag 8 sends it; it used to be ignored): a wind that slowly turns round.
+	// r_weatherSwirlingWind 0 = ignored, as before
+	//---------------
+	else if (Q_stricmp(token, "swirlingwind") == 0)
+	{
+		static cvar_t* sw = nullptr;
+		if (!sw)
+		{
+#ifdef REND2_SP
+			sw = ri.Cvar_Get("r_weatherSwirlingWind", "1", CVAR_ARCHIVE_ND);
+#else
+			sw = ri.Cvar_Get("r_weatherSwirlingWind", "1", CVAR_ARCHIVE_ND, "fx_wind's swirling wind: a wind that slowly turns round (0 = ignored)");
+#endif
+		}
+		if (sw->integer)
+		{
+			tr.weatherSystem->swirlSpeed = 0.5f;	// 500 units/s
+			tr.weatherSystem->swirlAngle = Q_flrand(0.0f, 6.2831853f);
+			tr.weatherSystem->swirlTime = -1;
+		}
 	}
 
 	// Create A Rain Storm
@@ -1261,13 +1285,13 @@ void RE_WorldEffectCommand(const char* command)
 #ifndef REND2_SP
 	else if (!weatherCommandFromConsole)
 	{
-		// a map's weather name this renderer doesn't have (e.g. fx_wind's "swirlingwind"): ignore it
+		// a map's weather name this renderer doesn't have (e.g. fx_lava's "lightlava"): ignore it
 		ri.Printf(PRINT_DEVELOPER, "RE_WorldEffectCommand: unknown weather command '%s' ignored\n", token);
 	}
 #else
 	else if (spPreset < 0)
 	{
-		// a name this renderer doesn't have (maps send e.g. fx_wind "swirlingwind"): ignore it. With r_weather 0
+		// a name this renderer doesn't have (maps send e.g. fx_lava "lightlava"): ignore it. With r_weather 0
 		// it used to fall into the "clear" preset and wipe the weather the map had set up.
 		ri.Printf(PRINT_DEVELOPER, "RE_WorldEffectCommand: unknown weather command '%s' ignored\n", token);
 	}
@@ -1529,6 +1553,34 @@ void R_UpdateWeatherWind()
 		RB_UpdateWindObject(windObject);
 		VectorAdd(windObject->currentVelocity, tr.weatherSystem->windDirection, tr.weatherSystem->windDirection);
 	}
+	// SJE "swirlingwind": turns round about once in 25 s (faster and slower in turn), give or take a fifth of its speed
+	weatherSystem_t* ws = tr.weatherSystem;
+	if (ws->swirlSpeed > 0.0f && !ws->frozen)
+	{
+		const int timeMs = tr.refdef.time;
+		float dt = ws->swirlTime < 0 ? 0.0f : (timeMs - ws->swirlTime) * 0.001f;
+		if (dt < 0.0f || dt > 0.25f)
+		{
+			dt = 0.0f;	// a reload, a pause, a jump in time: carry on from where it was
+		}
+		ws->swirlTime = timeMs;
+		const float t = timeMs * 0.001f;
+		ws->swirlAngle += dt * 0.25f * (1.0f + 0.5f * sinf(t * 0.13f));
+		if (ws->swirlAngle > 6.2831853f)
+		{
+			ws->swirlAngle -= 6.2831853f;
+		}
+		const float speed = ws->swirlSpeed * (1.0f + 0.2f * sinf(t * 0.21f + 1.0f));
+		ws->windDirection[0] += cosf(ws->swirlAngle) * speed;
+		ws->windDirection[1] += sinf(ws->swirlAngle) * speed;
+	}
+}
+
+// SJE mesh cloth (r_meshClothBreezeInside): inside a volume the map marks as inside - false on a map without weather
+// brushes (there R_IsOutside counts all of the map as outside, which says nothing about a room)
+bool R_IsInsideMarked(vec3_t pos)
+{
+	return tr.weatherSystem && tr.weatherSystem->numWeatherBrushes > 0 && !R_IsOutside(pos);
 }
 
 bool R_IsOutside(vec3_t pos)

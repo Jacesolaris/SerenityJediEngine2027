@@ -119,6 +119,11 @@ extern qboolean PM_SaberInTransition(int move);
 extern void NPC_SetAnim(gentity_t* ent, int setAnimParts, int anim, int setAnimFlags);
 qboolean AttackLocalBreakable(bot_state_t* bs);
 boteventtracker_t gBotEventTracker[MAX_CLIENTS];
+
+// 2026-11-22 bot AI additions (each 1 = on, 0 = the old behaviour)
+vmCvar_t bot_selfPreserve;	// hurt bots go for health / shield pickups (they never did)
+vmCvar_t bot_missionRevive;	// Missions: bots revive downed teammates
+vmCvar_t bot_focusFire;		// bots prefer the enemy their squad leader fights (default 0)
 extern qboolean G_PointInBounds(vec3_t point, vec3_t mins, vec3_t maxs);
 extern siegeClass_t* BG_GetClassOnBaseClass(int team, short classIndex, short cntIndex);
 extern void G_AddVoiceEvent(const gentity_t* self, int event, int speak_debounce_time);
@@ -1247,7 +1252,8 @@ static void bot_change_view_angles(bot_state_t* bs, float thinktime)
 	{
 		if (bs->settings.skill <= 2)
 		{
-			factor = (bs->skills.turnspeed_combat * 0.6f) * bs->settings.skill;
+			// 0.6 / 0.9 for skill 1 / 2 (was 0.6 / 1.2, faster than skill 3's 1.0)
+			factor = bs->skills.turnspeed_combat * (0.3f + 0.3f * bs->settings.skill);
 		}
 		else
 		{
@@ -1587,6 +1593,7 @@ static float Bot_SaberAIEnemyDist(const bot_state_t* bs)
 // g_saberAIDefend: while the enemy swings his saber at me from close in, guard (a bot that isn't attacking blocks)
 // instead of swinging back into his attack. Always against a swing spammer (fatigue at the HUD flash level); otherwise by
 // skill, 50/65/80/90%, re-rolled every 400 ms. A riposte window (perfect parry) or a saber lock still attacks.
+extern qboolean WP_SaberAISpamming(const gentity_t* enemy); // w_saberblocking.c (saber read pack, 2026-11-22)
 static qboolean Bot_SaberDefendFirst(const bot_state_t* bs)
 {
 	static const int hold_chance[4] = { 50, 65, 80, 90 };
@@ -1627,8 +1634,8 @@ static qboolean Bot_SaberDefendFirst(const bot_state_t* bs)
 	{// not swinging at me
 		return qfalse;
 	}
-	if (eps->saberFatigueChainCount >= MISHAPLEVEL_HUDFLASH)
-	{// a swing spammer: always guard, let his fatigue break him
+	if (eps->saberFatigueChainCount >= MISHAPLEVEL_HUDFLASH || WP_SaberAISpamming(enemy))
+	{// a swing spammer (tired, or 4+ swings in 3 s: g_saberAISpamPunish): always guard, let his fatigue break him
 		return qtrue;
 	}
 	if (s_botDefendRoll[c] > level.time + 400 || s_botDefendHold[c] > level.time + 400)
@@ -2128,6 +2135,65 @@ extern qboolean WP_SaberBotBlockedWait(const gentity_t* bot); // w_saberblocking
 qboolean Bot_StabDownWanted(const int client); // item 368, below
 qboolean Bot_DFAWanted(const int client); // item 369, below
 
+// Missions (GT_SINGLE_PLAYER, bot_missionRevive 1, 2026-11-22): a bot goes to the nearest downed teammate within 1536
+// units and holds USE next to him until he is up (g_target.c: USE held 3 s within 96 units). Not while he is downed
+// himself, or while an enemy is in sight within 768 units (he fights first).
+static int bot_revive_hold[MAX_CLIENTS]; // client number + 1 of the teammate being revived this frame, 0 = none
+static void bot_moveto(bot_state_t* bs, qboolean strafe);
+
+static qboolean bot_mission_revive_think(bot_state_t* bs)
+{
+	const gentity_t* self = &g_entities[bs->client];
+	int best = -1;
+	float best_dist = 1536.0f;
+	vec3_t dir;
+
+	if (!bot_missionRevive.integer || level.gametype != GT_SINGLE_PLAYER || !self->client || self->health < 1
+		|| bot_is_droid(bs) || G_MissionIsDowned(bs->client))
+	{
+		return qfalse;
+	}
+	if (bs->currentEnemy && bs->frame_Enemy_Vis && bs->frame_Enemy_Len < 768)
+	{
+		return qfalse;
+	}
+	for (int i = 0; i < level.maxclients; i++)
+	{
+		const gentity_t* other = &g_entities[i];
+
+		if (i == bs->client || !other->inuse || !other->client || !G_MissionIsDowned(i))
+		{
+			continue;
+		}
+		const float dist = Distance(bs->origin, other->client->ps.origin);
+
+		if (dist < best_dist)
+		{
+			best_dist = dist;
+			best = i;
+		}
+	}
+	if (best < 0)
+	{
+		return qfalse;
+	}
+
+	VectorCopy(g_entities[best].client->ps.origin, bs->DestPosition);
+	if (best_dist > 56.0f)
+	{
+		bot_moveto(bs, qfalse);
+	}
+	VectorSubtract(bs->DestPosition, bs->eye, dir);
+	vectoangles(dir, bs->goalAngles);
+	VectorCopy(bs->goalAngles, bs->ideal_viewangles);
+
+	if (best_dist < 90.0f)
+	{
+		bot_revive_hold[bs->client] = best + 1;
+	}
+	return qtrue;
+}
+
 static void bot_update_input(bot_state_t* bs, const int time, const int elapsed_time)
 {
 	bot_input_t bi;
@@ -2273,6 +2339,11 @@ static void bot_update_input(bot_state_t* bs, const int time, const int elapsed_
 
 	// Convert to usercmd
 	BotInputToUserCommand(bs, &bi, &bs->lastucmd, bs->cur_ps.delta_angles, time, bs->noUseTime);
+
+	if (bot_revive_hold[bs->client])
+	{// Missions revive (bot_mission_revive_think): hold USE next to the downed teammate (g_target.c G_MissionThink)
+		bs->lastucmd.buttons |= BUTTON_USE;
+	}
 
 	if (Bot_StabDownWanted(client))
 	{// the stab needs forward and no sideways move (bg_saber.c PM_SaberAttackForMovement), item 368
@@ -3343,11 +3414,16 @@ static int bot_ai(const int client, const float thinktime)
 #endif
 
 	qboolean lowSkill = (bs->settings.skill <= 3 ? qtrue : qfalse);
+	bot_revive_hold[bs->client] = 0;
 	qboolean notSaber = (bs->cur_ps.weapon != WP_SABER ? qtrue : qfalse);
 
 	if (bot_scepter_think(bs))
 	{
 		// in a scepter attack (the Possessed Tavion bot): she only turns to her enemy
+	}
+	else if (bot_mission_revive_think(bs))
+	{
+		// Missions: going to / reviving a downed teammate (bot_missionRevive)
 	}
 	else if (lowSkill == qtrue || notSaber == qtrue)
 	{
@@ -6990,6 +7066,33 @@ static qboolean bot_projection_enemy(const bot_state_t* bs, const gentity_t* en)
 	return qtrue;
 }
 
+// A friendly NPC (on the bot's side, e.g. a Missions ally, or a neutral civilian / droid) is no target for a bot,
+// unless that NPC is fighting him (2026-11-22: bots attacked every NPC, allies included).
+static qboolean bot_npc_is_friendly(const bot_state_t* bs, const gentity_t* npc)
+{
+	const gentity_t* self;
+
+	if (!bs || !npc || npc->s.eType != ET_NPC || !npc->client)
+	{
+		return qfalse;
+	}
+	self = &g_entities[bs->client];
+
+	if (!self->client || npc->enemy == self)
+	{
+		return qfalse;
+	}
+	if (npc->client->playerTeam == NPCTEAM_NEUTRAL)
+	{
+		return qtrue;
+	}
+	if (npc->client->playerTeam == self->client->playerTeam)
+	{
+		return qtrue;
+	}
+	return qfalse;
+}
+
 static int pass_standard_enemy_checks(const bot_state_t* bs, const gentity_t* en)
 {
 	if (!bs || !en)
@@ -7024,6 +7127,25 @@ static int pass_standard_enemy_checks(const bot_state_t* bs, const gentity_t* en
 	if (en->client->ps.fd.forcePowersActive & 1 << FP_PROJECTION)
 	{
 		return 0; // Force Projection: nobody sees the caster while it lasts (w_force.c)
+	}
+
+	if (en->s.eType == ET_NPC)
+	{
+		// NPCs have no session / pers.connected, so the player rules below threw every NPC out again (a bot hurt by
+		// an NPC never fought back, and standard bots dropped NPC enemies at the next scan). NPC rules instead:
+		if (en->health < 1 || !en->takedamage || en->s.eFlags & EF_DEAD || en->client->ps.eFlags & EF_DEAD)
+		{
+			return 0;
+		}
+		if (bot_npc_is_friendly(bs, en))
+		{
+			return 0;
+		}
+		if (bs->cur_ps.duelInProgress)
+		{
+			return 0;
+		}
+		return 1;
 	}
 
 	if (en->health < 1)
@@ -7172,7 +7294,17 @@ void bot_damage_notification(const gclient_t* bot, gentity_t* attacker)
 
 	if (attacker->s.number >= MAX_CLIENTS)
 	{
-		//if attacker is an npc also don't care I suppose.
+		//an NPC hurt us: fight back if we have no enemy in sight (bots used to ignore NPC attackers)
+		bot_state_t* bs_n = botstates[bot->ps.clientNum];
+
+		if (bs_n && attacker->s.eType == ET_NPC
+			&& (!bs_n->currentEnemy || !bs_n->frame_Enemy_Vis)
+			&& pass_standard_enemy_checks(bs_n, attacker))
+		{
+			bs_n->lastHurt = attacker;
+			bs_n->currentEnemy = attacker;
+			bs_n->enemySeenTime = level.time + ENEMY_FORGET_MS;
+		}
 		return;
 	}
 
@@ -7246,6 +7378,22 @@ void bot_damage_notification(const gclient_t* bot, gentity_t* attacker)
 	}
 }
 
+//how long a bot remembers a heard event (shot, saber swing, jump...): 0.8 s at skill 1 up to 1.6 s at skill 5
+static int bot_hear_memory_ms(const bot_state_t* bs)
+{
+	float skill = bs->settings.skill;
+
+	if (skill < 1)
+	{
+		skill = 1;
+	}
+	if (skill > 5)
+	{
+		skill = 5;
+	}
+	return 600 + (int)(skill * 200);
+}
+
 //perform cheap "hearing" checks based on the event catching
 //system
 static int bot_can_hear(const bot_state_t* bs, const gentity_t* en, const float endist)
@@ -7271,13 +7419,19 @@ static int bot_can_hear(const bot_state_t* bs, const gentity_t* en, const float 
 		goto checkStep;
 	}
 
-	if (gBotEventTracker[en->s.number].eventTime < level.time)
+	if (en->s.number >= MAX_CLIENTS)
 	{
-		//no recent events to check
+		//the event tracker only holds clients (it read past its end for NPCs)
 		return 0;
 	}
 
-	switch (gBotEventTracker[en->s.number].events[gBotEventTracker[en->s.number].eventSequence & MAX_PS_EVENTS - 1])
+	if (level.time - gBotEventTracker[en->s.number].eventTime > bot_hear_memory_ms(bs))
+	{
+		//no recent events to check (an event used to count for one frame only: level.time + 0.5 in an int)
+		return 0;
+	}
+
+	switch (gBotEventTracker[en->s.number].events[gBotEventTracker[en->s.number].eventSequence - 1 & MAX_PS_EVENTS - 1])
 	{
 		//did the last event contain a sound?
 	case EV_GLOBAL_SOUND:
@@ -7334,7 +7488,7 @@ static void update_event_tracker(void)
 			gBotEventTracker[i].eventSequence = level.clients[i].ps.eventSequence;
 			gBotEventTracker[i].events[0] = level.clients[i].ps.events[0];
 			gBotEventTracker[i].events[1] = level.clients[i].ps.events[1];
-			gBotEventTracker[i].eventTime = level.time + 0.5;
+			gBotEventTracker[i].eventTime = level.time; // when it happened (bot_can_hear keeps it bot_hear_memory_ms)
 		}
 
 		i++;
@@ -7760,7 +7914,8 @@ static void advanced_scanfor_enemies(bot_state_t* bs)
 			|| bs->currentEnemy->client && bs->currentEnemy->client->sess.sessionTeam == TEAM_SPECTATOR
 			|| bs->currentEnemy->s.eFlags & EF_DEAD
 			|| bs->currentEnemy->client && bs->currentEnemy->client->ps.eFlags & EF_DEAD
-			|| OnSameTeam(bs->currentEnemy, &g_entities[bs->cur_ps.clientNum]))
+			|| OnSameTeam(bs->currentEnemy, &g_entities[bs->cur_ps.clientNum])
+			|| bot_npc_is_friendly(bs, bs->currentEnemy))
 		{
 			//target died or because invalid, move to next target
 			bs->currentEnemy = NULL;
@@ -7785,7 +7940,7 @@ static void advanced_scanfor_enemies(bot_state_t* bs)
 		current_enemy_num = bs->currentEnemy->s.number;
 	}
 
-	for (i = 0; i <= level.num_entities; i++)
+	for (i = 0; i < level.num_entities; i++)
 	{
 		if (i != bs->client
 			&& (g_entities[i].client && !OnSameTeam(&g_entities[bs->client], &g_entities[i]) &&
@@ -7794,6 +7949,7 @@ static void advanced_scanfor_enemies(bot_state_t* bs)
 				|| g_entities[i].s.eType == ET_NPC && g_entities[i].s.NPC_class != CLASS_VEHICLE && g_entities[i].
 				health > 0 && !(g_entities[i].s.eFlags & EF_DEAD)
 				&& (!G_IsForceProjection(&g_entities[i]) || bot_projection_enemy(bs, &g_entities[i]))
+				&& (G_IsForceProjection(&g_entities[i]) || !bot_npc_is_friendly(bs, &g_entities[i]))
 				|| g_entities[i].s.weapon == WP_EMPLACED_GUN
 				&& g_entities[i].teamnodmg != g_entities[bs->client].client->sess.sessionTeam
 				&& g_entities[i].s.pos.trType == TR_STATIONARY))
@@ -7816,6 +7972,27 @@ static void advanced_scanfor_enemies(bot_state_t* bs)
 					closestdist = distcheck;
 					close_enemy_num = i;
 				}
+			}
+		}
+	}
+
+	// bot_focusFire: prefer the enemy our squad leader (a bot) fights, if we see him and he is at most 1.5x as far
+	if (bot_focusFire.integer && close_enemy_num != -1 && bs->squadLeader && bs->squadLeader->s.number < MAX_CLIENTS
+		&& bs->squadLeader->s.number != bs->client && botstates[bs->squadLeader->s.number]
+		&& botstates[bs->squadLeader->s.number]->currentEnemy)
+	{
+		gentity_t* focus = botstates[bs->squadLeader->s.number]->currentEnemy;
+
+		if (focus->s.number != close_enemy_num && focus->s.number != bs->client && pass_standard_enemy_checks(bs, focus))
+		{
+			FindOrigin(focus, enemy_origin);
+			VectorSubtract(enemy_origin, bs->eye, a);
+			distcheck = VectorLength(a);
+
+			if (distcheck <= closestdist * 1.5f && bot_enemy_in_sight(bs, enemy_origin))
+			{
+				closestdist = distcheck;
+				close_enemy_num = focus->s.number;
 			}
 		}
 	}
@@ -9327,8 +9504,60 @@ static int bot_has_associated(const bot_state_t* bs, const wpobject_t* wp)
 
 		return 0;
 	}
+	if (as->item->giType == IT_HEALTH || as->item->giType == IT_ARMOR)
+	{
+		// health / shield goal points (ai_wpnav.c CalculateWeightGoals, 2026-11-22): only wanted with bot_selfPreserve,
+		// when he lacks it and the pickup is there (not taken and waiting to respawn)
+		const int max = bs->cur_ps.stats[STAT_MAX_HEALTH] > 0 ? bs->cur_ps.stats[STAT_MAX_HEALTH] : 100;
+
+		if (!bot_selfPreserve.integer || as->s.eFlags & EF_NODRAW || as->r.svFlags & SVF_NOCLIENT)
+		{
+			return 1;
+		}
+		if (as->item->giType == IT_HEALTH)
+		{
+			return bs->cur_ps.stats[STAT_HEALTH] >= max ? 1 : 0;
+		}
+		return bs->cur_ps.stats[STAT_ARMOR] >= max ? 1 : 0;
+	}
 
 	return 0;
+}
+
+// bot_selfPreserve: extra goal weight for a health (up to 8) or shield (up to 3) pickup, the more he lacks it
+static float bot_goal_hurt_bonus(const bot_state_t* bs, const wpobject_t* wp)
+{
+	const gentity_t* as;
+	int max;
+
+	if (!bot_selfPreserve.integer || wp->associated_entity == ENTITYNUM_NONE)
+	{
+		return 0.0f;
+	}
+	as = &g_entities[wp->associated_entity];
+
+	if (!as->item)
+	{
+		return 0.0f;
+	}
+	max = bs->cur_ps.stats[STAT_MAX_HEALTH] > 0 ? bs->cur_ps.stats[STAT_MAX_HEALTH] : 100;
+
+	if (as->item->giType == IT_HEALTH && bs->cur_ps.stats[STAT_HEALTH] < max)
+	{
+		return 8.0f * (float)(max - bs->cur_ps.stats[STAT_HEALTH]) / (float)max;
+	}
+	if (as->item->giType == IT_ARMOR && bs->cur_ps.stats[STAT_ARMOR] < max)
+	{
+		return 3.0f * (float)(max - bs->cur_ps.stats[STAT_ARMOR]) / (float)max;
+	}
+	return 0.0f;
+}
+
+static qboolean bot_badly_hurt(const bot_state_t* bs)
+{
+	const int max = bs->cur_ps.stats[STAT_MAX_HEALTH] > 0 ? bs->cur_ps.stats[STAT_MAX_HEALTH] : 100;
+
+	return bot_selfPreserve.integer && bs->cur_ps.stats[STAT_HEALTH] * 2 < max ? qtrue : qfalse;
 }
 
 //we don't really have anything we want to do right now,
@@ -9362,9 +9591,9 @@ int get_best_idle_goal(bot_state_t* bs)
 		}
 	}
 
-	if (bs->randomNav)
+	if (bs->randomNav && !bot_badly_hurt(bs))
 	{
-		//stop looking for items and/or camping on them
+		//stop looking for items and/or camping on them (bot_selfPreserve: not while badly hurt)
 		return -1;
 	}
 
@@ -9373,7 +9602,7 @@ int get_best_idle_goal(bot_state_t* bs)
 		if (gWPArray[i] &&
 			gWPArray[i]->inuse &&
 			gWPArray[i]->flags & WPFLAG_GOALPOINT &&
-			gWPArray[i]->weight > highestweight &&
+			gWPArray[i]->weight + bot_goal_hurt_bonus(bs, gWPArray[i]) > highestweight &&
 			!bot_has_associated(bs, gWPArray[i]))
 		{
 			const int traildist = total_trail_distance(bs->wpCurrent->index, i);
@@ -9381,7 +9610,7 @@ int get_best_idle_goal(bot_state_t* bs)
 			if (traildist != -1)
 			{
 				int dist_to_weight = traildist / 10000;
-				dist_to_weight = gWPArray[i]->weight - dist_to_weight;
+				dist_to_weight = (int)(gWPArray[i]->weight + bot_goal_hurt_bonus(bs, gWPArray[i])) - dist_to_weight;
 
 				if (dist_to_weight > highestweight)
 				{
@@ -9511,7 +9740,8 @@ static void get_ideal_destination(bot_state_t* bs)
 			temp_int = bs->wpCurrent->index - 1;
 		}
 
-		if (gWPArray[temp_int] && gWPArray[temp_int]->inuse && bs->escapeDirTime < level.time)
+		if (temp_int >= 0 && temp_int < gWPNum && gWPArray[temp_int] && gWPArray[temp_int]->inuse
+			&& bs->escapeDirTime < level.time)
 		{
 			VectorSubtract(badthing->s.pos.trBase, bs->wpCurrent->origin, a);
 			plus_len = VectorLength(a);
@@ -9633,13 +9863,30 @@ static void get_ideal_destination(bot_state_t* bs)
 					bs->wpDestination = gWPArray[idleWP];
 				}
 			}
-			else if (gWPArray[c_wp_index - 1] && gWPArray[c_wp_index - 1]->inuse &&
+			else if (c_wp_index > 0 && c_wp_index + 1 < gWPNum &&
+				gWPArray[c_wp_index - 1] && gWPArray[c_wp_index - 1]->inuse &&
 				gWPArray[c_wp_index + 1] && gWPArray[c_wp_index + 1]->inuse)
 			{
 				VectorSubtract(gWPArray[c_wp_index + 1]->origin, usethisvec, a);
 				plus_len = VectorLength(a);
 				VectorSubtract(gWPArray[c_wp_index - 1]->origin, usethisvec, a);
 				minus_len = VectorLength(a);
+
+				if (bot_selfPreserve.integer && b_chicken)
+				{// bot_selfPreserve (2026-11-22): running from the enemy, prefer the neighbour waypoint he can't see (cover)
+					trace_t tr_plus, tr_minus;
+					trap->Trace(&tr_plus, usethisvec, NULL, NULL, gWPArray[c_wp_index + 1]->origin, ENTITYNUM_NONE, MASK_SOLID, qfalse, 0, 0);
+					trap->Trace(&tr_minus, usethisvec, NULL, NULL, gWPArray[c_wp_index - 1]->origin, ENTITYNUM_NONE, MASK_SOLID, qfalse, 0, 0);
+					if (tr_plus.fraction < 1.0f && tr_minus.fraction >= 1.0f)
+					{
+						minus_len = 0; // only the + one is out of his sight
+					}
+					else if (tr_minus.fraction < 1.0f && tr_plus.fraction >= 1.0f)
+					{
+						plus_len = 0; // only the - one is out of his sight
+						minus_len = 1;
+					}
+				}
 
 				if (minus_len > plus_len)
 				{
@@ -9980,7 +10227,8 @@ static void commander_bot_teamplay_ai(bot_state_t* bs)
 		{
 			teammates++;
 
-			if (ent->health < worsthealth)
+			if (ent->health < worsthealth && ent->health > 0 && i != bs->client
+				&& !(ent->client->ps.eFlags & EF_DEAD))
 			{
 				teammate_indanger = ent->s.number;
 				worsthealth = ent->health;
@@ -10004,7 +10252,7 @@ static void commander_bot_teamplay_ai(bot_state_t* bs)
 		if (bst && !bst->state_Forced)
 		{
 			//only order if this guy is not being ordered directly by the real player team leader
-			if (teammate_indanger >= 0 && !teammate_helped)
+			if (teammate_indanger >= 0 && !teammate_helped && squad[i]->s.number != teammate_indanger)
 			{
 				//send someone out to help whoever needs help most at the moment
 				bst->teamplayState = TEAMPLAYSTATE_ASSISTING;
@@ -10257,6 +10505,7 @@ static void melee_combat_handling(bot_state_t* bs)
 				bs->cur_ps.fd.forcePower >= 50)
 			{
 				bs->cur_ps.fd.forcePower -= 35;
+				g_entities[bs->client].client->ps.fd.forcePower -= 35; // cur_ps is a copy
 				JediDirectionalDashDodge(bs, enemyPos);
 				Bot_CountDash(bs);
 				return;
@@ -11596,6 +11845,7 @@ static void saber_combat_handling(bot_state_t* bs)
 				bs->cur_ps.fd.forcePower >= 50)
 			{
 				bs->cur_ps.fd.forcePower -= 35;
+				g_entities[bs->client].client->ps.fd.forcePower -= 35; // cur_ps is a copy
 				JediDirectionalDashDodge(bs, enemyPos);
 				Bot_CountDash(bs);
 				return;
@@ -11804,6 +12054,7 @@ static void Enhanced_saber_combat_handling(bot_state_t* bs)
 				bs->cur_ps.fd.forcePower >= 50)
 			{
 				bs->cur_ps.fd.forcePower -= 35;
+				g_entities[bs->client].client->ps.fd.forcePower -= 35; // cur_ps is a copy
 				JediDirectionalDashDodge(bs, enemyPos);
 				Bot_CountDash(bs);
 				return;
@@ -12001,6 +12252,514 @@ float bot_weapon_can_lead(const bot_state_t* bs)
 	}
 }
 
+/*
+==================
+Bot movement helpers ported from Bot2 (RebirthMeow/Bot2, GPLv2; DH 2026-11-22)
+
+bot_jumpCheck 1: before a bot leaves the ground on a jump of his own (not a route jump or a held force jump), the jump
+	is flown ahead with player-hull traces (his speed, the jump speed, gravity, sliding along walls) and called off if
+	it would end in a trigger_hurt, in lava or slime, nowhere within 2.5 s, or more than bot_jumpSafeDrop (512) below
+	where he took off. (Bot2 runs the movement code itself on a copy of the bot; SJE's MP Pmove hurts, throws and
+	sounds the real player on a hard landing, so this flies the arc with traces only.)
+bot_movers 1: lifts and jump pads.
+	- Lifts: the next waypoint well above or below (80+), over a func_plat or a func_door that moves up and down: he
+	  waits off it until it stands at his level, gets on, and stands still while it carries him (a lift that doesn't
+	  come within 10 s - one worked by a button - is let be for 10 s). The waypoint flags WAITFORFUNC / NOMOVEFUNC
+	  work as before.
+	- Jump pads: thrown by a trigger_push, he lets go of the keys until he lands, so the pad's arc takes him where
+	  the map maker meant.
+bot_aimBallistic 1: lead by the shot's flight time: each bot learns the speed of his own shots (per weapon and fire
+	mode, his gun variant's speed included) from the missiles he fires; the target is moved on by his velocity over
+	that time (twice), falling ones by gravity down to the floor below them; splash shots go to the feet of a target
+	on the ground; shots that drop (thermals, the repeater's alt) are aimed up by their drop. Until a bot has seen his
+	shot, the old lead is used. Instant hit weapons are aimed as before.
+==================
+*/
+vmCvar_t bot_jumpCheck;
+vmCvar_t bot_jumpSafeDrop;
+vmCvar_t bot_movers;
+vmCvar_t bot_aimBallistic;
+
+#define BOT_JC_STEP_MS		50
+#define BOT_JC_MAX_MS		2500
+#define BOT_JC_HOLD_MS		300
+
+static int bot_jc_until[MAX_CLIENTS];		// the last verdict holds until then
+static qboolean bot_jc_safe[MAX_CLIENTS];
+
+static qboolean bot_jc_hurt_between(const vec3_t a, const vec3_t b, const vec3_t mins, const vec3_t maxs)
+{
+	int touch[MAX_GENTITIES];
+	vec3_t bmins, bmaxs;
+
+	for (int k = 0; k < 3; k++)
+	{
+		bmins[k] = (a[k] < b[k] ? a[k] : b[k]) + mins[k];
+		bmaxs[k] = (a[k] > b[k] ? a[k] : b[k]) + maxs[k];
+	}
+	const int num = trap->EntitiesInBox(bmins, bmaxs, touch, MAX_GENTITIES);
+	for (int i = 0; i < num; i++)
+	{
+		const gentity_t* hit = &g_entities[touch[i]];
+		if (hit->inuse && hit->r.linked && hit->classname && hit->r.contents & CONTENTS_TRIGGER
+			&& !(hit->flags & FL_INACTIVE) && !Q_stricmp(hit->classname, "trigger_hurt"))
+		{
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+// qtrue: the jump he is about to make lands somewhere safe (or can't be judged)
+static qboolean bot_jump_lands_safe(const bot_state_t* bs, const usercmd_t* ucmd)
+{
+	const gentity_t* ent = &g_entities[bs->client];
+	const playerState_t* ps = &ent->client->ps;
+	vec3_t pos, vel, fwd, right, ang;
+	const float gravity = ps->gravity > 0 ? (float)ps->gravity : g_gravity.value > 0 ? g_gravity.value : 800.0f;
+	const float dt = BOT_JC_STEP_MS / 1000.0f;
+	float safe_drop = bot_jumpSafeDrop.value;
+
+	if (safe_drop < 64.0f)
+	{
+		safe_drop = 64.0f;
+	}
+
+	VectorCopy(ps->origin, pos);
+	VectorCopy(ps->velocity, vel);
+	vel[2] = 0;
+
+	// his move keys: a jump from (nearly) standing still goes the way he is pressing at his run speed
+	VectorSet(ang, 0, bs->viewangles[YAW], 0);
+	AngleVectors(ang, fwd, right, NULL);
+	{
+		vec3_t wish;
+		VectorScale(fwd, (float)ucmd->forwardmove, wish);
+		VectorMA(wish, (float)ucmd->rightmove, right, wish);
+		wish[2] = 0;
+		if (VectorNormalize(wish) > 0.0f && VectorLength(vel) < ps->speed * 0.5f)
+		{
+			VectorScale(wish, ps->speed > 0 ? (float)ps->speed : 250.0f, vel);
+		}
+	}
+	vel[2] = ps->velocity[2] > 0 ? ps->velocity[2] + JUMP_VELOCITY : JUMP_VELOCITY;
+
+	const float start_z = pos[2];
+
+	for (int t = 0; t < BOT_JC_MAX_MS; t += BOT_JC_STEP_MS)
+	{
+		vec3_t next;
+		trace_t tr;
+
+		next[0] = pos[0] + vel[0] * dt;
+		next[1] = pos[1] + vel[1] * dt;
+		next[2] = pos[2] + vel[2] * dt - 0.5f * gravity * dt * dt;
+		vel[2] -= gravity * dt;
+
+		trap->Trace(&tr, pos, ent->r.mins, ent->r.maxs, next, bs->client, MASK_PLAYERSOLID, qfalse, 0, 0);
+		if (tr.startsolid || tr.allsolid)
+		{
+			return qtrue; // can't judge from here: leave it to him
+		}
+		if (bot_jc_hurt_between(pos, tr.endpos, ent->r.mins, ent->r.maxs))
+		{
+			return qfalse;
+		}
+		if (trap->PointContents(tr.endpos, bs->client) & (CONTENTS_LAVA | CONTENTS_SLIME))
+		{
+			return qfalse;
+		}
+		if (tr.fraction < 1.0f)
+		{
+			if (tr.plane.normal[2] >= 0.7f)
+			{
+				// landed
+				return start_z - tr.endpos[2] > safe_drop ? qfalse : qtrue;
+			}
+			// a wall or a ceiling: slide along it
+			const float into = DotProduct(vel, tr.plane.normal);
+			VectorMA(vel, -1.001f * into, tr.plane.normal, vel);
+			VectorCopy(tr.endpos, pos);
+			continue;
+		}
+		VectorCopy(next, pos);
+		if (start_z - pos[2] > safe_drop + 64.0f)
+		{
+			return qfalse; // already falling far too far
+		}
+	}
+	return qfalse; // no floor within 2.5 s: a pit
+}
+
+// bot_jumpCheck: call his own jump off if it would end badly (after the other jump filters)
+static void bot_jump_check(bot_state_t* bs, usercmd_t* ucmd)
+{
+	const int client = bs->client;
+	const gentity_t* self = &g_entities[client];
+	const playerState_t* ps = &self->client->ps;
+
+	if (!bot_jumpCheck.integer || ucmd->upmove <= 0 || ps->groundEntityNum == ENTITYNUM_NONE
+		|| ps->pm_flags & PMF_JUMP_HELD || self->waterlevel >= 2 || ps->eFlags & EF_JETPACK_ACTIVE
+		|| ps->m_iVehicleNum)
+	{
+		return;
+	}
+	// a jump the route asks for, a held force jump or one he was told to make: as before
+	if ((bs->wpCurrent && bs->wpCurrent->flags & WPFLAG_JUMP) || bs->jumpHoldTime > level.time
+		|| bs->forceJumpChargeTime > level.time || bs->forceJumping > level.time || bs->forceMove_Up)
+	{
+		return;
+	}
+	if (bot_jc_until[client] <= level.time || bot_jc_until[client] - level.time > BOT_JC_HOLD_MS)
+	{
+		bot_jc_safe[client] = bot_jump_lands_safe(bs, ucmd);
+		bot_jc_until[client] = level.time + BOT_JC_HOLD_MS;
+	}
+	if (!bot_jc_safe[client])
+	{
+		ucmd->upmove = 0;
+		bs->jumpTime = 0;
+	}
+}
+
+// ---- bot_movers: jump pads ----
+#define BOT_MAX_PADS	64
+static int bot_pad_ents[BOT_MAX_PADS];
+static int bot_num_pads;
+static int bot_pads_time = -1;		// when the list was made (made again every 5 s and on a new map)
+static int bot_pad_time[MAX_CLIENTS];	// when he last touched a jump pad
+
+static qboolean bot_on_jump_pad(const gentity_t* self)
+{
+	if (bot_pads_time < 0 || level.time < bot_pads_time || level.time - bot_pads_time > 5000)
+	{
+		gentity_t* push = NULL;
+		bot_num_pads = 0;
+		while ((push = G_Find(push, FOFS(classname), "trigger_push")) != NULL && bot_num_pads < BOT_MAX_PADS)
+		{
+			bot_pad_ents[bot_num_pads++] = push->s.number;
+		}
+		bot_pads_time = level.time;
+	}
+	for (int i = 0; i < bot_num_pads; i++)
+	{
+		const gentity_t* push = &g_entities[bot_pad_ents[i]];
+		if (!push->inuse || !push->r.linked || push->flags & FL_INACTIVE)
+		{
+			continue;
+		}
+		if (self->r.absmax[0] >= push->r.absmin[0] && self->r.absmin[0] <= push->r.absmax[0]
+			&& self->r.absmax[1] >= push->r.absmin[1] && self->r.absmin[1] <= push->r.absmax[1]
+			&& self->r.absmax[2] >= push->r.absmin[2] && self->r.absmin[2] <= push->r.absmax[2])
+		{
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+// thrown by a jump pad: hands off the keys until he lands
+static void bot_jump_pad_flight(const bot_state_t* bs, usercmd_t* ucmd)
+{
+	const int client = bs->client;
+	const gentity_t* self = &g_entities[client];
+
+	if (!bot_movers.integer || bot_pad_time[client] > level.time)
+	{
+		bot_pad_time[client] = 0; // (off, or from an earlier map)
+		if (!bot_movers.integer)
+		{
+			return;
+		}
+	}
+	if (bot_on_jump_pad(self))
+	{
+		bot_pad_time[client] = level.time;
+	}
+	if (!bot_pad_time[client])
+	{
+		return;
+	}
+	if (self->client->ps.groundEntityNum != ENTITYNUM_NONE)
+	{
+		if (level.time - bot_pad_time[client] > 300)
+		{
+			bot_pad_time[client] = 0; // landed
+		}
+		return;
+	}
+	if (level.time - bot_pad_time[client] > 4000)
+	{
+		bot_pad_time[client] = 0;
+		return;
+	}
+	ucmd->forwardmove = ucmd->rightmove = ucmd->upmove = 0;
+}
+
+// ---- bot_movers: lifts ----
+static int bot_lift_ent[MAX_CLIENTS];		// the lift he is waiting for / riding (+1, 0 = none)
+static int bot_lift_since[MAX_CLIENTS];
+static int bot_lift_skip_ent[MAX_CLIENTS];	// a lift that didn't come (+1), let be until bot_lift_skip_until
+static int bot_lift_skip_until[MAX_CLIENTS];
+
+static qboolean bot_is_lift(const gentity_t* mover)
+{
+	if (!mover->inuse || !mover->r.linked || !mover->classname)
+	{
+		return qfalse;
+	}
+	if (!Q_stricmp(mover->classname, "func_plat"))
+	{
+		return qtrue;
+	}
+	if (!Q_stricmp(mover->classname, "func_door"))
+	{
+		// a door that moves (mostly) up and down
+		const float dz = fabs(mover->pos2[2] - mover->pos1[2]);
+		const float dxy = sqrt((mover->pos2[0] - mover->pos1[0]) * (mover->pos2[0] - mover->pos1[0])
+			+ (mover->pos2[1] - mover->pos1[1]) * (mover->pos2[1] - mover->pos1[1]));
+		return dz >= 80.0f && dxy <= 32.0f ? qtrue : qfalse;
+	}
+	return qfalse;
+}
+
+static qboolean bot_in_footprint(const gentity_t* mover, const vec3_t p, const float margin)
+{
+	return p[0] >= mover->r.absmin[0] - margin && p[0] <= mover->r.absmax[0] + margin
+		&& p[1] >= mover->r.absmin[1] - margin && p[1] <= mover->r.absmax[1] + margin ? qtrue : qfalse;
+}
+
+// qtrue: stand still this frame (waiting for a lift, or riding one)
+static qboolean bot_lift_wait(const bot_state_t* bs)
+{
+	const int client = bs->client;
+	const gentity_t* self = &g_entities[client];
+	const playerState_t* ps = &self->client->ps;
+
+	if (!bot_movers.integer || !bs->wpCurrent)
+	{
+		bot_lift_ent[client] = 0;
+		return qfalse;
+	}
+
+	// riding: he stands on a lift that is moving
+	if (ps->groundEntityNum > 0 && ps->groundEntityNum < ENTITYNUM_WORLD)
+	{
+		const gentity_t* under = &g_entities[ps->groundEntityNum];
+		if (bot_is_lift(under) && (under->moverState == MOVER_1TO2 || under->moverState == MOVER_2TO1))
+		{
+			bot_lift_ent[client] = under->s.number + 1;
+			bot_lift_since[client] = level.time;
+			return qtrue;
+		}
+	}
+
+	const float dz = bs->wpCurrent->origin[2] - ps->origin[2];
+	if (fabs(dz) < 80.0f)
+	{
+		bot_lift_ent[client] = 0;
+		return qfalse;
+	}
+
+	// the next waypoint is over a lift near him
+	gentity_t* lift = NULL;
+	for (int i = MAX_CLIENTS; i < level.num_entities; i++)
+	{
+		gentity_t* m = &g_entities[i];
+		if (m->s.eType != ET_MOVER || !bot_is_lift(m))
+		{
+			continue;
+		}
+		const float margin = !Q_stricmp(m->classname, "func_door") ? 64.0f : 20.0f;
+		if (!bot_in_footprint(m, bs->wpCurrent->origin, margin) || !bot_in_footprint(m, ps->origin, 256.0f))
+		{
+			continue;
+		}
+		if (bot_lift_skip_ent[client] == i + 1 && bot_lift_skip_until[client] > level.time
+			&& bot_lift_skip_until[client] - level.time <= 10000)
+		{
+			continue;
+		}
+		lift = m;
+		break;
+	}
+	if (!lift)
+	{
+		bot_lift_ent[client] = 0;
+		return qfalse;
+	}
+	if (bot_lift_ent[client] != lift->s.number + 1 || bot_lift_since[client] > level.time)
+	{
+		bot_lift_ent[client] = lift->s.number + 1;
+		bot_lift_since[client] = level.time;
+	}
+	else if (level.time - bot_lift_since[client] > 10000)
+	{
+		// it doesn't come (a button works it?): let it be for a while
+		bot_lift_skip_ent[client] = lift->s.number + 1;
+		bot_lift_skip_until[client] = level.time + 10000;
+		bot_lift_ent[client] = 0;
+		return qfalse;
+	}
+
+	// at his level and standing still: get on
+	const float feet = ps->origin[2] + self->r.mins[2];
+	if ((lift->moverState == MOVER_POS1 || lift->moverState == MOVER_POS2) && fabs(lift->r.absmax[2] - feet) <= 24.0f)
+	{
+		return qfalse;
+	}
+	return qtrue; // it is away or on its way: wait for it
+}
+
+// ---- bot_aimBallistic: the speed of his own shots ----
+typedef struct
+{
+	float speed;
+	qboolean gravity;
+	qboolean splash;
+	float boost;	// upward speed the shot gets on top of the aim (thermals, the repeater's alt)
+	int time;		// 0 = not seen yet
+} botShot_t;
+static botShot_t bot_shot[MAX_CLIENTS][WP_NUM_WEAPONS][2];
+static int bot_shot_scan[MAX_CLIENTS];
+
+static void bot_learn_shots(const bot_state_t* bs)
+{
+	const int client = bs->client;
+
+	if (bot_shot_scan[client] > level.time && bot_shot_scan[client] - level.time <= 250)
+	{
+		return;
+	}
+	bot_shot_scan[client] = level.time + 250;
+	for (int i = MAX_CLIENTS; i < level.num_entities; i++)
+	{
+		const gentity_t* m = &g_entities[i];
+		if (!m->inuse || m->s.eType != ET_MISSILE || m->r.ownerNum != client
+			|| m->s.weapon <= WP_NONE || m->s.weapon >= WP_NUM_WEAPONS
+			|| level.time - m->s.pos.trTime > 1000 || (m->s.pos.trType != TR_LINEAR && m->s.pos.trType != TR_GRAVITY))
+		{
+			continue;
+		}
+		const int alt = m->s.eFlags & EF_ALT_FIRING ? 1 : 0;
+		botShot_t* shot = &bot_shot[client][m->s.weapon][alt];
+		const qboolean gravity = m->s.pos.trType == TR_GRAVITY ? qtrue : qfalse;
+		float speed = VectorLength(m->s.pos.trDelta);
+		float boost = 0.0f;
+		if (gravity)
+		{
+			// the shot's rise beyond the aim: its upward speed less what the aim's pitch gave it
+			vec3_t fwd;
+			AngleVectors(bs->viewangles, fwd, NULL, NULL);
+			const float along = DotProduct(m->s.pos.trDelta, fwd);
+			boost = m->s.pos.trDelta[2] - along * fwd[2];
+			if (boost < 0.0f || boost > 300.0f)
+			{
+				boost = 0.0f;
+			}
+			if (along > 1.0f)
+			{
+				speed = along;
+			}
+		}
+		if (speed < 100.0f)
+		{
+			continue;
+		}
+		shot->speed = shot->time ? shot->speed * 0.5f + speed * 0.5f : speed;
+		shot->boost = shot->time ? shot->boost * 0.5f + boost * 0.5f : boost;
+		shot->gravity = gravity;
+		shot->splash = m->splashDamage > 0 && m->splashRadius > 0 ? qtrue : qfalse;
+		shot->time = level.time;
+	}
+}
+
+static const botShot_t* bot_known_shot(const bot_state_t* bs)
+{
+	const int weapon = bs->cur_ps.weapon;
+
+	if (!bot_aimBallistic.integer || weapon <= WP_NONE || weapon >= WP_NUM_WEAPONS || weapon == WP_SABER)
+	{
+		return NULL;
+	}
+	const botShot_t* shot = &bot_shot[bs->client][weapon][bs->doAltAttack ? 1 : 0];
+	return shot->time ? shot : NULL;
+}
+
+// qtrue: bs->goalAngles aims his shot where it meets the target
+static qboolean bot_ballistic_lead(bot_state_t* bs, const vec3_t headlevel)
+{
+	const gentity_t* target = bs->currentEnemy;
+	const botShot_t* shot = bot_known_shot(bs);
+	vec3_t offset, pred, aim, dir, ang;
+	float max_drop = 99999.0f;
+
+	if (!shot || !target || !target->client)
+	{
+		return qfalse;
+	}
+	const playerState_t* tps = &target->client->ps;
+	const qboolean airborne = tps->groundEntityNum == ENTITYNUM_NONE ? qtrue : qfalse;
+	const float t_gravity = tps->gravity > 0 ? (float)tps->gravity : 800.0f;
+
+	VectorSubtract(headlevel, tps->origin, offset); // the spot on him the caller picked
+
+	if (airborne)
+	{
+		// how far he can fall before the floor stops him
+		vec3_t down;
+		trace_t tr;
+		VectorCopy(tps->origin, down);
+		down[2] -= 8192.0f;
+		trap->Trace(&tr, tps->origin, target->r.mins, target->r.maxs, down, target->s.number, MASK_SOLID, qfalse, 0, 0);
+		max_drop = tps->origin[2] - tr.endpos[2];
+		if (max_drop < 0.0f)
+		{
+			max_drop = 0.0f;
+		}
+	}
+
+	// two passes: the time to where he is, then to where he will be
+	VectorAdd(tps->origin, offset, aim);
+	float tof = Distance(bs->eye, aim) / shot->speed;
+	for (int pass = 0; pass < 2; pass++)
+	{
+		if (tof > 1.5f)
+		{
+			tof = 1.5f;
+		}
+		VectorMA(tps->origin, tof, tps->velocity, pred);
+		if (airborne)
+		{
+			float drop = 0.5f * t_gravity * tof * tof;
+			if (drop > max_drop)
+			{
+				drop = max_drop;
+			}
+			pred[2] -= drop;
+		}
+		VectorAdd(pred, offset, aim);
+		tof = Distance(bs->eye, aim) / shot->speed;
+	}
+
+	// a splash shot at a target on the ground: at his feet (when he can see the floor there)
+	if (shot->splash && !airborne && bs->eye[2] > pred[2] + target->r.mins[2])
+	{
+		aim[2] = pred[2] + target->r.mins[2] + 4.0f;
+	}
+
+	// a shot that drops: aim up by the drop (less the rise it gets of its own)
+	if (shot->gravity)
+	{
+		aim[2] += 0.5f * DEFAULT_GRAVITY * tof * tof - shot->boost * tof;
+	}
+
+	VectorSubtract(aim, bs->eye, dir);
+	vectoangles(dir, ang);
+	VectorCopy(ang, bs->goalAngles);
+	return qtrue;
+}
+
 //offset the desired view angles with aim leading in mind
 void bot_aim_leading(bot_state_t* bs, vec3_t headlevel, const float lead_amount)
 {
@@ -12012,6 +12771,12 @@ void bot_aim_leading(bot_state_t* bs, vec3_t headlevel, const float lead_amount)
 		!bs->currentEnemy->client)
 	{
 		return;
+	}
+
+	bot_learn_shots(bs);
+	if (bot_ballistic_lead(bs, headlevel))
+	{
+		return; // bot_aimBallistic: by his shot's flight time
 	}
 
 	if (!bs->frame_Enemy_Len)
@@ -16204,6 +16969,10 @@ void standard_bot_ai(bot_state_t* bs)
 				bs->beStill = level.time + 500; //func brush under.. wait
 			}
 		}
+		if (bot_lift_wait(bs))
+		{
+			bs->beStill = level.time + 100; // bot_movers: waiting for a lift, or riding it
+		}
 
 		if (bs->frame_Waypoint_Vis || bs->wpCurrent->flags & WPFLAG_NOVIS)
 		{
@@ -16646,8 +17415,9 @@ void standard_bot_ai(bot_state_t* bs)
 		{
 			float b_lead_amount = bot_weapon_can_lead(bs);
 
+			bot_learn_shots(bs);
 			if ((bs->skills.accuracy / bs->settings.skill) <= 8 &&
-				b_lead_amount)
+				(b_lead_amount || bot_known_shot(bs))) // (bot_aimBallistic: any shot he has seen fly)
 			{
 				bot_aim_leading(bs, headlevel, b_lead_amount);
 			}
@@ -16667,7 +17437,7 @@ void standard_bot_ai(bot_state_t* bs)
 		bs->saberThrowTime = level.time + Q_irand(4000, 10000);
 	}
 
-	if (bs->currentEnemy)
+	if (bs->currentEnemy && bs->currentEnemy->client)
 	{
 		if (bot_get_weapon_range(bs) == BWEAPONRANGE_SABER && bs->saberSpecialist)
 		{
@@ -18422,6 +19192,10 @@ void Enhanced_bot_ai(bot_state_t* bs)
 				bs->beStill = level.time + 500; //func brush under.. wait
 			}
 		}
+		if (bot_lift_wait(bs))
+		{
+			bs->beStill = level.time + 100; // bot_movers: waiting for a lift, or riding it
+		}
 
 		if (bs->frame_Waypoint_Vis || bs->wpCurrent->flags & WPFLAG_NOVIS)
 		{
@@ -18798,8 +19572,9 @@ void Enhanced_bot_ai(bot_state_t* bs)
 		{
 			float b_lead_amount = bot_weapon_can_lead(bs);
 
+			bot_learn_shots(bs);
 			if ((bs->skills.accuracy / bs->settings.skill) <= 8 &&
-				b_lead_amount)
+				(b_lead_amount || bot_known_shot(bs))) // (bot_aimBallistic: any shot he has seen fly)
 			{
 				bot_aim_leading(bs, headlevel, b_lead_amount);
 			}
@@ -21430,6 +22205,13 @@ int bot_ai_startframe(const int time)
 		trap->Cvar_Update(&bot_forgimmick);
 		trap->Cvar_Update(&bot_honorableduelacceptance);
 		trap->Cvar_Update(&bot_obstaclejumps);
+		trap->Cvar_Update(&bot_jumpCheck);
+		trap->Cvar_Update(&bot_jumpSafeDrop);
+	trap->Cvar_Update(&bot_selfPreserve);
+	trap->Cvar_Update(&bot_missionRevive);
+	trap->Cvar_Update(&bot_focusFire);
+		trap->Cvar_Update(&bot_movers);
+		trap->Cvar_Update(&bot_aimBallistic);
 		trap->Cvar_Update(&bot_idlewalk);
 		trap->Cvar_Update(&bot_vehicles);
 #ifndef FINAL_BUILD
@@ -21560,6 +22342,8 @@ int bot_ai_startframe(const int time)
 
 		bot_calm_movement(bs, ucmd);
 		bot_obstacle_climb(bs, ucmd); // stuck against something on his way: climb onto it or go round it (g_obstacleClimb)
+		bot_jump_pad_flight(bs, ucmd); // bot_movers: thrown by a jump pad, he lets the pad fly him
+		bot_jump_check(bs, ucmd); // bot_jumpCheck: no jump of his own into a pit, lava or a trigger_hurt
 		bot_saber_blaster(bs, ucmd); // SS_BLASTER (2026-10-24): the left hand pistol out of saber reach
 		bot_boba_flight_cmd(bs, ucmd); // Boba Fett classes: jetpack flight, flamethrower (after the jump filters)
 		G_FighterAI_BotCmd(&g_entities[bs->client], ucmd); // in a ship the fighter AI flies: its moves, not his own
@@ -21612,6 +22396,13 @@ int bot_ai_setup(const int restart)
 	trap->Cvar_Register(&bot_forgimmick, "bot_forgimmick", "0", CVAR_CHEAT);
 	trap->Cvar_Register(&bot_honorableduelacceptance, "bot_honorableduelacceptance", "1", CVAR_CHEAT);
 	trap->Cvar_Register(&bot_obstaclejumps, "bot_obstaclejumps", "1", CVAR_ARCHIVE);
+	trap->Cvar_Register(&bot_jumpCheck, "bot_jumpCheck", "1", CVAR_ARCHIVE);	// no jump of his own into a pit, lava or a trigger_hurt
+	trap->Cvar_Register(&bot_jumpSafeDrop, "bot_jumpSafeDrop", "512", CVAR_ARCHIVE);	// ... or further down than this
+	trap->Cvar_Register(&bot_selfPreserve, "bot_selfPreserve", "1", CVAR_ARCHIVE);	// hurt bots go for health / shields
+	trap->Cvar_Register(&bot_missionRevive, "bot_missionRevive", "1", CVAR_ARCHIVE);	// Missions: bots revive downed teammates
+	trap->Cvar_Register(&bot_focusFire, "bot_focusFire", "0", CVAR_ARCHIVE);	// bots prefer their squad leader's enemy
+	trap->Cvar_Register(&bot_movers, "bot_movers", "1", CVAR_ARCHIVE);	// bots wait for lifts and ride them, and let jump pads fly them
+	trap->Cvar_Register(&bot_aimBallistic, "bot_aimBallistic", "1", CVAR_ARCHIVE);	// bots lead by their shot's flight time
 	trap->Cvar_Register(&bot_idlewalk, "bot_idlewalk", "1", CVAR_ARCHIVE);
 	trap->Cvar_Register(&bot_vehicles, "bot_vehicles", "1", CVAR_ARCHIVE);
 	trap->Cvar_Register(&bot_pvstype, "bot_pvstype", "1", CVAR_CHEAT);

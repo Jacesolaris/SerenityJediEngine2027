@@ -55,6 +55,7 @@ bool R_GetWindVector(vec3_t windVector, vec3_t atpoint);
 bool R_GetWindSpeed(float& windSpeed, vec3_t atpoint);
 bool R_GetWindGusting(vec3_t atpoint);
 bool R_IsOutside(vec3_t pos);
+bool R_IsInsideMarked(vec3_t pos);
 float R_IsOutsideCausingPain(vec3_t pos);
 float R_GetChanceOfSaberFizz();
 bool R_IsShaking(vec3_t pos);

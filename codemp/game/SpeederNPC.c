@@ -260,6 +260,17 @@ static void ProcessMoveCommands(Vehicle_t* p_veh)
 		parent_ps->speed = speedMin;
 	}
 
+#ifdef _GAME
+	// as SP: an AI pilot can set his bike's speed himself, to keep up with whom he chases (AI_Vehicle.c)
+	{
+		extern qboolean Pilot_MatchSpeed(const gentity_t* pilot);
+		if (p_veh->m_pPilot && Pilot_MatchSpeed((gentity_t*)p_veh->m_pPilot))
+		{
+			parent_ps->speed = ((gentity_t*)p_veh->m_pPilot)->client->ps.speed;
+		}
+	}
+#endif
+
 	// Electrified: slow movement
 	if (parent_ps->electrifyTime > curTime)
 	{
@@ -298,6 +309,18 @@ static void ProcessOrientCommands(const Vehicle_t* p_veh)
 		rider_ps = p_veh->m_pParentEntity->playerState;
 	}
 	const playerState_t* parent_ps = p_veh->m_pParentEntity->playerState;
+
+#ifdef _GAME
+	// as SP: an AI swoop pilot points his bike where he looks, moving or not (AI_Vehicle.c); players keep MP's handling
+	{
+		extern qboolean Pilot_AISteers(const bgEntity_t* pilot);
+		if (p_veh->m_pPilot && Pilot_AISteers(p_veh->m_pPilot) && !(p_veh->m_ulFlags & (VEH_SLIDEBREAKING | VEH_OUTOFCONTROL)))
+		{
+			p_veh->m_vOrientation[YAW] = rider_ps->viewangles[YAW];
+			return;
+		}
+	}
+#endif
 
 	//p_veh->m_vOrientation[YAW] = 0.0f;//rider_ps->viewangles[YAW];
 	float angDif = AngleSubtract(p_veh->m_vOrientation[YAW], rider_ps->viewangles[YAW]);

@@ -782,7 +782,7 @@ static qboolean WP_SaberAIIsAI(const gentity_t* ent)
 // 0 (easy) .. 3 (hardest): NPCs g_npcspskill, bots their skill (1-5)
 static int WP_SaberAISkill(const gentity_t* ent)
 {
-	int skill = g_npcspskill.integer;
+	int skill = G_DynSkill(g_npcspskill.integer); // g_dynamicDifficulty (bots below use their own skill)
 	if (ent && (ent->r.svFlags & SVF_BOT) && ent->s.number >= 0 && ent->s.number < MAX_CLIENTS && botstates[ent->s.number])
 	{
 		skill = (int)botstates[ent->s.number]->settings.skill - 2;
@@ -812,6 +812,207 @@ qboolean WP_SaberAIEnemyTurtling(const gentity_t* enemy)
 // it costs the NPC one mishap level like any fake). Chance 25% (easy) .. 55% (hardest); a feint can only follow 15 s ..
 // 9 s after the last one, and a failed roll waits 1.5 s before it is rolled again. Bots too since 2026-11-09 (their
 // enemy is the bot AI's current enemy).
+// Saber read pack (2026-11-22, AI audit items 5-7; g_saberAITurtleBreak, g_saberAISpamPunish, g_saberAIFinisher, each
+// archived, 1 = on, 0 = off). Saber NPCs (and MP bots) read the player over time, not only the current frame:
+// - Turtle break: the longer the player holds block (ps.ManualBlockingTime), the harder they work to open him up:
+//   from 1.5 s feints come more often (+20%, half the cooldown), from 3 s kicks / front slaps skip the rank and
+//   aggression rolls, from 4.5 s a force push (8-12 s apart; AI_Jedi Jedi_AttackDecide).
+// - Spam punish: a player who started 4 or more swings in the last 3 s is treated as a tired swing spammer: the NPC
+//   keeps its guard against him (Jedi_DefendFirst / Bot_SaberDefendFirst) and lets his fatigue and bounces break him.
+// - Finisher: an NPC parrying an enemy who is worn down (30 or fewer block points, or fatigue at the HUD flash level)
+//   attacks straight out of the parry / knockaway: break the guard first, then go for the kill.
+static int saber_swing_times[MAX_CLIENTS][4];
+
+// PM_SetSaberMove (through WP_SaberAIAdaptRecord): a human player started an attack
+static void WP_SaberAISwingNote(const int client)
+{
+	int i;
+	if (client < 0 || client >= MAX_CLIENTS)
+	{
+		return;
+	}
+	for (i = 3; i > 0; i--)
+	{
+		saber_swing_times[client][i] = saber_swing_times[client][i - 1];
+	}
+	saber_swing_times[client][0] = level.time;
+}
+
+// ms the enemy has been holding block (turtling), 0 = not turtling or turtle break off
+int WP_SaberAITurtleTime(const gentity_t* enemy)
+{
+	int start;
+	if (!g_saberAITurtleBreak.integer || !WP_SaberAIEnemyTurtling(enemy))
+	{
+		return 0;
+	}
+	start = enemy->client->ps.ManualBlockingTime;
+	return start > 0 && start <= level.time ? level.time - start : 0;
+}
+
+// 4 or more swings started in the last 3 s (human players)
+qboolean WP_SaberAISpamming(const gentity_t* enemy)
+{
+	int oldest;
+	if (!g_saberAISpamPunish.integer || !enemy || enemy->s.number < 0 || enemy->s.number >= MAX_CLIENTS)
+	{
+		return qfalse;
+	}
+	oldest = saber_swing_times[enemy->s.number][3];
+	return oldest > 0 && oldest <= level.time && level.time - oldest <= 3000 ? qtrue : qfalse;
+}
+
+qboolean WP_SaberAIFinisherOn(void)
+{
+	return g_saberAIFinisher.integer ? qtrue : qfalse;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// g_dynamicDifficulty (2026-11-22, AI audit item 22; archived, default 0 = off; DH: adaptive difficulty without
+// obvious cheating). Reads how the player is doing on this map and moves the NPCs' EFFECTIVE skill at most one step
+// either way around the chosen difficulty (SP g_spskill; MP g_npcspskill, Missions only, human players, bots
+// excluded). Only things a player can't easily spot use it: NPC reaction delay and aim error (NPC_combat.c) and the
+// saber AI's skill reads (defend-first hold chance, stab-down / DFA reaction, feint chance, ...). Never NPC health or
+// damage. It moves only after a player death (about one step easier per three deaths) or at the end of each 60 s of
+// play (a little harder after 2+ kills with 75%+ health left, a little easier below 25% health with no kill), and it
+// resets on a new map. Not in the save game: a reload keeps it (the game DLL stays loaded), a new map or quitting resets
+// it. g_dynamicDifficultyDebug 1 prints every change.
+static float dd_level; // -1 .. +1; the skill step is -1 / 0 / +1 at -0.5 / +0.5
+static char dd_map[MAX_QPATH];
+static int dd_windowStart;
+static int dd_windowKills;
+static int dd_lastDeath[MAX_GENTITIES];
+
+static qboolean G_DynHuman(const gentity_t* ent)
+{
+	return ent && ent->client && ent->s.number >= 0 && ent->s.number < MAX_CLIENTS && !(ent->r.svFlags & SVF_BOT)
+		&& ent->client->pers.connected == CON_CONNECTED && ent->client->sess.sessionTeam != TEAM_SPECTATOR ? qtrue : qfalse;
+}
+
+static qboolean G_DynOn(void)
+{
+	return g_dynamicDifficulty.integer && level.gametype == GT_SINGLE_PLAYER ? qtrue : qfalse;
+}
+
+static void G_DynDiffMapCheck(void)
+{
+	if (Q_stricmp(dd_map, level.mapname))
+	{
+		Q_strncpyz(dd_map, level.mapname, sizeof dd_map);
+		dd_level = 0.0f;
+		dd_windowStart = level.time;
+		dd_windowKills = 0;
+		memset(dd_lastDeath, 0, sizeof dd_lastDeath);
+	}
+	if (dd_windowStart > level.time)
+	{
+		dd_windowStart = level.time;
+	}
+}
+
+static int G_DynStep(void)
+{
+	return dd_level >= 0.5f ? 1 : dd_level <= -0.5f ? -1 : 0;
+}
+
+static void G_DynDiffNudge(const float amount, const char* why)
+{
+	dd_level += amount;
+	if (dd_level > 1.0f)
+	{
+		dd_level = 1.0f;
+	}
+	if (dd_level < -1.0f)
+	{
+		dd_level = -1.0f;
+	}
+	if (g_dynamicDifficultyDebug.integer)
+	{
+		Com_Printf(S_COLOR_YELLOW"Dynamic difficulty: %s -> level %.2f, skill step %+d\n", why, dd_level, G_DynStep());
+	}
+}
+
+// every 60 s: the human players' average (health left, kills)
+static void G_DynDiffWindow(void)
+{
+	int i, humans = 0, hp_pct = 0;
+	if (level.time - dd_windowStart < 60000)
+	{
+		return;
+	}
+	for (i = 0; i < level.maxclients; i++)
+	{
+		const gentity_t* ent = &g_entities[i];
+		int max;
+		if (!G_DynHuman(ent) || ent->health <= 0)
+		{
+			continue;
+		}
+		max = ent->client->ps.stats[STAT_MAX_HEALTH] > 0 ? ent->client->ps.stats[STAT_MAX_HEALTH] : 100;
+		hp_pct += ent->health * 100 / max;
+		humans++;
+	}
+	if (humans)
+	{
+		hp_pct /= humans;
+		if (dd_windowKills >= 2 * humans && hp_pct >= 75)
+		{
+			G_DynDiffNudge(0.17f, "strong minute");
+		}
+		else if (dd_windowKills == 0 && hp_pct < 25)
+		{
+			G_DynDiffNudge(-0.17f, "hard minute");
+		}
+	}
+	dd_windowStart = level.time;
+	dd_windowKills = 0;
+}
+
+// the effective skill (0-3) for an NPC skill read: base, +-1 with g_dynamicDifficulty (Missions only)
+int G_DynSkill(const int base)
+{
+	int skill = base < 0 ? 0 : base > 3 ? 3 : base;
+	if (!G_DynOn())
+	{
+		return skill;
+	}
+	G_DynDiffMapCheck();
+	G_DynDiffWindow();
+	skill += G_DynStep();
+	return skill < 0 ? 0 : skill > 3 ? 3 : skill;
+}
+
+// player_die: a human player died (scaled by how many humans play), or a human killed an NPC
+void G_DynDiffDeath(const gentity_t* self, const gentity_t* attacker)
+{
+	int i, humans = 0;
+	if (!self || !G_DynOn() || self->s.number < 0 || self->s.number >= MAX_GENTITIES)
+	{
+		return;
+	}
+	G_DynDiffMapCheck();
+	if (dd_lastDeath[self->s.number] && dd_lastDeath[self->s.number] <= level.time
+		&& level.time - dd_lastDeath[self->s.number] < 2000)
+	{
+		return; // the same death again
+	}
+	dd_lastDeath[self->s.number] = level.time;
+	if (G_DynHuman(self))
+	{
+		for (i = 0; i < level.maxclients; i++)
+		{
+			if (G_DynHuman(&g_entities[i]))
+			{
+				humans++;
+			}
+		}
+		G_DynDiffNudge(-0.34f / (humans > 0 ? humans : 1), "player died");
+	}
+	else if (self->NPC && G_DynHuman(attacker))
+	{
+		dd_windowKills++;
+	}
+}
 qboolean WP_SaberAIFeintWanted(gentity_t* npc)
 {
 	const gentity_t* enemy;
@@ -846,12 +1047,12 @@ qboolean WP_SaberAIFeintWanted(gentity_t* npc)
 		return qfalse;
 	}
 	skill = WP_SaberAISkill(npc);
-	if (Q_irand(0, 99) >= 25 + 10 * skill)
+	if (Q_irand(0, 99) >= 25 + 10 * skill + (WP_SaberAITurtleTime(enemy) >= 1500 ? 20 : 0)) // turtle break: more feints
 	{
 		saber_feint_next[npc->s.number] = level.time + 1500;
 		return qfalse;
 	}
-	saber_feint_next[npc->s.number] = level.time + 15000 - 2000 * skill;
+	saber_feint_next[npc->s.number] = level.time + (15000 - 2000 * skill) / (WP_SaberAITurtleTime(enemy) >= 1500 ? 2 : 1);
 	if (d_blockinfo.integer || g_DebugSaberCombat.integer)
 	{
 		Com_Printf(S_COLOR_YELLOW"Saber AI: %s feints\n", npc->NPC ? npc->NPC_type : npc->client->pers.netname);
@@ -1350,17 +1551,45 @@ static int saber_adapt_read_time[MAX_CLIENTS];
 static int saber_adapt_npc_next[MAX_GENTITIES];
 
 // PM_SetSaberMove (bg_saber.c, game side): a player starts a new attack
+// g_saberAIAdaptTypes (2026-11-22, AI audit item 21; archived, 1 = on): the adaptive read (g_saberAIAdapt) also counts
+// the player's lunge, jump / flip attacks (DFAs) and back attacks, not only the 7 basic swing directions, so a player
+// who keeps opening with the same lunge or DFA gets read and perfect-blocked now and then. Katas stay unreadable.
+static qboolean WP_SaberAIAdaptSpecial(const int move)
+{
+	if (!g_saberAIAdaptTypes.integer)
+	{
+		return qfalse;
+	}
+	switch (move)
+	{
+	case LS_A_LUNGE:
+	case LS_A_JUMP_T__B_:
+	case LS_A_FLIP_STAB:
+	case LS_A_FLIP_SLASH:
+	case LS_A_BACKSTAB:
+	case LS_A_BACK:
+	case LS_A_BACK_CR:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
 void WP_SaberAIAdaptRecord(const int clientNum, const int move)
 {
 	int repeats = 0, chance, i;
+	if (clientNum >= 0 && clientNum < MAX_CLIENTS && WP_SaberAIIsHuman(&g_entities[clientNum]))
+	{
+		WP_SaberAISwingNote(clientNum); // spam punish (2026-11-22)
+	}
 	if (!g_saberAIAdapt.integer || clientNum < 0 || clientNum >= MAX_CLIENTS || !WP_SaberAIIsHuman(&g_entities[clientNum]))
 	{
 		return;
 	}
 	saber_adapt_read_time[clientNum] = 0;
-	if (move < LS_A_TL2BR || move > LS_A_T2B)
+	if ((move < LS_A_TL2BR || move > LS_A_T2B) && !WP_SaberAIAdaptSpecial(move))
 	{
-		return; // only the 7 basic swing directions
+		return; // the 7 basic swing directions, and (g_saberAIAdaptTypes) lunges, DFAs and back attacks
 	}
 	for (i = 0; i < SABER_ADAPT_HISTORY; i++)
 	{

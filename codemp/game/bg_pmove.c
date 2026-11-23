@@ -20492,7 +20492,9 @@ static void PmoveSingle(pmove_t* pmove)
 	}
 	if (pm->ps->m_iVehicleNum)
 	{
-		if (pm->ps->clientNum < MAX_CLIENTS)
+		// a rider (player or NPC) has his vehicle's number, a vehicle its pilot's + 1 (MP only checked for players, so an
+		// NPC rider got the entity before his vehicle and none of the riding anims: T-pose on t2_trip's swoops, DH 2026-11-23)
+		if (pm->ps->clientNum < MAX_CLIENTS || pm_entSelf->s.NPC_class != CLASS_VEHICLE)
 		{
 			//player riding vehicle
 			pm_entVeh = PM_BGEntForNum(pm->ps->m_iVehicleNum);

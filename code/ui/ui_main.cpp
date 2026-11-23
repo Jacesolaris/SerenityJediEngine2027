@@ -3970,8 +3970,8 @@ void UI_LoadMenus(const char* menuFile, const qboolean reset)
 	Com_Printf("--------------------- Client Initialization ---------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("---------- Genuine SerenityJediEngine-(Solaris Edition)SP--------\n");
-	Com_Printf("---------------------Build date 21/11/2026-----------------------\n"); // build date
-	Com_Printf("---------------------------Build 12------------------------------\n");
+	Com_Printf("---------------------Build date 23/11/2026-----------------------\n"); // build date
+	Com_Printf("---------------------------Build 13------------------------------\n");
 	Com_Printf("-----------------------------------------------------------------\n");
 	Com_Printf("------------------------LightSaber-------------------------------\n");
 	Com_Printf("-----------An elegant weapon for a more civilized age------------\n");
@@ -5688,7 +5688,9 @@ static void UI_UpdateSaberCvars()
 		Cvar_Set(to, Cvar_VariableString(from));
 	}
 
-	if (TranslateSaberColor(Cvar_VariableString("ui_saber_color")) >= SABER_RGB)
+	// SJE: only a colour the menu really set (an empty one, as in a fresh profile, came out as custom RGB black "x000000":
+	// the first drawn saber was a white core without colour or glow)
+	if (Cvar_VariableString("ui_saber_color")[0] && TranslateSaberColor(Cvar_VariableString("ui_saber_color")) >= SABER_RGB)
 	{
 		char rgb_color[8];
 		Com_sprintf(rgb_color, 8, "x%02x%02x%02x", Cvar_VariableIntegerValue("ui_rgb_saber_red"),
@@ -5697,7 +5699,7 @@ static void UI_UpdateSaberCvars()
 		Cvar_Set("g_saber_color", rgb_color);
 	}
 
-	if (TranslateSaberColor(Cvar_VariableString("ui_saber2_color")) >= SABER_RGB)
+	if (Cvar_VariableString("ui_saber2_color")[0] && TranslateSaberColor(Cvar_VariableString("ui_saber2_color")) >= SABER_RGB)
 	{
 		char rgb_color[8];
 		Com_sprintf(rgb_color, 8, "x%02x%02x%02x", Cvar_VariableIntegerValue("ui_rgb_saber2_red"),

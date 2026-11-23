@@ -393,7 +393,7 @@ qboolean G2_SetRootSurface(CGhoul2Info_v& ghoul2, const int modelIndex, const ch
 		for (int i = 0; i < ghoul2.size(); i++)
 		{
 			// are we even bolted to anything?
-			if (ghoul2[i].mModelBoltLink != -1)
+			if (ghoul2[i].mModelindex != -1 && ghoul2[i].mModelBoltLink != -1) // skip slots already removed (Debug assert in G2API_RemoveGhoul2Model when a saber cut a limb)
 			{
 				const int bolt_mod = ghoul2[i].mModelBoltLink >> MODEL_SHIFT & MODEL_AND;
 				const int bolt_num = ghoul2[i].mModelBoltLink >> BOLT_SHIFT & BOLT_AND;

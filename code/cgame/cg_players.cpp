@@ -5249,6 +5249,186 @@ static void CG_ClothForcePush(const centity_t* cent)
 		org[0], org[1], org[2], fwd[0], fwd[1], fwd[2], strength));
 }
 
+// SJE cg_clothFans (1 = on, other values scale how far the stream runs ahead of the push, 0 = off): the map's pushers -
+// trigger_push (jump pads, air streams, fans) and the triggers that fire a target_push - blow the capes and robes of the
+// characters in them: a stream of air in the push direction (renderer commands meshcloth_windzone /
+// meshcloth_windzones_clear; the renderer keeps it on a character for a moment after a push threw it out of the
+// trigger). The stream moves with the push and runs ahead of it by 1.6 times its speed, at most CG_FAN_AHEAD units/s,
+// so cloth carried along by the push still streams its way: a jump pad blows the cape up, not down (a stream that
+// runs along a hanging cape lifts it far less than one that meets it: with 0.8 times the speed its hem rose 3 units in
+// the climb, with 1.6 times 7 to 15, with 2.4 times it was torn). Conveyor belts (CONVEYOR) move the floor, not the
+// air: left out. Looked at every 200 ms; sent again only when something changed (a pusher switched on or off, its aim
+// worked out at the map's start, a new map).
+static constexpr float CG_FAN_MAX = 2000.0f;	// a push faster than this counts as this fast
+static constexpr float CG_FAN_AHEAD = 1800.0f;	// the stream runs ahead of the push by at most this much (units/s)
+static constexpr int CG_FAN_MAX_ZONES = 128;
+static unsigned int cg_clothFanSig = 0xFFFFFFFFu;	// the set last sent (0 = none, ~0 = not known: send)
+static int cg_clothFanTime = -1;
+
+void CG_ClothWindZonesReset()
+{
+	cg_clothFanSig = 0xFFFFFFFFu;	// the renderer may still hold the last map's zones: clear them at least
+	cg_clothFanTime = -1;
+}
+
+// the stream of a push velocity (qfalse: none); pushSpeed: the push's speed as counted (the stream runs ahead of it)
+static qboolean CG_ClothFanAir(const vec3_t push, vec3_t air, float* pushSpeed)
+{
+	vec3_t dir;
+	VectorCopy(push, dir);
+	float speed = VectorNormalize(dir);
+	if (speed < 1.0f)
+	{
+		return qfalse;
+	}
+	if (speed > CG_FAN_MAX)
+	{
+		speed = CG_FAN_MAX;
+	}
+	float ahead = speed * 1.6f;
+	if (ahead > CG_FAN_AHEAD)
+	{
+		ahead = CG_FAN_AHEAD;
+	}
+	VectorScale(dir, speed + ahead * cg_clothFans.value, air);
+	*pushSpeed = speed;
+	return qtrue;
+}
+
+// the velocity a trigger_push gives (trigger_push_touch; RELATIVE: as from the middle of the trigger)
+static void CG_TriggerPushVelocity(const gentity_t* ent, vec3_t push)
+{
+	if (ent->spawnflags & 16)
+	{
+		// RELATIVE: towards the target_position, whose point is in origin2 (with no speed: the distance as the speed)
+		vec3_t mid;
+		VectorAdd(ent->absmin, ent->absmax, mid);
+		VectorScale(mid, 0.5f, mid);
+		VectorSubtract(ent->s.origin2, mid, push);
+		if (ent->speed)
+		{
+			VectorNormalize(push);
+			VectorScale(push, ent->speed, push);
+		}
+	}
+	else if (ent->spawnflags & 4)
+	{
+		VectorScale(ent->s.origin2, ent->speed, push);	// LINEAR: origin2 is the direction
+	}
+	else
+	{
+		VectorCopy(ent->s.origin2, push);	// a throw at the target's apex: origin2 is the velocity (AimAtTarget)
+	}
+}
+
+// a zone: the trigger's box, grown by CG_FAN_GROW all round and by CG_FAN_REACH along the stream (the air of a jump pad
+// rises above it; and the renderer sees a character where the frames between two game frames put it, a few units off
+// the thin slab a pad's trigger often is)
+static constexpr float CG_FAN_GROW = 8.0f;
+static constexpr float CG_FAN_REACH = 96.0f;
+static void CG_ClothFanZone(float* zone, const vec3_t mins, const vec3_t maxs, const vec3_t air, const float pushSpeed)
+{
+	vec3_t dir;
+	VectorCopy(air, dir);
+	VectorNormalize(dir);
+	for (int k = 0; k < 3; k++)
+	{
+		zone[k] = mins[k] - CG_FAN_GROW + (dir[k] < 0.0f ? CG_FAN_REACH * dir[k] : 0.0f);
+		zone[3 + k] = maxs[k] + CG_FAN_GROW + (dir[k] > 0.0f ? CG_FAN_REACH * dir[k] : 0.0f);
+		zone[6 + k] = air[k];
+	}
+	zone[9] = pushSpeed;
+}
+
+void CG_ClothWindZones()
+{
+	if (cg_clothFanTime >= 0 && cg.time >= cg_clothFanTime && cg.time - cg_clothFanTime < 200)
+	{
+		return;
+	}
+	cg_clothFanTime = cg.time;
+	static float zone[CG_FAN_MAX_ZONES][10];	// mins, maxs, air, push speed
+	int n = 0;
+	if (cg_clothFans.value > 0.0f)
+	{
+		for (int i = MAX_CLIENTS; i < ENTITYNUM_WORLD && n < CG_FAN_MAX_ZONES; i++)
+		{
+			const gentity_t* ent = &g_entities[i];
+			if (!ent->inuse || !ent->classname)
+			{
+				continue;
+			}
+			// its aim (origin2) is worked out a moment after the map starts (AimAtTarget)
+			const bool aimPending = ent->e_ThinkFunc == thinkF_AimAtTarget && ent->nextthink > 0;
+			vec3_t air;
+			float tpSpeed = 0.0f;
+			if (!Q_stricmp(ent->classname, "trigger_push"))
+			{
+				if (ent->e_TouchFunc != touchF_trigger_push_touch || ent->svFlags & SVF_INACTIVE || ent->spawnflags & 32 || aimPending)
+				{
+					continue;	// off (inactive, used up, no clear path) or a conveyor belt
+				}
+				vec3_t push;
+				CG_TriggerPushVelocity(ent, push);
+				float pushSpeed;
+				if (CG_ClothFanAir(push, air, &pushSpeed))
+				{
+					CG_ClothFanZone(zone[n++], ent->absmin, ent->absmax, air, pushSpeed);
+				}
+			}
+			else if (!Q_stricmp(ent->classname, "target_push") && ent->targetname && ent->e_UseFunc == useF_Use_target_push && !aimPending
+				&& CG_ClothFanAir(ent->s.origin2, air, &tpSpeed))
+			{
+				// a target_push has no room of its own: the triggers that fire it are its zones
+				for (int j = MAX_CLIENTS; j < ENTITYNUM_WORLD && n < CG_FAN_MAX_ZONES; j++)
+				{
+					const gentity_t* t = &g_entities[j];
+					if (!t->inuse || !t->classname || !t->target || t->e_TouchFunc == touchF_NULL || t->svFlags & SVF_INACTIVE
+						|| Q_stricmpn(t->classname, "trigger_", 8) || !Q_stricmp(t->classname, "trigger_push")
+						|| Q_stricmp(t->target, ent->targetname))
+					{
+						continue;
+					}
+					CG_ClothFanZone(zone[n++], t->absmin, t->absmax, air, tpSpeed);
+				}
+			}
+		}
+	}
+	// the set's signature (whole units, FNV-1a; 0 = none)
+	unsigned int sig = 0;
+	if (n > 0)
+	{
+		sig = 2166136261u;
+		for (int z = 0; z < n; z++)
+		{
+			for (int k = 0; k < 10; k++)
+			{
+				const int v = static_cast<int>(floorf(zone[z][k] + 0.5f));
+				for (int b = 0; b < 4; b++)
+				{
+					sig ^= static_cast<unsigned int>(v >> 8 * b) & 255u;
+					sig *= 16777619u;
+				}
+			}
+		}
+		if (sig == 0 || sig == 0xFFFFFFFFu)
+		{
+			sig = 1;
+		}
+	}
+	if (sig == cg_clothFanSig)
+	{
+		return;
+	}
+	cg_clothFanSig = sig;
+	cgi_SendConsoleCommand("meshcloth_windzones_clear\n");
+	for (int z = 0; z < n; z++)
+	{
+		cgi_SendConsoleCommand(va("meshcloth_windzone %.0f %.0f %.0f %.0f %.0f %.0f %.0f %.0f %.0f %.0f\n", zone[z][0], zone[z][1], zone[z][2],
+			zone[z][3], zone[z][4], zone[z][5], zone[z][6], zone[z][7], zone[z][8], zone[z][9]));
+	}
+}
+
 // Grass force waves (2026-10-27): when someone's force push or pull starts (its refraction powerup came on) or their
 // repulse blast goes off (PW_FORCE_REPULSE turns from "charging" to the blast time), tell the renderer (renderer
 // command grass_wave), which sends a wave through the grass in front of them (all round for repulse).

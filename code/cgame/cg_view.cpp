@@ -2939,6 +2939,7 @@ void CG_DrawActiveFrame(const int serverTime, const stereoFrame_t stereoView)
 	{
 		cg.frametime = cg.time - cg.oldTime;
 		cg.oldTime = cg.time;
+		CG_ClothWindZones();	// SJE cg_clothFans: the map's pushers blow mesh cloth (sent to the renderer when they change)
 	}
 	// Make sure the helper has the updated time
 	theFxHelper.AdjustTime(cg.frametime);

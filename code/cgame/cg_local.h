@@ -627,6 +627,13 @@ extern vmCvar_t cg_drawTimer;
 extern vmCvar_t cg_drawFPS;
 extern vmCvar_t cg_clothForcePush;
 extern vmCvar_t cg_clothExplosion;
+extern vmCvar_t cg_clothFans;
+extern vmCvar_t cg_clothMapExplosion;
+void CG_ClothMapBlast(const vec3_t origin, float damage, float radius, int mod);	// cg_event.cpp: a map explosion blows mesh cloth
+void CG_ClothMapBlastUp(qboolean up);	// ... only while the cgame runs (CG_Init / CG_Shutdown)
+qboolean CG_ClothBlastSize(int weapon, qboolean altFire, float* radius, float* strength);	// cg_event.cpp
+void CG_ClothWindZones();		// cg_players.cpp: the map's pushers blow mesh cloth (cg_clothFans)
+void CG_ClothWindZonesReset();	// ... sent again from scratch (a new map, CG_Init)
 extern vmCvar_t cg_traceCull;
 extern vmCvar_t cg_drawSnapshot;
 extern vmCvar_t cg_drawAmmoWarning;

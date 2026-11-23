@@ -1544,6 +1544,25 @@ static void R_MeshClothPush_f(void) {
 	MC_Push(c, d, (float)atof(ri.Cmd_Argv(7)), (float)atof(ri.Cmd_Argv(8)), coneDot);
 }
 
+// SJE meshcloth_windzone x0 y0 z0 x1 y1 z1 airx airy airz [push] - sent by the cgame for a map's pushers (fans, jump
+// pads, air streams; cg_clothFans): a box of moving air (units/s) that blows the capes and robes of the characters in it;
+// push = the speed of the push it gives (the air runs ahead of it by the rest, also after a throw).
+// meshcloth_windzones_clear: forget them all (the cgame sends it before each new set; a map change clears them too)
+static void R_MeshClothWindZone_f(void) {
+	if (ri.Cmd_Argc() < 10) return;
+	float mins[3], maxs[3], air[3];
+	for (int k = 0; k < 3; k++) {
+		mins[k] = (float)atof(ri.Cmd_Argv(1 + k));
+		maxs[k] = (float)atof(ri.Cmd_Argv(4 + k));
+		air[k] = (float)atof(ri.Cmd_Argv(7 + k));
+	}
+	MC_WindZoneAdd(mins, maxs, air, ri.Cmd_Argc() > 10 ? (float)atof(ri.Cmd_Argv(10)) : -1.0f);
+}
+
+static void R_MeshClothWindZonesClear_f(void) {
+	MC_WindZonesClear();
+}
+
 // grass_wave time x y z dirx diry type range - sent by the cgame when someone uses force push (type 0), pull (1) or
 // repulse (2): a wave runs out from them through the grass (R_GrassAddWave, surface sprites; r_grassForceWave)
 void R_GrassAddWave(int time, const float* org, const float* dir, int type, float range);
@@ -1570,6 +1589,8 @@ static consoleCommand_t	commands[] = {
 	{ "modellist",			R_Modellist_f },
 	{ "meshcloth_blast",	R_MeshClothBlast_f },
 	{ "meshcloth_push",	R_MeshClothPush_f },
+	{ "meshcloth_windzone",	R_MeshClothWindZone_f },
+	{ "meshcloth_windzones_clear",	R_MeshClothWindZonesClear_f },
 	{ "grass_wave",		R_GrassWave_f },
 	{ "vbolist",			R_VBOList_f },
 	{ "capframes",			R_CaptureFrameData_f },

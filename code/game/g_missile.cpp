@@ -1586,8 +1586,16 @@ void G_MissileImpacted(gentity_t* ent, gentity_t* other, vec3_t impact_pos, vec3
 
 	if (ent->splashDamage)
 	{
+		// SJE cg_clothMapExplosion: the cgame blows the cloth for this blast from the impact event above (CG_ClothBlast),
+		// if the missile's weapon has one there and no vehicle weapon's own impact replaces it (CG_VehicleWeaponImpact):
+		// then its radius damage is not a map explosion as well
+		extern qboolean g_clothBlastByCgame;
+		float clothRadius, clothStrength;
+		g_clothBlastByCgame = !(ent->s.otherentityNum2 && g_vehWeaponInfo[ent->s.otherentityNum2].iImpactFX)
+			&& CG_ClothBlastSize(ent->s.weapon, ent->alt_fire, &clothRadius, &clothStrength) ? qtrue : qfalse;
 		G_RadiusDamage(impact_pos, ent->owner, ent->splashDamage,
 			ent->splashRadius, other, ent->splashMethodOfDeath);
+		g_clothBlastByCgame = qfalse;
 	}
 
 	if (ent->s.weapon == WP_NOGHRI_STICK)

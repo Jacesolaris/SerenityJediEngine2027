@@ -5419,8 +5419,10 @@ static void G_AwardStreaks(gentity_t* self, gentity_t* attacker)
 
 extern void G_Shop_Died(gentity_t* victim, gentity_t* attacker);
 
+extern void G_DynDiffDeath(const gentity_t* self, const gentity_t* attacker); // wp_saberblocking.cpp
 void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, const int damage, const int means_of_death, const int dflags, const int hit_loc)
 {
+	G_DynDiffDeath(self, attacker); // g_dynamicDifficulty (2026-11-22)
 	// a wampa or rancor dying with a victim in its hand: no saber slice on it in this death (s_noSliceDying, DH 2026-11-11)
 	const NoSliceDyingGuard no_slice_dying(self->client && (self->client->NPC_class == CLASS_WAMPA || self->client->NPC_class == CLASS_RANCOR)
 		&& self->count && self->activator ? self : s_noSliceDying);
@@ -9892,12 +9894,27 @@ qboolean CanDamage(const gentity_t* targ, const vec3_t origin)
 
 extern void Do_DustFallNear(const vec3_t origin, int dustcount);
 extern void G_GetMassAndVelocityForEnt(const gentity_t* ent, float* mass, vec3_t velocity);
+extern void CG_ClothMapBlast(const vec3_t origin, float damage, float radius, int mod);
+// SJE cg_clothMapExplosion: set by G_MissileImpacted for a missile whose own blast the cgame sends from its impact event
+// (CG_ClothBlast); the next G_RadiusDamage takes it back and leaves the cloth to the cgame (not blown twice)
+qboolean g_clothBlastByCgame = qfalse;
 /*
 ============
 G_RadiusDamage
 ============
 */void G_RadiusDamage(const vec3_t origin, gentity_t* attacker, const float damage, float radius, const gentity_t* ignore, const int mod)
 {
+	// SJE cg_clothMapExplosion: an explosion of the map's (a crate, a barrel, a breakable, an effect that does damage)
+	// blows the capes and robes near it (cg_event.cpp CG_ClothMapBlast). Taken back at once: an explosion this one sets
+	// off (a chain of crates) is the map's again.
+	if (g_clothBlastByCgame)
+	{
+		g_clothBlastByCgame = qfalse;
+	}
+	else
+	{
+		CG_ClothMapBlast(origin, damage, radius, mod);
+	}
 	// ---------------------------------------------------------
 	// Static array avoids stack overflow (fixes C6262)
 	// ---------------------------------------------------------

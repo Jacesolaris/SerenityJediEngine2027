@@ -33,6 +33,27 @@ static void CVU_Derpity( void ) {
 }
 */
 
+// g_npcspskill is the NPCs' difficulty, 0 (easy) .. 3 (hardest), as SP's g_spskill (2026-11-22). The bot spawn code
+// (g_bot.c) used to write the bot skill (1-5) into it, so it sat at 5 and the NPC code's skill formulas went negative
+// (parry debounce, chance scales) or out of range (perfect block window always "hard"). Bots read g_spSkill again
+// (the menu's bot skill); this keeps the NPC value in 0..3 (an archived 5 becomes 3, the hardest).
+static void CVU_NPCSkill(void)
+{
+	if (g_npcspskill.integer < 0)
+	{
+		trap->Cvar_Set("g_npcspskill", "0");
+	}
+	else if (g_npcspskill.integer > 3)
+	{
+		trap->Cvar_Set("g_npcspskill", "3");
+	}
+	else
+	{
+		return;
+	}
+	trap->Cvar_Update(&g_npcspskill);
+}
+
 //
 // Cvar table
 //

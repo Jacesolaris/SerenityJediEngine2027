@@ -6914,6 +6914,17 @@ static bool TorsoAgainstWindTest(gentity_t* ent)
 
 				if (DotProduct(fwd, wind_dir) > 0.65f)
 				{
+					// (MD 8e267d8, DH) sprinting or holding a block: no brace pose, and not 'wind anim active' either - this
+					// returned true without the anim, the callers left the torso as it was and the upper body froze in its
+					// last pose. With the blade lit: no brace pose either (it took the place of the saber stance, the saber
+					// held up in one hand for as long as the player faced the wind). Saber off and other weapons as before.
+					if (ent->client->ps.PlayerEffectFlags & 1 << PEF_SPRINTING ||
+						ent->client->ps.PlayerEffectFlags & 1 << PEF_WEAPONSPRINTING ||
+						ent->client->ps.ManualBlockingFlags & 1 << MBF_HOLDINGBLOCK ||
+						ent->client->ps.weapon == WP_SABER && ent->client->ps.SaberActive())
+					{
+						return false;
+					}
 					if (ent->client->ps.weapon != WP_SABER &&
 						!(pm->ps->PlayerEffectFlags & 1 << PEF_SPRINTING) &&
 						!(pm->ps->PlayerEffectFlags & 1 << PEF_WEAPONSPRINTING) &&
@@ -6936,7 +6947,9 @@ static bool TorsoAgainstWindTest(gentity_t* ent)
 							}
 						}
 					}
-					return true;
+					// active only while the anim really plays (a model without it, or an anim that could not be set yet,
+					// leaves the torso to the normal logic instead of freezing it)
+					return ent->client->ps.torsoAnim == BOTH_WIND;
 				}
 			}
 		}

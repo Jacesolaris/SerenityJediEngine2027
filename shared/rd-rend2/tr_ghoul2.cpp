@@ -3989,6 +3989,7 @@ static bool MC_ModelHasCloth(const model_t* mod, const int lod)
 void R_MeshClothShutdown()
 {
 	MC_Clear();
+	MC_WindZonesClear();	// SJE r_meshClothFans: the zones belong to a map (the cgame sends them again)
 	MC_FreeRend2Buffers();
 	s_mcModelCloth.clear();
 }
@@ -4236,6 +4237,8 @@ static cvar_t* MC_ClothCvar(const char* name, const char* value, const char* des
 //  r_meshClothLayers    1 = a character's cloth layers keep their order: a cape stays over a robe (0 = off)
 //  r_meshClothBodyCarry 1 = the cloth is carried along with the body's own fast travel inside its animation,
 //                       e.g. the landing of a jump: no cape thrown up over the shoulders there (0 = off)
+//  r_meshClothLiftAir 1 = air from below (a fall, an updraft) and strong wind open the lift limit behind the attached
+//                       edge, so a cape's hem may flip up and stream out above the shoulders (0 = closed, as before)
 //  r_meshClothLiftSlope 0.3 = the lift limit slopes down from the attached edge by this much per unit of cloth
 //                       length, so a cape thrown up streams out and droops instead of lying flat (0 = level)
 //  r_meshClothTwistFree 540 = deg/s of the body's turn about its upright axis the cloth lags by itself; the part of
@@ -4244,6 +4247,8 @@ static cvar_t* MC_ClothCvar(const char* name, const char* value, const char* des
 //                       flick of the body there and back the cape trails and comes back by itself (under 0 = carried
 //                       at once, wherever it is: it goes round with the body like a part of it and is back with it)
 //  r_meshClothTwistCarry 1 = the part of that excess that is carried (0 = none)
+//  r_meshClothShapeScale 1 = the body shapes' radii follow a character drawn far off its size (Yoda 45 %; 0 = as before)
+//  r_meshClothBreezeInside 0 = no breeze where the map marks the character as inside (still air; 1 = there too)
 //  r_meshClothBreeze    1 = a light, slowly wandering breeze sways hanging cloth near the camera (strength;
 //                       0 = off: in still air the cloth hangs frozen). Cloth in the breeze does not sleep.
 //  r_meshClothShoulders 1 = the drawn cloth is kept over what the shoulder bones carry: no shoulder plate
@@ -4291,6 +4296,8 @@ static cvar_t* MC_ClothCvar(const char* name, const char* value, const char* des
 //                       finger bones), not along the forearm: with the wrist bent (a hand behind the back) the
 //                       fingers no longer reach out of it through the cape (0 = off)
 //  r_meshClothSleep     1 = cloth at rest on a character standing still stops simulating until something moves it
+//  r_meshClothLimbLie   1 = cloth lying against a still arm is not thrown as 'gone through' it (0 = as before)
+//  r_meshClothSleepShown 1 = cloth the skin has switched off does not keep the cloth awake (0 = as before)
 //  r_meshClothSelfSub   1 = self-collision in every substep, with cloth-on-cloth friction (0 = once per step, old)
 //  r_meshClothRest      1 = cloth lying on a body that holds still is left to rest by the triangle test: cloth draped
 //                       round a leg is not thrown 'back to its own side', and cloth the animation partly holds is
@@ -4340,6 +4347,7 @@ static void MC_SolverParams(mcParams_t& prm)
 	static cvar_t* ly = nullptr;
 	static cvar_t* bcr = nullptr;
 	static cvar_t* lsl = nullptr;
+	static cvar_t* lai = nullptr;
 	static cvar_t* twf = nullptr;
 	static cvar_t* twl = nullptr;
 	static cvar_t* twc = nullptr;
@@ -4353,6 +4361,8 @@ static void MC_SolverParams(mcParams_t& prm)
 	static cvar_t* shd = nullptr;
 	static cvar_t* ova = nullptr;
 	static cvar_t* sl = nullptr;
+	static cvar_t* llie = nullptr;	// SJE r_meshClothLimbLie
+	static cvar_t* slsh = nullptr;	// SJE r_meshClothSleepShown
 	static cvar_t* ss = nullptr;
 	static cvar_t* calm = nullptr;
 	static cvar_t* rst = nullptr;
@@ -4372,6 +4382,7 @@ static void MC_SolverParams(mcParams_t& prm)
 		ly = MC_ClothCvar("r_meshClothLayers", "1", "A character's mesh cloth layers keep their order (a cape stays over a robe); 0 off");
 		bcr = MC_ClothCvar("r_meshClothBodyCarry", "1", "The mesh cloth is carried along with the body's own fast travel inside its animation (the landing of a jump); 0 off");
 		lsl = MC_ClothCvar("r_meshClothLiftSlope", "0.3", "The mesh cloth's lift limit drops by this much per unit of cloth length from the attached edge (no flat sheet at shoulder height in a jump); 0 level");
+		lai = MC_ClothCvar("r_meshClothLiftAir", "1", "Air from below (a fall, an updraft) and strong wind open the mesh cloth's lift limit behind the attached edge, so a cape's hem may flip up; 0 closed");
 		twf = MC_ClothCvar("r_meshClothTwistFree", "540", "Degrees per second of the body's turn the mesh cloth lags by itself; a faster turn's excess is carried along");
 		twl = MC_ClothCvar("r_meshClothTwistLag", "20", "Degrees the mesh cloth may trail behind a fast turn before it is carried along; under 0 at once, wherever the cloth is");
 		twc = MC_ClothCvar("r_meshClothTwistCarry", "1", "The part of a fast turn's excess the mesh cloth is carried along by; 0 none");
@@ -4385,6 +4396,8 @@ static void MC_SolverParams(mcParams_t& prm)
 		shd = MC_ClothCvar("r_meshClothShoulders", "1", "Mesh cloth: the drawn cloth is kept over what the shoulder bones carry (no shoulder plate through a cape); 0 off");
 		ova = MC_ClothCvar("r_meshClothOverArms", "1", "Mesh cloth: a cape or cloak (hanging from shoulder height) lies over arms and hands, e.g. a hand behind the back; 0 off");
 		sl = MC_ClothCvar("r_meshClothSleep", "1", "Mesh cloth at rest sleeps until the pose, body, wind or a blast moves it (1 on, 0 off)");
+		llie = MC_ClothCvar("r_meshClothLimbLie", "1", "Mesh cloth: cloth lying against a still arm is not thrown as gone through it (1 on, 0 off)");
+		slsh = MC_ClothCvar("r_meshClothSleepShown", "1", "Mesh cloth: cloth the skin has switched off does not keep the cloth awake (1 on, 0 off)");
 		ss = MC_ClothCvar("r_meshClothSelfSub", "1", "Mesh cloth self-collision in every substep with cloth-on-cloth friction (1 on, 0 once per step)");
 		calm = MC_ClothCvar("r_meshClothCalm", "1", "Mesh cloth on a body that holds still comes to rest: self-collision pairs that shake lose their closing speed, points trembling in place count as at rest; 0 off");
 		rst = MC_ClothCvar("r_meshClothRest", "1", "Mesh cloth lying on a body that holds still is left to rest by the triangle test (no throw back to the animated side for cloth draped round a shape, a collar not held off the arm further than the pose has it); 0 off");
@@ -4409,6 +4422,7 @@ static void MC_SolverParams(mcParams_t& prm)
 	prm.layers = ly ? ly->integer : 0;
 	prm.bodyCarry = bcr ? bcr->value : 1.0f;
 	prm.liftSlope = lsl ? lsl->value : 0.3f;
+	prm.liftAir = lai ? lai->value : 1.0f;
 	{
 		// SJE r_meshClothResume: cloth not simulated for up to this many ms (its character was out of view) carries
 		// on where it was instead of settling anew from the pose (0 = off, as before)
@@ -4442,7 +4456,33 @@ static void MC_SolverParams(mcParams_t& prm)
 	prm.garment = gmt ? gmt->integer : 1;
 	prm.shoulders = shd ? shd->integer : 1;
 	prm.overArms = ova ? ova->integer : 1;
+	{	// SJE r_meshClothInside
+		static cvar_t* ins = nullptr;
+		if (!ins)
+		{
+			ins = MC_ClothCvar("r_meshClothInside", "1", "In strong wind, loose layers the model has under worn cloth (tunic strips under a robe) stay inside it (0 off)");
+		}
+		prm.inside = ins->integer;
+	}
 	prm.sleep = sl ? sl->integer : 0;
+	prm.limbLie = llie ? llie->integer : 1;
+	{	// SJE r_meshClothBlastGain (MC_Blast, from the renderer commands; read here once a frame)
+		static cvar_t* bgc = nullptr;
+		if (!bgc)
+		{
+			bgc = MC_ClothCvar("r_meshClothBlastGain", "3", "Mesh cloth: how hard explosions blow capes and robes (3; 1 = the old strength, 0 = off)");
+		}
+		MC_SetBlastGain(bgc ? bgc->value : 3.0f);
+	}
+	{	// SJE r_meshClothArmGap
+		static cvar_t* agc = nullptr;
+		if (!agc)
+		{
+			agc = MC_ClothCvar("r_meshClothArmGap", "1", "1 = mesh cloth lines with 'armgap G' (a cloak over the arms) are kept G units further off the arms and pushed out harder; 0 = ignored");
+		}
+		prm.armGap = agc ? agc->integer : 1;
+	}
+	prm.sleepShown = slsh ? slsh->integer : 1;
 	prm.selfSub = ss ? ss->integer : 0;
 	prm.calm = calm ? calm->integer : 1;
 	prm.rest = rst ? rst->integer : 1;
@@ -4452,11 +4492,121 @@ static void MC_SolverParams(mcParams_t& prm)
 	prm.aero = ae ? ae->integer : 0;
 }
 
+// SJE r_meshClothLevelWind (1 = on, other values scale it, 0 = off): a cloth wind for one map, from its line in
+// ext_data/meshcloth_wind.dat (tr_meshcloth.h MC_LevelWindParse) - for maps whose wind is not in their weather (a train
+// whose scenery moves past). Read when the world changes. Returns true when the line says "only" (no weather wind there).
+static bool MC_LevelWind(const trRefEntity_t* ent, const void* key, const int timeMs, mcParams_t& prm)
+{
+	static cvar_t* lw = nullptr;
+	static char mapName[MAX_QPATH] = "";
+	static mcLevelWind_t line;
+	if (!lw)
+	{
+		lw = MC_ClothCvar("r_meshClothLevelWind", "1", "Per-map cloth wind from ext_data/meshcloth_wind.dat (1 as written, 0 off)");
+	}
+	if (Q_stricmp(mapName, tr.world->name))
+	{
+		Q_strncpyz(mapName, tr.world->name, sizeof(mapName));
+		char* buf = nullptr;
+		const long len = ri.FS_ReadFile("ext_data/meshcloth_wind.dat", reinterpret_cast<void**>(&buf));
+		MC_LevelWindParse(len > 0 && buf ? buf : "", tr.world->name, &line);
+		if (buf)
+		{
+			ri.FS_FreeFile(buf);
+		}
+		if (line.found)
+		{
+			ri.Printf(PRINT_ALL, "Mesh cloth: level wind %.0f %.0f %.0f%s%s for %s\n", line.wind[0], line.wind[1], line.wind[2],
+				line.outside ? " outside" : "", line.only ? " only" : "", tr.world->name);
+		}
+	}
+	if (!line.found || lw->value <= 0.0f)
+	{
+		return false;
+	}
+	float k = lw->value;
+	if (line.outside)
+	{
+		vec3_t org;
+		VectorCopy(ent->e.origin, org);
+		vec3_t up;
+		VectorCopy(org, up);
+		up[2] += 32.0f;	// or at the shoulders: an inside volume can reach a little above a roof (MC_WeatherWind)
+		k *= MC_StrongWindOutside(key, timeMs, R_IsOutside(org) || R_IsOutside(up));	// the game's outside test, eased
+	}
+	VectorMA(prm.wind, k, line.wind, prm.wind);
+	if (line.gust >= 0.0f)
+	{
+		prm.gust = line.gust;
+	}
+	return line.only != 0;
+}
+
 // The weather on one character's cloth (key: its bone cache, the cloth's own key), main thread:
 //  r_meshClothWeatherWind  the map's wind (tr.weatherSystem: constant wind and wind zones), outside only;
 //                          fades in and out over ~0.4 s at a shelter edge
 //  r_meshClothWater        in water: heavy drag, the cloth floats up a little (strength; 0 = off)
 //  r_meshClothRain         outside in rain the cloth soaks and gets heavier, then dries (0 = off)
+// SJE r_meshClothBreezeInside: no breeze where the map marks the character as inside (its weather volumes): still
+// air indoors. A cape that keeps swaying in a room is a fault players notice. A map without
+// such volumes keeps the breeze everywhere (its outside test says nothing about rooms). 1 = breeze inside too.
+static void MC_BreezeInside(const trRefEntity_t* ent, mcParams_t& prm)
+{
+	static cvar_t* bi = nullptr;
+	if (!bi)
+	{
+		bi = MC_ClothCvar("r_meshClothBreezeInside", "0", "0 = no breeze on mesh cloth where the map marks the character as inside (still air); 1 = breeze there too");
+	}
+	if (!(prm.breeze > 0.0f) || !bi || bi->value > 0.0f || !tr.world || (backEnd.refdef.rdflags & RDF_NOWORLDMODEL))
+	{
+		return;
+	}
+	vec3_t pos;
+	VectorCopy(ent->e.origin, pos);
+	pos[2] += 32.0f;	// the body, not the floor it stands on
+	if (R_IsInsideMarked(pos))
+	{
+		prm.breeze = 0.0f;
+	}
+}
+
+// SJE r_meshClothShapeScale: the fitted body shapes (MC_BodyShapesPose) move with the bone matrices, which carry
+// the size the game draws a character at (the NPC's 'scale'), but keep the radius fitted on the model's own mesh.
+// Yoda is drawn at 45 %: his shapes were more than twice as thick as his body and pushed his robe out like a bell,
+// with or without wind. The radii are scaled with the model where it is drawn more than MC_SHAPE_SCALE_OFF off its
+// size; the main characters (Vader 113 %, Dooku 107 %, Kylo 105 %, Sidious 96 %) keep their shapes as tuned.
+static const float MC_SHAPE_SCALE_OFF = 0.2f;
+static cvar_t* s_mcShapeScaleCv = nullptr;	// r_meshClothShapeScale (made by MC_ShapeScale, read by the nearby-characters list)
+// the factor itself: the size the entity is drawn at where it is more than MC_SHAPE_SCALE_OFF off, else 1
+static float MC_ShapeScaleOf(const trRefEntity_t* ent)
+{
+	float s = ent->e.modelScale[0];
+	if (ent->e.modelScale[1] > s) s = ent->e.modelScale[1];
+	if (ent->e.modelScale[2] > s) s = ent->e.modelScale[2];
+	return s <= 0.0f || fabsf(s - 1.0f) <= MC_SHAPE_SCALE_OFF ? 1.0f : s;
+}
+static void MC_ShapeScale(const trRefEntity_t* ent, mcCapsule_t* c, const int n)
+{
+	cvar_t*& ss = s_mcShapeScaleCv;
+	if (!ss)
+	{
+		ss = MC_ClothCvar("r_meshClothShapeScale", "1", "1 = the mesh cloth's body shapes follow a character drawn far off its size (Yoda); 0 = as before");
+	}
+	if (!ss || ss->value <= 0.0f || n <= 0)
+	{
+		return;
+	}
+	const float s = MC_ShapeScaleOf(ent);
+	if (s == 1.0f)
+	{
+		return;	// not scaled (0 = the model's own size) or close to it
+	}
+	for (int i = 0; i < n; i++)
+	{
+		c[i].r *= s;
+	}
+}
+
 static void MC_WeatherWind(const trRefEntity_t* ent, const void* key, const int timeMs, mcParams_t& prm)
 {
 	// r_meshClothFlutter: wind ripples across the cloth (tr_meshcloth.cpp Step), for any wind
@@ -4499,13 +4649,135 @@ static void MC_WeatherWind(const trRefEntity_t* ent, const void* key, const int 
 	MC_WeatherState(key, timeMs, outside, wetTarget, &outsideF, &wet);
 	prm.wet = ra->value > 0.0f ? wet * ra->value : 0.0f;
 
-	if (cv->value <= 0.0f || outsideF <= 0.0f)
+	// SJE r_meshClothLevelWind: this map's own cloth wind (ext_data/meshcloth_wind.dat); "only" there = no weather wind
+	if (MC_LevelWind(ent, key, timeMs, prm) || cv->value <= 0.0f)
+	{
+		return;
+	}
+	// SJE r_meshClothStrongWind (1 = on, 0 = off): strong wind, over MC_STRONG_WIND - where the game braces its characters
+	// against it (R_GetWindGusting: over 1.0 here, in thousandths) - by the game's own outside test at the character's
+	// origin (not 32 units up), standing, jumping or falling alike; at a strength the cloth takes without being torn into
+	// strips (MC_StrongWindSpeed). Weaker wind stays as it was.
+	static cvar_t* sw = nullptr;
+	if (!sw)
+	{
+		sw = MC_ClothCvar("r_meshClothStrongWind", "1", "Strong weather wind (where characters brace against it) blows mesh cloth by the game's outside test, without tearing it (0 = as weak wind)");
+	}
+	const float mapSpeed = VectorLength(tr.weatherSystem->windDirection) * 1000.0f;
+	if (sw->integer && mapSpeed > MC_STRONG_WIND)
+	{
+		vec3_t org;
+		VectorCopy(ent->e.origin, org);
+		// outside at the origin (the game's test) or at the shoulders, 32 units up: t1_rail's car interiors end at the
+		// height of the car roofs, so on a roof the origin was inside (vanilla MC_WeatherWind)
+		const float outG = MC_StrongWindOutside(key, timeMs, R_IsOutside(org) || outside);
+		if (outG > 0.0f)
+		{
+			VectorMA(prm.wind, MC_StrongWindSpeed(mapSpeed, prm.wet) * cv->value * outG / mapSpeed * 1000.0f, tr.weatherSystem->windDirection, prm.wind);
+		}
+		return;
+	}
+	if (outsideF <= 0.0f)
 	{
 		return;
 	}
 	// rend2 keeps its wind in thousandths ("constantwind 0 900 0" is stored as 0 0.9 0, gusts go to 1.5):
 	// back to units per second, the same strength as the vanilla renderer
 	VectorMA(prm.wind, cv->value * outsideF * 1000.0f, tr.weatherSystem->windDirection, prm.wind);
+}
+
+// SJE r_meshClothFans: the air of the map's pushers - fans, jump pads, air streams - as the cgame told it (renderer
+// command meshcloth_windzone, cg_clothFans): the zones this character's box touches, kept for a moment after it left
+// them (tr_meshcloth.cpp MC_ZoneAir). No zones (most maps): nothing changes. Main thread.
+static void MC_ZoneWind(const trRefEntity_t* ent, const void* key, const int timeMs, mcParams_t& prm)
+{
+	prm.zoneWind[0] = prm.zoneWind[1] = prm.zoneWind[2] = 0.0f;
+	if (!tr.world || (backEnd.refdef.rdflags & RDF_NOWORLDMODEL))
+	{
+		return;
+	}
+	// the character's box as the game has it: its origin is the middle of a standing body (feet 24 below, head 40 above)
+	const float mins[3] = { ent->e.origin[0] - 16.0f, ent->e.origin[1] - 16.0f, ent->e.origin[2] - 24.0f };
+	const float maxs[3] = { ent->e.origin[0] + 16.0f, ent->e.origin[1] + 16.0f, ent->e.origin[2] + 40.0f };
+	MC_ZoneAir(key, timeMs, mins, maxs, prm.zoneWind);
+}
+
+// SJE r_meshClothCarried (bits; 3 = both, 0 = as before): things a character carries that the game draws as models of their
+// own - a gun in a holster on the hip or the back (cg_holster.cpp) - lit from the character's origin (RF_LIGHTING_ORIGIN,
+// lightingOrigin copied from the origin the character is drawn at). r_meshClothOthers took every such model for a character
+// standing there: a body 12 units round and 40 high about a holster on the hip or the back, inside its wearer, pushed the
+// wearer's cape about, and the gun itself was no shape at all: the cape went through it. Bit 1: such a thing is no other
+// character. Bit 2: it pushes its wearer's cloth like a thing bolted to it (r_meshClothHeld): shapes fitted from its own
+// mesh, placed where it is drawn. Main thread.
+static int MC_CarriedBits()
+{
+	static cvar_t* cc = nullptr;
+	if (!cc)
+	{
+		cc = MC_ClothCvar("r_meshClothCarried", "3", "Things a character carries drawn as models of their own (holstered guns): 1 = not taken for other characters, 2 = they push the cloth, 3 = both, 0 = off");
+	}
+	return cc->integer;
+}
+
+// is e a model lit from the point org (drawn on the character standing there)?
+static bool MC_LitFrom(const trRefEntity_t* e, const float* org)
+{
+	if (e->e.reType != RT_MODEL || !e->e.ghoul2 || !(e->e.renderfx & RF_LIGHTING_ORIGIN))
+	{
+		return false;
+	}
+	vec3_t d;
+	VectorSubtract(e->e.lightingOrigin, org, d);
+	return DotProduct(d, d) < 1e-4f;
+}
+
+// is e a thing carried by another model of the scene (lit from that model's origin, not from its own)?
+static bool MC_IsCarried(const trRefdef_t* rd, const trRefEntity_t* e)
+{
+	if (!(MC_CarriedBits() & 1) || !(e->e.renderfx & RF_LIGHTING_ORIGIN) || MC_LitFrom(e, e->e.origin))
+	{
+		return false;
+	}
+	for (int i = 0; i < rd->num_entities; i++)
+	{
+		const trRefEntity_t* o = &rd->entities[i];
+		if (o != e && o->e.reType == RT_MODEL && o->e.ghoul2 && o->e.ghoul2 != e->e.ghoul2 && MC_LitFrom(e, o->e.origin))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+// bit 2: the shapes of the things this character carries, from each one's own mesh (MC_HeldFit), where it is drawn
+static int MC_CarriedShapes(const trRefdef_t* rd, const trRefEntity_t* ent, mcCapsule_t* out)
+{
+	if (!(MC_CarriedBits() & 2) || !rd || (rd->rdflags & RDF_NOWORLDMODEL) || !ent->e.ghoul2)
+	{
+		return 0;
+	}
+	int n = 0;
+	for (int i = 0; i < rd->num_entities && n < MC_MAX_CARRIED; i++)
+	{
+		const trRefEntity_t* e = &rd->entities[i];
+		if (e == ent || e->e.ghoul2 == ent->e.ghoul2 || !MC_LitFrom(e, ent->e.origin) || MC_LitFrom(e, e->e.origin))
+		{
+			continue;	// not drawn on this character, or a drawing of a character itself
+		}
+		CGhoul2Info_v& g2 = *((CGhoul2Info_v*)e->e.ghoul2);
+		if (!g2.IsValid() || !g2.size() || !g2[0].currentModel || !g2[0].mBoneCache)
+		{
+			continue;	// (the bone matrices are there once the thing has been drawn)
+		}
+		const mdxmHeader_t* mdxm = (g2[0].currentModel->data.glm ? g2[0].currentModel->data.glm->header : nullptr);
+		if (!mdxm)
+		{
+			continue;
+		}
+		// posed by its own bone matrices (a model's root bone is turned against the world) and placed where it is drawn
+		n += MC_HeldShapesPose(MC_HeldFit(mdxm), MC_BoneFn, g2[0].mBoneCache, e->e.origin, e->e.axis, out + n, MC_MAX_CARRIED - n);
+	}
+	return n;
 }
 
 // r_meshClothOthers (1 = on, 0 = off): the characters of this scene, listed once a frame, so the ones close
@@ -4523,17 +4795,20 @@ static int MC_OthersNear(const trRefEntity_t* ent, mcCapsule_t* out)
 	}
 	if (!MC_CharactersListed(tr.frameCount))
 	{
-		static std::vector<float> origins;
+		static std::vector<float> origins, scales;	// SJE r_meshClothShapeScale: a nearby character's column follows its size
 		origins.clear();
+		scales.clear();
 		for (int i = 0; i < backEnd.refdef.num_entities; i++)
 		{
 			const trRefEntity_t* e = &backEnd.refdef.entities[i];
-			if (e->e.reType == RT_MODEL && e->e.ghoul2)
+			if (e->e.reType == RT_MODEL && e->e.ghoul2 && !MC_IsCarried((&backEnd.refdef), e))	// SJE r_meshClothCarried
 			{
 				origins.insert(origins.end(), e->e.origin, e->e.origin + 3);
+				scales.push_back(MC_ShapeScaleOf(e));
 			}
 		}
-		MC_SetCharacters(tr.frameCount, reinterpret_cast<const float(*)[3]>(origins.data()), static_cast<int>(origins.size() / 3));
+		MC_SetCharacters(tr.frameCount, reinterpret_cast<const float(*)[3]>(origins.data()), static_cast<int>(origins.size() / 3),
+			!s_mcShapeScaleCv || s_mcShapeScaleCv->value > 0.0f ? scales.data() : nullptr);
 	}
 	return MC_NearCharacters(ent->e.origin, out, MC_MAX_OTHERS);
 }
@@ -5063,6 +5338,8 @@ struct g2ClothPrep_t
 	int numBlades = 0;
 	mcCapsule_t held[MC_MAX_HELD]{};	// things bolted to the character (r_meshClothHeld)
 	int numHeld = 0;
+	mcCapsule_t carried[MC_MAX_CARRIED]{};	// SJE: things the character carries drawn as models of their own (r_meshClothCarried)
+	int numCarried = 0;
 	const void* bodyFit = nullptr;	// r_meshClothBodyFit (MC_BodyFit, fitted on the main thread)
 	bool fistAlong = false;			// SJE r_meshClothFist: this character wears cloth hanging from shoulder height (MC_ClothHangsHigh)
 	const void* ownerBones = nullptr;	// SJE: whose this was prepared for (a character's other cloth surfaces take it over)
@@ -5183,13 +5460,16 @@ static void RB_MeshClothPrepare(CBoneCache* bones, const mdxmSurface_t* surface,
 	}
 	prm.gust = r_meshClothGust->value;
 	MC_WeatherWind(ent, bones, timeMs, prm);
+	MC_ZoneWind(ent, bones, timeMs, prm);	// SJE r_meshClothFans (cg_clothFans)
 	MC_SolverParams(prm);
+	MC_BreezeInside(ent, prm);	// SJE r_meshClothBreezeInside (after the breeze is read)
 	prm.timeSec = 0.0f;
 	MC_LodParams(ent, prm);
 	MC_FloorUnder(ent, timeMs, prm);
 	cp.numOthers = MC_OthersNear(ent, cp.others);
 	cp.numBlades = MC_BladesNear(ent, cp.blades);
 	cp.numHeld = MC_HeldShapes(ent, cp.axis, cp.held);
+	cp.numCarried = MC_CarriedShapes((&backEnd.refdef), ent, cp.carried);	// SJE r_meshClothCarried
 	// r_meshClothBodyFit (KatarnEngine): only for characters at full cloth detail (inside r_meshClothLodNear)
 	// SJE r_meshClothShown: the surfaces this character has switched on (main thread; kept for the fit below)
 	static std::vector<unsigned char> mcDrawn;
@@ -5212,7 +5492,7 @@ static bool RB_MeshClothBuild(CBoneCache* bones, const mdxmSurface_t* surface, c
 	const vec3_t* axis = cp.axis;
 
 	// capsules: posed bone origin = skin matrix * bind position, then to world
-	mcCapsule_t caps[MC_NUM_COLLIDERS + 4 + MC_MAX_OTHERS + MC_MAX_BLADES + MC_MAX_HELD + 96]{};	// + fitted body shapes (r_meshClothBodyFit)
+	mcCapsule_t caps[MC_NUM_COLLIDERS + 4 + MC_MAX_OTHERS + MC_MAX_BLADES + MC_MAX_HELD + MC_MAX_CARRIED + 96]{};	// + fitted body shapes (r_meshClothBodyFit)
 	int ncaps = 0;
 	const mcBoneLookup_t* lk = &cp.lk;	// copied on the main thread (MC_Lookup is a shared cache)
 	for (int k = 0; k < MC_NUM_COLLIDERS; k++)
@@ -5358,11 +5638,18 @@ static bool RB_MeshClothBuild(CBoneCache* bones, const mdxmSurface_t* surface, c
 	{
 		caps[ncaps++] = cp.held[i];
 	}
+	// things the character carries drawn as models of their own: holstered guns (r_meshClothCarried)
+	for (int i = 0; i < cp.numCarried; i++)
+	{
+		caps[ncaps++] = cp.carried[i];
+	}
 	// the body's real shape, fitted from the model's own mesh (on top of the capsules above)
 	if (cp.bodyFit)
 	{
+		const int nBody = ncaps;
 		ncaps += MC_BodyShapesPose(cp.bodyFit, MC_BoneFn, bones, ent->e.origin, axis, caps + ncaps,
 			static_cast<int>(sizeof(caps) / sizeof(caps[0])) - ncaps);
+		MC_ShapeScale(ent, caps + nBody, ncaps - nBody);	// SJE r_meshClothShapeScale
 	}
 
 	if (cp.ok)

@@ -1,0 +1,462 @@
+/*
+===========================================================================
+Copyright (C) 2000 - 2013, Raven Software, Inc.
+Copyright (C) 2001 - 2013, Activision, Inc.
+Copyright (C) 2013 - 2015, SerenityJediEngine2027 contributors
+
+This file is part of the SerenityJediEngine2027 source code.
+
+SerenityJediEngine2027 is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License version 2 as
+published by the Free Software Foundation.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, see <http://www.gnu.org/licenses/>.
+===========================================================================
+*/
+
+#include "game/g_npcshared.h"
+
+void Interrogator_Idle(void);
+
+enum
+{
+	LSTATE_BLADESTOP = 0,
+	LSTATE_BLADEUP,
+	LSTATE_BLADEDOWN,
+};
+
+/*
+-------------------------
+NPC_Interrogator_Precache
+-------------------------
+*/
+void NPC_Interrogator_Precache(void)
+{
+	G_SoundIndex("sound/chars/interrogator/misc/torture_droid_lp");
+	G_SoundIndex("sound/chars/mark1/misc/anger.wav");
+	G_SoundIndex("sound/chars/probe/misc/talk");
+	G_SoundIndex("sound/chars/interrogator/misc/torture_droid_inject");
+	G_SoundIndex("sound/chars/interrogator/misc/int_droid_explo");
+	G_EffectIndex("explosions/droidexplosion1");
+}
+
+/*
+-------------------------
+Interrogator_die
+-------------------------
+*/
+void Interrogator_die(const gentity_t* self, gentity_t* inflictor, gentity_t* attacker, int damage, int mod, int dflags,
+	int hit_loc)
+{
+	self->client->ps.velocity[2] = -100;
+
+	self->client->moveType = MT_WALK;
+	self->client->ps.velocity[0] = Q_irand(-20, -10);
+	self->client->ps.velocity[1] = Q_irand(-20, -10);
+	self->client->ps.velocity[2] = -100;
+}
+
+/*
+-------------------------
+Interrogator_PartsMove
+-------------------------
+*/
+static void Interrogator_PartsMove(void)
+{
+	// Syringe
+	if (TIMER_Done(NPCS.NPC, "syringeDelay"))
+	{
+		NPCS.NPC->pos1[1] = AngleNormalize360(NPCS.NPC->pos1[1]);
+
+		if (NPCS.NPC->pos1[1] < 60 || NPCS.NPC->pos1[1] > 300)
+		{
+			NPCS.NPC->pos1[1] += Q_irand(-20, 20); // Pitch
+		}
+		else if (NPCS.NPC->pos1[1] > 180)
+		{
+			NPCS.NPC->pos1[1] = Q_irand(300, 360); // Pitch
+		}
+		else
+		{
+			NPCS.NPC->pos1[1] = Q_irand(0, 60); // Pitch
+		}
+
+#ifdef SP_GAME
+		gi.G2API_SetBoneAnglesIndex(&NPCS.NPC->ghoul2[NPCS.NPC->playerModel], NPCS.NPC->genericBone1, NPCS.NPC->pos1, BONE_ANGLES_POSTMULT,
+			POSITIVE_X, NEGATIVE_Y, NEGATIVE_Z, NULL, 0, 0);
+#else
+		NPC_SetBoneAngles(NPCS.NPC, "left_arm", NPCS.NPC->pos1);
+#endif
+		TIMER_Set(NPCS.NPC, "syringeDelay", Q_irand(100, 1000));
+	}
+
+	// Scalpel
+	if (TIMER_Done(NPCS.NPC, "scalpelDelay"))
+	{
+		// Change pitch
+		if (NPCS.NPCInfo->localState == LSTATE_BLADEDOWN) // Blade is moving down
+		{
+			NPCS.NPC->pos2[0] -= 30;
+			if (NPCS.NPC->pos2[0] < 180)
+			{
+				NPCS.NPC->pos2[0] = 180;
+				NPCS.NPCInfo->localState = LSTATE_BLADEUP; // Make it move up
+			}
+		}
+		else // Blade is coming back up
+		{
+			NPCS.NPC->pos2[0] += 30;
+			if (NPCS.NPC->pos2[0] >= 360)
+			{
+				NPCS.NPC->pos2[0] = 360;
+				NPCS.NPCInfo->localState = LSTATE_BLADEDOWN; // Make it move down
+				TIMER_Set(NPCS.NPC, "scalpelDelay", Q_irand(100, 1000));
+			}
+		}
+
+		NPCS.NPC->pos2[0] = AngleNormalize360(NPCS.NPC->pos2[0]);
+#ifdef SP_GAME
+		gi.G2API_SetBoneAnglesIndex(&NPCS.NPC->ghoul2[NPCS.NPC->playerModel], NPCS.NPC->genericBone2, NPCS.NPC->pos2, BONE_ANGLES_POSTMULT,
+			POSITIVE_X, NEGATIVE_Y, NEGATIVE_Z, NULL, 0, 0);
+#else
+		NPC_SetBoneAngles(NPCS.NPC, "right_arm", NPCS.NPC->pos2);
+#endif
+	}
+
+	// Claw
+	NPCS.NPC->pos3[1] += Q_irand(10, 30);
+	NPCS.NPC->pos3[1] = AngleNormalize360(NPCS.NPC->pos3[1]);
+#ifdef SP_GAME
+	gi.G2API_SetBoneAnglesIndex(&NPCS.NPC->ghoul2[NPCS.NPC->playerModel], NPCS.NPC->genericBone3, NPCS.NPC->pos3, BONE_ANGLES_POSTMULT,
+		POSITIVE_X, NEGATIVE_Y, NEGATIVE_Z, NULL, 0, 0);
+#else
+	NPC_SetBoneAngles(NPCS.NPC, "claw", NPCS.NPC->pos3);
+#endif
+}
+
+#define VELOCITY_DECAY 0.85f
+#define HUNTER_UPWARD_PUSH 2
+
+/*
+-------------------------
+Interrogator_MaintainHeight
+-------------------------
+*/
+static void Interrogator_MaintainHeight(void)
+{
+	float dif = 0.0f;
+
+	NPCS.NPC->s.loopSound = G_SoundIndex("sound/chars/interrogator/misc/torture_droid_lp");
+	// Update our angles regardless
+	NPC_UpdateAngles(qtrue, qtrue);
+
+	// If we have an enemy, we should try to hover at about enemy eye level
+	if (NPCS.NPC->enemy)
+	{
+		// Find the height difference
+		dif = NPCS.NPC->enemy->SHR_currentOrigin[2] + NPCS.NPC->enemy->SHR_maxs[2] - NPCS.NPC->SHR_currentOrigin[2];
+
+		// cap to prevent dramatic height shifts
+		if (fabs(dif) > 2)
+		{
+			if (fabs(dif) > 16)
+			{
+				dif = dif < 0 ? -16 : 16;
+			}
+
+			NPCS.NPC->client->ps.velocity[2] = (NPCS.NPC->client->ps.velocity[2] + dif) / 2;
+		}
+	}
+	else
+	{
+		const gentity_t* goal = NULL;
+
+		if (NPCS.NPCInfo->goalEntity) // Is there a goal?
+		{
+			goal = NPCS.NPCInfo->goalEntity;
+		}
+		else
+		{
+			goal = NPCS.NPCInfo->lastGoalEntity;
+		}
+		if (goal)
+		{
+			dif = goal->SHR_currentOrigin[2] - NPCS.NPC->SHR_currentOrigin[2];
+
+			if (fabs(dif) > 24)
+			{
+				NPCS.ucmd.upmove = NPCS.ucmd.upmove < 0 ? -4 : 4;
+			}
+			else
+			{
+				if (NPCS.NPC->client->ps.velocity[2])
+				{
+					NPCS.NPC->client->ps.velocity[2] *= VELOCITY_DECAY;
+
+					if (fabs(NPCS.NPC->client->ps.velocity[2]) < 2)
+					{
+						NPCS.NPC->client->ps.velocity[2] = 0;
+					}
+				}
+			}
+		}
+		// Apply friction
+		else if (NPCS.NPC->client->ps.velocity[2])
+		{
+			NPCS.NPC->client->ps.velocity[2] *= VELOCITY_DECAY;
+
+			if (fabs(NPCS.NPC->client->ps.velocity[2]) < 1)
+			{
+				NPCS.NPC->client->ps.velocity[2] = 0;
+			}
+		}
+	}
+
+	// Apply friction
+	if (NPCS.NPC->client->ps.velocity[0])
+	{
+		NPCS.NPC->client->ps.velocity[0] *= VELOCITY_DECAY;
+
+		if (fabs(NPCS.NPC->client->ps.velocity[0]) < 1)
+		{
+			NPCS.NPC->client->ps.velocity[0] = 0;
+		}
+	}
+
+	if (NPCS.NPC->client->ps.velocity[1])
+	{
+		NPCS.NPC->client->ps.velocity[1] *= VELOCITY_DECAY;
+
+		if (fabs(NPCS.NPC->client->ps.velocity[1]) < 1)
+		{
+			NPCS.NPC->client->ps.velocity[1] = 0;
+		}
+	}
+}
+
+#define HUNTER_STRAFE_VEL 32
+#define HUNTER_STRAFE_DIS 200
+/*
+-------------------------
+Interrogator_Strafe
+-------------------------
+*/
+static void Interrogator_Strafe(void)
+{
+	vec3_t end, right;
+	trace_t tr;
+
+	AngleVectors(NPCS.NPC->client->renderInfo.eyeAngles, NULL, right, NULL);
+
+	// Pick a random strafe direction, then check to see if doing a strafe would be
+	//	reasonable valid
+	const int dir = rand() & 1 ? -1 : 1;
+	VectorMA(NPCS.NPC->SHR_currentOrigin, HUNTER_STRAFE_DIS * dir, right, end);
+
+	SHR_Trace(&tr, NPCS.NPC->SHR_currentOrigin, NULL, NULL, end, NPCS.NPC->s.number, MASK_SOLID);
+
+	// Close enough
+	if (tr.fraction > 0.9f)
+	{
+		VectorMA(NPCS.NPC->client->ps.velocity, HUNTER_STRAFE_VEL * dir, right, NPCS.NPC->client->ps.velocity);
+
+		// Add a slight upward push
+		if (NPCS.NPC->enemy)
+		{
+			// Find the height difference
+			float dif = NPCS.NPC->enemy->SHR_currentOrigin[2] + 32 - NPCS.NPC->SHR_currentOrigin[2];
+
+			// cap to prevent dramatic height shifts
+			if (fabs(dif) > 8)
+			{
+				dif = dif < 0 ? -HUNTER_UPWARD_PUSH : HUNTER_UPWARD_PUSH;
+			}
+
+			NPCS.NPC->client->ps.velocity[2] += dif;
+		}
+
+		// Set the strafe start time
+		NPCS.NPC->fx_time = level.time;
+		NPCS.NPCInfo->standTime = level.time + 3000 + Q_flrand(0.0f, 1.0f) * 500;
+	}
+}
+
+/*
+-------------------------
+Interrogator_Hunt
+-------------------------`
+*/
+
+#define HUNTER_FORWARD_BASE_SPEED 10
+#define HUNTER_FORWARD_MULTIPLIER 2
+
+static void Interrogator_Hunt(const qboolean visible, const qboolean advance)
+{
+	vec3_t forward;
+
+	Interrogator_PartsMove();
+
+	NPC_FaceEnemy(qfalse);
+
+	//If we're not supposed to stand still, pursue the player
+	if (NPCS.NPCInfo->standTime < level.time)
+	{
+		// Only strafe when we can see the player
+		if (visible)
+		{
+			Interrogator_Strafe();
+			if (NPCS.NPCInfo->standTime > level.time)
+			{
+				//successfully strafed
+				return;
+			}
+		}
+	}
+
+	//If we don't want to advance, stop here
+	if (advance == qfalse)
+		return;
+
+	//Only try and navigate if the player is visible
+	if (visible == qfalse)
+	{
+		// Move towards our goal
+		NPCS.NPCInfo->goalEntity = NPCS.NPC->enemy;
+		NPCS.NPCInfo->goalRadius = 12;
+
+		NPC_MoveToGoal(qtrue);
+		return;
+	}
+	VectorSubtract(NPCS.NPC->enemy->SHR_currentOrigin, NPCS.NPC->SHR_currentOrigin, forward);
+	VectorNormalize(forward);
+
+	const float speed = HUNTER_FORWARD_BASE_SPEED + HUNTER_FORWARD_MULTIPLIER * SHR_SPSKILL;
+	VectorMA(NPCS.NPC->client->ps.velocity, speed, forward, NPCS.NPC->client->ps.velocity);
+}
+
+#define MIN_DISTANCE 64
+
+/*
+-------------------------
+Interrogator_Melee
+-------------------------
+*/
+static void Interrogator_Melee(const qboolean visible, const qboolean advance)
+{
+	if (TIMER_Done(NPCS.NPC, "attackDelay")) // Attack?
+	{
+		// Make sure that we are within the height range before we allow any damage to happen
+		if (NPCS.NPC->SHR_currentOrigin[2] >= NPCS.NPC->enemy->SHR_currentOrigin[2] + NPCS.NPC->enemy->SHR_mins[2] && NPCS.NPC->SHR_currentOrigin[2] + NPCS.NPC->
+			mins[2] + 8 < NPCS.NPC->enemy->SHR_currentOrigin[2] + NPCS.NPC->enemy->SHR_maxs[2])
+		{
+			TIMER_Set(NPCS.NPC, "attackDelay", Q_irand(500, 3000));
+			G_Damage(NPCS.NPC->enemy, NPCS.NPC, NPCS.NPC, NULL, NULL, 2, DAMAGE_NO_KNOCKBACK, MOD_MELEE);
+
+			NPCS.NPC->enemy->client->poisonDamage = 18;
+			NPCS.NPC->enemy->client->poisonTime = level.time + 1000;
+
+			// Drug our enemy up and do the wonky vision thing
+			gentity_t* tent = G_TempEntity(NPCS.NPC->enemy->SHR_currentOrigin, EV_DRUGGED);
+			tent->owner = NPCS.NPC->enemy;
+
+			SHR_Sound(NPCS.NPC, G_SoundIndex("sound/chars/interrogator/misc/torture_droid_inject.mp3"));
+		}
+	}
+
+	if (NPCS.NPCInfo->scriptFlags & SCF_CHASE_ENEMIES)
+	{
+		Interrogator_Hunt(visible, advance);
+	}
+}
+
+/*
+-------------------------
+Interrogator_Attack
+-------------------------
+*/
+static void Interrogator_Attack(void)
+{
+	// Always keep a good height off the ground
+	Interrogator_MaintainHeight();
+
+	//randomly talk
+	if (TIMER_Done(NPCS.NPC, "patrolNoise"))
+	{
+		if (TIMER_Done(NPCS.NPC, "angerNoise"))
+		{
+			SHR_SoundOnEnt(NPCS.NPC, CHAN_AUTO, va("sound/chars/probe/misc/talk.wav", Q_irand(1, 3)));
+
+			TIMER_Set(NPCS.NPC, "patrolNoise", Q_irand(4000, 10000));
+		}
+	}
+
+	// If we don't have an enemy, just idle
+	if (NPC_CheckEnemyExt(qfalse) == qfalse)
+	{
+		Interrogator_Idle();
+		return;
+	}
+
+	// Rate our distance to the target, and our visibilty
+	const float distance = (int)(DistanceHorizontalSquared(NPCS.NPC->SHR_currentOrigin, NPCS.NPC->enemy->SHR_currentOrigin));
+	const qboolean visible = SHR_ClearLOSEnt(NPCS.NPC->enemy);
+	qboolean advance = (qboolean)(distance > MIN_DISTANCE * MIN_DISTANCE);
+
+	if (!visible)
+	{
+		advance = qtrue;
+	}
+	if (NPCS.NPCInfo->scriptFlags & SCF_CHASE_ENEMIES)
+	{
+		Interrogator_Hunt(visible, advance);
+	}
+
+	NPC_FaceEnemy(qtrue);
+
+	if (!advance)
+	{
+		Interrogator_Melee(visible, advance);
+	}
+}
+
+/*
+-------------------------
+Interrogator_Idle
+-------------------------
+*/
+void Interrogator_Idle(void)
+{
+	if (NPC_CheckPlayerTeamStealth())
+	{
+		SHR_SoundOnEnt(NPCS.NPC, CHAN_AUTO, "sound/chars/mark1/misc/anger.wav");
+		NPC_UpdateAngles(qtrue, qtrue);
+		return;
+	}
+
+	Interrogator_MaintainHeight();
+
+	NPC_BSIdle();
+}
+
+/*
+-------------------------
+NPC_BSInterrogator_Default
+-------------------------
+*/
+void NPC_BSInterrogator_Default(void)
+{
+	if (NPCS.NPC->enemy)
+	{
+		Interrogator_Attack();
+	}
+	else
+	{
+		Interrogator_Idle();
+	}
+}

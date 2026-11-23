@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 Copyright (C) 1999 - 2005, Id Software, Inc.
 Copyright (C) 2000 - 2013, Raven Software, Inc.
@@ -2258,6 +2258,7 @@ void* g2SaberInstance = NULL;
 qboolean BG_IsValidCharacterModel(const char* modelName, const char* skin_name);
 qboolean BG_ValidateSkinForTeam(const char* modelName, char* skin_name, int team, float* colors);
 void BG_GetVehicleModelName(char* modelName, const char* vehicleName, size_t len);
+const char* BG_VehicleSkinName(const char* skinList, int entNum);
 
 void SetupGameGhoul2Model(gentity_t* ent, char* modelname, char* skinName)
 {
@@ -2326,7 +2327,7 @@ void SetupGameGhoul2Model(gentity_t* ent, char* modelname, char* skinName)
 					&& ent->m_pVehicle->m_pVehicleInfo->skin[0])
 				{
 					skinHandle = trap->R_RegisterSkin(va("models/players/%s/model_%s.skin", realModelName,
-						ent->m_pVehicle->m_pVehicleInfo->skin));
+						BG_VehicleSkinName(ent->m_pVehicle->m_pVehicleInfo->skin, ent->s.number)));
 				}
 				else
 				{
@@ -7602,6 +7603,8 @@ void G_ClearTeamVote(const gentity_t* ent, const int team)
 	}
 }
 
+extern void G_ForgetAlertOwner(const gentity_t* owner);
+
 void ClientDisconnect(const int clientNum)
 {
 	// cleanup if we are kicking a bot that
@@ -7615,6 +7618,8 @@ void ClientDisconnect(const int clientNum)
 	{
 		return;
 	}
+
+	G_ForgetAlertOwner(ent); // JA:R fix: drop this client's alerts before the slot is reused
 
 	int i = 0;
 

@@ -399,6 +399,8 @@ void Use_Multi(gentity_t* ent, gentity_t* other, gentity_t* activator)
 
 qboolean G_PointInBounds(vec3_t point, vec3_t mins, vec3_t maxs);
 
+extern int Pilot_ActivePilotCount(void); // AI_Vehicle.c
+
 void Touch_Multi(gentity_t* self, gentity_t* other, trace_t* trace)
 {
 	if (!other->client)
@@ -641,6 +643,12 @@ void Touch_Multi(gentity_t* self, gentity_t* other, trace_t* trace)
 		return;
 	}
 
+	if (self->spawnflags & 32 && Pilot_ActivePilotCount() >= self->genericValue8)
+	{
+		// LIMITED_PILOT (SP): no more than max_pilots swoop pilots riding (AI_Vehicle.c)
+		return;
+	}
+
 	multi_trigger(self, other);
 }
 
@@ -671,7 +679,7 @@ qboolean G_TriggerActive(const gentity_t* self)
 	return qtrue;
 }
 
-/*QUAKED trigger_multiple (.1 .5 .1) ? CLIENTONLY FACING USE_BUTTON FIRE_BUTTON NPCONLY x x INACTIVE MULTIPLE
+/*QUAKED trigger_multiple (.1 .5 .1) ? CLIENTONLY FACING USE_BUTTON FIRE_BUTTON NPCONLY LIMITED_PILOT x INACTIVE MULTIPLE
 CLIENTONLY - only a player can trigger this by touch
 FACING - Won't fire unless triggering ent's view angles are within 45 degrees of trigger's angles (in addition to any other conditions)
 USE_BUTTON - Won't fire unless player is in it and pressing use button (in addition to any other conditions)
@@ -740,6 +748,7 @@ void SP_trigger_multiple(gentity_t* ent)
 	G_SpawnInt("teambalance", "0", &ent->genericValue2);
 
 	G_SpawnInt("delay", "0", &ent->delay);
+	G_SpawnInt("max_pilots", "2", &ent->genericValue8); // LIMITED_PILOT (SP)
 
 	if (ent->wait > 0 && ent->random >= ent->wait)
 	{
@@ -1576,7 +1585,9 @@ void SP_trigger_hurt(gentity_t* self)
 
 	self->r.contents = CONTENTS_TRIGGER;
 
-	if (self->spawnflags & 2)
+	// SP maps (Missions): SP's trigger_hurt can be switched on / off by anything that targets it (spawnflag 2 is
+	// PLAYERONLY there, not CAN_TARGET), e.g. the START_OFF laser beams on cairn_reactor (DH 2026-11-23)
+	if (self->spawnflags & 2 || (level.gametype == GT_SINGLE_PLAYER && self->targetname && self->targetname[0]))
 	{
 		self->use = hurt_use;
 	}

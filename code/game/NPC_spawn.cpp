@@ -241,7 +241,7 @@ static void G_ClassSetDontFlee(const gentity_t* self)
 	default:
 		break;
 	}
-	if (self->NPC->aiFlags & NPCAI_BOSS_SERENITYJEDIENGINE)
+	if (NPC_IsSJEBoss(self))
 	{
 		self->NPC->scriptFlags |= SCF_DONT_FLEE;
 	}
@@ -452,8 +452,7 @@ static void NPC_SetMiscDefaultData(gentity_t* ent)
 	{
 		//FIXME: extern this into NPC.cfg?
 		ent->NPC->scriptFlags |= SCF_NO_FORCE; //force powers don't work on him
-		ent->NPC->aiFlags |= NPCAI_BOSS_SERENITYJEDIENGINE;
-		ent->NPC->aiFlags |= NPCAI_BOSS_CHARACTER;
+		ent->NPC->aiFlags |= NPCAI_BOSS_CHARACTER; // (SJE boss: NPC_IsSJEBoss)
 	}
 	if (!Q_stricmp("emperor", ent->NPC_type)
 		|| !Q_stricmp("cultist_grip", ent->NPC_type)
@@ -541,15 +540,7 @@ static void NPC_SetMiscDefaultData(gentity_t* ent)
 		ent->flags |= FL_NO_IMPACT_DMG;
 		ent->NPC->scriptFlags |= SCF_NAV_CAN_JUMP; // These jokers can jump
 	}
-	if (ent->client->NPC_class == CLASS_DESANN
-		|| ent->client->NPC_class == CLASS_TAVION
-		|| ent->client->NPC_class == CLASS_LUKE
-		|| ent->client->NPC_class == CLASS_KYLE
-		|| Q_stricmp("tavion_scepter", ent->NPC_type) == 0
-		|| Q_stricmp("alora_dual", ent->NPC_type) == 0)
-	{
-		ent->NPC->aiFlags |= NPCAI_BOSS_SERENITYJEDIENGINE;
-	}
+	// (Desann, Tavion, Luke, Kyle, tavion_scepter, alora_dual: SJE bosses, see NPC_IsSJEBoss)
 	if (ent->client->NPC_class == CLASS_DESANN
 		|| ent->client->NPC_class == CLASS_VADER
 		|| ent->client->NPC_class == CLASS_SITHLORD
@@ -6941,4 +6932,32 @@ void G_CivilianReset(void)
 	memset(civilianEnts, 0, sizeof civilianEnts);
 	civilianNextSpawn = 0;
 	civilianBadTypes = 0;
+}
+
+// The "SJE boss" (lightning absorb, boss saber reach, kick / push immunity ... in AI_Jedi.cpp and wp_saber.cpp): Yoda,
+// Desann, Tavion, Luke, Kyle, tavion_scepter, alora_dual, as the old NPCAI_BOSS_SERENITYJEDIENGINE spawn lists meant.
+qboolean NPC_IsSJEBoss(const gentity_t* ent)
+{
+	if (!ent || !ent->client || !ent->NPC)
+	{
+		return qfalse;
+	}
+	switch (ent->client->NPC_class)
+	{
+	case CLASS_YODA:
+	case CLASS_DESANN:
+	case CLASS_TAVION:
+	case CLASS_LUKE:
+	case CLASS_KYLE:
+		return qtrue;
+	default:
+		break;
+	}
+	if (!ent->NPC_type)
+	{
+		return qfalse;
+	}
+	return !Q_stricmp("Yoda", ent->NPC_type) || !Q_stricmp("Ep1_Yoda", ent->NPC_type) || !Q_stricmp("Ep2_Yoda", ent->NPC_type)
+		|| !Q_stricmp("Ep3_Yoda", ent->NPC_type) || !Q_stricmp("t_yoda", ent->NPC_type) || !Q_stricmp("emperor", ent->NPC_type)
+		|| !Q_stricmp("tavion_scepter", ent->NPC_type) || !Q_stricmp("alora_dual", ent->NPC_type) ? qtrue : qfalse;
 }

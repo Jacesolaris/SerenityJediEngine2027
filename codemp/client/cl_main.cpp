@@ -1359,6 +1359,16 @@ void CL_Snd_Restart_f(void)
 
 	extern void S_RestartMusic(void);
 	S_RestartMusic();
+
+	// TaystJK fix: reload this level's sounds and its ambient sets, which snd_restart dropped until the next map.
+	// Only inside a level: outside one the precache list can name sets from server pk3s that are gone.
+	extern void S_ReloadAllUsedSounds(void);
+	extern void AS_ParseSets(void);
+	S_ReloadAllUsedSounds();
+	if (cls.cgameStarted && cls.state >= CA_PRIMED)
+	{
+		AS_ParseSets();
+	}
 }
 
 /*

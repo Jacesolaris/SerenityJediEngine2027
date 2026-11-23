@@ -1455,6 +1455,8 @@ Marks the entity as free
 */
 extern qboolean EjectAll(Vehicle_t* p_veh);
 
+extern void G_ForgetAlertOwner(const gentity_t* owner);
+
 void G_FreeEntity(gentity_t* ed)
 {
 	if (ed->isSaberEntity)
@@ -1474,6 +1476,8 @@ void G_FreeEntity(gentity_t* ed)
 	trap->UnlinkEntity((sharedEntity_t*)ed); // unlink from world
 
 	trap->ICARUS_FreeEnt((sharedEntity_t*)ed); //ICARUS information must be added after this point
+
+	G_ForgetAlertOwner(ed); // JA:R fix: no NPC reacts to a stale alert from this slot's next owner
 
 	if (ed->neverFree)
 	{

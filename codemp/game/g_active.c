@@ -1,4 +1,4 @@
-﻿/*
+/*
 ===========================================================================
 Copyright (C) 1999 - 2005, Id Software, Inc.
 Copyright (C) 2000 - 2013, Raven Software, Inc.
@@ -5132,8 +5132,8 @@ static void ClientThink_real(gentity_t* ent)
 
 	// This code was moved here from clientThink to fix a problem with g_synchronousClients
 	// being set to 1 when in vehicles.
-	// (an AI pilot of the space maps' ships, ai_fighter.c, drives his the same way)
-	if ((ent->s.number < MAX_CLIENTS || ent->NPC && ent->classname && !Q_stricmp(ent->classname, "fighter_pilot"))
+	// (an AI pilot drives his the same way, as in SP: the space maps' ships, ai_fighter.c, and the swoop riders, AI_Vehicle.c)
+	if ((ent->s.number < MAX_CLIENTS || ent->NPC && ent->client->NPC_class != CLASS_VEHICLE)
 		&& ent->client->ps.m_iVehicleNum)
 	{
 		//driving a vehicle
@@ -6611,25 +6611,25 @@ static void ClientThink_real(gentity_t* ent)
 		}
 		else if (IsPressingKickButton(ent))
 		{
-			if (client->ps.kickstartTime <= 0 && level.time - client->ps.kicklaststartTime >= 1500)
+			// A kick press opens a 0.5 s window for the kick / slap to start. The 1.5 s spacing between kicks starts
+			// only when one really starts, so a press made while no kick can happen (mid swing, blocking, rolling,
+			// knocked down...) is not used up and the next press works (DH 2026-11-23: kicks took up to 3 tries).
+			if (client->ps.kickstartTime > 0
+				&& (PM_KickMove(client->ps.saberMove) || PM_KickingAnim(client->ps.legsAnim) || PM_KickingAnim(client->ps.torsoAnim)))
 			{
-				// They just pressed kick. Mark the time... 5000 wait between allowed kicks.
-				client->ps.kickstartTime = level.time;
 				client->ps.kicklaststartTime = level.time;
-
-				if (!(client->ps.communicatingflags & 1 << CF_KICKING))
-				{
-					client->ps.communicatingflags |= 1 << CF_KICKING;
-				}
+				client->ps.kickstartTime = 0;
+				client->ps.communicatingflags &= ~(1 << CF_KICKING);
 			}
-			else
+			else if (client->ps.kickstartTime <= 0 && level.time - client->ps.kicklaststartTime >= 1500)
 			{
-				if (level.time - client->ps.kicklaststartTime >= 500)
-				{
-					// When kick was pressed, wait 3000 before letting go.
-					client->ps.kickstartTime = 0;
-					client->ps.communicatingflags &= ~(1 << CF_KICKING);
-				}
+				client->ps.kickstartTime = level.time;
+				client->ps.communicatingflags |= 1 << CF_KICKING;
+			}
+			else if (client->ps.kickstartTime > 0 && level.time - client->ps.kickstartTime >= 500)
+			{
+				client->ps.kickstartTime = 0;
+				client->ps.communicatingflags &= ~(1 << CF_KICKING);
 			}
 		}
 		else if (client->ps.weapon == WP_STUN_BATON && ucmd->buttons & BUTTON_ALT_ATTACK && !(ucmd->buttons & BUTTON_BLOCK))

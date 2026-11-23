@@ -112,6 +112,12 @@ struct weatherSystem_t
 	vec3_t		windDirection;
 	float		windSpeed;
 
+	// SJE r_weatherSwirlingWind: fx_wind's "swirlingwind", a wind that slowly turns round (thousandths, as the rest;
+	// R_UpdateWeatherWind). The system is allocated zeroed: 0 = none
+	float		swirlSpeed;
+	float		swirlAngle;
+	int			swirlTime;
+
 	float		weatherMVP[16];
 };
 struct srfWeather_t;
@@ -125,6 +131,7 @@ void R_ShutdownWeatherSystem();
 void RB_SurfaceWeather(srfWeather_t* surf);
 void R_UpdateWeatherWind();	// RE_BeginFrame: the global wind, once a frame
 bool R_IsOutside(vec3_t pos);
+bool R_IsInsideMarked(vec3_t pos);
 bool R_IsShaking(vec3_t pos);
 float R_IsOutsideCausingPain(vec3_t pos);
 float R_GetChanceOfSaberFizz();

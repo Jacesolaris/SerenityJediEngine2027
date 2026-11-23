@@ -320,12 +320,21 @@ public:
 	CVec3		mTargetVelocity;
 	int			mTargetVelocityTimeRemaining = 0;
 
+	// SJE r_weatherSwirlingWind: fx_wind's "swirlingwind" - a wind that slowly turns round (and breathes a little):
+	// mCurrentVelocity is set from the angle, which turns with the game time (SwirlUpdate), not per update
+	bool		mSwirl = false;
+	float		mSwirlAngle = 0.0f;	// radians, about up
+	int			mSwirlTime = -1;	// game time of the last turn (ms); -1 = not yet
+
 public:
 	////////////////////////////////////////////////////////////////////////////////////
 	// Initialize - Will setup default values for all data
 	////////////////////////////////////////////////////////////////////////////////////
 	void		Initialize()
 	{
+		mSwirl = false;
+		mSwirlAngle = 0.0f;
+		mSwirlTime = -1;
 		mRBounds.Clear();
 		mGlobal = true;
 
@@ -349,10 +358,39 @@ public:
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////
+	// SwirlUpdate - SJE "swirlingwind": the wind turns round about once in 25 s (faster and slower in turn) at
+	// SWIRL_SPEED units/s, give or take a fifth. timeMs: game time; the first call only takes the time.
+	////////////////////////////////////////////////////////////////////////////////////
+	static constexpr float SWIRL_SPEED = 500.0f;
+	void		SwirlUpdate(const int timeMs)
+	{
+		float dt = mSwirlTime < 0 ? 0.0f : (timeMs - mSwirlTime) * 0.001f;
+		if (dt < 0.0f || dt > 0.25f)
+		{
+			dt = 0.0f;	// a reload, a pause, a jump in time: carry on from where it was
+		}
+		mSwirlTime = timeMs;
+		const float t = timeMs * 0.001f;
+		mSwirlAngle += dt * 0.25f * (1.0f + 0.5f * sinf(t * 0.13f));
+		if (mSwirlAngle > 6.2831853f)
+		{
+			mSwirlAngle -= 6.2831853f;
+		}
+		const float speed = SWIRL_SPEED * (1.0f + 0.2f * sinf(t * 0.21f + 1.0f));
+		mCurrentVelocity[0] = cosf(mSwirlAngle) * speed;
+		mCurrentVelocity[1] = sinf(mSwirlAngle) * speed;
+		mCurrentVelocity[2] = 0.0f;
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////
 	// Update - Changes wind when current target velocity expires
 	////////////////////////////////////////////////////////////////////////////////////
 	void		Update()
 	{
+		if (mSwirl)
+		{
+			return;	// turned by SwirlUpdate
+		}
 		if (mTargetVelocityTimeRemaining == 0)
 		{
 			if (FloatRand() < mChanceOfDeadTime)
@@ -824,6 +862,13 @@ public:
 	////////////////////////////////////////////////////////////////////////////////////
 	// PointOutside - Test to see if a given point is outside
 	////////////////////////////////////////////////////////////////////////////////////
+	// SJE mesh cloth (r_meshClothBreezeInside): inside by the map's own weather volumes - false on a map without them
+	// (there PointOutside counts all of the map as inside or as outside, which says nothing about a room)
+	bool	InsideMarked(const CVec3& pos)
+	{
+		return mCacheInit && !PointOutside(pos);
+	}
+
 	bool	PointOutside(const CVec3& pos)
 	{
 		if (!mCacheInit)
@@ -899,6 +944,13 @@ bool R_IsOutside(vec3_t pos)
 {
 	WE_LOCK();
 	return mOutside.PointOutside(pos);
+}
+
+// SJE mesh cloth (r_meshClothBreezeInside): inside a volume the map marks as inside (false on a map without them)
+bool R_IsInsideMarked(vec3_t pos)
+{
+	WE_LOCK();
+	return mOutside.InsideMarked(pos);
 }
 
 bool R_IsShaking(vec3_t pos)
@@ -1833,6 +1885,29 @@ void RE_WorldEffectCommand(const char* command) // vanilla sp
 		nWind.mRDeadTime.mMax = 4000;
 	}
 
+	// Swirling Wind (SJE: fx_wind spawnflag 8 sends it; it used to be ignored): a wind that slowly turns round.
+	// r_weatherSwirlingWind 0 = ignored, as before
+	//---------------
+	else if (Q_stricmp(token, "swirlingwind") == 0)
+	{
+		static cvar_t* sw = nullptr;
+		if (!sw)
+		{
+			sw = ri.Cvar_Get("r_weatherSwirlingWind", "1", CVAR_ARCHIVE_ND);
+		}
+		if (sw->integer && !mWindZones.full())
+		{
+			CWindZone& nWind = mWindZones.push_back();
+			nWind.Initialize();
+			nWind.mSwirl = true;
+			nWind.mSwirlAngle = Q_flrand(0.0f, 6.2831853f);
+			nWind.mTargetVelocityTimeRemaining = -1;
+			nWind.mCurrentVelocity[0] = cosf(nWind.mSwirlAngle) * CWindZone::SWIRL_SPEED;
+			nWind.mCurrentVelocity[1] = sinf(nWind.mSwirlAngle) * CWindZone::SWIRL_SPEED;
+			nWind.mCurrentVelocity[2] = 0.0f;
+		}
+	}
+
 	// Local Wind Zone
 	//-----------------
 	else if (Q_stricmp(token, "windzone") == 0)
@@ -2445,6 +2520,14 @@ void R_WorldEffectsWind()
 {
 	if (!tr.world || !mWindZones.size())
 	{
+		// SJE: no wind left (the weather was cleared during the map - "clear", the menu's weather off): no wind. The
+		// last global wind used to stay: capes kept blowing, the game kept its characters braced against it
+		if (mGlobalWindSpeed != 0.0f)
+		{
+			WE_LOCK();
+			mGlobalWindVelocity.Clear();
+			mGlobalWindSpeed = 0.0f;
+		}
 		return;
 	}
 	WE_LOCK();
@@ -2459,6 +2542,10 @@ void R_WorldEffectsWind()
 	mGlobalWindVelocity.Clear();
 	for (int wz = 0; wz < mWindZones.size(); wz++)
 	{
+		if (mWindZones[wz].mSwirl)
+		{
+			mWindZones[wz].SwirlUpdate(tr.refdef.time);	// SJE "swirlingwind": turns with the game time
+		}
 		mWindZones[wz].Update();
 		if (mWindZones[wz].mGlobal)
 		{

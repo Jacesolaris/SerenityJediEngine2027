@@ -642,7 +642,7 @@ static qboolean G_AddRandomBotOfFaction(const int team, const int faction)
 			if (num <= 0)
 			{
 				char netname[MAX_NETNAME]; // was 36: bot names over 35 characters were cut and "not defined" (test phase 2026-10-13)
-				const float skill = trap->Cvar_VariableIntegerValue("g_npcspskill");
+				const float skill = trap->Cvar_VariableIntegerValue("g_spSkill"); // bot skill 1-5 (g_npcspskill is the NPC difficulty)
 				if (team == TEAM_RED) teamstr = "red";
 				else if (team == TEAM_BLUE) teamstr = "blue";
 				else teamstr = "";
@@ -1326,13 +1326,13 @@ static void G_SpawnBots(char* botList, int baseDelay)
 	int			delay;
 	char		bots[MAX_INFO_VALUE];
 
-	skill = trap->Cvar_VariableIntegerValue("g_npcspskill");
+	skill = trap->Cvar_VariableIntegerValue("g_spSkill"); // bot skill 1-5 (was g_npcspskill, the NPC difficulty 0-3)
 	if (skill < 1) {
-		trap->Cvar_Set("g_npcspskill", "1");
+		trap->Cvar_Set("g_spSkill", "1");
 		skill = 1;
 	}
 	else if (skill > 5) {
-		trap->Cvar_Set("g_npcspskill", "5");
+		trap->Cvar_Set("g_spSkill", "5");
 		skill = 5;
 	}
 

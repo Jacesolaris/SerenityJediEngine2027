@@ -1447,6 +1447,53 @@ void BG_GetVehicleModelName(char* modelName, const char* vehicleName, const size
 }
 
 /*
+====================
+BG_VehicleSkinName
+
+A vehicle file's skin may be a list ("black|blue|gold|...", swoop.veh): SP picks one at random. MP used the whole list
+as one skin name ("model_black|blue|....skin"), which the renderer took for a head|torso|lower skin and overflowed.
+MP picks by entity number, so the server and every client choose the same entry.
+====================
+*/
+const char* BG_VehicleSkinName(const char* skinList, const int entNum)
+{
+	static char out[MAX_QPATH];
+	const int outSize = sizeof out;
+	int count = 1;
+	const char* p = skinList;
+
+	for (const char* c = skinList; *c; c++)
+	{
+		if (*c == '|')
+		{
+			count++;
+		}
+	}
+
+	int pick = count > 1 ? (entNum < 0 ? -entNum : entNum) % count : 0;
+	while (pick > 0)
+	{
+		const char* bar = strchr(p, '|');
+		if (!bar)
+		{
+			break;
+		}
+		p = bar + 1;
+		pick--;
+	}
+
+	const char* end = strchr(p, '|');
+	int len = end ? (int)(end - p) : (int)strlen(p);
+	if (len >= outSize)
+	{
+		len = outSize - 1;
+	}
+	memcpy(out, p, len);
+	out[len] = 0;
+	return out;
+}
+
+/*
 ==============================
 BG_GetVehicleSkinName
 

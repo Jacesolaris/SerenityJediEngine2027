@@ -138,6 +138,9 @@ struct mcParams_t {
 							//   speed (1/unit), as real air does: a cape streams out behind a runner and falls back
 							//   when he stops, instead of lying against him at any speed. 0 = off (linear drag only)
 	float	wind[3];		// world wind velocity, units/s (still air = 0 0 0)
+	float	zoneWind[3] = { 0.0f, 0.0f, 0.0f };	// SJE r_meshClothFans: the air of the pushers (fans, jump pads, air streams)
+							//   the character is in or was just thrown by (world, units/s; MC_ZoneAir). Added to the wind,
+							//   but not varied by 'gust': it is made to outrun the push by a set amount
 	float	gust;			// 0..1 how much the wind strength varies over time
 	float	flutter;		// 0..1 how much the wind ripples across the cloth (r_meshClothFlutter; 0 = it pushes it evenly)
 	float	timeSec;		// current time for gusts (filled in by MC_Apply)
@@ -145,6 +148,8 @@ struct mcParams_t {
 	int		xpbdIters = 1;	// r_meshClothXPBDIter: XPBD solver passes per substep
 	float	frictionScale = 1.0f;	// r_meshClothFriction: multiplies every surface's friction (0 = frictionless)
 	float	liftLimit = -2.0f;	// r_meshClothLift: overrides every surface's 'lift': -2 = use the config, -1 = no limit, N = units
+	float	liftAir = 1.0f;		// SJE r_meshClothLiftAir: air from below (a fall, an updraft) and strong wind open the lift limit
+							// behind the attached edge, so a cape's hem may flip up (0 = closed, as before)
 	float	liftSlope = 0.3f;	// SJE r_meshClothLiftSlope: the lift limit drops by this much per unit of cloth length from the
 							// attached edge (0 = level with it, as before): no flat sheet at shoulder height in a jump
 	float	breeze = 1.0f;	// SJE r_meshClothBreeze: a light, slowly wandering breeze sways hanging cloth near the camera
@@ -174,6 +179,11 @@ struct mcParams_t {
 	int		edgeCol = 0;	// r_meshClothEdgeCol: 1 = cloth edges are also pushed off arms, fists and hilts
 	int		faceCol = 0;	// r_meshClothFaceCol: 1 = the cloth's triangles (not only their corners) are kept out of the whole
 							//   body and on their own side of it (replaces edgeCol: the triangles' edges are tested too)
+	int		sleepShown = 1;	// SJE r_meshClothSleepShown: 1 = cloth the skin has switched off (shown) does not keep the rest awake
+	int		armGap = 1;		// SJE r_meshClothArmGap: 1 = a group whose lines have 'armgap G' is kept G further off the arms (0 = ignored)
+	int		limbLie = 1;	// SJE r_meshClothLimbLie: 1 = cloth lying against a still arm is not thrown as 'gone through' it
+	int		inside = 1;		// SJE r_meshClothInside: 1 = in strong wind a loose layer the model has under worn cloth (tunic strips under a
+							//   robe) stays inside that cloth: blown out through it, it is put back; 0 = as before
 	int		sleep = 0;		// r_meshClothSleep: 1 = cloth at rest on a character standing still stops simulating until something moves it
 	int		selfSub = 0;	// r_meshClothSelfSub: 1 = self-collision ('self' surfaces) in every substep, with cloth-on-cloth friction
 	int		rest = 1;		// SJE r_meshClothRest: 1 = cloth lying on a body that holds still is left to rest by the triangle test:
@@ -214,6 +224,43 @@ struct mcParams_t {
 //   outside: the weather wind fades in and out over ~0.4 s at a shelter edge instead of switching
 //   wet:     wetTarget 0 = dry, 1 = in the rain (soaks in ~8 s), 2 = in water (soaked at once); dries in ~45 s
 void MC_WeatherState(const void* instanceKey, int timeMs, bool outside, float wetTarget, float* outsideOut, float* wetOut);
+
+// SJE r_meshClothStrongWind: strong weather wind - over MC_STRONG_WIND units/s, where the game has its characters brace
+// against it (bg_panimate.cpp TorsoAgainstWindTest: R_GetWindGusting, R_IsOutside at the character's origin) - blows the
+// cloth by the game's own outside test (at the origin, in the air or on the ground alike), at a strength the cloth takes
+// without being torn into strips: MC_StrongWindSpeed(map speed, the cloth's wetness 0..1 - soaked cloth weighs twice as
+// much, so from twice MC_STRONG_WIND on it gets twice the wind and is blown as clearly). MC_StrongWindOutside eases the
+// game's outside test per character (key) over ~0.4 s, as MC_WeatherState does. Main thread.
+const float MC_STRONG_WIND = 1000.0f;
+float MC_StrongWindSpeed(float mapSpeed, float wet);
+float MC_StrongWindOutside(const void* instanceKey, int timeMs, bool outside);
+
+// SJE r_meshClothFans: wind zones - boxes of moving air (a map's pushers: fans, jump pads, air streams), told by the
+// cgame through the renderer commands meshcloth_windzone / meshcloth_windzones_clear. Main thread.
+// pushSpeed: the speed of the push the zone gives (its air runs ahead of it by the rest); under 0 = not known
+void MC_WindZoneAdd(const float mins[3], const float maxs[3], const float air[3], float pushSpeed = -1.0f);
+void MC_WindZonesClear(void);
+int  MC_WindZoneCount(void);
+// The air of the zones a character's box (world mins / maxs) touches (the strongest). A character that leaves them keeps their
+// air for a moment, fading out (thrown up by a jump pad, the stream goes along for a short way), also when the set of
+// zones changes meanwhile (MC_WindZonesClear forgets the zones only). Returns false when there is none (no zones and no
+// character thrown: nothing is looked up). Main thread.
+bool MC_ZoneAir(const void* instanceKey, int timeMs, const float mins[3], const float maxs[3], float air[3]);
+
+// SJE r_meshClothLevelWind: a wind for one map from ext_data/meshcloth_wind.dat, one line per map:
+//   mapname  x y z  [gust]  [outside]  [only]
+// x y z: world wind, units/s; gust 0..1: how much its strength varies (replaces r_meshClothGust on that map);
+// outside: only where the game counts as outside (R_IsOutside at the character's origin), eased in and out;
+// only: the map's own weather wind does not blow the cloth there (for maps whose weather wind is wrong for cloth).
+// '//' or '#' start a comment. MC_LevelWindParse finds the line for mapName (the bare name, e.g. "t1_rail") in text.
+struct mcLevelWind_t {
+	int		found = 0;
+	float	wind[3] = { 0.0f, 0.0f, 0.0f };
+	float	gust = -1.0f;	// under 0: not given
+	int		outside = 0;
+	int		only = 0;
+};
+void MC_LevelWindParse(const char* text, const char* mapName, mcLevelWind_t* out);
 
 // Returns the 3x4 skinning matrix (model space) for a skeleton bone index.
 typedef const float (*(*mcBoneFn_t)(void* ctx, int boneIndex))[4];
@@ -290,12 +337,16 @@ void MC_Push(const float center[3], const float dir[3], float strength, float ra
 // Other characters push cloth (r_meshClothOthers). The glue lists every character's origin once a frame
 // (MC_SetCharacters; MC_CharactersListed says if this frame's list is there), then MC_NearCharacters
 // gives up to max standing-body capsules (world space) of the characters close to one character. Main thread.
-void MC_SetCharacters(int frameId, const float (*origins)[3], int count);
+// SJE: scales (optional, one per character): the size each is drawn at, 1 = its own (r_meshClothShapeScale)
+// SJE r_meshClothBlastGain: multiplies every MC_Blast (default 3; 1 = as before). Main thread.
+void MC_SetBlastGain(float gain);
+void MC_SetCharacters(int frameId, const float (*origins)[3], int count, const float* scales = nullptr);
 bool MC_CharactersListed(int frameId);
 int  MC_NearCharacters(const float origin[3], mcCapsule_t* out, int max);
 const int MC_MAX_OTHERS = 4;
 const int MC_MAX_HELD = 6;		// SJE: fitted shapes of the things bolted to a character (r_meshClothHeld)
 const int MC_MAX_BLADES = 4;	// SJE: lit lightsaber blades near a character that push its cloth (r_meshClothBlade)
+const int MC_MAX_CARRIED = 6;	// SJE: fitted shapes of the things a character carries drawn as models of their own (r_meshClothCarried)
 
 // r_meshClothBodyFit: collision shapes fitted to the model's own (non-cloth) mesh for the cloth group of
 // clothSurface: each torso, hip, leg, neck and head bone's vertices cut into height slices, each slice a "stadium"
