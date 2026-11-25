@@ -37,7 +37,7 @@ NAV_HitNavGoal
 
 qboolean NAV_HitNavGoal(vec3_t point, vec3_t mins, vec3_t maxs, vec3_t dest, const int radius, const qboolean flying)
 {
-	vec3_t dmins, dmaxs, pmins, pmaxs;
+	vec3_t dmins = {}, dmaxs = {}, pmins = {}, pmaxs = {};
 
 	if (radius)
 	{
@@ -48,7 +48,7 @@ qboolean NAV_HitNavGoal(vec3_t point, vec3_t mins, vec3_t maxs, vec3_t dest, con
 		if (!flying)
 		{
 			//Allow for a little z difference
-			vec3_t diff;
+			vec3_t diff = {};
 			VectorSubtract(point, dest, diff);
 			if (fabs(diff[2]) <= 24)
 			{
@@ -87,7 +87,7 @@ NAV_CheckAhead
 
 qboolean NAV_CheckAhead(const gentity_t* self, vec3_t end, trace_t& trace, int clipmask)
 {
-	vec3_t mins;
+	vec3_t mins = {};
 
 	//Offset the step height
 	VectorSet(mins, self->mins[0], self->mins[1], self->mins[2] + STEPSIZE);
@@ -189,7 +189,7 @@ qboolean NPC_ClearPathToGoal(gentity_t* goal)
 
 qboolean NAV_DirSafe(const gentity_t* self, vec3_t dir, const float dist)
 {
-	vec3_t mins, end;
+	vec3_t mins = {}, end = {};
 	trace_t trace;
 
 	VectorMA(self->currentOrigin, dist, dir, end);
@@ -211,7 +211,7 @@ qboolean NAV_DirSafe(const gentity_t* self, vec3_t dir, const float dist)
 
 qboolean NAV_MoveDirSafe(const gentity_t* self, const usercmd_t* cmd, const float distScale = 1.0f)
 {
-	vec3_t moveDir;
+	vec3_t moveDir = {};
 
 	if (!self || !self->client)
 	{
@@ -233,7 +233,7 @@ qboolean NAV_MoveDirSafe(const gentity_t* self, const usercmd_t* cmd, const floa
 			//not moving at all
 			return qtrue;
 		}
-		vec3_t fwd, right;
+		vec3_t fwd = {}, right = {};
 		const vec3_t fwdAngs = { 0, self->currentAngles[YAW], 0 };
 		AngleVectors(fwdAngs, fwd, right, nullptr);
 		VectorScale(fwd, cmd->forwardmove, fwd);

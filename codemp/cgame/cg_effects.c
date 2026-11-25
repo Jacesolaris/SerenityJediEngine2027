@@ -35,8 +35,8 @@ Bullets shot underwater
 */
 void CG_BubbleTrail(vec3_t start, vec3_t end, const float spacing)
 {
-	vec3_t move;
-	vec3_t vec;
+	vec3_t move = { 0 };
+	vec3_t vec = { 0 };
 
 	if (cg_noProjectileTrail.integer)
 	{
@@ -331,10 +331,10 @@ off_z[20][20];
 
 static void CG_DoGlassQuad(vec3_t p[4], vec2_t uv[4], const qboolean stick, const int time, vec3_t dmg_dir)
 {
-	vec3_t rot_delta;
-	vec3_t vel, accel;
-	vec3_t rgb1;
-	addpolyArgStruct_t ap_args;
+	vec3_t rot_delta = { 0 };
+	vec3_t vel = { 0 }, accel = { 0 };
+	vec3_t rgb1 = { 0 };
+	addpolyArgStruct_t ap_args = { 0 };
 
 	VectorSet(vel, Q_flrand(-12.0f, 12.0f), Q_flrand(-12.0f, 12.0f), -1);
 
@@ -417,7 +417,7 @@ static void CG_DoGlassQuad(vec3_t p[4], vec2_t uv[4], const qboolean stick, cons
 
 static void CG_CalcBiLerp(vec3_t verts[4], vec3_t sub_verts[4], vec2_t uv[4])
 {
-	vec3_t temp;
+	vec3_t temp = { 0 };
 
 	// Nasty crap
 	VectorScale(verts[0], 1.0f - uv[0][0], sub_verts[0]);
@@ -454,7 +454,7 @@ static void CG_CalcBiLerp(vec3_t verts[4], vec3_t sub_verts[4], vec2_t uv[4])
 
 static void CG_CalcHeightWidth(vec3_t verts[4], float* height, float* width)
 {
-	vec3_t dir1, dir2, cross;
+	vec3_t dir1 = { 0 }, dir2 = { 0 }, cross = { 0 };
 
 	VectorSubtract(verts[3], verts[0], dir1); // v
 	VectorSubtract(verts[1], verts[0], dir2); // p-a
@@ -508,7 +508,7 @@ void CG_DoGlass(vec3_t verts[], vec3_t dmg_pt, vec3_t dmg_dir, const float dmg_r
 	float xx = 0.0f, zz = 0.0f;
 	int time = 0;
 	int glass_shards = 0;
-	qboolean stick;
+	qboolean stick = qfalse;
 
 	// To do a smarter tesselation, we should figure out the relative height and width of the brush face,
 	//	then use this to pick a lod value from 1-3 in each axis.  This will give us 1-9 lod levels, which will
@@ -556,8 +556,8 @@ void CG_DoGlass(vec3_t verts[], vec3_t dmg_pt, vec3_t dmg_dir, const float dmg_r
 	{
 		for (x = 0.0f, t = 0; x < 1.0f; x += step_width, t++)
 		{
-			vec2_t bi_points[4];
-			vec3_t sub_verts[4];
+			vec2_t bi_points[4] = { 0 };
+			vec3_t sub_verts[4] = { 0 };
 			// This is nasty..
 			if (t > 0 && t < mx_width)
 			{
@@ -678,8 +678,8 @@ void CG_GlassShatter(const int entnum, vec3_t dmg_pt, vec3_t dmg_dir, const floa
 {
 	if (cgs.inlineDrawModel[cg_entities[entnum].currentState.modelIndex])
 	{
-		vec3_t normal;
-		vec3_t verts[4];
+		vec3_t normal = { 0 };
+		vec3_t verts[4] = { 0 };
 		trap->R_GetBModelVerts(cgs.inlineDrawModel[cg_entities[entnum].currentState.modelIndex], verts, normal);
 		CG_DoGlass(verts, dmg_pt, dmg_dir, dmg_radius, max_shards);
 	}
@@ -703,7 +703,7 @@ void CG_ExplosionEffects(vec3_t origin, const float intensity, const int radius,
 {
 	//FIXME: When exactly is the vieworg calculated in relation to the rest of the frame?s
 
-	vec3_t dir;
+	vec3_t dir = { 0 };
 
 	VectorSubtract(cg.refdef.vieworg, origin, dir);
 	const float dist = VectorNormalize(dir);
@@ -730,7 +730,7 @@ Adds an explosion to a misc model breakables
 void CG_MiscModelExplosion(vec3_t mins, vec3_t maxs, const int size, const material_t chunk_type)
 {
 	int ct = 13;
-	vec3_t org, mid;
+	vec3_t org = { 0 }, mid = { 0 };
 	const char* effect = NULL, * effect2 = NULL;
 	int e_id2 = 0;
 
@@ -809,7 +809,7 @@ void CG_MiscModelExplosion(vec3_t mins, vec3_t maxs, const int size, const mater
 	// spawn chunk roughly in the bbox of the thing..
 	for (int i = 0; i < ct; i++)
 	{
-		vec3_t dir;
+		vec3_t dir = { 0 };
 		for (int j = 0; j < 3; j++)
 		{
 			const float r = Q_flrand(0.0f, 1.0f) * 0.8f + 0.1f;
@@ -977,7 +977,7 @@ void CG_Chunks(const int owner, vec3_t origin, const vec3_t mins, const vec3_t m
 		// It wouldn't look good to throw a bunch of RGB axis models...so make sure we have something to work with.
 		if (chunk_model)
 		{
-			vec3_t dir;
+			vec3_t dir = { 0 };
 			localEntity_t* le = CG_AllocLocalEntity();
 			refEntity_t* re = &le->refEntity;
 
@@ -1042,7 +1042,7 @@ CG_ScorePlum
 */
 void CG_ScorePlum(const int client, vec3_t org, const int score)
 {
-	vec3_t angles;
+	vec3_t angles = { 0 };
 	static vec3_t last_pos;
 
 	// only visualize for the client that scored
@@ -1088,7 +1088,7 @@ localEntity_t* CG_MakeExplosion(vec3_t origin, vec3_t dir,
 	const qhandle_t h_model, const int numFrames, const qhandle_t shader,
 	const int msec, const qboolean is_sprite, const float scale, const int flags)
 {
-	vec3_t new_origin;
+	vec3_t new_origin = { 0 };
 
 	if (msec <= 0)
 	{
@@ -1101,7 +1101,7 @@ localEntity_t* CG_MakeExplosion(vec3_t origin, vec3_t dir,
 	localEntity_t* ex = CG_AllocLocalEntity();
 	if (is_sprite)
 	{
-		vec3_t tmp_vec;
+		vec3_t tmp_vec = { 0 };
 		ex->leType = LE_SPRITE_EXPLOSION;
 		ex->refEntity.rotation = rand() % 360;
 		ex->radius = scale;
@@ -1208,7 +1208,7 @@ Generated a bunch of gibs launching out from the bodies location
 
 void CG_GibPlayer(vec3_t player_origin)
 {
-	vec3_t origin, velocity;
+	vec3_t origin = { 0 }, velocity = { 0 };
 
 	VectorCopy(player_origin, origin);
 	velocity[0] = crandom() * GIB_VELOCITY;
@@ -1266,7 +1266,7 @@ void CG_GibPlayer(vec3_t player_origin)
 
 void CG_GibPlayerHeadshot(vec3_t player_origin)
 {
-	vec3_t origin, velocity;
+	vec3_t origin = { 0 }, velocity = { 0 };
 
 	VectorCopy(player_origin, origin);
 	origin[2] += 25;

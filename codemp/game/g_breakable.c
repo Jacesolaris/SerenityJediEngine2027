@@ -15,7 +15,7 @@ void misc_model_breakable_die(gentity_t* self, const gentity_t* inflictor, genti
 	int meansOfDeath)
 {
 	float size = 0;
-	vec3_t dir, up, dis;
+	vec3_t dir = { 0 }, up = { 0 }, dis = { 0 };
 
 	if (self->die == NULL) //i was probably already killed since my die func was removed
 	{
@@ -102,7 +102,7 @@ void misc_model_breakable_die(gentity_t* self, const gentity_t* inflictor, genti
 		if (self->splashDamage > 0 && self->splashRadius > 0)
 		{
 			//explode
-			vec3_t org;
+			vec3_t org = { 0 };
 			AddSightEvent(attacker, self->r.currentOrigin, 256, AEL_DISCOVERED, 100);
 			AddSoundEvent(attacker, self->r.currentOrigin, 128, AEL_DISCOVERED, qfalse, qtrue);
 			//FIXME: am I on ground or not?
@@ -167,7 +167,7 @@ static void misc_model_breakable_touch(gentity_t* self, gentity_t* other, trace_
 
 static void misc_model_throw_at_target4(gentity_t* self, const gentity_t* activator)
 {
-	vec3_t push_dir, kvel;
+	vec3_t push_dir = { 0 }, kvel = { 0 };
 	float knockback = 200;
 	float mass = self->mass;
 	const gentity_t* target = G_Find(NULL, FOFS(targetname), self->target4);
@@ -675,7 +675,7 @@ void TieFighterThink(gentity_t* self)
 	self->nextthink = level.time + FRAMETIME;
 	if (player)
 	{
-		vec3_t playerDir, fighterDir, fwd, rt;
+		vec3_t playerDir = { 0 }, fighterDir = { 0 }, fwd = { 0 }, rt = { 0 };
 
 		//use player eyepoint
 		VectorSubtract(player->r.currentOrigin, self->r.currentOrigin, playerDir);
@@ -775,7 +775,7 @@ void TieFighterThink(gentity_t* self)
 
 void misc_model_breakable_gravity_init(gentity_t* ent, const qboolean dropToFloor)
 {
-	trace_t tr;
+	trace_t tr = { 0 };
 
 	G_EffectIndex("melee/kick_impact");
 	G_EffectIndex("melee/kick_impact_silent");
@@ -794,8 +794,8 @@ void misc_model_breakable_gravity_init(gentity_t* ent, const qboolean dropToFloo
 	//drop to floor
 	if (dropToFloor)
 	{
-		vec3_t bottom;
-		vec3_t top;
+		vec3_t bottom = { 0 };
+		vec3_t top = { 0 };
 		VectorCopy(ent->r.currentOrigin, top);
 		top[2] += 1;
 		VectorCopy(ent->r.currentOrigin, bottom);
@@ -846,9 +846,9 @@ extern stringID_table_t TeamTable[];
 
 void SP_misc_model_breakable(gentity_t* ent)
 {
-	char damageModel[MAX_QPATH];
-	char chunkModel[MAX_QPATH];
-	char useModel[MAX_QPATH];
+	char damageModel[MAX_QPATH] = { 0 };
+	char chunkModel[MAX_QPATH] = { 0 };
+	char useModel[MAX_QPATH] = { 0 };
 
 	float grav = 0;
 	int forceVisible = 0;
@@ -991,7 +991,7 @@ void SP_misc_model_breakable(gentity_t* ent)
 
 		if (ent->splashDamage > 0 && ent->splashRadius > 0)
 		{
-			vec3_t color;
+			vec3_t color = { 0 };
 
 			ent->s.loopSound = G_SoundIndex("sound/vehicles/tie-bomber/loop.wav");
 			const qboolean lightSet = qtrue;

@@ -83,7 +83,7 @@ static void MineMonster_Patrol(void)
 
 	if (near_player)
 	{
-		vec3_t dif;
+		vec3_t dif = { 0 };
 		VectorSubtract(SHR_ORG(near_player), SHR_ORG(NPCS.NPC), dif);
 
 		if (VectorLengthSquared(dif) < 256 * 256)
@@ -116,8 +116,8 @@ static void MineMonster_Move(void)
 //---------------------------------------------------------
 static void MineMonster_TryDamage(const gentity_t* enemy, const int damage)
 {
-	vec3_t end, dir;
-	trace_t tr;
+	vec3_t end = { 0 }, dir = { 0 };
+	trace_t tr = { qfalse };
 
 	if (!enemy)
 	{

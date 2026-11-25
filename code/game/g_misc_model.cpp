@@ -293,7 +293,7 @@ ROCKET - Puts one or more rocket launchers on the rack.
 
 static void GunRackAddItem(gitem_t* gun, vec3_t org, vec3_t angs, const float ffwd, const float fright, const float fup)
 {
-	vec3_t fwd, right;
+	vec3_t fwd = {}, right = {};
 	gentity_t* it_ent = G_Spawn();
 	qboolean rotate = qtrue;
 
@@ -767,7 +767,7 @@ void misc_model_cargo_die(gentity_t* self, const gentity_t* inflictor, gentity_t
 	const int mod, int dflags,
 	int hit_loc)
 {
-	vec3_t org, temp{};
+	vec3_t org = {}, temp{};
 
 	// copy these for later
 	const int flags = self->spawnflags;

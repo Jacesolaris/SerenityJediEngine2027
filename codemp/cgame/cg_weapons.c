@@ -418,7 +418,7 @@ static void CG_CalculateWeaponPosition(vec3_t origin, vec3_t angles)
 		static vec3_t previous_angles = { 0, 0, 0 };
 		static int previous_time = 0;
 
-		vec3_t delta_angles;
+		vec3_t delta_angles = { 0 };
 		AnglesSubtract(angles, previous_angles, delta_angles);
 		VectorScale(delta_angles, 1.0f, delta_angles);
 
@@ -452,7 +452,7 @@ angle)
 */
 static void CG_LightningBolt(const centity_t* cent)
 {
-	refEntity_t beam;
+	refEntity_t beam = { 0 };
 
 	//Must be a duration weapon that continuously generates an effect.
 	if (cent->currentState.weapon == WP_DEMP2 && cent->currentState.eFlags & EF_ALT_FIRING)
@@ -524,10 +524,10 @@ void cg_add_player_weaponduals(refEntity_t* parent,
 	qboolean third_person,
 	qboolean leftweap)
 {
-	refEntity_t   gun;
-	refEntity_t   barrel;
-	refEntity_t   flash;
-	weapon_t      weapon_num;
+	refEntity_t   gun = { 0 };
+	refEntity_t   barrel = { 0 };
+	refEntity_t   flash = { 0 };
+	weapon_t      weapon_num = WP_NONE;
 	weaponInfo_t* weapon = NULL;
 	centity_t* non_predicted_cent = NULL;
 
@@ -727,11 +727,11 @@ void cg_add_player_weaponduals(refEntity_t* parent,
 		float val = 0.0f;
 		float scale = 1.0f;
 
-		addspriteArgStruct_t fxSArgs;
+		addspriteArgStruct_t fxSArgs = { 0 };
 		memset(&fxSArgs, 0, sizeof(fxSArgs));
 
-		vec3_t flashorigin;
-		vec3_t flashdir;
+		vec3_t flashorigin = { 0 };
+		vec3_t flashdir = { 0 };
 
 		if (!third_person)
 		{
@@ -743,7 +743,7 @@ void cg_add_player_weaponduals(refEntity_t* parent,
 		{
 			// Third-person: use the correct Ghoul2 weapon model (1 = right, 2 = left)
 			int        wpmdlidx = leftweap ? 2 : 1;
-			mdxaBone_t boltMatrix;
+			mdxaBone_t boltMatrix = { 0 };
 
 			if (!trap->G2API_HasGhoul2ModelOnIndex(&cent->ghoul2, wpmdlidx))
 			{
@@ -877,9 +877,9 @@ void cg_add_player_weaponduals(refEntity_t* parent,
 		cg_trueguns.integer ||
 		cent->currentState.number != cg.predictedPlayerState.clientNum)
 	{
-		vec3_t     flashorigin;
-		vec3_t     flashdir;
-		refEntity_t ref_entity_s;
+		vec3_t     flashorigin = { 0 };
+		vec3_t     flashdir = { 0 };
+		refEntity_t ref_entity_s = { 0 };
 		int        wpmdlidx = leftweap ? 2 : 1;
 
 		memset(&ref_entity_s, 0, sizeof(ref_entity_s));
@@ -894,7 +894,7 @@ void cg_add_player_weaponduals(refEntity_t* parent,
 		else
 		{
 			// Third-person: use the correct Ghoul2 weapon model (1 = right, 2 = left)
-			mdxaBone_t boltMatrix;
+			mdxaBone_t boltMatrix = { 0 };
 
 			if (!trap->G2API_HasGhoul2ModelOnIndex(&cent->ghoul2, wpmdlidx))
 			{
@@ -1090,7 +1090,7 @@ static void CG_AddViewWeaponCounter(refEntity_t* gun, const cgWeaponVariant_t* c
 {
 	// a gun with fewer digits shows its top number while the pool holds more (SJE guns draw from the ammo pool)
 	const int top = cwv->numViewDigits >= 3 ? 999 : cwv->numViewDigits == 2 ? 99 : 9;
-	int frames[3], d, n = ammo < 0 ? 0 : ammo > top ? top : ammo;
+	int frames[3] = { 0 }, d = 0, n = ammo < 0 ? 0 : ammo > top ? top : ammo;
 
 	frames[0] = n % 10;
 	frames[1] = n >= 10 ? n / 10 % 10 : 10;
@@ -1116,12 +1116,12 @@ void CG_AddPlayerWeapon(refEntity_t* parent, playerState_t* ps, centity_t* cent,
 	{
 		CG_Z6SpinBarrel(cent);
 	}
-	refEntity_t gun;
-	refEntity_t barrel;
-	weapon_t weapon_num;
+	refEntity_t gun = { 0 };
+	refEntity_t barrel = { 0 };
+	weapon_t weapon_num = WP_NONE;
 	weaponInfo_t* weapon = NULL;
 	centity_t* non_predicted_cent = NULL;
-	refEntity_t flash;
+	refEntity_t flash = { 0 };
 	const cgWeaponVariant_t* variant_view = NULL;
 
 	weapon_num = cent->currentState.weapon;
@@ -1223,7 +1223,7 @@ void CG_AddPlayerWeapon(refEntity_t* parent, playerState_t* ps, centity_t* cent,
 		if (variant_view)
 		{
 			// the SJE gun's arms and moving parts, on the hand model's tag_barrel .. tag_barrel4
-			int i;
+			int i = 0;
 
 			for (i = 0; i < variant_view->numViewBarrels; i++)
 			{
@@ -1337,9 +1337,9 @@ void CG_AddPlayerWeapon(refEntity_t* parent, playerState_t* ps, centity_t* cent,
 		int shader = 0;
 		float val = 0.0f;
 		float scale = 1.0f;
-		addspriteArgStruct_t fxSArgs;
+		addspriteArgStruct_t fxSArgs = { 0 };
 		memset(&fxSArgs, 0, sizeof(fxSArgs));
-		vec3_t flashorigin, flashdir;
+		vec3_t flashorigin = { 0 }, flashdir = { 0 };
 
 		if (!third_person)
 		{
@@ -1348,7 +1348,7 @@ void CG_AddPlayerWeapon(refEntity_t* parent, playerState_t* ps, centity_t* cent,
 		}
 		else
 		{
-			mdxaBone_t boltMatrix;
+			mdxaBone_t boltMatrix = { 0 };
 
 			if (!trap->G2API_HasGhoul2ModelOnIndex(&cent->ghoul2, 1))
 			{
@@ -1462,7 +1462,7 @@ void CG_AddPlayerWeapon(refEntity_t* parent, playerState_t* ps, centity_t* cent,
 		|| cent->currentState.number != cg.predictedPlayerState.clientNum)
 	{
 		// Make sure we don't do the thirdperson model effects for the local player if we're in first person
-		vec3_t flashorigin, flashdir;
+		vec3_t flashorigin = { 0 }, flashdir = { 0 };
 		refEntity_t ref_entity_s = { 0 };
 
 		if (!third_person)
@@ -1473,7 +1473,7 @@ void CG_AddPlayerWeapon(refEntity_t* parent, playerState_t* ps, centity_t* cent,
 		}
 		else
 		{
-			mdxaBone_t boltMatrix;
+			mdxaBone_t boltMatrix = { 0 };
 
 			if (!trap->G2API_HasGhoul2ModelOnIndex(&cent->ghoul2, 1))
 			{
@@ -1608,11 +1608,11 @@ Add the weapon, and flash for the player's view
 */
 void CG_AddViewWeapon(playerState_t* ps)
 {
-	refEntity_t hand;
+	refEntity_t hand = { 0 };
 	centity_t* cent = NULL;
 	clientInfo_t* ci = NULL;
 	float fov_offset = 0.0f;
-	vec3_t angles;
+	vec3_t angles = { 0 };
 	weaponInfo_t* weapon = NULL;
 	float cgFov = 0.0f;
 
@@ -1662,7 +1662,7 @@ void CG_AddViewWeapon(playerState_t* ps)
 	{
 		if (ps->eFlags & EF_FIRING)
 		{
-			vec3_t origin;
+			vec3_t origin = { 0 };
 			VectorCopy(cg.refdef.vieworg, origin);
 			VectorMA(origin, -8, cg.refdef.viewaxis[2], origin);
 			CG_LightningBolt(&cg_entities[ps->clientNum]);
@@ -1699,7 +1699,7 @@ void CG_AddViewWeapon(playerState_t* ps)
 	{
 		// an SJE gun's own first-person model (2026-11-16) sits where its file says unless cg_gunX/Y/Z are set
 		const cgWeaponVariant_t* variant_view = (ps->eFlags & EF3_DUAL_WEAPONS && ps->weapon == WP_BRYAR_PISTOL) ? NULL : CG_WeaponVariantView(ps);
-		vec3_t gun_offset;
+		vec3_t gun_offset = { 0 };
 
 		VectorSet(gun_offset, cg_gunX.value, cg_gunY.value, cg_gunZ.value);
 		if (variant_view && !cg_gunX.value && !cg_gunY.value && !cg_gunZ.value)
@@ -1796,7 +1796,7 @@ void CG_AddViewWeapon(playerState_t* ps)
 	//
 	{
 		refEntity_t leftHand = hand;
-		vec3_t leftAngles;
+		vec3_t leftAngles = { 0 };
 
 		// Offset the left-hand weapon slightly
 		leftHand.origin[1] -= 2.0f;
@@ -2308,8 +2308,8 @@ void CG_DrawWeaponSelect(void)
 	if (cg_weapons[cg.weaponSelect].item)
 	{
 		vec4_t text_color = { .875f, .718f, .121f, 1.0f };
-		char text[1024];
-		char upper_key[1024];
+		char text[1024] = { 0 };
+		char upper_key[1024] = { 0 };
 
 		const weaponVariant_t* wv = cg.snap ? BG_GetWeaponVariant(CG_LocalWeaponLook(cg.weaponSelect), cg.weaponSelect) : NULL;
 
@@ -2880,7 +2880,7 @@ WEAPON EVENTS
 
 void CG_GetClientWeaponMuzzleBoltPoint(const int cl_index, vec3_t to)
 {
-	mdxaBone_t boltMatrix;
+	mdxaBone_t boltMatrix = { 0 };
 
 	if (cl_index < 0 || cl_index >= MAX_CLIENTS)
 	{
@@ -2902,7 +2902,7 @@ void CG_GetClientWeaponMuzzleBoltPoint(const int cl_index, vec3_t to)
 
 void CG_GetClientWeaponMuzzleBoltPointduals(const int cl_index, vec3_t to, const qboolean leftweap)
 {
-	mdxaBone_t boltMatrix;
+	mdxaBone_t boltMatrix = { 0 };
 
 	// ---------------------------------------------------------
 	// Select the correct ghoul2 model index:
@@ -3229,7 +3229,7 @@ qboolean CG_VehicleWeaponImpact(centity_t* cent)
 		&& g_vehWeaponInfo[cent->currentState.otherentityNum2].iImpactFX)
 	{
 		//missile is from a special vehWeapon
-		vec3_t normal;
+		vec3_t normal = { 0 };
 		ByteToDir(cent->currentState.eventParm, normal);
 
 		trap->FX_PlayEffectID(g_vehWeaponInfo[cent->currentState.otherentityNum2].iImpactFX, cent->lerpOrigin, normal,
@@ -3502,15 +3502,15 @@ CG_CalcmuzzlePoint
 */
 qboolean CG_CalcmuzzlePoint(const int entityNum, vec3_t muzzle)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	if (entityNum == cg.snap->ps.clientNum)
 	{
-		vec3_t gunpoint;
-		vec3_t right;
+		vec3_t gunpoint = { 0 };
+		vec3_t right = { 0 };
 		//I'm not exactly sure why we'd be rendering someone else's crosshair, but hey.
 		const int weapontype = cg.snap->ps.weapon;
-		vec3_t weapon_muzzle;
+		vec3_t weapon_muzzle = { 0 };
 		const centity_t* pEnt = &cg_entities[cg.predictedPlayerState.clientNum];
 
 		VectorCopy(WP_muzzlePoint[weapontype], weapon_muzzle);
@@ -3538,7 +3538,7 @@ qboolean CG_CalcmuzzlePoint(const int entityNum, vec3_t muzzle)
 
 			if (gun_ent)
 			{
-				vec3_t pitch_constraint;
+				vec3_t pitch_constraint = { 0 };
 
 				VectorCopy(gun_ent->lerpOrigin, gunpoint);
 				gunpoint[2] += 46;
@@ -3671,7 +3671,7 @@ static void CG_RegisterWeaponVariant(const int variant)
 // local player holds when it has a view model (and cg_variantViewModels is on), else NULL = the base weapon's
 const cgWeaponVariant_t* CG_WeaponVariantView(const playerState_t* ps)
 {
-	const cgWeaponVariant_t* cwv;
+	const cgWeaponVariant_t* cwv = NULL;
 
 	if (!ps || !cg_variantViewModels.integer)
 	{
@@ -3688,8 +3688,8 @@ const cgWeaponVariant_t* CG_WeaponVariantView(const playerState_t* ps)
 		// first person (2026-11-16): <name>.md3, <name>_hand.md3 (the tags), <name>_barrel.md3 .. _barrel4.md3 (arms, parts)
 		if (wv->viewModel[0])
 		{
-			char stem[MAX_QPATH];
-			int i;
+			char stem[MAX_QPATH] = { 0 };
+			int i = 0;
 
 			COM_StripExtension(wv->viewModel, stem, sizeof stem);
 			w->viewModel = trap->R_RegisterModel(wv->viewModel);
@@ -3740,7 +3740,7 @@ static unsigned char cg_weaponLooks[MAX_CLIENTS][WP_NUM_WEAPONS];
 
 void CG_SetWeaponLooks(const int clientNum, const char* hex)
 {
-	int w;
+	int w = 0;
 	if (clientNum < 0 || clientNum >= MAX_CLIENTS)
 	{
 		return;
@@ -3756,7 +3756,7 @@ void CG_SetWeaponLooks(const int clientNum, const char* hex)
 // the look the local player has on this weapon: the gun in hand, else the one he uses on it (wvlooks); 0 = stock
 int CG_LocalWeaponLook(const int weapon)
 {
-	int family, look;
+	int family = 0, look = 0;
 	if (!cg.snap || weapon <= WP_NONE || weapon >= WP_NUM_WEAPONS)
 	{
 		return 0;
@@ -3794,7 +3794,7 @@ void CG_PrecacheWeaponVariants(void)
 		"thermal/explosion", "thermal/shockwave", "cryoban/explosion", "cryoban/stuck", "flash/faceflash",
 		"smoke/smokegrenade", "player/fire", "player/poison", "force/heal", "explosives/burnmedium_fire"
 	};
-	int v, i;
+	int v = 0, i = 0;
 
 	if (!cg_precacheWeaponVariants.integer)
 	{
@@ -3868,7 +3868,7 @@ qboolean CG_WeaponVariantMissile(centity_t* cent)
 	const entityState_t* s1 = &cent->currentState;
 	const cgWeaponVariant_t* cwv = CG_WeaponVariant(s1->weaponVariant, s1->weapon);
 	const int f = (s1->eFlags & EF_ALT_FIRING) ? 1 : 0;
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	if (!cwv || (!cwv->shotFx[f] && !cwv->shotModel[f]))
 	{
@@ -3884,13 +3884,13 @@ qboolean CG_WeaponVariantMissile(centity_t* cent)
 	}
 	if (cwv->shotSound[f])
 	{
-		vec3_t velocity;
+		vec3_t velocity = { 0 };
 		BG_EvaluateTrajectoryDelta(&s1->pos, cg.time, velocity);
 		trap->S_AddLoopingSound(s1->number, cent->lerpOrigin, velocity, cwv->shotSound[f]);
 	}
 	if (cwv->shotModel[f])
 	{
-		refEntity_t ent;
+		refEntity_t ent = { 0 };
 
 		memset(&ent, 0, sizeof ent);
 		VectorCopy(cent->lerpOrigin, ent.origin);
@@ -3901,8 +3901,8 @@ qboolean CG_WeaponVariantMissile(centity_t* cent)
 		if (s1->weapon == WP_THERMAL)
 		{
 			// a thrown grenade (2026-11-16): it tumbles, and is drawn a bit bigger so it can be seen in the air
-			int k;
-			vec3_t angles;
+			int k = 0;
+			vec3_t angles = { 0 };
 
 			VectorCopy(cent->lerpAngles, angles);
 			angles[PITCH] += (float)((cg.time + s1->number * 97) % 720) * 0.5f;
@@ -3947,7 +3947,7 @@ qboolean CG_WeaponVariantImpact(const entityState_t* es, vec3_t origin, vec3_t d
 {
 	const cgWeaponVariant_t* cwv = CG_WeaponVariant(es->weaponVariant, es->weapon);
 	const int f = alt_fire ? 1 : 0;
-	fxHandle_t fx;
+	fxHandle_t fx = 0;
 
 	if (!cwv)
 	{
@@ -3975,7 +3975,7 @@ qhandle_t CG_WeaponVariantIcon(const int variant, const int weapon)
 
 static void* CG_WeaponVariantG2(const centity_t* cent, const int weapon, const qboolean holster)
 {
-	const cgWeaponVariant_t* cwv;
+	const cgWeaponVariant_t* cwv = NULL;
 
 	if (cent->currentState.eType != ET_PLAYER && cent->currentState.eType != ET_NPC)
 	{
@@ -4727,7 +4727,7 @@ static void CG_MDWheel_BuildItems(void)
 	}
 	else
 	{
-		int side[3][NUM_FORCE_POWERS];
+		int side[3][NUM_FORCE_POWERS] = { 0 };
 		int count[3] = { 0, 0, 0 };
 		for (int i = 0; i < (int)ARRAY_LEN(mdWheelForceOrder); i++)
 		{
@@ -4989,7 +4989,7 @@ qboolean CG_MDWheel_MouseEvent(const int x, const int y)
 static const char* CG_MDWheel_WeaponName(const int weapon)
 {
 	static char text[256];
-	char key[256];
+	char key[256] = { 0 };
 
 	if (!cg_weapons[weapon].item)
 	{
@@ -5067,7 +5067,7 @@ static void CG_MDWheel_Sector(const float r0, const float r1, const float a0, co
 	}
 	for (int s = 0; s < steps; s++)
 	{
-		polyVert_t v[4];
+		polyVert_t v[4] = { 0 };
 		const float s0 = a0 + (a1 - a0) * (float)s / (float)steps;
 		const float s1 = a0 + (a1 - a0) * (float)(s + 1) / (float)steps;
 		CG_MDWheel_Vert(&v[0], r0, s0, c0);
@@ -5081,7 +5081,7 @@ static void CG_MDWheel_Sector(const float r0, const float r1, const float a0, co
 // a straight line out from the centre at angle a, from r0 to r1, w wide
 static void CG_MDWheel_Spoke(const float a, const float r0, const float r1, const float w, const vec4_t c)
 {
-	polyVert_t v[4];
+	polyVert_t v[4] = { 0 };
 	const float sx = sinf(a), sy = cosf(a);
 	const float tx = sy * w * 0.5f, ty = -sx * w * 0.5f; // across the line
 	CG_MDWheel_VertXY(&v[0], sx * r0 - tx, sy * r0 - ty, c);
@@ -5106,12 +5106,12 @@ static void CG_MDWheel_SoftSpoke(const float a, const float r0, const float r1, 
 {
 	const float sx = sinf(a), sy = cosf(a);
 	const float nx = sy, ny = -sx; // across the line
-	vec4_t clear;
+	vec4_t clear = { 0 };
 	CG_MDWheel_Clear(clear, c);
 	CG_MDWheel_Spoke(a, r0, r1, w, c);
 	for (int side = -1; side <= 1; side += 2)
 	{
-		polyVert_t v[4];
+		polyVert_t v[4] = { 0 };
 		const float o0 = (float)side * w * 0.5f, o1 = (float)side * (w * 0.5f + f);
 		CG_MDWheel_VertXY(&v[0], sx * r0 + nx * o0, sy * r0 + ny * o0, c);
 		CG_MDWheel_VertXY(&v[1], sx * r1 + nx * o0, sy * r1 + ny * o0, c);
@@ -5125,7 +5125,7 @@ static void CG_MDWheel_SoftSpoke(const float a, const float r0, const float r1, 
 static void CG_MDWheel_SoftArc(const float r0, const float r1, const float f, const float a0, const float a1,
 	const vec4_t c)
 {
-	vec4_t clear;
+	vec4_t clear = { 0 };
 	CG_MDWheel_Clear(clear, c);
 	CG_MDWheel_Sector(r0, r1, a0, a1, c, c);
 	CG_MDWheel_Sector(r0 - f, r0, a0, a1, clear, c);
@@ -5140,7 +5140,7 @@ static void CG_MDWheel_Slice(const int n, const vec3_t rgb, const float alphaIn,
 	const float band = 14.0f; // the brighter band inside the rim
 	const float step = 2.0f * (float)M_PI / (float)mdWheel.numItems;
 	const float a0 = ((float)n - 0.5f) * step, a1 = ((float)n + 0.5f) * step;
-	vec4_t cIn, cOut, cBand, cEdge;
+	vec4_t cIn = { 0 }, cOut = { 0 }, cBand = { 0 }, cEdge = { 0 };
 
 	VectorCopy(rgb, cIn);
 	VectorCopy(rgb, cOut);
@@ -5171,7 +5171,7 @@ static void CG_MDWheel_DrawSlices(const int current)
 	static const vec3_t rim = { 171.0f / 255.0f, 126.0f / 255.0f, 46.0f / 255.0f };
 	static const vec3_t greyRgb = { 0.62f, 0.62f, 0.62f };
 	static const vec4_t divider = { 171.0f / 255.0f, 126.0f / 255.0f, 46.0f / 255.0f, 0.5f };
-	refdef_t rd;
+	refdef_t rd = { 0 };
 
 	if (!mdWheel.sliceShader || mdWheel.numItems <= 0 || cgs.glconfig.vidHeight <= 0)
 	{
@@ -5226,7 +5226,7 @@ static void CG_MDWheel_DarkDisc(const float x, const float y, const float r, con
 	for (int i = 0; i < steps; i++)
 	{
 		const float a0 = 2.0f * (float)M_PI * (float)(i) / (float)(steps), a1 = 2.0f * (float)M_PI * (float)(i + 1) / (float)(steps);
-		polyVert_t v[4];
+		polyVert_t v[4] = { 0 };
 		// the solid middle
 		CG_MDWheel_VertXY(&v[0], x, y, dark);
 		CG_MDWheel_VertXY(&v[1], x + sinf(a0) * r * 0.85f, y + cosf(a0) * r * 0.85f, dark);
@@ -5279,7 +5279,7 @@ static void CG_MDWheel_GreyUnknownForce(const float iconSize)
 	{
 		return;
 	}
-	refdef_t rd;
+	refdef_t rd = { 0 };
 	memset(&rd, 0, sizeof rd);
 	rd.rdflags = RDF_NOWORLDMODEL;
 	AxisClear(rd.viewaxis);

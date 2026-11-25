@@ -60,7 +60,7 @@ void TurretPain(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 	int hit_loc)
 	//------------------------------------------------------------------------------------------------------------
 {
-	vec3_t dir;
+	vec3_t dir = {};
 
 	VectorSubtract(point, self->currentOrigin, dir);
 	VectorNormalize(dir);
@@ -131,7 +131,7 @@ void turret_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, int 
 	{
 		if (self->fxID > 0)
 		{
-			vec3_t pos;
+			vec3_t pos = {};
 			VectorMA(self->currentOrigin, 12, forward, pos);
 			G_PlayEffect(self->fxID, pos, forward);
 		}
@@ -246,7 +246,7 @@ extern void WP_FireTurboLaserMissile(gentity_t* ent, vec3_t start, vec3_t dir);
 static void turret_fire(gentity_t* ent, vec3_t start, vec3_t dir)
 //----------------------------------------------------------------
 {
-	vec3_t org, ang;
+	vec3_t org = {}, ang = {};
 
 	if (gi.pointcontents(start, ent->s.number) & MASK_SHOT)
 	{
@@ -323,8 +323,8 @@ void turret_head_think(gentity_t* self)
 		// set up our next fire time
 		self->pushDebounceTime = level.time + self->wait;
 
-		vec3_t fwd, org;
-		mdxaBone_t boltMatrix;
+		vec3_t fwd = {}, org = {};
+		mdxaBone_t boltMatrix = {};
 
 		// Getting the flash bolt here
 		gi.G2API_GetBoltMatrix(self->ghoul2,
@@ -367,7 +367,7 @@ void turret_head_think(gentity_t* self)
 static void turret_aim(gentity_t* self)
 //-----------------------------------------------------
 {
-	vec3_t desired_angles;
+	vec3_t desired_angles = {};
 	float diff_yaw = 0.0f, diff_pitch = 0.0f;
 	const float max_yaw_speed = self->spawnflags & SPF_TURRETG2_TURBO ? 30.0f : 14.0f;
 	const float max_pitch_speed = self->spawnflags & SPF_TURRETG2_TURBO ? 15.0f : 3.0f;
@@ -379,9 +379,9 @@ static void turret_aim(gentity_t* self)
 
 	if (self->enemy)
 	{
-		vec3_t org2;
-		vec3_t org;
-		vec3_t enemy_dir;
+		vec3_t org2 = {};
+		vec3_t org = {};
+		vec3_t enemy_dir = {};
 		// ...then we'll calculate what new aim adjustments we should attempt to make this frame
 		// Aim at enemy
 		turret_target_point(self->enemy, org);
@@ -397,7 +397,7 @@ static void turret_aim(gentity_t* self)
 		if (self->spawnflags & SPF_TURRETG2_LEAD_ENEMY && self->spawnflags & SPF_TURRETG2_MP_RULES && self->mass > 0)
 		{
 			//aim ahead of a moving target, by as much as it moves while the shot is on its way (as in MP)
-			vec3_t diff, velocity;
+			vec3_t diff = {}, velocity = {};
 			VectorSubtract(org, self->s.origin, diff);
 			const float dist = VectorNormalize(diff);
 			if (self->enemy->client)
@@ -410,7 +410,7 @@ static void turret_aim(gentity_t* self)
 			}
 			VectorMA(org, dist / self->mass, velocity, org);
 		}
-		mdxaBone_t boltMatrix;
+		mdxaBone_t boltMatrix = {};
 
 		// Getting the "eye" here
 		gi.G2API_GetBoltMatrix(self->ghoul2,
@@ -443,7 +443,7 @@ static void turret_aim(gentity_t* self)
 
 	if (diff_yaw)
 	{
-		vec3_t set_angle;
+		vec3_t set_angle = {};
 		// cap max speed....
 		if (fabs(diff_yaw) > max_yaw_speed)
 		{
@@ -553,7 +553,7 @@ static qboolean turret_find_enemies(gentity_t* self)
 
 	qboolean found = qfalse;
 	float best_dist = self->radius * self->radius;
-	vec3_t org, org2;
+	vec3_t org = {}, org2 = {};
 
 	// FIX: move large array off stack → static buffer
 	static gentity_t* entity_list[MAX_GENTITIES];
@@ -653,7 +653,7 @@ static qboolean turret_find_enemies(gentity_t* self)
 			!tr.startsolid &&
 			(tr.fraction == 1.0f || tr.entityNum == target->s.number))
 		{
-			vec3_t enemy_dir;
+			vec3_t enemy_dir = {};
 			VectorSubtract(target->currentOrigin, self->currentOrigin, enemy_dir);
 			const float enemy_dist = VectorLengthSquared(enemy_dir);
 
@@ -736,7 +736,7 @@ void turret_base_think(gentity_t* self)
 	{
 		if (self->enemy->health > 0)
 		{
-			vec3_t enemy_dir;
+			vec3_t enemy_dir = {};
 			// enemy is alive
 			VectorSubtract(self->enemy->currentOrigin, self->currentOrigin, enemy_dir);
 			const float enemy_dist = VectorLengthSquared(enemy_dir);
@@ -744,7 +744,7 @@ void turret_base_think(gentity_t* self)
 			if (enemy_dist < self->radius * self->radius)
 			{
 				// was in valid radius
-				vec3_t org2;
+				vec3_t org2 = {};
 
 				// Look from where turret_find_enemies looks from, a little way out of the base, and not from the origin.
 				// That is where the turret is mounted, on (or in) the ceiling, or the floor for an upside-down one, so
@@ -760,7 +760,7 @@ void turret_base_think(gentity_t* self)
 
 				if (gi.inPVS(org2, self->enemy->currentOrigin))
 				{
-					vec3_t org;
+					vec3_t org = {};
 					// Every now and again, check to see if we can even trace to the enemy
 					trace_t tr;
 
@@ -1189,7 +1189,7 @@ void SP_misc_turretG2(gentity_t* base)
 //-----------------------------------------------------
 void finish_spawning_turret(gentity_t* base)
 {
-	vec3_t fwd;
+	vec3_t fwd = {};
 
 	if (base->spawnflags & 2)
 	{
@@ -1434,7 +1434,7 @@ void SP_misc_ns_turret(gentity_t* base)
 
 void laser_arm_fire(gentity_t* ent)
 {
-	vec3_t start, end, fwd, rt, up;
+	vec3_t start = {}, end = {}, fwd = {}, rt = {}, up = {};
 	trace_t trace;
 
 	if (ent->attackDebounceTime < level.time && ent->alt_fire)
@@ -1481,7 +1481,7 @@ void laser_arm_fire(gentity_t* ent)
 
 void laser_arm_use(gentity_t* self, gentity_t* other, gentity_t* activator)
 {
-	vec3_t new_angles;
+	vec3_t new_angles = {};
 
 	self->activator = activator;
 	switch (self->count)
@@ -1554,8 +1554,8 @@ What it does when used depends on it's "count" (can be set by a script)
 */
 void laser_arm_start(gentity_t* base)
 {
-	vec3_t arm_angles;
-	vec3_t head_angles;
+	vec3_t arm_angles = {};
+	vec3_t head_angles = {};
 
 	base->e_ThinkFunc = thinkF_NULL;
 	//We're the base, spawn the arm and head
@@ -1576,7 +1576,7 @@ void laser_arm_start(gentity_t* base)
 		else
 		{
 			//point at it
-			vec3_t dir, angles;
+			vec3_t dir = {}, angles = {};
 
 			VectorSubtract(targ->currentOrigin, base->s.origin, dir);
 			vectoangles(dir, angles);
@@ -1710,8 +1710,8 @@ void pas_use(gentity_t* self, gentity_t* other, gentity_t* activator)
 static void pas_fire(gentity_t* ent)
 //----------------------------------------------------------------
 {
-	vec3_t fwd, org;
-	mdxaBone_t boltMatrix;
+	vec3_t fwd = {}, org = {};
+	mdxaBone_t boltMatrix = {};
 
 	// Getting the flash bolt here
 	gi.G2API_GetBoltMatrix(ent->ghoul2, ent->playerModel,
@@ -1762,7 +1762,7 @@ static qboolean pas_find_enemies(gentity_t* self)
 {
 	qboolean found = qfalse;
 	float best_dist = self->radius * self->radius;
-	vec3_t org, org2;
+	vec3_t org = {}, org2 = {};
 
 	// FIX: move large array off stack → static buffer
 	static gentity_t* entity_list[MAX_GENTITIES];
@@ -1776,7 +1776,7 @@ static qboolean pas_find_enemies(gentity_t* self)
 		}
 	}
 
-	mdxaBone_t boltMatrix;
+	mdxaBone_t boltMatrix = {};
 
 	// Get the "eye" position
 	gi.G2API_GetBoltMatrix(
@@ -1844,7 +1844,7 @@ static qboolean pas_find_enemies(gentity_t* self)
 			!tr.startsolid &&
 			(tr.fraction == 1.0f || tr.entityNum == target->s.number))
 		{
-			vec3_t enemy_dir;
+			vec3_t enemy_dir = {};
 			VectorSubtract(target->currentOrigin, self->currentOrigin, enemy_dir);
 			const float enemy_dist = VectorLengthSquared(enemy_dir);
 
@@ -1890,8 +1890,8 @@ static void pas_adjust_enemy(gentity_t* ent)
 	else // if ( Q_flrand(0.0f, 1.0f) > 0.5f )
 	{
 		// do a trace every now and then.
-		mdxaBone_t boltMatrix;
-		vec3_t org, org2;
+		mdxaBone_t boltMatrix = {};
+		vec3_t org = {}, org2 = {};
 
 		// Getting the "eye" here
 		gi.G2API_GetBoltMatrix(ent->ghoul2, ent->playerModel,
@@ -1986,16 +1986,16 @@ void pas_think(gentity_t* ent)
 
 	qboolean moved = qfalse;
 	float diff_yaw = 0.0f, diff_pitch = 0.0f;
-	vec3_t front_angles, back_angles;
+	vec3_t front_angles = {}, back_angles = {};
 
 	ent->speed = AngleNormalize360(ent->speed);
 	ent->random = AngleNormalize360(ent->random);
 
 	if (ent->enemy)
 	{
-		vec3_t desired_angles;
-		vec3_t org;
-		vec3_t enemy_dir;
+		vec3_t desired_angles = {};
+		vec3_t org = {};
+		vec3_t enemy_dir = {};
 		// ...then we'll calculate what new aim adjustments we should attempt to make this frame
 		// Aim at enemy
 		if (ent->enemy->client)
@@ -2215,8 +2215,8 @@ void SP_PAS(gentity_t* base)
 qboolean place_portable_assault_sentry(gentity_t* self, vec3_t origin, vec3_t angs)
 //------------------------------------------------------------------------
 {
-	vec3_t fwd, pos;
-	vec3_t mins, maxs;
+	vec3_t fwd = {}, pos = {};
+	vec3_t mins = {}, maxs = {};
 	trace_t tr;
 
 	VectorSet(maxs, 9, 9, 0);
@@ -2295,8 +2295,8 @@ void ion_cannon_think(gentity_t* self)
 
 	if (self->fxID)
 	{
-		vec3_t fwd, org;
-		mdxaBone_t boltMatrix;
+		vec3_t fwd = {}, org = {};
+		mdxaBone_t boltMatrix = {};
 
 		// Getting the flash bolt here
 		gi.G2API_GetBoltMatrix(self->ghoul2, self->playerModel,
@@ -2326,7 +2326,7 @@ void ion_cannon_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, 
 	int hit_loc)
 	//----------------------------------------------------------------------------------------------
 {
-	vec3_t org;
+	vec3_t org = {};
 
 	// dead, so nuke the ghoul model and put in the damage md3 version
 	if (self->playerModel >= 0)
@@ -2516,7 +2516,7 @@ void spotlight_use(gentity_t* self, gentity_t* other, gentity_t* activator)
 //-----------------------------------------------------
 void spotlight_think(gentity_t* ent)
 {
-	vec3_t dir, end;
+	vec3_t dir = {}, end = {};
 	trace_t tr;
 
 	// dumb hack flag so that we can draw an interpolated light cone cgame side.
@@ -2786,7 +2786,7 @@ void panel_turret_think(gentity_t* self)
 		{
 			if (self->attackDebounceTime < level.time)
 			{
-				vec3_t dir, pt;
+				vec3_t dir = {}, pt = {};
 
 				AngleVectors(self->s.apos.trBase, dir, nullptr, nullptr);
 

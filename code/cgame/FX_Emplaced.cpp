@@ -35,7 +35,7 @@ FX_EmplacedProjectileThink
 
 void FX_EmplacedProjectileThink(centity_t* cent, const weaponInfo_s* weapon)
 {
-	vec3_t forward;
+	vec3_t forward = {};
 
 	if (VectorNormalize2(cent->gent->s.pos.trDelta, forward) == 0.0f)
 	{
@@ -145,7 +145,7 @@ FX_TurretProjectileThink
 
 void FX_TurretProjectileThink(centity_t* cent, const weaponInfo_s* weapon)
 {
-	vec3_t forward;
+	vec3_t forward = {};
 
 	if (VectorNormalize2(cent->gent->s.pos.trDelta, forward) == 0.0f)
 	{

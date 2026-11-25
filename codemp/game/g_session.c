@@ -197,6 +197,12 @@ void G_InitSessionData(gclient_t* client, const char* userinfo, const qboolean i
 		{
 			sess->sessionTeam = PickTeam(-1);
 			client->ps.fd.forceDoInit = 1; //every time we change teams make sure our force powers are set right
+			if (level.gametype == GT_SINGLE_PLAYER && G_MissionSquadCount(client - level.clients, NULL) >= G_MissionSquadMax())
+			{
+				// Missions: the squad is full - he waits in the queue (g_cmds.c G_MissionSquadThink)
+				sess->sessionTeam = TEAM_SPECTATOR;
+				G_MissionQueueAdd(&g_entities[client - level.clients]);
+			}
 		}
 		else
 		{
@@ -301,7 +307,7 @@ G_InitWorldSession
 */
 void G_InitWorldSession(void)
 {
-	char s[MAX_STRING_CHARS];
+	char s[MAX_STRING_CHARS] = { 0 };
 
 	trap->Cvar_VariableStringBuffer("session", s, sizeof s);
 	const int gt = atoi(s);

@@ -155,7 +155,7 @@ reference_tag_t* TAG_Find(const char* owner, const char* name)
 		if (tagOwner == nullptr)
 			return nullptr;
 
-		char tempName[MAX_REFNAME];
+		char tempName[MAX_REFNAME] = {};
 
 		Q_strncpyz(tempName, name, MAX_REFNAME);
 		Q_strlwr(tempName); //NOTENOTE: For case insensitive searches on a map
@@ -376,7 +376,7 @@ void ref_link(gentity_t* ent)
 
 		if (target)
 		{
-			vec3_t dir;
+			vec3_t dir = {};
 			//Find the direction to the target
 			VectorSubtract(target->s.origin, ent->s.origin, dir);
 			VectorNormalize(dir);

@@ -775,7 +775,7 @@ private:
 				}
 			}
 
-			trace_t trace;
+			trace_t trace = { qfalse };
 			mOrders[0].mPosition = mFormHead;
 
 			gi.trace(&trace,
@@ -893,7 +893,7 @@ private:
 
 			if (NextState >= TS_ATTACK)
 			{
-				trace_t trace;
+				trace_t trace = { qfalse };
 				CVec3   OrderUp(Order.mPosition);
 				OrderUp[2] += 10.0f;
 
@@ -1144,7 +1144,7 @@ static void Trooper_UpdateTroop(gentity_t* actor)
 	{
 		float closestDist = 0;
 		TTroopPool::iterator closestTroop = mTroops.end();
-		trace_t trace;
+		trace_t trace = { qfalse };
 
 		for (TTroopPool::iterator iTroop = mTroops.begin(); iTroop != mTroops.end(); ++iTroop)
 		{
@@ -1300,7 +1300,7 @@ static void Trooper_StandUp(gentity_t* actor, const bool always = false)
 static int Trooper_CanHitTarget(gentity_t* actor, const gentity_t* target, c_troop& troop, float& MuzzleToTargetDistance,
 	CVec3& MuzzleToTarget)
 {
-	trace_t tr;
+	trace_t tr = { qfalse };
 	CVec3 MuzzlePoint(actor->currentOrigin);
 	CalcEntitySpot(actor, SPOT_WEAPON, MuzzlePoint.v);
 
@@ -1997,7 +1997,7 @@ static void Troop_ScanForTarget(troop_t* troop, const int scannerIndex)
 	int targetStop = ENTITYNUM_WORLD;
 	const float scannerMaxViewDist = scanner->NPC->stats.visrange;
 	const float scannerMaxHearDist = scanner->NPC->stats.earshot;
-	vec3_t scannerFwd;
+	vec3_t scannerFwd = { 0 };
 	AngleVectors(scanner->r.currentAngles, scannerFwd, NULL, NULL);
 
 	if (troop->target)
@@ -2012,7 +2012,7 @@ static void Troop_ScanForTarget(troop_t* troop, const int scannerIndex)
 	for (; targetIndex < targetStop; targetIndex++)
 	{
 		gentity_t* target = &g_entities[targetIndex];
-		vec3_t targetPos, targetDirection;
+		vec3_t targetPos = { 0 }, targetDirection = { 0 };
 
 		if (!target->inuse || !NPC_ValidEnemy(target))
 		{
@@ -2074,7 +2074,7 @@ static qboolean Troop_InFormation(const troop_t* troop)
 static void Troop_LeaderIssueAndUpdateOrders(troop_t* troop, const troopState_t nextState)
 {
 	const int actorCount = troop->numActors;
-	trace_t trace;
+	trace_t trace = { 0 };
 	const vec3_t up = { 0, 0, 1 };
 
 	if (!actorCount || !troop->actors[0])
@@ -2252,7 +2252,7 @@ static void Troop_LeaderIssueAndUpdateOrders(troop_t* troop, const troopState_t 
 
 		if (nextState >= TS_ATTACK)
 		{
-			vec3_t orderUp;
+			vec3_t orderUp = { 0 };
 			VectorCopy(order->position, orderUp);
 			orderUp[2] += 10.0f;
 			trap->Trace(&trace, order->position, actor->r.mins, actor->r.maxs, orderUp, actor->s.number,
@@ -2431,7 +2431,7 @@ static void Troop_FrameCheck(void)
 // Join a troop / a leader merges troops
 static void Trooper_UpdateTroop(gentity_t* actor)
 {
-	trace_t trace;
+	trace_t trace = { 0 };
 
 	if (!trooperTroop[actor->s.number])
 	{
@@ -2520,7 +2520,7 @@ static qboolean Trooper_UpdateSmackAway(gentity_t* actor, gentity_t* target)
 	{
 		if (TIMER_Done(actor, "Trooper_SmackAway"))
 		{
-			vec3_t actorToTgt;
+			vec3_t actorToTgt = { 0 };
 			VectorSubtract(target->r.currentOrigin, actor->r.currentOrigin, actorToTgt);
 			if (VectorNormalize(actorToTgt) < 100.0f)
 			{
@@ -2569,8 +2569,8 @@ static void Trooper_StandUp(gentity_t* actor, const qboolean always)
 static int Trooper_CanHitTarget(gentity_t* actor, const gentity_t* target, const troop_t* troop,
 	float* muzzleToTargetDistance, vec3_t muzzleToTarget)
 {
-	trace_t tr;
-	vec3_t muzzlePoint, muzzleDirection;
+	trace_t tr = { 0 };
+	vec3_t muzzlePoint = { 0 }, muzzleDirection = { 0 };
 
 	CalcEntitySpot(actor, SPOT_WEAPON, muzzlePoint);
 	VectorSubtract(troop->targetVisiblePosition, muzzlePoint, muzzleToTarget);
@@ -2640,7 +2640,7 @@ static void Trooper_Think(gentity_t* actor)
 	const gentity_t* fleeFrom = Troop_TooCloseToTroopMember(troop, actor);
 	if (fleeFrom)
 	{
-		vec3_t away;
+		vec3_t away = { 0 };
 		VectorSubtract(actor->r.currentOrigin, fleeFrom->r.currentOrigin, away);
 		away[2] = 0;
 		VectorNormalize(away);
@@ -2713,14 +2713,14 @@ static void Trooper_Think(gentity_t* actor)
 		}
 
 		// Convert To Angles And Set That As Our Desired Look Direction
-		vec3_t angles;
+		vec3_t angles = { 0 };
 		if (muzzleToTargetDistance > 100)
 		{
 			vectoangles(muzzleToTarget, angles);
 		}
 		else
 		{
-			vec3_t aim;
+			vec3_t aim = { 0 };
 			VectorCopy(troop->targetVisiblePosition, aim);
 			aim[2] -= 20.0f; // Aim Lower
 			VectorSubtract(aim, actor->r.currentOrigin, aim);

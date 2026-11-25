@@ -132,7 +132,7 @@ void WP_prox_mine_think(gentity_t* ent)
 void laserTrapThink(gentity_t* ent)
 //---------------------------------------------------------
 {
-	vec3_t end;
+	vec3_t end = {};
 	constexpr vec3_t maxs = { 4, 4, 4 };
 	constexpr vec3_t mins = { -4, -4, -4 };
 	trace_t tr;
@@ -291,7 +291,7 @@ void WP_PlaceLaserTrap(gentity_t* ent, const qboolean alt_fire)
 
 	if (laserTrap)
 	{
-		vec3_t start;
+		vec3_t start = {};
 		// now make the new one
 		VectorCopy(muzzle, start);
 		WP_TraceSetStart(ent, start);

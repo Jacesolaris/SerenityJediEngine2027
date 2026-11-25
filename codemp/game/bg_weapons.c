@@ -928,7 +928,7 @@ int bgNumPersonalShields = 1;
 
 int BG_PersonalShieldByName(const char* name)
 {
-	int i;
+	int i = 0;
 
 	if (!name || !name[0])
 	{
@@ -947,15 +947,15 @@ int BG_PersonalShieldByName(const char* name)
 void BG_LoadPersonalShields(void)
 {
 	char* buf = NULL;
-	const char* p;
-	int len;
+	const char* p = NULL;
+	int len = 0;
 
 	memset(bgPersonalShields, 0, sizeof bgPersonalShields);
 	bgNumPersonalShields = 1;
 
 	{
 		static char shield_buf[16384];
-		fileHandle_t f;
+		fileHandle_t f = 0;
 
 		len = trap->FS_Open(PERSONAL_SHIELD_FILE, &f, FS_READ);
 		if (len <= 0 || len >= (int)sizeof shield_buf)
@@ -975,7 +975,7 @@ void BG_LoadPersonalShields(void)
 	COM_BeginParseSession(PERSONAL_SHIELD_FILE);
 	while (p)
 	{
-		personalShield_t* sh;
+		personalShield_t* sh = NULL;
 		const char* token = COM_ParseExt(&p, qtrue);
 
 		if (!token[0])
@@ -999,7 +999,7 @@ void BG_LoadPersonalShields(void)
 		}
 		while (1)
 		{
-			char key[64];
+			char key[64] = { 0 };
 
 			token = COM_ParseExt(&p, qtrue);
 			if (!token[0] || !Q_stricmp(token, "}"))
@@ -1053,7 +1053,7 @@ void BG_LoadWeaponVariants(void)
 
 	while (p)
 	{
-		char name[64];
+		char name[64] = { 0 };
 		const char* token = COM_ParseExt(&p, qtrue);
 
 		if (!token[0])
@@ -1089,7 +1089,7 @@ void BG_LoadWeaponVariants(void)
 
 		while (1)
 		{
-			char key[64];
+			char key[64] = { 0 };
 
 			token = COM_ParseExt(&p, qtrue);
 			if (!token[0])

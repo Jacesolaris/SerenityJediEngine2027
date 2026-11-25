@@ -110,7 +110,7 @@ static float STEER_Truncate(vec3_t v, const float maxLen)
 // a move trace of the actor's box (lifted by a step) to pos: qtrue = clear
 static qboolean STEER_MoveTrace(const gentity_t* actor, const vec3_t pos)
 {
-	vec3_t mins;
+	vec3_t mins = { 0 };
 	VectorCopy(actor->r.mins, mins);
 	mins[2] += STEPSIZE;
 	trap->Trace(&steerMoveTrace, actor->r.currentOrigin, mins, actor->r.maxs, pos, actor->s.number,
@@ -123,7 +123,7 @@ static qboolean STEER_MoveTrace(const gentity_t* actor, const vec3_t pos)
 	if (steerMoveTrace.fraction < 1.0f)
 	{
 		// something in the way: a client counts (the AI steers round it), and so does the world
-		trace_t clients;
+		trace_t clients = { 0 };
 		trap->Trace(&clients, actor->r.currentOrigin, mins, actor->r.maxs, pos, actor->s.number, actor->clipmask, qfalse, 0,
 			0);
 		steerMoveTrace = clients;
@@ -143,7 +143,7 @@ qboolean STEER_Active(const gentity_t* actor)
 void STEER_Activate(gentity_t* actor)
 {
 	static int touch[MAX_GENTITIES]; // static: 16 KB off the stack (game code runs on one thread)
-	vec3_t mins, maxs;
+	vec3_t mins = { 0 }, maxs = { 0 };
 
 	if (!actor || !actor->client || !actor->NPC)
 	{
@@ -230,7 +230,7 @@ void STEER_DeActivate(gentity_t* actor, usercmd_t* ucmd)
 	// velocity to move direction, angles and the usercmd
 	if (actor->NPC->jumpState != JS_JUMPING && actor->NPC->jumpState != JS_LANDING)
 	{
-		vec3_t moveDir, angles;
+		vec3_t moveDir = { 0 }, angles = { 0 };
 		VectorCopy(su->velocity, moveDir);
 		VectorCopy(actor->NPC->lastPathAngles, angles);
 		if (su->speed > 0.0f && VectorLengthSquared(moveDir) > 0.0f)
@@ -251,7 +251,7 @@ void STEER_DeActivate(gentity_t* actor, usercmd_t* ucmd)
 
 		if (su->speed > 0.0f)
 		{
-			vec3_t forward, right;
+			vec3_t forward = { 0 }, right = { 0 };
 			AngleVectors(actor->r.currentAngles, forward, right, NULL);
 			ucmd->forwardmove = (signed char)floorf(Com_Clamp(-127.0f, 127.0f, DotProduct(forward, moveDir) * 127.0f));
 			ucmd->rightmove = (signed char)floorf(Com_Clamp(-127.0f, 127.0f, DotProduct(right, moveDir) * 127.0f));
@@ -319,7 +319,7 @@ float STEER_Stop(gentity_t* actor)
 float STEER_Seek(gentity_t* actor, const vec3_t pos, const float slowingDistance, const float weight,
 	const float desiredSpeed)
 {
-	vec3_t delta;
+	vec3_t delta = { 0 };
 	if (!STEER_Active(actor))
 	{
 		return 0.0f;
@@ -354,7 +354,7 @@ float STEER_Seek(gentity_t* actor, const vec3_t pos, const float slowingDistance
 
 float STEER_Flee(gentity_t* actor, const vec3_t pos, const float weight)
 {
-	vec3_t delta;
+	vec3_t delta = { 0 };
 	if (!STEER_Active(actor))
 	{
 		return 0.0f;
@@ -377,7 +377,7 @@ static void STEER_ProjectTarget(const steerUser_t* su, const gentity_t* target, 
 	VectorCopy(target->r.currentOrigin, out);
 	if (target->client)
 	{
-		vec3_t vel;
+		vec3_t vel = { 0 };
 		const float distToTarget = Distance(out, su->position);
 		VectorCopy(target->client->ps.velocity, vel);
 		if (VectorNormalize(vel) > 0.0f)
@@ -389,7 +389,7 @@ static void STEER_ProjectTarget(const steerUser_t* su, const gentity_t* target, 
 
 float STEER_Persue(gentity_t* actor, const gentity_t* target, const float slowingDistance)
 {
-	vec3_t projected;
+	vec3_t projected = { 0 };
 	if (!STEER_Active(actor) || !target)
 	{
 		return 0.0f;
@@ -400,7 +400,7 @@ float STEER_Persue(gentity_t* actor, const gentity_t* target, const float slowin
 
 float STEER_Evade(gentity_t* actor, const gentity_t* target)
 {
-	vec3_t projected;
+	vec3_t projected = { 0 };
 	if (!STEER_Active(actor) || !target)
 	{
 		return 0.0f;
@@ -420,7 +420,7 @@ float STEER_Separation(gentity_t* actor, const float scale)
 	{
 		if (su->neighbors[i]->s.number > actor->s.number)
 		{
-			vec3_t nbrToAct;
+			vec3_t nbrToAct = { 0 };
 			VectorSubtract(su->position, su->neighbors[i]->r.currentOrigin, nbrToAct);
 			float d = VectorLengthSquared(nbrToAct);
 			if (d > 1.0f)
@@ -435,7 +435,7 @@ float STEER_Separation(gentity_t* actor, const float scale)
 
 float STEER_Wander(gentity_t* actor)
 {
-	vec3_t dir, pos;
+	vec3_t dir = { 0 }, pos = { 0 };
 	if (!STEER_Active(actor))
 	{
 		return 0.0f;
@@ -445,7 +445,7 @@ float STEER_Wander(gentity_t* actor)
 	VectorSet(dir, 1.0f, 0.0f, 0.0f);
 	if (su->speed > 0.1f)
 	{
-		vec3_t angles;
+		vec3_t angles = { 0 };
 		vectoangles(su->velocity, angles);
 		angles[YAW] += Q_irand(-5, 5); // (SP turned the roll: a slight change of course)
 		AngleVectors(angles, dir, NULL, NULL);
@@ -469,7 +469,7 @@ float STEER_FollowLeader(gentity_t* actor, gentity_t* leader, const float dist)
 
 	if (timeRemaining < 0 || leaderSpeed > 0.0f && timeRemaining > 1000)
 	{
-		vec3_t leaderDir, followPos, angles;
+		vec3_t leaderDir = { 0 }, followPos = { 0 }, angles = { 0 };
 		VectorSet(angles, 0, leader->r.currentAngles[YAW], 0);
 		AngleVectors(angles, leaderDir, NULL, NULL);
 		if (!actor->enemy && !leader->enemy)
@@ -505,7 +505,7 @@ static qboolean STEER_TestCollision(gentity_t* actor, steerUser_t* su, const vec
 	steerEntData_t* d = STEER_EntData(actor);
 	qboolean safe = STEER_MoveTrace(actor, projectPos);
 	const int contactNum = steerMoveTrace.entityNum;
-	vec3_t contactNormal, contactPoint;
+	vec3_t contactNormal = { 0 }, contactPoint = { 0 };
 
 	if (contactNum != ENTITYNUM_NONE && contactNum != ENTITYNUM_WORLD)
 	{
@@ -536,7 +536,7 @@ static qboolean STEER_TestCollision(gentity_t* actor, steerUser_t* su, const vec
 				// he is moving: maybe just slow down some and stay behind him
 				if (contactSpeed < projectSpeed)
 				{
-					vec3_t myDir, contactDir, delta;
+					vec3_t myDir = { 0 }, contactDir = { 0 }, delta = { 0 };
 					VectorCopy(projectVelocity, myDir);
 					VectorNormalize(myDir);
 					VectorCopy(contact->client->ps.velocity, contactDir);
@@ -572,7 +572,7 @@ static qboolean STEER_TestCollision(gentity_t* actor, steerUser_t* su, const vec
 
 		if (!safe)
 		{
-			vec3_t projectDir, along;
+			vec3_t projectDir = { 0 }, along = { 0 };
 			const vec3_t up = { 0, 0, 1 };
 			VectorCopy(projectVelocity, projectDir);
 			VectorNormalize(projectDir);
@@ -610,7 +610,7 @@ static qboolean STEER_TestCollision(gentity_t* actor, steerUser_t* su, const vec
 
 float STEER_AvoidCollisions(gentity_t* actor, const gentity_t* leader)
 {
-	vec3_t projSteering, projVelocity, projectFwd, projectSide, sideVel, angles, right;
+	vec3_t projSteering = { 0 }, projVelocity = { 0 }, projectFwd = { 0 }, projectSide = { 0 }, sideVel = { 0 }, angles = { 0 }, right = { 0 };
 	if (!STEER_Active(actor))
 	{
 		return 0.0f;
@@ -822,7 +822,7 @@ int NAV_ChooseRandomNeighbor(const int node)
 // SP ChooseFarthestNeighbor: of the actor's node and its neighbours, the one farthest from target (and not past it)
 int NAV_ChooseFarthestNeighbor(gentity_t* actor, const vec3_t target, const float maxSafeDot)
 {
-	vec3_t curPos, nbrPos, actorToTgt;
+	vec3_t curPos = { 0 }, nbrPos = { 0 }, actorToTgt = { 0 };
 	const int cur = NAV_NearestNode(actor);
 
 	if (cur == WAYPOINT_NONE || cur < 0)
@@ -845,7 +845,7 @@ int NAV_ChooseFarthestNeighbor(gentity_t* actor, const vec3_t target, const floa
 	const int numEdges = trap->Nav_GetNodeNumEdges(cur);
 	for (int i = 0; i < numEdges; i++)
 	{
-		vec3_t actorToNbr;
+		vec3_t actorToNbr = { 0 };
 		const int nbr = trap->Nav_GetNodeEdge(cur, i);
 		trap->Nav_GetNodePosition(nbr, nbrPos);
 		const float nbrDist = Distance(target, nbrPos);
@@ -869,7 +869,7 @@ int NAV_ChooseFarthestNeighbor(gentity_t* actor, const vec3_t target, const floa
 // the usercmd)
 qboolean NAV_GoToPos(gentity_t* actor, const vec3_t position, const float radius)
 {
-	vec3_t pos, savedOrigin, dir;
+	vec3_t pos = { 0 }, savedOrigin = { 0 }, dir = { 0 };
 	if (!STEER_Active(actor) || actor != NPCS.NPC || !NPCS.NPCInfo->tempGoal)
 	{
 		return qfalse;
@@ -921,7 +921,7 @@ qboolean NAV_GoToPos(gentity_t* actor, const vec3_t position, const float radius
 // SP SafePathExists: does the straight way from start to stop keep dangerDist away from danger?
 qboolean NAV_SafePathExists(const vec3_t start, const vec3_t stop, const vec3_t danger, const float dangerDist)
 {
-	vec3_t dir, toDanger, closest;
+	vec3_t dir = { 0 }, toDanger = { 0 }, closest = { 0 };
 	VectorSubtract(stop, start, dir);
 	const float len = VectorNormalize(dir);
 	VectorSubtract(danger, start, toDanger);

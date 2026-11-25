@@ -77,7 +77,7 @@ FX_DisruptorAltMiss
 
 void FX_DisruptorAltMiss(vec3_t origin, vec3_t normal)
 {
-	vec3_t pos, c1, c2;
+	vec3_t pos = {}, c1 = {}, c2 = {};
 
 	VectorMA(origin, 4.0f, normal, c1);
 	VectorCopy(c1, c2);
@@ -155,9 +155,9 @@ FX_Strike_Beam
 */
 void FX_Strike_Beam(vec3_t start, vec3_t end, vec3_t targ1, vec3_t targ2)
 {
-	vec3_t dir, chaos,
-		c1, c2,
-		v1, v2;
+	vec3_t dir = {}, chaos = {},
+		c1 = {}, c2 = {},
+		v1 = {}, v2 = {};
 
 	VectorSubtract(end, start, dir);
 	float len = VectorNormalize(dir);

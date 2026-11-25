@@ -45,7 +45,7 @@ extern void player_Decloak(gentity_t* self);
 static void WP_DEMP2_MainFire(gentity_t* ent)
 //---------------------------------------------------------
 {
-	vec3_t start;
+	vec3_t start = {};
 	int damage = weaponData[WP_DEMP2].damage;
 
 	VectorCopy(muzzle, start);
@@ -109,7 +109,7 @@ void DEMP2_AltRadiusDamage(gentity_t* ent)
 	}
 
 	vec3_t mins = { 0 }, maxs = { 0 };
-	vec3_t v, dir;
+	vec3_t v = {}, dir = {};
 
 	frac *= frac * frac;
 
@@ -232,7 +232,7 @@ static void WP_DEMP2_AltFire(gentity_t* ent)
 //---------------------------------------------------------
 {
 	int damage = weaponData[WP_REPEATER].altDamage;
-	vec3_t start;
+	vec3_t start = {};
 	trace_t tr;
 
 	VectorCopy(muzzle, start);

@@ -4120,7 +4120,7 @@ void STEER::DeActivate(gentity_t* actor, usercmd_t* ucmd)
 		//----------------------------------
 		if (suser.mSpeed > 0.0f)
 		{
-			vec3_t forward, right, up;
+			vec3_t forward = {}, right = {}, up = {};
 			AngleVectors(actor->currentAngles, forward, right, up); // Use Current Angles
 
 			const float fDot = Com_Clamp(-127.0f, 127.0f, DotProduct(forward, MoveDir.v) * 127.0f);

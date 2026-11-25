@@ -272,7 +272,7 @@ const char* CG_GetGameStatusText(void)
 	{
 		if (cg.snap->ps.persistant[PERS_TEAM] != TEAM_SPECTATOR)
 		{
-			char sPlaceWith[256];
+			char sPlaceWith[256] = { 0 };
 			trap->SE_GetStringTextString("MP_INGAME_PLACE_WITH", sPlaceWith, sizeof sPlaceWith);
 
 			s = va("%s %s %i", CG_PlaceString(cg.snap->ps.persistant[PERS_RANK] + 1), sPlaceWith,
@@ -305,7 +305,7 @@ static void CG_Text_Paint_Limit(float* max_x, const float x, const float y, cons
 	const char* text,
 	const float adjust, const int limit, const int i_menu_font)
 {
-	qboolean b_is_trailing_punctuation;
+	qboolean b_is_trailing_punctuation = qfalse;
 
 	// this is kinda dirty, but...
 	//
@@ -403,7 +403,7 @@ static void CG_DrawNewTeamInfo(const rectDef_t* rect, const float text_y, const 
 		ci = cgs.clientinfo + sortedTeamPlayers[i];
 		if (ci->infoValid && ci->team == cg.snap->ps.persistant[PERS_TEAM])
 		{
-			vec4_t hcolor;
+			vec4_t hcolor = { 0 };
 			int xx = rect->x + 1;
 			for (int j = 0; j < PW_NUM_POWERUPS; j++)
 			{

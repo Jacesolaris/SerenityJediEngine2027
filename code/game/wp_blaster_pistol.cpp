@@ -46,7 +46,7 @@ void WP_FireBryarPistol(gentity_t* ent, const qboolean alt_fire)
 		return;
 	}
 
-	vec3_t start;
+	vec3_t start = {};
 	int damage = (alt_fire == qfalse) ? weaponData[WP_BLASTER_PISTOL].damage : weaponData[WP_BLASTER_PISTOL].altDamage;
 
 	// Starting point of the shot
@@ -63,7 +63,7 @@ void WP_FireBryarPistol(gentity_t* ent, const qboolean alt_fire)
 	else if (NPC_IsNotHavingEnoughForceSight(ent) == qtrue)
 	{
 		// Force Sight 2+ gives perfect aim; below that we add spread
-		vec3_t angs;
+		vec3_t angs = {};
 		vectoangles(forward_vec, angs);
 
 		const qboolean is_player_or_controlled = ((ent->s.number < MAX_CLIENTS) || (G_ControlledByPlayer(ent) == qtrue)) ? qtrue : qfalse;
@@ -218,7 +218,7 @@ void WP_FireBryarPistolDuals(gentity_t* ent, const qboolean alt_fire, const qboo
 		return;
 	}
 
-	vec3_t start;
+	vec3_t start = {};
 	int damage = (alt_fire == qfalse)
 		? weaponData[WP_BLASTER_PISTOL].damage
 		: weaponData[WP_BLASTER_PISTOL].altDamage;
@@ -242,7 +242,7 @@ void WP_FireBryarPistolDuals(gentity_t* ent, const qboolean alt_fire, const qboo
 	}
 	else if (NPC_IsNotHavingEnoughForceSight(ent) == qtrue)
 	{
-		vec3_t angs;
+		vec3_t angs = {};
 		vectoangles(forward_vec, angs);
 
 		const qboolean is_player_or_controlled =
@@ -444,8 +444,8 @@ void WP_FireBryarsbdPistol(gentity_t* ent, const qboolean alt_fire)
 		return;
 	}
 
-	vec3_t dir;
-	vec3_t angs;
+	vec3_t dir = {};
+	vec3_t angs = {};
 
 	// Convert forward vector to angles
 	vectoangles(forward_vec, angs);
@@ -557,7 +557,7 @@ void WP_FireJawaPistol(gentity_t* ent, const qboolean alt_fire)
 		return;
 	}
 
-	vec3_t start;
+	vec3_t start = {};
 	int damage = (alt_fire == qfalse)
 		? weaponData[WP_JAWA].damage
 		: weaponData[WP_JAWA].altDamage;
@@ -573,7 +573,7 @@ void WP_FireJawaPistol(gentity_t* ent, const qboolean alt_fire)
 	}
 	else if (NPC_IsNotHavingEnoughForceSight(ent) == qtrue)
 	{
-		vec3_t angs;
+		vec3_t angs = {};
 		vectoangles(forward_vec, angs);
 
 		const qboolean is_player_or_controlled =
@@ -720,7 +720,7 @@ void WP_FireBryarPistolold(gentity_t* ent, const qboolean alt_fire)
 		return;
 	}
 
-	vec3_t start;
+	vec3_t start = {};
 	int damage = (alt_fire == qfalse)
 		? weaponData[WP_BRYAR_PISTOL].damage
 		: weaponData[WP_BRYAR_PISTOL].altDamage;
@@ -736,7 +736,7 @@ void WP_FireBryarPistolold(gentity_t* ent, const qboolean alt_fire)
 	}
 	else if (NPC_IsNotHavingEnoughForceSight(ent) == qtrue)
 	{
-		vec3_t angs;
+		vec3_t angs = {};
 		vectoangles(forward_vec, angs);
 
 		const qboolean is_player_or_controlled =

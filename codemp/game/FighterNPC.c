@@ -36,11 +36,11 @@ extern void ChangeWeapon(const gentity_t* ent, int newWeapon);
 extern int PM_AnimLength(const animNumber_t anim);
 extern void G_VehicleTrace(trace_t* results, const vec3_t start, const vec3_t tMins, const vec3_t tMaxs,
 	const vec3_t end, int passEntityNum, int contentmask);
-extern void G_DamageFromKiller(gentity_t* pEnt, gentity_t* pVehEnt, gentity_t* attacker, vec3_t org, int damage,
+extern void G_DamageFromKiller(gentity_t* pEnt, const gentity_t* pVehEnt, gentity_t* attacker, vec3_t org, int damage,
 	int dflags, int mod);
 #endif
 
-extern qboolean BG_UnrestrainedPitchRoll(const playerState_t* ps, Vehicle_t* p_veh);
+extern qboolean BG_UnrestrainedPitchRoll(const playerState_t* ps, const Vehicle_t* p_veh);
 extern void BG_SetAnim(playerState_t* ps, const animation_t* animations, int setAnimParts, int anim, int setAnimFlags);
 extern int BG_GetTime(void);
 
@@ -60,7 +60,7 @@ qboolean BG_FighterUpdate(Vehicle_t* p_veh, const usercmd_t* pUcmd, vec3_t trMin
 	void (*traceFunc)(trace_t* results, const vec3_t start, const vec3_t lmins,
 		const vec3_t lmaxs, const vec3_t end, int passEntityNum, int content_mask))
 {
-	vec3_t bottom;
+	vec3_t bottom = { 0 };
 	playerState_t* parent_ps = NULL;
 #ifdef _GAME //don't do this on client
 
@@ -694,7 +694,7 @@ static void ProcessMoveCommands(Vehicle_t* p_veh)
 		&& p_veh->m_ucmd.rightmove)
 	{
 		//strafe
-		vec3_t vAngles, vRight;
+		vec3_t vAngles = { 0 }, vRight = { 0 };
 		float strafeSpeed = p_veh->m_pVehicleInfo->strafePerc * speedMax * 5.0f;
 		VectorCopy(p_veh->m_vOrientation, vAngles);
 		vAngles[PITCH] = vAngles[ROLL] = 0;
@@ -1425,8 +1425,8 @@ static void ProcessOrientCommands(Vehicle_t* p_veh)
 	const float groundFraction = 0.1f;
 #endif
 	float curRoll = 0.0f;
-	qboolean isDead;
-	qboolean isLandingOrLanded;
+	qboolean isDead = qfalse;
+	qboolean isLandingOrLanded = qfalse;
 	const qboolean arcade = FighterArcade(p_veh); // (2026-10-13)
 #ifdef _GAME
 	int curTime = level.time;

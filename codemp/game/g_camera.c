@@ -149,7 +149,7 @@ void GCam_Update(void)
 
 void GCam_FollowUpdate(void)
 {
-	vec3_t center, dir, cameraAngles, vec, focus[MAX_CAMERA_GROUP_SUBJECTS]; //No more than 16 subjects in a cameraGroup
+	vec3_t center = { 0 }, dir = { 0 }, cameraAngles = { 0 }, vec = { 0 }, focus[MAX_CAMERA_GROUP_SUBJECTS] = { 0 }; //No more than 16 subjects in a cameraGroup
 	//centity_t	*fromCent = NULL;
 	int num_subjects = 0, i = 0;
 
@@ -182,8 +182,8 @@ void GCam_FollowUpdate(void)
 			const int newBolt = trap->G2API_AddBolt(&from->ghoul2, 0, client_camera.cameraGroupTag);
 			if (newBolt != -1)
 			{
-				mdxaBone_t boltMatrix;
-				vec3_t angle;
+				mdxaBone_t boltMatrix = { 0 };
+				vec3_t angle = { 0 };
 
 				VectorSet(angle, 0, from->client->ps.viewangles[YAW], 0);
 
@@ -750,7 +750,7 @@ static void GCam_TrackPointUpdate(void)
 
 	if (gcam_trackIndex >= 0 && gcam_trackIndex < gcam_trackCount)
 	{
-		vec3_t vec;
+		vec3_t vec = { 0 };
 		VectorSubtract(gcam_trackOrg[gcam_trackIndex], client_camera.origin, vec);
 		if (VectorLengthSquared(vec) < 256) //16 squared
 		{
@@ -797,7 +797,7 @@ static void GCam_TrackPointUpdate(void)
 
 static void GCam_TrackUpdate(void)
 {
-	vec3_t goalVec, curVec;
+	vec3_t goalVec = { 0 }, curVec = { 0 };
 	float ft = (float)g_TimeSinceLastFrame;
 
 	if (client_camera.nextTrackEntUpdateTime <= level.time)
@@ -866,7 +866,7 @@ static void GCam_Roff(void)
 
 		const roff_list_t* roff = &roffs[gcam_roffNum - 1];
 		const int frame = client_camera.roff_frame;
-		vec3_t org, ang;
+		vec3_t org = { 0 }, ang = { 0 };
 
 		if (frame >= roff->frames || frame >= MAXNUMDATANEW)
 		{

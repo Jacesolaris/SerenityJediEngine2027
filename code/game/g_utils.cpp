@@ -85,7 +85,7 @@ int G_FindConfigstringIndex(const char* name, const int start, const int max, co
 
 	for (i = 1; i < max; i++)
 	{
-		char s[MAX_STRING_CHARS];
+		char s[MAX_STRING_CHARS] = {};
 		gi.GetConfigstring(start + i, s, sizeof s);
 		if (!s[0])
 		{
@@ -134,7 +134,7 @@ int G_ModelIndex(const char* name)
 int G_SoundIndex(const char* name)
 {
 	assert(name && name[0]);
-	char stripped[MAX_QPATH];
+	char stripped[MAX_QPATH] = {};
 	COM_StripExtension(name, stripped, sizeof stripped);
 
 	return G_FindConfigstringIndex(stripped, CS_SOUNDS, MAX_SOUNDS, qtrue);
@@ -142,7 +142,7 @@ int G_SoundIndex(const char* name)
 
 int G_EffectIndex(const char* name)
 {
-	char temp[MAX_QPATH];
+	char temp[MAX_QPATH] = {};
 
 	// We just don't want extensions on the things we are registering
 	COM_StripExtension(name, temp, sizeof temp);
@@ -170,7 +170,7 @@ constexpr auto FX_ENT_RADIUS = 32;
 //-----------------------------
 void G_PlayEffect(const int fx_id, const vec3_t origin, const vec3_t fwd)
 {
-	vec3_t temp;
+	vec3_t temp = {};
 
 	gentity_t* tent = G_TempEntity(origin, EV_PLAY_EFFECT);
 	tent->s.eventParm = fx_id;
@@ -189,7 +189,7 @@ void G_PlayEffect(const int fx_id, const vec3_t origin, const vec3_t fwd)
 //----------------------------
 void G_PlayEffect(const int fx_id, const int entNum, const vec3_t fwd)
 {
-	vec3_t temp;
+	vec3_t temp = {};
 
 	gentity_t* tent = G_TempEntity(g_entities[entNum].currentOrigin, EV_PLAY_EFFECT);
 	tent->s.eventParm = fx_id;
@@ -1335,7 +1335,7 @@ must be taken if the origin is right on a surface (snap towards start vector fir
 */
 gentity_t* G_TempEntity(const vec3_t origin, const int event)
 {
-	vec3_t snapped;
+	vec3_t snapped = {};
 
 	gentity_t* e = G_Spawn();
 	e->s.eType = ET_EVENTS + event;
@@ -1607,7 +1607,7 @@ void G_SetOrigin(gentity_t* ent, const vec3_t origin)
 qboolean G_CheckInSolidTeleport(const vec3_t& teleport_pos, const gentity_t* self)
 {
 	trace_t trace;
-	vec3_t end, mins;
+	vec3_t end = {}, mins = {};
 
 	VectorCopy(teleport_pos, end);
 	end[2] += self->mins[2];
@@ -1627,7 +1627,7 @@ qboolean G_CheckInSolidTeleport(const vec3_t& teleport_pos, const gentity_t* sel
 qboolean G_CheckInSolid(gentity_t* self, const qboolean fix)
 {
 	trace_t trace;
-	vec3_t end, mins;
+	vec3_t end = {}, mins = {};
 
 	VectorCopy(self->currentOrigin, end);
 	end[2] += self->mins[2];
@@ -1650,7 +1650,7 @@ qboolean G_CheckInSolid(gentity_t* self, const qboolean fix)
 		if (fix)
 		{
 			//Put them at end of trace and check again
-			vec3_t neworg;
+			vec3_t neworg = {};
 
 			VectorCopy(trace.endpos, neworg);
 			neworg[2] -= self->mins[2];
@@ -1667,7 +1667,7 @@ qboolean G_CheckInSolid(gentity_t* self, const qboolean fix)
 
 qboolean infront(const gentity_t* from, const gentity_t* to)
 {
-	vec3_t angles{}, dir, forward;
+	vec3_t angles{}, dir = {}, forward = {};
 
 	angles[PITCH] = angles[ROLL] = 0;
 	angles[YAW] = from->s.angles[YAW];
@@ -1813,7 +1813,7 @@ static qboolean ValidUseTarget(const gentity_t* ent)
 static void DebugTraceForNPC(const gentity_t* ent)
 {
 	trace_t trace;
-	vec3_t src, dest, vf;
+	vec3_t src = {}, dest = {}, vf = {};
 
 	VectorCopy(ent->client->renderInfo.eyePoint, src);
 
@@ -1898,7 +1898,7 @@ static qboolean G_IsTriggerUsable(const gentity_t* self, const gentity_t* other)
 	if (self->spawnflags & 2)
 	{
 		//FACING
-		vec3_t forward;
+		vec3_t forward = {};
 
 		if (other->client)
 		{
@@ -1944,7 +1944,7 @@ static qboolean CanUseInfrontOfPartOfLevel(const gentity_t* ent) // originally f
 	// FIX: move large array off stack → static buffer
 	static gentity_t* touch[MAX_GENTITIES];
 
-	vec3_t mins, maxs;
+	vec3_t mins = {}, maxs = {};
 	constexpr vec3_t range = { 40, 40, 52 };
 
 	if (ent->client == NULL)
@@ -2008,7 +2008,7 @@ extern qboolean eweb_can_be_used(const gentity_t* self, const gentity_t* other, 
 qboolean CanUseInfrontOf(const gentity_t* ent)
 {
 	trace_t trace;
-	vec3_t src, dest, vf;
+	vec3_t src = {}, dest = {}, vf = {};
 
 	if (ent->s.number && ent->client->NPC_class == CLASS_ATST)
 	{
@@ -2181,7 +2181,7 @@ qboolean G_GonkCanGiveBacta(const gentity_t* gonk)
 static void G_GonkGiveBacta(gentity_t* gonk, const gentity_t* user)
 {
 	gitem_t* item = FindItemForInventory(INV_BACTA_CANISTER);
-	vec3_t dir, org, vel;
+	vec3_t dir = {}, org = {}, vel = {};
 
 	if (!item)
 	{
@@ -2207,7 +2207,7 @@ static void G_GonkGiveBacta(gentity_t* gonk, const gentity_t* user)
 void TryUse(gentity_t* ent)
 {
 	trace_t trace;
-	vec3_t src, dest, vf;
+	vec3_t src = {}, dest = {}, vf = {};
 
 	if (ent->s.number == 0 && g_npcdebug->integer == 1)
 	{
@@ -2360,8 +2360,8 @@ qboolean G_PointInBounds(const vec3_t point, const vec3_t mins, const vec3_t max
 qboolean G_BoxInBounds(const vec3_t point, const vec3_t mins, const vec3_t maxs, const vec3_t bounds_mins,
 	const vec3_t bounds_maxs)
 {
-	vec3_t box_mins;
-	vec3_t box_maxs;
+	vec3_t box_mins = {};
+	vec3_t box_maxs = {};
 
 	VectorAdd(point, mins, box_mins);
 	VectorAdd(point, maxs, box_maxs);
@@ -2420,7 +2420,7 @@ void G_DebugLine(vec3_t a, vec3_t b, const int duration, const int color)
 qboolean G_ExpandPointToBBox(vec3_t point, const vec3_t mins, const vec3_t maxs, const int ignore, const int clipmask)
 {
 	trace_t tr;
-	vec3_t start, end;
+	vec3_t start = {}, end = {};
 
 	VectorCopy(point, start);
 

@@ -804,7 +804,7 @@ qboolean BG_LegalizedForcePowers(
 	const int gametype,
 	const int fp_disabled)
 {
-	char power_buf[128];
+	char power_buf[128] = { 0 };
 	char read_buf[128] = { 0 };
 	qboolean maintains_validity = qtrue;
 	const int power_len = (int)strlen(power_out);
@@ -2697,7 +2697,7 @@ grabbing them easier
 */
 qboolean BG_PlayerTouchesItem(const playerState_t* ps, const entityState_t* item, const int at_time)
 {
-	vec3_t origin;
+	vec3_t origin = { 0 };
 
 	BG_EvaluateTrajectory(&item->pos, at_time, origin);
 

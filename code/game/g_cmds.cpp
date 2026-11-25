@@ -174,7 +174,7 @@ static int clientNumberFromString(const gentity_t* to, char* s)
 {
 	gclient_t* cl = nullptr;
 	int idnum = 0;
-	char s2[MAX_STRING_CHARS];
+	char s2[MAX_STRING_CHARS] = {};
 
 	// numeric values are just slot numbers
 	if (s[0] >= '0' && s[0] <= '9')
@@ -199,7 +199,7 @@ static int clientNumberFromString(const gentity_t* to, char* s)
 	SanitizeString(s, s2);
 	for (idnum = 0, cl = level.clients; idnum < level.maxclients; idnum++, cl++)
 	{
-		char n2[MAX_STRING_CHARS];
+		char n2[MAX_STRING_CHARS] = {};
 		if (cl->pers.connected != CON_CONNECTED)
 		{
 			continue;
@@ -475,7 +475,7 @@ extern void Cmd_PersonalShield_f(gentity_t* ent); // g_weapon.cpp (personal shie
 static void Cmd_Grenade_f(gentity_t* ent)
 {
 	const char* arg = gi.argv(1);
-	int v;
+	int v = 0;
 
 	if (!arg[0])
 	{
@@ -535,7 +535,7 @@ static void Cmd_Fx(const gentity_t* ent)
 	{
 		if (gi.argc() == 3)
 		{
-			vec3_t dir;
+			vec3_t dir = {};
 			// I guess, only allow one active at a time
 			while ((fx_ent = G_Find(fx_ent, FOFS(classname), "cmd_fx")) != nullptr)
 			{
@@ -862,9 +862,9 @@ extern qboolean G_CallSpawn(gentity_t* ent);
 
 static void UserSpawn(const gentity_t* ent, const char* name)
 {
-	vec3_t origin;
-	vec3_t vf;
-	vec3_t angles;
+	vec3_t origin = {};
+	vec3_t vf = {};
+	vec3_t angles = {};
 
 	//Spawn the ent
 	gentity_t* ent2 = G_Spawn();
@@ -912,7 +912,7 @@ Cmd_SetViewpos_f
 */
 static void Cmd_SetViewpos_f(gentity_t* ent)
 {
-	vec3_t origin{}, angles;
+	vec3_t origin{}, angles = {};
 
 	if (!g_cheats->integer)
 	{
@@ -1082,7 +1082,7 @@ static void Cmd_UseJetpack_f(const gentity_t* ent)
 //----------------------------------------------------------------------------------
 static qboolean pick_seeker_spawn_point(vec3_t org, vec3_t fwd, vec3_t right, const int skip, vec3_t spot)
 {
-	vec3_t mins{}, maxs, forward, end;
+	vec3_t mins{}, maxs = {}, forward = {}, end = {};
 	trace_t tr;
 
 	VectorSet(maxs, -8, -8, -24); // ?? size
@@ -1165,7 +1165,7 @@ static void Cmd_UseSeeker_f(gentity_t* ent)
 
 		if (tent)
 		{
-			vec3_t fwd, right, spot;
+			vec3_t fwd = {}, right = {}, spot = {};
 
 			AngleVectors(ent->client->ps.viewangles, fwd, right, nullptr);
 
@@ -2891,7 +2891,7 @@ static qboolean Ally_TakesOrders(const gentity_t* player, const gentity_t* ally)
 static gentity_t* Ally_CrosshairEnemy(const gentity_t* player)
 {
 	trace_t tr;
-	vec3_t eyes, forward, end;
+	vec3_t eyes = {}, forward = {}, end = {};
 	VectorCopy(player->client->renderInfo.eyePoint, eyes);
 	if (VectorCompare(eyes, vec3_origin))
 	{
@@ -2964,7 +2964,7 @@ static void Cmd_AllyOrder_f(gentity_t* player, const allyOrder_t order)
 			gi.Printf("ALLYORDER %d order=%d ent=%d dist=%d oldstate=%d player=%s ally=%s\n", level.time, static_cast<int>(order), i,
 				static_cast<int>(Distance(ally->currentOrigin, player->currentOrigin)), static_cast<int>(ally->NPC->behaviorState), vtos(player->currentOrigin), vtos(ally->currentOrigin));
 		}
-		bState_t new_state;
+		bState_t new_state = BS_DEFAULT;
 		switch (order)
 		{
 		case ALLY_ORDER_HOLD:

@@ -76,8 +76,8 @@ FX_DisruptorAltMiss
 
 void FX_DisruptorAltMiss(vec3_t origin, vec3_t normal)
 {
-	vec3_t pos, c1, c2;
-	addbezierArgStruct_t b;
+	vec3_t pos = { 0 }, c1 = { 0 }, c2 = { 0 };
+	addbezierArgStruct_t b = { 0 };
 
 	VectorMA(origin, 4.0f, normal, c1);
 	VectorCopy(c1, c2);

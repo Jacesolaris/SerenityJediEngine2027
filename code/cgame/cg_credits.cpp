@@ -296,7 +296,7 @@ void CG_Credits_Init(const char* psStripReference, vec4_t* pv4Color)
 		qboolean bWasCommand = qtrue;
 		while (true)
 		{
-			qboolean bIsTrailingPunctuation;
+			qboolean bIsTrailingPunctuation = qfalse;
 			int iAdvanceCount = 0;
 			unsigned int uiLetter = cgi_AnyLanguage_ReadCharFromString(psTextParse, &iAdvanceCount,
 				&bIsTrailingPunctuation);

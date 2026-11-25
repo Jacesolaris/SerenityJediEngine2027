@@ -126,7 +126,7 @@ void CG_LoadHolsterData(clientInfo_t* ci)
 	while ((s = BG_GetNextValueGroup(s, holster_type_group)) != NULL)
 	{
 		vec3_t vector_data = { 0, 0, 0 };
-		char holster_type_value[MAX_QPATH];
+		char holster_type_value[MAX_QPATH] = { 0 };
 
 		if (!BG_SiegeGetPairedValue(holster_type_group, "holsterType", holster_type_value))
 		{

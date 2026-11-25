@@ -46,7 +46,7 @@ CG_TargetCommand_f
 */
 void CG_TargetCommand_f()
 {
-	char test[4];
+	char test[4] = {};
 
 	const int targetNum = CG_CrosshairPlayer();
 	if (targetNum == -1)
@@ -75,7 +75,7 @@ static void CG_Viewpos_f()
 
 static void CG_WriteCam_f()
 {
-	char text[1024];
+	char text[1024] = {};
 	static int numCams;
 
 	numCams++;

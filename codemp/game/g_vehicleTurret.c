@@ -91,12 +91,12 @@ static void VEH_TurretAnglesToEnemy(const Vehicle_t* p_veh, const int cur_muzzle
 	const qboolean b_ai_lead,
 	vec3_t desired_angles)
 {
-	vec3_t enemy_dir, org;
+	vec3_t enemy_dir = { 0 }, org = { 0 };
 	VectorCopy(turret_enemy->r.currentOrigin, org);
 	if (b_ai_lead)
 	{
 		//we want to lead them a bit
-		vec3_t diff, velocity;
+		vec3_t diff = { 0 }, velocity = { 0 };
 		VectorSubtract(org, p_veh->m_vMuzzlePos[cur_muzzle], diff);
 		const float dist = VectorNormalize(diff);
 		if (turret_enemy->client)
@@ -125,7 +125,7 @@ static qboolean VEH_TurretAim(Vehicle_t* p_veh,
 	const int turret_num, const int cur_muzzle, vec3_t desired_angles)
 	//-----------------------------------------------------
 {
-	vec3_t cur_angles, add_angles, new_angles = { 0 };
+	vec3_t cur_angles = { 0 }, add_angles = { 0 }, new_angles = { 0 };
 	float aim_correct = qfalse;
 
 	WP_CalcVehMuzzle(parent, cur_muzzle);
@@ -203,7 +203,7 @@ static qboolean VEH_TurretAim(Vehicle_t* p_veh,
 	//set yaw
 	if (turret_stats->yawBone)
 	{
-		vec3_t yawAngles;
+		vec3_t yawAngles = { 0 };
 		VectorClear(yawAngles);
 		yawAngles[turret_stats->yawAxis] = new_angles[YAW];
 		NPC_SetBoneAngles(parent, turret_stats->yawBone, yawAngles);
@@ -211,7 +211,7 @@ static qboolean VEH_TurretAim(Vehicle_t* p_veh,
 	//set pitch
 	if (turret_stats->pitchBone)
 	{
-		vec3_t pitchAngles;
+		vec3_t pitchAngles = { 0 };
 		VectorClear(pitchAngles);
 		pitchAngles[turret_stats->pitchAxis] = new_angles[PITCH];
 		NPC_SetBoneAngles(parent, turret_stats->pitchBone, pitchAngles);
@@ -230,13 +230,13 @@ static qboolean VEH_TurretFindEnemies(Vehicle_t* p_veh,
 {
 	qboolean found = qfalse;
 	float bestDist = turretStats->fAIRange * turretStats->fAIRange;
-	vec3_t org2;
+	vec3_t org2 = { 0 };
 	qboolean foundClient = qfalse;
 
 	// static, off the stack (C6262). This was BG_Alloc'ed on EVERY call: BG_Alloc is a bump allocator that
 	// never frees, so an AI turret used up the whole game pool in about a minute (then every BG_Alloc failed).
 	static gentity_t* entity_list[MAX_GENTITIES];
-	trace_t tr_local;
+	trace_t tr_local = { 0 };
 	trace_t* tr = &tr_local;
 
 	const gentity_t* bestTarget = NULL;
@@ -255,7 +255,7 @@ static qboolean VEH_TurretFindEnemies(Vehicle_t* p_veh,
 	for (int i = 0; i < count; i++)
 	{
 		const gentity_t* target = entity_list[i];
-		vec3_t org;
+		vec3_t org = { 0 };
 
 		if (!target)
 		{
@@ -334,7 +334,7 @@ static qboolean VEH_TurretFindEnemies(Vehicle_t* p_veh,
 		if (tr->entityNum == target->s.number ||
 			(!tr->allsolid && !tr->startsolid && tr->fraction == 1.0f))
 		{
-			vec3_t enemyDir;
+			vec3_t enemyDir = { 0 };
 			VectorSubtract(target->r.currentOrigin, org2, enemyDir);
 			const float enemyDist = VectorLengthSquared(enemyDir);
 
@@ -371,7 +371,7 @@ static void VEH_TurretObeyPassengerControl(Vehicle_t* p_veh, gentity_t* parent, 
 		//a valid, living passenger client
 		const vehWeaponInfo_t* vehWeapon = &g_vehWeaponInfo[turretStats->iWeapon];
 		const int curMuzzle = p_veh->turretStatus[turretNum].nextMuzzle;
-		vec3_t aimAngles;
+		vec3_t aimAngles = { 0 };
 		VectorCopy(passenger->client->ps.viewangles, aimAngles);
 
 		VEH_TurretAim(p_veh, parent, NULL, turretStats, vehWeapon, turretNum, curMuzzle, aimAngles);
@@ -482,7 +482,7 @@ void VEH_TurretThink(Vehicle_t* p_veh, gentity_t* parent, const int turretNum)
 	{
 		if (turretEnemy->health > 0)
 		{
-			vec3_t enemyDir;
+			vec3_t enemyDir = { 0 };
 			// enemy is alive
 			WP_CalcVehMuzzle(parent, curMuzzle);
 			VectorSubtract(turretEnemy->r.currentOrigin, p_veh->m_vMuzzlePos[curMuzzle], enemyDir);
@@ -494,8 +494,8 @@ void VEH_TurretThink(Vehicle_t* p_veh, gentity_t* parent, const int turretNum)
 				if (trap->InPVS(p_veh->m_vMuzzlePos[curMuzzle], turretEnemy->r.currentOrigin))
 				{
 					// Every now and again, check to see if we can even trace to the enemy
-					trace_t tr;
-					vec3_t start, end;
+					trace_t tr = { 0 };
+					vec3_t start = { 0 }, end = { 0 };
 					VectorCopy(p_veh->m_vMuzzlePos[curMuzzle], start);
 
 					VectorCopy(turretEnemy->r.currentOrigin, end);
@@ -513,7 +513,7 @@ void VEH_TurretThink(Vehicle_t* p_veh, gentity_t* parent, const int turretNum)
 
 	if (doAim)
 	{
-		vec3_t aimAngles;
+		vec3_t aimAngles = { 0 };
 		if (VEH_TurretAim(p_veh, parent, turretEnemy, turretStats, vehWeapon, turretNum, curMuzzle, aimAngles))
 		{
 			VEH_TurretCheckFire(p_veh, parent, /*turretEnemy,*/ turretStats, vehWeapon, turretNum, curMuzzle);

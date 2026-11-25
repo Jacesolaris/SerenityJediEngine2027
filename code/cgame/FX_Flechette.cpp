@@ -35,7 +35,7 @@ FX_FlechetteProjectileThink
 
 void FX_FlechetteProjectileThink(centity_t* cent, const weaponInfo_s* weapon)
 {
-	vec3_t forward;
+	vec3_t forward = {};
 
 	EvaluateTrajectoryDelta(&cent->gent->s.pos, cg.time, forward);
 
@@ -88,7 +88,7 @@ FX_FlechetteProjectileThink
 
 void FX_FlechetteAltProjectileThink(centity_t* cent, const weaponInfo_s* weapon)
 {
-	vec3_t forward;
+	vec3_t forward = {};
 
 	if (VectorNormalize2(cent->currentState.pos.trDelta, forward) == 0.0f)
 	{

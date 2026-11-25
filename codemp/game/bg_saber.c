@@ -1212,10 +1212,10 @@ extern qboolean Jedi_StabDownWanted(gentity_t* self); // NPC_AI_Jedi.c, item 367
 
 static saberMoveName_t PM_CheckStabDown(void)
 {
-	vec3_t face_fwd, facing_angles;
-	vec3_t fwd;
+	vec3_t face_fwd = { 0 }, facing_angles = { 0 };
+	vec3_t fwd = { 0 };
 	const bgEntity_t* ent = NULL;
-	trace_t tr;
+	trace_t tr = { 0 };
 	const vec3_t trmins = { -15, -15, -15 };
 	const vec3_t trmaxs = { 15, 15, 15 };
 
@@ -1917,7 +1917,7 @@ static void PM_SaberLockBreak(playerState_t* genemy, const qboolean victory, con
 	}
 	else
 	{//If no one lost, then shove each player away from the other
-		vec3_t opp_dir;
+		vec3_t opp_dir = { 0 };
 
 		const int newstrength = 10;
 
@@ -2391,9 +2391,9 @@ saberMoveName_t PM_BrokenParryForParry(const int move)
 #define BACK_STAB_DISTANCE 128
 static qboolean PM_CanBackstab(void)
 {
-	trace_t tr;
-	vec3_t flat_ang;
-	vec3_t fwd, back = { 0 };
+	trace_t tr = { 0 };
+	vec3_t flat_ang = { 0 };
+	vec3_t fwd = { 0 }, back = { 0 };
 	const vec3_t trmins = { -15, -15, -8 };
 	const vec3_t trmaxs = { 15, 15, 8 };
 
@@ -2423,7 +2423,7 @@ static qboolean PM_CanBackstab(void)
 
 saberMoveName_t PM_SaberFlipOverAttackMove(void)
 {
-	vec3_t fwdAngles, jumpFwd;
+	vec3_t fwdAngles = { 0 }, jumpFwd = { 0 };
 
 	const saberInfo_t* saber1 = BG_MySaber(pm->ps->clientNum, 0);
 	const saberInfo_t* saber2 = BG_MySaber(pm->ps->clientNum, 1);
@@ -2548,7 +2548,7 @@ static int PM_SaberDualJumpAttackMove(void)
 
 saberMoveName_t PM_SaberLungeAttackMove(const qboolean noSpecials)
 {
-	vec3_t fwdAngles, jumpFwd;
+	vec3_t fwdAngles = { 0 }, jumpFwd = { 0 };
 
 	const saberInfo_t* saber1 = BG_MySaber(pm->ps->clientNum, 0);
 	const saberInfo_t* saber2 = BG_MySaber(pm->ps->clientNum, 1);
@@ -2726,9 +2726,9 @@ static int killLungeCooldownTime[MAX_CLIENTS] = { 0 };
 
 qboolean PM_Can_Do_Kill_Lunge(void)
 {
-	trace_t tr;
-	vec3_t flatAng;
-	vec3_t fwd, end = { 0 };
+	trace_t tr = { 0 };
+	vec3_t flatAng = { 0 };
+	vec3_t fwd = { 0 }, end = { 0 };
 	const vec3_t trmins = { -15.0f, -15.0f, -8.0f };
 	const vec3_t trmaxs = { 15.0f,  15.0f,  8.0f };
 
@@ -2796,9 +2796,9 @@ static int killLungeBackCooldown[MAX_CLIENTS] = { 0 };
 
 qboolean PM_Can_Do_Kill_Lunge_back(void)
 {
-	trace_t tr;
-	vec3_t flatAng;
-	vec3_t fwd, end = { 0 };
+	trace_t tr = { 0 };
+	vec3_t flatAng = { 0 };
+	vec3_t fwd = { 0 }, end = { 0 };
 	const vec3_t trmins = { -15.0f, -15.0f, -8.0f };
 	const vec3_t trmaxs = { 15.0f,  15.0f,  8.0f };
 
@@ -2908,7 +2908,7 @@ static saberMoveName_t PM_SaberJumpAttackMove2(void)
 
 saberMoveName_t PM_SaberJumpForwardAttackMove(void)
 {
-	vec3_t fwdAngles, jumpFwd;
+	vec3_t fwdAngles = { 0 }, jumpFwd = { 0 };
 
 	const saberInfo_t* saber1 = BG_MySaber(pm->ps->clientNum, 0);
 	const saberInfo_t* saber2 = BG_MySaber(pm->ps->clientNum, 1);
@@ -3037,7 +3037,7 @@ static saberMoveName_t PM_NPCSmartDFAMove(void)
 
 saberMoveName_t PM_NPC_Force_Leap_Attack(void)
 {
-	vec3_t fwdAngles, jumpFwd;
+	vec3_t fwdAngles = { 0 }, jumpFwd = { 0 };
 
 	const saberInfo_t* saber1 = BG_MySaber(pm->ps->clientNum, 0);
 	const saberInfo_t* saber2 = BG_MySaber(pm->ps->clientNum, 1);
@@ -3128,8 +3128,8 @@ saberMoveName_t PM_NPC_Force_Leap_Attack(void)
 
 float PM_GroundDistance(void)
 {
-	trace_t tr;
-	vec3_t down;
+	trace_t tr = { 0 };
+	vec3_t down = { 0 };
 
 	VectorCopy(pm->ps->origin, down);
 
@@ -3144,8 +3144,8 @@ float PM_GroundDistance(void)
 
 float PM_WalkableGroundDistance(void)
 {
-	trace_t tr;
-	vec3_t down;
+	trace_t tr = { 0 };
+	vec3_t down = { 0 };
 
 	VectorCopy(pm->ps->origin, down);
 
@@ -3192,12 +3192,12 @@ static qboolean PM_CanDoDualDoubleAttacks(void)
 qboolean G_CheckEnemyPresence(const int dir, const float radius)
 {
 	//anyone in this dir?
-	vec3_t angles;
+	vec3_t angles = { 0 };
 	vec3_t checkDir = { 0.0f };
-	vec3_t interDir;
-	vec3_t tTo;
-	vec3_t tMins, tMaxs;
-	trace_t tr;
+	vec3_t interDir = { 0 };
+	vec3_t tTo = { 0 };
+	vec3_t tMins = { 0 }, tMaxs = { 0 };
+	trace_t tr = { 0 };
 	const float tSize = 12.0f;
 	//sp uses a bbox ent list check, but.. that's not so easy/fast to
 	//do in predicted code. So I'll just do a single box trace in the proper direction,
@@ -3294,7 +3294,7 @@ saberMoveName_t PM_CheckPullAttack(void)
 	{
 		const qboolean doMove = qtrue;
 
-		saberMoveName_t pullAttackMove;
+		saberMoveName_t pullAttackMove = LS_NONE;
 		if (pm->ps->fd.saberAnimLevel == SS_FAST)
 		{
 			pullAttackMove = LS_PULL_ATTACK_STAB;
@@ -3447,7 +3447,7 @@ static saberMoveName_t PM_SaberAttackForMovement(const int curmove)
 				//overridden with another move
 				return overrideJumpRightAttackMove;
 			}
-			vec3_t right, fwdAngles;
+			vec3_t right = { 0 }, fwdAngles = { 0 };
 
 			VectorSet(fwdAngles, 0.0f, pm->ps->viewangles[YAW], 0.0f);
 
@@ -3505,7 +3505,7 @@ static saberMoveName_t PM_SaberAttackForMovement(const int curmove)
 				//overridden with another move
 				return overrideJumpLeftAttackMove;
 			}
-			vec3_t right, fwdAngles;
+			vec3_t right = { 0 }, fwdAngles = { 0 };
 
 			VectorSet(fwdAngles, 0.0f, pm->ps->viewangles[YAW], 0.0f);
 			AngleVectors(fwdAngles, NULL, right, NULL);
@@ -4968,7 +4968,7 @@ static qboolean PM_SaberBlocking(void)
 		case BLOCKED_PARRY_BROKEN:
 			//whatever parry we were is in now broken, play the appropriate knocked-away anim
 		{
-			saberMoveName_t next_move;
+			saberMoveName_t next_move = LS_NONE;
 
 			if (PM_SaberInBrokenParry(pm->ps->saberMove))
 			{
@@ -5064,7 +5064,7 @@ static qboolean PM_SaberBlocking(void)
 			else
 			{
 				//start the bounce move
-				saberMoveName_t bounceMove;
+				saberMoveName_t bounceMove = LS_NONE;
 				if (pm->ps->saberBounceMove != LS_NONE)
 				{
 					bounceMove = (saberMoveName_t)pm->ps->saberBounceMove;
@@ -5336,7 +5336,7 @@ static qboolean PM_EnemyCloseEnoughForNormalKata(void)
 		return qfalse;
 	}
 
-	vec3_t start;
+	vec3_t start = { 0 };
 	VectorCopy(pm->ps->origin, start);
 	start[2] += 24.0f; // eye height
 
@@ -5352,15 +5352,15 @@ static qboolean PM_EnemyCloseEnoughForNormalKata(void)
 
 	for (int i = 0; i < 3; i++)
 	{
-		vec3_t testAngles;
+		vec3_t testAngles = { 0 };
 		VectorCopy(baseAngles, testAngles);
 		testAngles[YAW] += yawOffsets[i];
 
-		vec3_t forward, end;
+		vec3_t forward = { 0 }, end = { 0 };
 		AngleVectors(testAngles, forward, NULL, NULL);
 		VectorMA(start, range, forward, end);
 
-		trace_t tr;
+		trace_t tr = { 0 };
 		// use the player's entity number as the passEntity parameter
 		pm->trace(&tr, start, vec3_origin, vec3_origin, end, selfNum, MASK_SHOT);
 
@@ -5441,7 +5441,7 @@ static qboolean PM_KataEnemyDistance(float* dist, float* dz, float* dot)
 {
 #ifdef _GAME
 	const gentity_t* enemy = PM_KataEnemyEnt();
-	vec3_t diff, fwd, yaw_angles;
+	vec3_t diff = { 0 }, fwd = { 0 }, yaw_angles = { 0 };
 
 	if (!enemy)
 	{
@@ -5473,9 +5473,9 @@ static qboolean PM_KataEnemyDistance(float* dist, float* dz, float* dot)
 static int PM_SmashdownEnemiesNear(const gentity_t* enemy, const float range)
 {
 	const gentity_t* self = &g_entities[pm->ps->clientNum];
-	int ents[128];
-	vec3_t mins, maxs;
-	int i, num, count = 0;
+	int ents[128] = { 0 };
+	vec3_t mins = { 0 }, maxs = { 0 };
+	int i = 0, num = 0, count = 0;
 
 	for (i = 0; i < 3; i++)
 	{
@@ -5486,7 +5486,7 @@ static int PM_SmashdownEnemiesNear(const gentity_t* enemy, const float range)
 	for (i = 0; i < num; i++)
 	{
 		const gentity_t* ent = &g_entities[ents[i]];
-		vec3_t diff;
+		vec3_t diff = { 0 };
 
 		if (ent == self || !ent->inuse || !ent->client || ent->health <= 0)
 		{
@@ -5533,8 +5533,8 @@ static qboolean PM_SmashdownWorthIt(void)
 #ifdef _GAME
 	float dist = 0.0f, dz = 0.0f, dot = 0.0f;
 	const gentity_t* enemy = PM_KataEnemyEnt();
-	const playerState_t* eps;
-	qboolean turtling, worn_out;
+	const playerState_t* eps = NULL;
+	qboolean turtling = qfalse, worn_out = qfalse;
 
 	if (!enemy || !PM_KataEnemyDistance(&dist, &dz, &dot))
 	{
@@ -6274,11 +6274,11 @@ void PM_WeaponLightsaber(void)
 			pm->ps->fd.forcePowerLevel[FP_SABERTHROW] > 0 &&
 			PM_SaberPowerCheck())
 		{
-			trace_t sab_tr;
-			vec3_t fwd;
-			vec3_t min_fwd;
-			vec3_t sab_mins;
-			vec3_t sab_maxs;
+			trace_t sab_tr = { 0 };
+			vec3_t fwd = { 0 };
+			vec3_t min_fwd = { 0 };
+			vec3_t sab_mins = { 0 };
+			vec3_t sab_maxs = { 0 };
 
 			VectorSet(sab_mins, SABERMINS_X, SABERMINS_Y, SABERMINS_Z);
 			VectorSet(sab_maxs, SABERMAXS_X, SABERMAXS_Y, SABERMAXS_Z);
@@ -7725,7 +7725,7 @@ void PM_SetSaberMove(saberMoveName_t new_move)
 		// SS_BLASTER (Jace 2026-10-31): the flip-over stab (BOTH_JUMPFLIPSTABDOWN) as its jump attack, launched as
 		// PM_SaberFlipOverAttackMove launches LS_A_FLIP_STAB: up as well as forward. Setting only the forward velocity
 		// wiped the jump attack's upward one, so he dropped straight back down and stabbed the floor
-		vec3_t fwdAngles, jumpFwd;
+		vec3_t fwdAngles = { 0 }, jumpFwd = { 0 };
 
 		VectorCopy(pm->ps->viewangles, fwdAngles);
 		fwdAngles[PITCH] = fwdAngles[ROLL] = 0;

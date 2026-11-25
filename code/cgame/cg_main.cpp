@@ -908,8 +908,8 @@ int CG_GetCameraAng(vec3_t cameraang)
 
 void CG_Printf(const char* msg, ...)
 {
-	va_list argptr;
-	char text[1024];
+	va_list argptr = {};
+	char text[1024] = {};
 
 	va_start(argptr, msg);
 	Q_vsnprintf(text, sizeof text, msg, argptr);
@@ -920,8 +920,8 @@ void CG_Printf(const char* msg, ...)
 
 NORETURN void CG_Error(const char* msg, ...)
 {
-	va_list argptr;
-	char text[1024];
+	va_list argptr = {};
+	char text[1024] = {};
 
 	va_start(argptr, msg);
 	Q_vsnprintf(text, sizeof text, msg, argptr);
@@ -955,7 +955,7 @@ The server says this item is used on this level
 */
 void CG_RegisterItemSounds(const int itemNum)
 {
-	char data[MAX_QPATH];
+	char data[MAX_QPATH] = {};
 
 	const gitem_t* item = &bg_itemlist[itemNum];
 
@@ -1107,7 +1107,7 @@ static void CG_RegisterSounds()
 
 	for (i = 0; i < 4; i++)
 	{
-		char name[MAX_QPATH];
+		char name[MAX_QPATH] = {};
 		Com_sprintf(name, sizeof name, "sound/player/footsteps/stone_step%i.wav", i + 1);
 		cgs.media.footsteps[FOOTSTEP_NORMAL][i] = cgi_S_RegisterSound(name);
 
@@ -1200,7 +1200,7 @@ static void CG_RegisterSounds()
 	CG_LoadingString("item sounds");
 
 	// only register the items that the server says we need
-	char items[MAX_ITEMS + 1];
+	char items[MAX_ITEMS + 1] = {};
 	//Raz: Fixed buffer overflow
 	Q_strncpyz(items, CG_ConfigString(CS_ITEMS), sizeof items);
 
@@ -1252,7 +1252,7 @@ static qboolean CG_RegisterClientSkin(clientInfo_t* ci,
 	const char* torsoModelName, const char* torsoSkinName,
 	const char* legsModelName, const char* legsSkinName)
 {
-	char lfilename[MAX_QPATH];
+	char lfilename[MAX_QPATH] = {};
 
 	Com_sprintf(lfilename, sizeof lfilename, "models/players/%s/lower_%s.skin", legsModelName, legsSkinName);
 	ci->legsSkin = cgi_R_RegisterSkin(lfilename);
@@ -1265,7 +1265,7 @@ static qboolean CG_RegisterClientSkin(clientInfo_t* ci,
 
 	if (torsoModelName && torsoSkinName && torsoModelName[0] && torsoSkinName[0])
 	{
-		char tfilename[MAX_QPATH];
+		char tfilename[MAX_QPATH] = {};
 		Com_sprintf(tfilename, sizeof tfilename, "models/players/%s/upper_%s.skin", torsoModelName, torsoSkinName);
 		ci->torsoSkin = cgi_R_RegisterSkin(tfilename);
 
@@ -1278,7 +1278,7 @@ static qboolean CG_RegisterClientSkin(clientInfo_t* ci,
 
 	if (headModelName && headSkinName && headModelName[0] && headSkinName[0])
 	{
-		char hfilename[MAX_QPATH];
+		char hfilename[MAX_QPATH] = {};
 		Com_sprintf(hfilename, sizeof hfilename, "models/players/%s/head_%s.skin", headModelName, headSkinName);
 		ci->headSkin = cgi_R_RegisterSkin(hfilename);
 
@@ -1306,7 +1306,7 @@ qboolean CG_RegisterClientModelname(clientInfo_t* ci,
 	Ghoul2 Insert Start
 	*/
 #if 1
-	char filename[MAX_QPATH];
+	char filename[MAX_QPATH] = {};
 
 	if (!legsModelName || !legsModelName[0])
 	{
@@ -1389,12 +1389,12 @@ qboolean CG_RegisterClientModelname(clientInfo_t* ci,
 
 void CG_RegisterClientRenderInfo(clientInfo_t* ci, const renderInfo_t* ri)
 {
-	char headModelName[MAX_QPATH];
-	char torsoModelName[MAX_QPATH];
-	char legsModelName[MAX_QPATH];
-	char headSkinName[MAX_QPATH];
-	char torsoSkinName[MAX_QPATH];
-	char legsSkinName[MAX_QPATH];
+	char headModelName[MAX_QPATH] = {};
+	char torsoModelName[MAX_QPATH] = {};
+	char legsModelName[MAX_QPATH] = {};
+	char headSkinName[MAX_QPATH] = {};
+	char torsoSkinName[MAX_QPATH] = {};
+	char legsSkinName[MAX_QPATH] = {};
 
 	if (!ri->legsModelName[0])
 	{
@@ -1820,7 +1820,7 @@ void CG_CreateMiscEnts();
 static void CG_RegisterGraphics()
 {
 	int i = 0;
-	char items[MAX_ITEMS + 1];
+	char items[MAX_ITEMS + 1] = {};
 	const char* sb_nums[11] = {
 		"gfx/2d/numbers/zero",
 		"gfx/2d/numbers/one",
@@ -2232,8 +2232,8 @@ static void CG_RegisterGraphics()
 	assert(static_cast<size_t>(cgs.numInlineModels) < sizeof cgs.inlineDrawModel / sizeof cgs.inlineDrawModel[0]);
 	for (i = 1; i < cgs.numInlineModels; i++)
 	{
-		char name[10];
-		vec3_t mins, maxs;
+		char name[10] = {};
+		vec3_t mins = {}, maxs = {};
 
 		Com_sprintf(name, sizeof name, "*%i", i);
 		cgs.inlineDrawModel[i] = cgi_R_RegisterModel(name);
@@ -2392,7 +2392,7 @@ static void CG_RegisterGraphics()
 
 	for (i = 1; i < MAX_SUB_BSP; i++)
 	{
-		vec3_t mins, maxs;
+		vec3_t mins = {}, maxs = {};
 		int j = 0;
 
 		const char* bspName = CG_ConfigString(CS_BSP_MODELS + i);
@@ -2412,7 +2412,7 @@ static void CG_RegisterGraphics()
 		break_point++;
 		for (int sub = 1; sub < MAX_MODELS; sub++)
 		{
-			char temp[MAX_QPATH];
+			char temp[MAX_QPATH] = {};
 			Com_sprintf(temp, MAX_QPATH, "*%d-%d", i, sub);
 			cgs.inlineDrawModel[break_point] = cgi_R_RegisterModel(temp);
 			if (!cgs.inlineDrawModel[break_point])
@@ -2517,7 +2517,7 @@ CG_StartMusic
 void CG_StartMusic(const qboolean bForceStart)
 {
 	const char* s = nullptr;
-	char parm1[MAX_QPATH], parm2[MAX_QPATH];
+	char parm1[MAX_QPATH] = {}, parm2[MAX_QPATH] = {};
 
 	// start the background music
 	s = const_cast<char*>(CG_ConfigString(CS_MUSIC));
@@ -2713,8 +2713,8 @@ void CG_CreateMiscEnts()
 {
 	for (int i = 0; i < NumMiscEnts; i++)
 	{
-		vec3_t maxs;
-		vec3_t mins;
+		vec3_t maxs = {};
+		vec3_t mins = {};
 		cgMiscEntData_t* MiscEnt = &MiscEnts[i];
 
 		MiscEnt->hModel = cgi_R_RegisterModel(MiscEnt->model);
@@ -2734,8 +2734,8 @@ void CG_CreateMiscEnts()
 void CG_DrawMiscEnts()
 {
 	cgMiscEntData_t* MiscEnt = MiscEnts;
-	refEntity_t refEnt;
-	vec3_t cullOrigin;
+	refEntity_t refEnt = {};
+	vec3_t cullOrigin = {};
 
 	memset(&refEnt, 0, sizeof refEnt);
 	refEnt.reType = RT_MODEL;
@@ -2748,7 +2748,7 @@ void CG_DrawMiscEnts()
 
 		if (gi.inPVS(cg.refdef.vieworg, cullOrigin))
 		{
-			vec3_t difference;
+			vec3_t difference = {};
 			VectorSubtract(MiscEnt->origin, cg.refdef.vieworg, difference);
 			if (VectorLengthSquared(difference) - MiscEnt->radius <= 8192 * 8192/*RMG_distancecull.value*/)
 			{
@@ -3257,7 +3257,7 @@ CG_DrawAlert
 
 void CG_DrawAlert(vec3_t origin, const float rating)
 {
-	vec3_t drawPos;
+	vec3_t drawPos = {};
 
 	VectorCopy(origin, drawPos);
 	drawPos[2] += 48;
@@ -3627,7 +3627,7 @@ void CG_LoadMenus(const char* menuFile)
 {
 	const char* p = nullptr;
 	fileHandle_t f = 0;
-	char buf[MAX_MENUDEFFILE];
+	char buf[MAX_MENUDEFFILE] = {};
 
 	int len = cgi_FS_FOpenFile(menuFile, &f, FS_READ);
 
@@ -4086,7 +4086,7 @@ void cg_draw_inventory_select()
 
 			if (item && item->classname && item->classname[0])
 			{
-				char itemName[256], data[1024]; // FIXME: do these really need to be this large??  does it matter?
+				char itemName[256] = {}, data[1024] = {}; // FIXME: do these really need to be this large??  does it matter?
 
 				Com_sprintf(itemName, sizeof itemName, "SP_INGAME_%s", item->classname);
 
@@ -4470,7 +4470,7 @@ static const char* CG_ForcePowerName(const int index)
 {
 	if (showPowers[index] == FP_LIGHTNING && CG_PlayerUsesFlamethrower())
 	{
-		char test[64];
+		char test[64] = {};
 
 		if (cgi_SP_GetStringTextString("SP_INGAME_FLAMETHROWER2", test, sizeof test))
 		{
@@ -5412,7 +5412,7 @@ static void CG_MDWheel_BuildItems()
 	}
 	else
 	{
-		int side[3][MAX_SHOWPOWERS];
+		int side[3][MAX_SHOWPOWERS] = {};
 		int count[3] = {};
 		for (int i = 0; i < MAX_SHOWPOWERS; i++)
 		{
@@ -5520,7 +5520,7 @@ static void CG_MDWheel_Open(const int ring)
 		mdWheel.clickSound = cgi_S_RegisterSound("sound/interface/button1.wav");
 	}
 
-	usercmd_t cmd;
+	usercmd_t cmd = {};
 	CG_MDWheel_GetCmd(&cmd);
 	for (int i = 0; i < 3; i++)
 	{
@@ -5662,7 +5662,7 @@ static void CG_MDWheel_ToggleOnPerson(const int weapon)
 // alt attack toggles the pointed gun's holster
 void CG_MDWheel_Frame()
 {
-	usercmd_t cmd;
+	usercmd_t cmd = {};
 
 	if (!mdWheel.open)
 	{
@@ -5684,7 +5684,7 @@ void CG_MDWheel_Frame()
 	}
 
 	CG_MDWheel_GetCmd(&cmd);
-	vec3_t angles;
+	vec3_t angles = {};
 	for (int i = 0; i < 3; i++)
 	{
 		angles[i] = SHORT2ANGLE(cmd.angles[i]);
@@ -5780,7 +5780,7 @@ static void CG_MDWheel_Sector(const float r0, const float r1, const float a0, co
 	}
 	for (int s = 0; s < steps; s++)
 	{
-		polyVert_t v[4];
+		polyVert_t v[4] = {};
 		const float s0 = a0 + (a1 - a0) * static_cast<float>(s) / static_cast<float>(steps);
 		const float s1 = a0 + (a1 - a0) * static_cast<float>(s + 1) / static_cast<float>(steps);
 		CG_MDWheel_Vert(&v[0], r0, s0, c0);
@@ -5794,7 +5794,7 @@ static void CG_MDWheel_Sector(const float r0, const float r1, const float a0, co
 // a straight line out from the centre at angle a, from r0 to r1, w wide
 static void CG_MDWheel_Spoke(const float a, const float r0, const float r1, const float w, const vec4_t c)
 {
-	polyVert_t v[4];
+	polyVert_t v[4] = {};
 	const float sx = sinf(a), sy = cosf(a);
 	const float tx = sy * w * 0.5f, ty = -sx * w * 0.5f; // across the line
 	CG_MDWheel_VertXY(&v[0], sx * r0 - tx, sy * r0 - ty, c);
@@ -5819,12 +5819,12 @@ static void CG_MDWheel_SoftSpoke(const float a, const float r0, const float r1, 
 {
 	const float sx = sinf(a), sy = cosf(a);
 	const float nx = sy, ny = -sx; // across the line
-	vec4_t clear;
+	vec4_t clear = {};
 	CG_MDWheel_Clear(clear, c);
 	CG_MDWheel_Spoke(a, r0, r1, w, c);
 	for (int side = -1; side <= 1; side += 2)
 	{
-		polyVert_t v[4];
+		polyVert_t v[4] = {};
 		const float o0 = static_cast<float>(side) * w * 0.5f, o1 = static_cast<float>(side) * (w * 0.5f + f);
 		CG_MDWheel_VertXY(&v[0], sx * r0 + nx * o0, sy * r0 + ny * o0, c);
 		CG_MDWheel_VertXY(&v[1], sx * r1 + nx * o0, sy * r1 + ny * o0, c);
@@ -5838,7 +5838,7 @@ static void CG_MDWheel_SoftSpoke(const float a, const float r0, const float r1, 
 static void CG_MDWheel_SoftArc(const float r0, const float r1, const float f, const float a0, const float a1,
 	const vec4_t c)
 {
-	vec4_t clear;
+	vec4_t clear = {};
 	CG_MDWheel_Clear(clear, c);
 	CG_MDWheel_Sector(r0, r1, a0, a1, c, c);
 	CG_MDWheel_Sector(r0 - f, r0, a0, a1, clear, c);
@@ -5853,7 +5853,7 @@ static void CG_MDWheel_Slice(const int n, const vec3_t rgb, const float alphaIn,
 	constexpr float band = 14.0f; // the brighter band inside the rim
 	const float step = 2.0f * static_cast<float>(M_PI) / static_cast<float>(mdWheel.numItems);
 	const float a0 = (static_cast<float>(n) - 0.5f) * step, a1 = (static_cast<float>(n) + 0.5f) * step;
-	vec4_t cIn, cOut, cBand, cEdge;
+	vec4_t cIn = {}, cOut = {}, cBand = {}, cEdge = {};
 
 	VectorCopy(rgb, cIn);
 	VectorCopy(rgb, cOut);
@@ -5938,7 +5938,7 @@ static void CG_MDWheel_DarkDisc(const float x, const float y, const float r, con
 	for (int i = 0; i < steps; i++)
 	{
 		const float a0 = 2.0f * static_cast<float>(M_PI) * static_cast<float>(i) / static_cast<float>(steps), a1 = 2.0f * static_cast<float>(M_PI) * static_cast<float>(i + 1) / static_cast<float>(steps);
-		polyVert_t v[4];
+		polyVert_t v[4] = {};
 		// the solid middle
 		CG_MDWheel_VertXY(&v[0], x, y, dark);
 		CG_MDWheel_VertXY(&v[1], x + sinf(a0) * r * 0.85f, y + cosf(a0) * r * 0.85f, dark);
@@ -6122,7 +6122,7 @@ void CG_DrawMDWheel()
 		}
 		else if (mdWheel.ring == 1)
 		{
-			char text[256];
+			char text[256] = {};
 			if (!cgi_SP_GetStringTextString(CG_ForcePowerName(item), text, sizeof text))
 			{
 				Q_strncpyz(text, CG_ForcePowerName(item), sizeof text);

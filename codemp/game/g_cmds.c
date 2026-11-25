@@ -136,7 +136,7 @@ void DeathmatchScoreboardMessage(const gentity_t* ent)
 	for (i = 0; i < num_sorted; i++)
 	{
 		const int score_flags = 0;
-		char entry[1024];
+		char entry[1024] = { 0 };
 		int ping = 0;
 
 		const gclient_t* cl = &level.clients[level.sortedClients[i]];
@@ -216,7 +216,7 @@ char* ConcatArgs(const int start)
 	const int c = trap->Argc();
 	for (int i = start; i < c; i++)
 	{
-		char arg[MAX_STRING_CHARS];
+		char arg[MAX_STRING_CHARS] = { 0 };
 		trap->Argv(i, arg, sizeof arg);
 		const int tlen = strlen(arg);
 		if (len + tlen >= MAX_STRING_CHARS - 1)
@@ -270,7 +270,7 @@ static int clientNumberFromString(const gentity_t* to, const char* s, const qboo
 {
 	gclient_t* cl = NULL;
 	int idnum = 0;
-	char clean_input[MAX_NETNAME];
+	char clean_input[MAX_NETNAME] = { 0 };
 
 	if (StringIsInteger(s))
 	{
@@ -346,8 +346,8 @@ static void SanitizeString2(char* in, char* out)
 
 static int G_ClientNumberFromStrippedSubstring(const char* name)
 {
-	char		s2[MAX_STRING_CHARS];
-	char		n2[MAX_STRING_CHARS];
+	char		s2[MAX_STRING_CHARS] = { 0 };
+	char		n2[MAX_STRING_CHARS] = { 0 };
 	int			i = 0, match = -1;
 	gclient_t* cl = NULL;
 
@@ -410,7 +410,7 @@ static void G_Give(gentity_t* ent, const char* name, const char* args, const int
 {
 	int i = 0;
 	qboolean give_all = qfalse;
-	trace_t trace;
+	trace_t trace = { 0 };
 
 	if (!Q_stricmp(name, "all"))
 		give_all = qtrue;
@@ -626,7 +626,7 @@ extern void Cmd_PersonalShield_f(gentity_t* ent); // g_weapon.c (personal shield
 static void Cmd_Grenade_f(gentity_t* ent)
 {
 	char arg[MAX_TOKEN_CHARS] = { 0 };
-	int v;
+	int v = 0;
 
 	trap->Argv(1, arg, sizeof arg);
 
@@ -681,7 +681,7 @@ static void Cmd_Grenade_f(gentity_t* ent)
 static void Cmd_GiveOther_f(const gentity_t* ent)
 {
 	char name[MAX_TOKEN_CHARS] = { 0 };
-	char otherindex[MAX_TOKEN_CHARS];
+	char otherindex[MAX_TOKEN_CHARS] = { 0 };
 
 	if (trap->Argc() < 3)
 	{
@@ -892,7 +892,7 @@ static void Cmd_Kill_f(gentity_t* ent)
 
 static void Cmd_KillOther_f(const gentity_t* ent)
 {
-	char otherindex[MAX_TOKEN_CHARS];
+	char otherindex[MAX_TOKEN_CHARS] = { 0 };
 
 	if (trap->Argc() < 2)
 	{
@@ -1019,6 +1019,241 @@ SetTeam
 qboolean g_dontPenalizeTeam = qfalse;
 qboolean g_preventTeamBegin = qfalse;
 
+/*
+-------------------------
+Missions squad (GT_SINGLE_PLAYER, 2026-11-25, Jace)
+
+At most g_missionMaxPlayers (1-4) players are in a mission. A human who wants in while it is full stays a spectator and
+waits in a queue; the first in line goes in by himself when a place is free (G_MissionSquadThink, from G_RunFrame).
+Bots only with g_missionBots 1: they count in the squad, no bot is added to a full one, and a waiting human takes a
+bot's place (the bot is kicked). With g_missionBots 0 a bot in a mission is kicked. The queue is kept in the cvar
+g_missionQueue (client numbers in order), so it lasts over the campaign's map changes.
+-------------------------
+*/
+static int g_missionQueue[MAX_CLIENTS];	// when he joined the queue (order); 0 = not waiting
+static int g_missionQueueLoaded = -1;
+
+int G_MissionSquadMax(void)
+{
+	const int max = g_missionMaxPlayers.integer;
+
+	return max < 1 ? 1 : max > 4 ? 4 : max;
+}
+
+// the players in the mission (not spectators), not counting ignore; *bots: how many of them are bots
+int G_MissionSquadCount(const int ignore, int* bots)
+{
+	int n = 0;
+
+	if (bots)
+	{
+		*bots = 0;
+	}
+	for (int i = 0; i < level.maxclients; i++)
+	{
+		const gclient_t* cl = &level.clients[i];
+
+		if (i == ignore || cl->pers.connected == CON_DISCONNECTED || cl->sess.sessionTeam == TEAM_SPECTATOR)
+		{
+			continue;
+		}
+		n++;
+		if (bots && g_entities[i].r.svFlags & SVF_BOT)
+		{
+			(*bots)++;
+		}
+	}
+	return n;
+}
+
+static void G_MissionQueueSave(void)
+{
+	char buf[MAX_CLIENTS * 4] = { 0 };
+	int last = 0;
+
+	for (;;)
+	{
+		// next in order after last
+		int best = -1;
+		for (int i = 0; i < MAX_CLIENTS; i++)
+		{
+			if (g_missionQueue[i] > last && (best < 0 || g_missionQueue[i] < g_missionQueue[best]))
+			{
+				best = i;
+			}
+		}
+		if (best < 0)
+		{
+			break;
+		}
+		Q_strcat(buf, sizeof buf, va("%i ", best));
+		last = g_missionQueue[best];
+	}
+	trap->Cvar_Set("g_missionQueue", buf);
+}
+
+static void G_MissionQueueLoad(void)
+{
+	char buf[MAX_CLIENTS * 4] = { 0 };
+	const char* p = buf;
+	int order = 1;
+
+	if (g_missionQueueLoaded == level.startTime)
+	{
+		return;
+	}
+	g_missionQueueLoaded = level.startTime;
+	memset(g_missionQueue, 0, sizeof g_missionQueue);
+	trap->Cvar_VariableStringBuffer("g_missionQueue", buf, sizeof buf);
+	for (;;)
+	{
+		const char* token = COM_ParseExt(&p, qfalse);
+		if (!token[0])
+		{
+			break;
+		}
+		const int n = atoi(token);
+		if (n >= 0 && n < MAX_CLIENTS)
+		{
+			g_missionQueue[n] = order++;
+		}
+	}
+}
+
+static int G_MissionQueuePlace(const int clientNum)
+{
+	int place = 1;
+
+	for (int i = 0; i < MAX_CLIENTS; i++)
+	{
+		if (i != clientNum && g_missionQueue[i] && g_missionQueue[i] < g_missionQueue[clientNum])
+		{
+			place++;
+		}
+	}
+	return place;
+}
+
+void G_MissionQueueAdd(const gentity_t* ent)
+{
+	const int n = ent - g_entities;
+	int newest = 0;
+
+	if (n < 0 || n >= MAX_CLIENTS || ent->r.svFlags & SVF_BOT)
+	{
+		return;
+	}
+	G_MissionQueueLoad();
+	if (!g_missionQueue[n])
+	{
+		for (int i = 0; i < MAX_CLIENTS; i++)
+		{
+			if (g_missionQueue[i] > newest)
+			{
+				newest = g_missionQueue[i];
+			}
+		}
+		g_missionQueue[n] = newest + 1;
+		G_MissionQueueSave();
+	}
+	trap->SendServerCommand(n, va("cp \"" S_COLOR_YELLOW "The squad is full (%i players)\n" S_COLOR_WHITE
+		"You are number %i in the queue\n\"", G_MissionSquadMax(), G_MissionQueuePlace(n)));
+	trap->SendServerCommand(n, va("print \"Missions: the squad is full (%i players). You are number %i in the queue"
+		" and join the mission when a place is free.\n\"", G_MissionSquadMax(), G_MissionQueuePlace(n)));
+}
+
+void G_MissionQueueRemove(const int clientNum)
+{
+	if (clientNum < 0 || clientNum >= MAX_CLIENTS)
+	{
+		return;
+	}
+	G_MissionQueueLoad();
+	if (g_missionQueue[clientNum])
+	{
+		g_missionQueue[clientNum] = 0;
+		G_MissionQueueSave();
+	}
+}
+
+static qboolean G_MissionKickBot(void)
+{
+	for (int i = 0; i < level.maxclients; i++)
+	{
+		if (level.clients[i].pers.connected != CON_DISCONNECTED && g_entities[i].r.svFlags & SVF_BOT)
+		{
+			trap->SendConsoleCommand(EXEC_INSERT, va("clientkick %d\n", i));
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+void G_MissionSquadThink(void)
+{
+	static int next = 0;
+	int bots = 0;
+	int first = -1;
+
+	if (level.gametype != GT_SINGLE_PLAYER || level.intermissiontime)
+	{
+		return;
+	}
+	if (next > level.time && next - level.time <= 2000)
+	{
+		return;
+	}
+	next = level.time + 500;
+	G_MissionQueueLoad();
+
+	const int count = G_MissionSquadCount(-1, &bots);
+	const int max = G_MissionSquadMax();
+
+	// bots are off for missions, or too many players (g_missionMaxPlayers lowered): a bot goes
+	if (bots && (!g_missionBots.integer || count > max))
+	{
+		G_MissionKickBot();
+		next = level.time + 1000;
+		return;
+	}
+
+	// the first in line (still here and still waiting)
+	for (int i = 0; i < MAX_CLIENTS; i++)
+	{
+		if (!g_missionQueue[i])
+		{
+			continue;
+		}
+		if (i >= level.maxclients || level.clients[i].pers.connected == CON_DISCONNECTED
+			|| level.clients[i].sess.sessionTeam != TEAM_SPECTATOR || g_entities[i].r.svFlags & SVF_BOT)
+		{
+			g_missionQueue[i] = 0;
+			G_MissionQueueSave();
+			continue;
+		}
+		if (first < 0 || g_missionQueue[i] < g_missionQueue[first])
+		{
+			first = i;
+		}
+	}
+	if (first < 0 || level.clients[first].pers.connected != CON_CONNECTED)
+	{
+		return;
+	}
+	if (count < max)
+	{
+		g_missionQueue[first] = 0;
+		G_MissionQueueSave();
+		trap->SendServerCommand(first, "cp \"" S_COLOR_GREEN "A place in the squad is free\n\"");
+		SetTeam(&g_entities[first], "free");
+		return;
+	}
+	if (bots && G_MissionKickBot()) // a waiting human takes a bot's place
+	{
+		next = level.time + 1000;
+	}
+}
+
 void SetTeam(gentity_t* ent, const char* s)
 {
 	int team = 0;
@@ -1139,7 +1374,7 @@ void SetTeam(gentity_t* ent, const char* s)
 			team != TEAM_SPECTATOR)
 		{
 			//not a spectator now, and not switching to spec, so you have to wait til you die.
-			qboolean do_begin;
+			qboolean do_begin = qfalse;
 			if (ent->client->tempSpectate >= level.time)
 			{
 				do_begin = qfalse;
@@ -1167,6 +1402,18 @@ void SetTeam(gentity_t* ent, const char* s)
 
 			return;
 		}
+	}
+
+	// Missions: the squad is full - he waits in the queue as a spectator (G_MissionSquadThink lets him in)
+	if (level.gametype == GT_SINGLE_PLAYER && team != TEAM_SPECTATOR && old_team == TEAM_SPECTATOR
+		&& G_MissionSquadCount(clientNum, NULL) >= G_MissionSquadMax())
+	{
+		G_MissionQueueAdd(ent);
+		return;
+	}
+	if (team == TEAM_SPECTATOR)
+	{
+		G_MissionQueueRemove(clientNum); // a spectator by choice no longer waits
 	}
 
 	// override decision if limiting the players
@@ -1373,7 +1620,7 @@ Cmd_Team_f
 */
 static void Cmd_Team_f(gentity_t* ent)
 {
-	char s[MAX_TOKEN_CHARS];
+	char s[MAX_TOKEN_CHARS] = { 0 };
 
 	const int old_team = ent->client->sess.sessionTeam;
 
@@ -1470,7 +1717,7 @@ Cmd_DuelTeam_f
 static void Cmd_DuelTeam_f(gentity_t* ent)
 {
 	int old_team = 0;
-	char s[MAX_TOKEN_CHARS];
+	char s[MAX_TOKEN_CHARS] = { 0 };
 
 	if (level.gametype != GT_POWERDUEL)
 	{
@@ -1598,7 +1845,7 @@ Cmd_SiegeClass_f
 */
 static void Cmd_SiegeClass_f(gentity_t* ent)
 {
-	char class_name[64];
+	char class_name[64] = { 0 };
 	qboolean startedAsSpec = qfalse;
 
 	if (level.gametype != GT_SIEGE)
@@ -1708,7 +1955,7 @@ Cmd_ForceChanged_f
 */
 static void Cmd_ForceChanged_f(gentity_t* ent)
 {
-	char fp_ch_str[1024];
+	char fp_ch_str[1024] = { 0 };
 	//	Cmd_Kill_f(ent);
 	if (ent->client->sess.sessionTeam == TEAM_SPECTATOR)
 	{
@@ -1733,7 +1980,7 @@ argCheck:
 
 	if (trap->Argc() > 1)
 	{
-		char arg[MAX_TOKEN_CHARS];
+		char arg[MAX_TOKEN_CHARS] = { 0 };
 
 		trap->Argv(1, arg, sizeof arg);
 
@@ -1799,7 +2046,7 @@ Cmd_Follow_f
 */
 static void Cmd_Follow_f(gentity_t* ent)
 {
-	char arg[MAX_TOKEN_CHARS];
+	char arg[MAX_TOKEN_CHARS] = { 0 };
 
 	if (ent->client->sess.spectatorState == SPECTATOR_NOT && ent->client->switchTeamTime > level.time)
 	{
@@ -2022,10 +2269,10 @@ static void G_SayTo(const gentity_t* ent, const gentity_t* other, const int mode
 static void G_Say(const gentity_t* ent, const gentity_t* target, int mode, const char* chat_text)
 {
 	int color = 0;
-	char name[64];
+	char name[64] = { 0 };
 	// don't let text be too long for malicious reasons
-	char text[MAX_SAY_TEXT];
-	char location[64];
+	char text[MAX_SAY_TEXT] = { 0 };
+	char location[64] = { 0 };
 	char* loc_msg = NULL;
 
 	{
@@ -2170,7 +2417,7 @@ Cmd_Tell_f
 */
 static void Cmd_Tell_f(const gentity_t* ent)
 {
-	char arg[MAX_TOKEN_CHARS];
+	char arg[MAX_TOKEN_CHARS] = { 0 };
 
 	if (trap->Argc() < 3)
 	{
@@ -2213,8 +2460,8 @@ static void Cmd_Tell_f(const gentity_t* ent)
 //siege voice command
 static void Cmd_VoiceCommand_f(gentity_t* ent)
 {
-	char arg[MAX_TOKEN_CHARS];
-	char content[MAX_TOKEN_CHARS];
+	char arg[MAX_TOKEN_CHARS] = { 0 };
+	char content[MAX_TOKEN_CHARS] = { 0 };
 	int i = 0;
 
 	strcpy(content, "");
@@ -2291,13 +2538,13 @@ static void Cmd_VoiceCommand_f(gentity_t* ent)
 	else
 	{
 		// in other gamemodes that are not Team ones, just do a G_Sound call to each allied player
-		char voice_dir[32];
+		char voice_dir[32] = { 0 };
 
 		strcpy(voice_dir, "mp_generic_male");
 
 		if (trap->Argc() == 3)
 		{
-			char arg2[MAX_TOKEN_CHARS];
+			char arg2[MAX_TOKEN_CHARS] = { 0 };
 			trap->Argv(2, arg2, sizeof arg2);
 			if (Q_stricmp(arg2, "f") == 0)
 				strcpy(voice_dir, "mp_generic_female");
@@ -2599,7 +2846,7 @@ static qboolean G_VoteMapRestart(gentity_t* ent, const int num_args, const char*
 
 static qboolean G_VoteNextmap(const gentity_t* ent, int num_args, const char* arg1, const char* arg2)
 {
-	char s[MAX_CVAR_VALUE_STRING];
+	char s[MAX_CVAR_VALUE_STRING] = { 0 };
 
 	trap->Cvar_VariableStringBuffer("nextmap", s, sizeof s);
 	if (!*s)
@@ -2703,7 +2950,7 @@ static void CG_AdminMenu(gentity_t* ent)
 
 static void Cmd_ChangeMap(gentity_t* ent)
 {
-	char   arg1[MAX_STRING_CHARS];
+	char   arg1[MAX_STRING_CHARS] = { 0 };
 
 	if (!(ent->r.svFlags & SVF_ADMIN))
 	{
@@ -2713,7 +2960,7 @@ static void Cmd_ChangeMap(gentity_t* ent)
 
 	// The arguments come from the client and go into the server command buffer:
 	// only accept a gametype number and a map name without command separators.
-	char   arg2[MAX_STRING_CHARS];
+	char   arg2[MAX_STRING_CHARS] = { 0 };
 	trap->Argv(1, arg1, sizeof(arg1));
 	trap->Argv(2, arg2, sizeof(arg2));
 	const int gametype = atoi(arg1);
@@ -2732,7 +2979,7 @@ static void Cmd_ChangeMap(gentity_t* ent)
 static void Cmd_Punish(gentity_t* ent)
 {
 	int client_id = -1;
-	char   arg1[MAX_STRING_CHARS];
+	char   arg1[MAX_STRING_CHARS] = { 0 };
 
 	if (!(ent->r.svFlags & SVF_ADMIN))
 	{
@@ -2808,7 +3055,7 @@ static void Cmd_Punish(gentity_t* ent)
 static void Cmd_Kick(gentity_t* ent)
 {
 	int client_id = -1;
-	char   arg1[MAX_STRING_CHARS];
+	char   arg1[MAX_STRING_CHARS] = { 0 };
 
 	if (!(ent->r.svFlags & SVF_ADMIN))
 	{
@@ -2877,9 +3124,9 @@ static qboolean Admin_Check(const gentity_t* ent)
 // another admin and not himself (kick, punish, ban, mute)
 static gentity_t* Admin_Target(const gentity_t* ent, const char* arg, const qboolean protect)
 {
-	char name[MAX_STRING_CHARS];
-	gentity_t* target;
-	int client_id;
+	char name[MAX_STRING_CHARS] = { 0 };
+	gentity_t* target = NULL;
+	int client_id = 0;
 
 	if (!arg || !arg[0])
 	{
@@ -2947,10 +3194,10 @@ static void Admin_PrintHelp(const gentity_t* ent)
 // "Adminban <player> [time] [reason]"
 static void Cmd_AdminBan_f(gentity_t* ent)
 {
-	char arg[MAX_STRING_CHARS], reason[ADMINLIST_REASON];
-	gentity_t* target;
-	int seconds, id;
-	const char* time_text;
+	char arg[MAX_STRING_CHARS] = { 0 }, reason[ADMINLIST_REASON] = { 0 };
+	gentity_t* target = NULL;
+	int seconds = 0, id = 0;
+	const char* time_text = NULL;
 
 	if (!Admin_Check(ent))
 	{
@@ -2997,8 +3244,8 @@ static void Cmd_AdminBan_f(gentity_t* ent)
 // "Adminunban <id>": a ban, a mute or a login lock, by its number in Adminbanlist
 static void Cmd_AdminUnban_f(gentity_t* ent)
 {
-	char arg[MAX_STRING_CHARS];
-	char type;
+	char arg[MAX_STRING_CHARS] = { 0 };
+	char type = 0;
 
 	if (!Admin_Check(ent))
 	{
@@ -3033,10 +3280,10 @@ static void Cmd_AdminBanList_f(gentity_t* ent)
 // "Adminmute <player> [time] [reason]": his chat and voice commands are dropped
 static void Cmd_AdminMute_f(gentity_t* ent)
 {
-	char arg[MAX_STRING_CHARS], reason[ADMINLIST_REASON];
-	gentity_t* target;
-	int seconds;
-	const char* time_text;
+	char arg[MAX_STRING_CHARS] = { 0 }, reason[ADMINLIST_REASON] = { 0 };
+	gentity_t* target = NULL;
+	int seconds = 0;
+	const char* time_text = NULL;
 
 	if (!Admin_Check(ent))
 	{
@@ -3079,8 +3326,8 @@ static void Cmd_AdminMute_f(gentity_t* ent)
 
 static void Cmd_AdminUnmute_f(gentity_t* ent)
 {
-	char arg[MAX_STRING_CHARS];
-	gentity_t* target;
+	char arg[MAX_STRING_CHARS] = { 0 };
+	gentity_t* target = NULL;
 
 	if (!Admin_Check(ent))
 	{
@@ -3102,7 +3349,7 @@ static void Cmd_AdminUnmute_f(gentity_t* ent)
 // "Adminsay <text>": to everyone, marked as from an admin
 static void Cmd_AdminSay_f(gentity_t* ent)
 {
-	char text[MAX_SAY_TEXT];
+	char text[MAX_SAY_TEXT] = { 0 };
 
 	if (!Admin_Check(ent))
 	{
@@ -3122,8 +3369,8 @@ static void Cmd_AdminSay_f(gentity_t* ent)
 // "Admintell <player> <text>": to one player, marked as from an admin
 static void Cmd_AdminTell_f(gentity_t* ent)
 {
-	char arg[MAX_STRING_CHARS], text[MAX_SAY_TEXT];
-	gentity_t* target;
+	char arg[MAX_STRING_CHARS] = { 0 }, text[MAX_SAY_TEXT] = { 0 };
+	gentity_t* target = NULL;
 
 	if (!Admin_Check(ent))
 	{
@@ -3155,8 +3402,8 @@ static void Cmd_AdminTell_f(gentity_t* ent)
 // "Adminstatus": every player with his number, team, ping and IP, and who is an admin or muted
 static void Cmd_AdminStatus_f(gentity_t* ent)
 {
-	char chunk[1000];
-	int i;
+	char chunk[1000] = { 0 };
+	int i = 0;
 
 	if (!Admin_Check(ent))
 	{
@@ -3165,7 +3412,7 @@ static void Cmd_AdminStatus_f(gentity_t* ent)
 	Q_strncpyz(chunk, "^3Num  Team  Ping  IP                     Flags  Name\n", sizeof chunk);
 	for (i = 0; i <= level.maxclients; i++)
 	{
-		char line[192];
+		char line[192] = { 0 };
 
 		line[0] = 0;
 		if (i < level.maxclients)
@@ -3173,8 +3420,8 @@ static void Cmd_AdminStatus_f(gentity_t* ent)
 			const gentity_t* other = &g_entities[i];
 			const gclient_t* cl = &level.clients[i];
 			const int mute = other->inuse && other->client ? G_AdminMuteLeft(other) : 0;
-			const char* team;
-			char flags[8];
+			const char* team = NULL;
+			char flags[8] = { 0 };
 
 			if (cl->pers.connected == CON_DISCONNECTED)
 			{
@@ -3232,9 +3479,9 @@ static qboolean Admin_FreeSpot(const gentity_t* mover, const gentity_t* near_ent
 		{ 64, 0, 1 }, { -64, 0, 1 }, { 0, 64, 1 }, { 0, -64, 1 },
 		{ 48, 48, 1 }, { -48, 48, 1 }, { 48, -48, 1 }, { -48, -48, 1 }, { 0, 0, 80 }
 	};
-	vec3_t start, end;
-	trace_t tr;
-	int i;
+	vec3_t start = { 0 }, end = { 0 };
+	trace_t tr = { 0 };
+	int i = 0;
 
 	VectorCopy(near_ent->client->ps.origin, start);
 	for (i = 0; i < 9; i++)
@@ -3252,7 +3499,7 @@ static qboolean Admin_FreeSpot(const gentity_t* mover, const gentity_t* near_ent
 
 static void Admin_Teleport(gentity_t* ent, gentity_t* mover, const gentity_t* to)
 {
-	vec3_t spot, angles;
+	vec3_t spot = { 0 }, angles = { 0 };
 
 	if (mover == to)
 	{
@@ -3277,8 +3524,8 @@ static void Admin_Teleport(gentity_t* ent, gentity_t* mover, const gentity_t* to
 // "Admingoto <player>": the admin goes to him
 static void Cmd_AdminGoto_f(gentity_t* ent)
 {
-	char arg[MAX_STRING_CHARS];
-	gentity_t* target;
+	char arg[MAX_STRING_CHARS] = { 0 };
+	gentity_t* target = NULL;
 
 	if (!Admin_Check(ent))
 	{
@@ -3295,8 +3542,8 @@ static void Cmd_AdminGoto_f(gentity_t* ent)
 // "Adminbring <player>": he comes to the admin
 static void Cmd_AdminBring_f(gentity_t* ent)
 {
-	char arg[MAX_STRING_CHARS];
-	gentity_t* target;
+	char arg[MAX_STRING_CHARS] = { 0 };
+	gentity_t* target = NULL;
 
 	if (!Admin_Check(ent))
 	{
@@ -3313,8 +3560,8 @@ static void Cmd_AdminBring_f(gentity_t* ent)
 
 static void Cmd_AdminLogin(gentity_t* ent)
 {
-	char   password[MAX_STRING_CHARS];
-	int locked;
+	char   password[MAX_STRING_CHARS] = { 0 };
+	int locked = 0;
 
 	trap->Cvar_Set("cl_noprint", "0");
 
@@ -3841,7 +4088,7 @@ Cmd_SetViewpos_f
 static void Cmd_SetViewpos_f(gentity_t* ent)
 {
 	vec3_t origin = { 0 }, angles = { 0 };
-	char buffer[MAX_TOKEN_CHARS];
+	char buffer[MAX_TOKEN_CHARS] = { 0 };
 
 	if (trap->Argc() != 5)
 	{
@@ -3892,11 +4139,11 @@ void G_LeaveVehicle(gentity_t* ent, const qboolean con_check)
 
 int G_ItemUsable(const playerState_t* ps, int forcedUse)
 {
-	vec3_t fwd, fwdorg = { 0 }, dest;
+	vec3_t fwd = { 0 }, fwdorg = { 0 }, dest = { 0 };
 	vec3_t yawonly = { 0 };
 	vec3_t mins = { 0 }, maxs = { 0 };
 	vec3_t trtest = { 0 };
-	trace_t tr;
+	trace_t tr = { 0 };
 
 	// fix: dead players shouldn't use items
 	if (ps->stats[STAT_HEALTH] <= 0)
@@ -3949,7 +4196,7 @@ int G_ItemUsable(const playerState_t* ps, int forcedUse)
 		trap->Trace(&tr, ps->origin, mins, maxs, dest, ps->clientNum, MASK_SHOT, qfalse, 0, 0);
 		if (tr.fraction > 0.9 && !tr.startsolid && !tr.allsolid)
 		{
-			vec3_t pos;
+			vec3_t pos = { 0 };
 			VectorCopy(tr.endpos, pos);
 			VectorSet(dest, pos[0], pos[1], pos[2] - 4096);
 			trap->Trace(&tr, pos, mins, maxs, dest, ps->clientNum, MASK_SOLID, qfalse, 0, 0);
@@ -4158,7 +4405,7 @@ void Cmd_ToggleSaber_f(gentity_t* ent)
 // Players and bots: their model from the userinfo; NPCs: from the NPC file (NPC_stats.c).
 qboolean G_SaberBlasterKyleModel(const gentity_t* ent)
 {
-	char model[MAX_QPATH];
+	char model[MAX_QPATH] = { 0 };
 	if (!ent->client)
 	{
 		return qfalse;
@@ -4166,7 +4413,7 @@ qboolean G_SaberBlasterKyleModel(const gentity_t* ent)
 	if (ent->s.number < MAX_CLIENTS)
 	{
 		// players and bots: the model they picked (client->modelname is not kept up to date in siege)
-		char userinfo[MAX_INFO_STRING];
+		char userinfo[MAX_INFO_STRING] = { 0 };
 		trap->GetUserinfo(ent->s.number, userinfo, sizeof userinfo);
 		Q_strncpyz(model, Info_ValueForKey(userinfo, "model"), sizeof model);
 	}
@@ -4517,8 +4764,8 @@ void Cmd_SaberAttackCycle_f(gentity_t* ent)
 
 void Cmd_EngageDuel_f(gentity_t* ent)
 {
-	trace_t tr;
-	vec3_t forward, fwd_org = { 0 };
+	trace_t tr = { 0 };
+	vec3_t forward = { 0 }, fwd_org = { 0 };
 
 	if (!g_privateDuel.integer)
 	{
@@ -4880,7 +5127,7 @@ static void Cmd_TheDestroyer_f(gentity_t* ent)
 static void Cmd_BotMoveForward_f(gentity_t* ent)
 {
 	const int arg = 4000;
-	char sarg[MAX_STRING_CHARS];
+	char sarg[MAX_STRING_CHARS] = { 0 };
 
 	assert(trap->Argc() > 1);
 	trap->Argv(1, sarg, sizeof sarg);
@@ -4893,7 +5140,7 @@ static void Cmd_BotMoveForward_f(gentity_t* ent)
 static void Cmd_BotMoveBack_f(gentity_t* ent)
 {
 	const int arg = -4000;
-	char sarg[MAX_STRING_CHARS];
+	char sarg[MAX_STRING_CHARS] = { 0 };
 
 	assert(trap->Argc() > 1);
 	trap->Argv(1, sarg, sizeof sarg);
@@ -4906,7 +5153,7 @@ static void Cmd_BotMoveBack_f(gentity_t* ent)
 static void Cmd_BotMoveRight_f(gentity_t* ent)
 {
 	const int arg = 4000;
-	char sarg[MAX_STRING_CHARS];
+	char sarg[MAX_STRING_CHARS] = { 0 };
 
 	assert(trap->Argc() > 1);
 	trap->Argv(1, sarg, sizeof sarg);
@@ -4919,7 +5166,7 @@ static void Cmd_BotMoveRight_f(gentity_t* ent)
 static void Cmd_BotMoveLeft_f(gentity_t* ent)
 {
 	const int arg = -4000;
-	char sarg[MAX_STRING_CHARS];
+	char sarg[MAX_STRING_CHARS] = { 0 };
 
 	assert(trap->Argc() > 1);
 	trap->Argv(1, sarg, sizeof sarg);
@@ -4932,7 +5179,7 @@ static void Cmd_BotMoveLeft_f(gentity_t* ent)
 static void Cmd_BotMoveUp_f(gentity_t* ent)
 {
 	const int arg = 4000;
-	char sarg[MAX_STRING_CHARS];
+	char sarg[MAX_STRING_CHARS] = { 0 };
 
 	assert(trap->Argc() > 1);
 	trap->Argv(1, sarg, sizeof sarg);
@@ -5156,7 +5403,7 @@ void ClientCommand(const int clientNum)
 		}
 		else
 		{
-			char arg1[MAX_STRING_CHARS];
+			char arg1[MAX_STRING_CHARS] = { 0 };
 			trap->Argv(1, arg1, sizeof arg1);
 			if (arg1[0] == 't')
 			{
@@ -5165,7 +5412,7 @@ void ClientCommand(const int clientNum)
 			}
 			else if (args > 1)
 			{
-				char arg2[MAX_STRING_CHARS];
+				char arg2[MAX_STRING_CHARS] = { 0 };
 				//size and teleport flag
 				trap->Argv(2, arg2, sizeof arg2);
 				Create_Autosave(ent->r.currentOrigin, atoi(arg1), arg2[0] == 't' ? qtrue : qfalse);

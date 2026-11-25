@@ -30,7 +30,7 @@ Gives the activator all the items pointed to.
 */
 void Use_Target_Give(const gentity_t* self, gentity_t* other, gentity_t* activator)
 {
-	trace_t trace;
+	trace_t trace = { 0 };
 
 	if (!activator->client)
 	{
@@ -312,7 +312,7 @@ void Use_Target_Speaker(gentity_t* ent, gentity_t* other, gentity_t* activator)
 
 void SP_target_speaker(gentity_t* ent)
 {
-	char buffer[MAX_QPATH];
+	char buffer[MAX_QPATH] = { 0 };
 	char* s = NULL;
 
 	G_SpawnFloat("wait", "0", &ent->wait);
@@ -378,13 +378,13 @@ When triggered, fires a laser.  You can either set a target or a direction.
 */
 void target_laser_think(gentity_t* ent)
 {
-	vec3_t end;
-	trace_t tr;
+	vec3_t end = { 0 };
+	trace_t tr = { 0 };
 
 	// if pointed at another entity, set movedir to point at it
 	if (ent->enemy)
 	{
-		vec3_t point;
+		vec3_t point = { 0 };
 		VectorMA(ent->enemy->s.origin, 0.5, ent->enemy->r.mins, point);
 		VectorMA(point, 0.5, ent->enemy->r.maxs, point);
 		VectorSubtract(point, ent->s.origin, ent->movedir);
@@ -1109,7 +1109,7 @@ static void G_MissionSaveLoadouts(const char* nextMap)
 	for (int i = 0; i < MAX_CLIENTS; i++)
 	{
 		const gentity_t* ent = &g_entities[i];
-		char buf[MAX_CVAR_VALUE_STRING];
+		char buf[MAX_CVAR_VALUE_STRING] = { 0 };
 
 		if (!G_MissionInGame(ent))
 		{
@@ -1189,7 +1189,7 @@ static void G_MissionWriteSave(const char* map, const qboolean hasSpot, const ve
 	const char* target)
 {
 	static char buf[MISSION_SAVE_MAXSIZE];
-	char mapname[MAX_QPATH], loadout[MAX_CVAR_VALUE_STRING];
+	char mapname[MAX_QPATH] = { 0 }, loadout[MAX_CVAR_VALUE_STRING] = { 0 };
 	fileHandle_t f = 0;
 
 	if (level.gametype != GT_SINGLE_PLAYER)
@@ -1241,7 +1241,7 @@ static void G_MissionWriteSave(const char* map, const qboolean hasSpot, const ve
 // a checkpoint was reached (Use_Autosave): saved, so a restart / continue starts here
 void G_MissionCheckpointReached(const vec3_t spot, const float yaw)
 {
-	char mapname[MAX_QPATH];
+	char mapname[MAX_QPATH] = { 0 };
 
 	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
 	G_MissionWriteSave(mapname, qtrue, spot, yaw, "");
@@ -1348,7 +1348,7 @@ void G_MissionRestartSoon(const int delay)
 
 void G_MissionRestartThink(void)
 {
-	char mapname[MAX_QPATH];
+	char mapname[MAX_QPATH] = { 0 };
 	static char buf[MISSION_SAVE_MAXSIZE];
 
 	if (missionRestartLevel != level.startTime || !missionRestartTime || level.time < missionRestartTime)
@@ -1379,7 +1379,7 @@ void G_MissionRestartThink(void)
 void G_MissionCheckContinue(void)
 {
 	static int doneLevel = -1;
-	char value[MAX_QPATH], mapname[MAX_QPATH];
+	char value[MAX_QPATH] = { 0 }, mapname[MAX_QPATH] = { 0 };
 
 	if (level.gametype != GT_SINGLE_PLAYER || doneLevel == level.startTime)
 	{
@@ -1429,7 +1429,7 @@ static gentity_t* G_MissionCheckpointSpot(const vec3_t origin, const float yaw)
 // the loadout this player brought along to this map, or qfalse (buf gets the rest after the map name)
 static qboolean G_MissionLoadoutFor(const int clientNum, char* buf, const int bufSize)
 {
-	char mapname[MAX_QPATH];
+	char mapname[MAX_QPATH] = { 0 };
 	const char* p = buf;
 
 	trap->Cvar_VariableStringBuffer(va(MISSION_LOADOUT_CVAR, clientNum), buf, bufSize);
@@ -1455,8 +1455,8 @@ static qboolean G_MissionFreeSpotNear(const gentity_t* ent, const vec3_t center,
 		for (int k = 0; k < (r ? 8 : 1); k++)
 		{
 			const float yaw = DEG2RAD(k * 45.0f + ent->s.number * 15.0f);
-			vec3_t loc, eye;
-			trace_t tr;
+			vec3_t loc = { 0 }, eye = { 0 };
+			trace_t tr = { 0 };
 
 			VectorCopy(center, loc);
 			loc[0] += cos(yaw) * radii[r];
@@ -1492,8 +1492,8 @@ static qboolean G_MissionFreeSpotNear(const gentity_t* ent, const vec3_t center,
 // Missions: the spot a player who came along from the last map starts this map at (its spawn target), or NULL
 gentity_t* G_MissionSpawnPoint(const gentity_t* ent, vec3_t origin, vec3_t angles)
 {
-	char buf[MAX_CVAR_VALUE_STRING];
-	char mapname[MAX_QPATH], spawnMap[MAX_QPATH], target[MAX_QPATH];
+	char buf[MAX_CVAR_VALUE_STRING] = { 0 };
+	char mapname[MAX_QPATH] = { 0 }, spawnMap[MAX_QPATH] = { 0 }, target[MAX_QPATH] = { 0 };
 
 	if (level.gametype != GT_SINGLE_PLAYER || !G_MissionLoadoutFor(ent->s.number, buf, sizeof buf))
 	{
@@ -1505,8 +1505,8 @@ gentity_t* G_MissionSpawnPoint(const gentity_t* ent, vec3_t origin, vec3_t angle
 	trap->Cvar_VariableStringBuffer("g_missionCheckpointMap", spawnMap, sizeof spawnMap);
 	if (spawnMap[0] && !Q_stricmp(spawnMap, mapname))
 	{
-		char cp[128];
-		vec3_t cpOrigin;
+		char cp[128] = { 0 };
+		vec3_t cpOrigin = { 0 };
 		float cpYaw = 0.0f;
 		trap->Cvar_VariableStringBuffer("g_missionCheckpoint", cp, sizeof cp);
 		if (sscanf(cp, "%f %f %f %f", &cpOrigin[0], &cpOrigin[1], &cpOrigin[2], &cpYaw) == 4)
@@ -1547,8 +1547,8 @@ void G_MissionSpreadSpawn(const gentity_t* ent, const gentity_t* spot, vec3_t or
 {
 	static const vec3_t mins = { -15.0f, -15.0f, DEFAULT_MINS_2 };
 	static const vec3_t maxs = { 15.0f, 15.0f, DEFAULT_MAXS_2 };
-	trace_t tr;
-	vec3_t loc;
+	trace_t tr = { 0 };
+	vec3_t loc = { 0 };
 
 	if (level.gametype != GT_SINGLE_PLAYER || !spot)
 	{
@@ -1601,7 +1601,7 @@ qboolean G_MissionFull(const int clientNum)
 // Missions: the loadout a player brought from the last map, given back on his first spawn on this one, then cleared
 void G_MissionApplyLoadout(gentity_t* ent)
 {
-	char buf[MAX_CVAR_VALUE_STRING];
+	char buf[MAX_CVAR_VALUE_STRING] = { 0 };
 	int v[8] = { 0 };
 	playerState_t* ps = &ent->client->ps;
 	const char* p = buf;
@@ -1664,7 +1664,7 @@ void G_MissionApplyLoadout(gentity_t* ent)
 // Missions: on to the next map of the campaign (see above); qfalse if there is none to go to
 static qboolean G_MissionLevelChange(const gentity_t* self)
 {
-	char mapname[MAX_QPATH], next[MAX_QPATH], spawnTarget[MAX_QPATH];
+	char mapname[MAX_QPATH] = { 0 }, next[MAX_QPATH] = { 0 }, spawnTarget[MAX_QPATH] = { 0 };
 
 	trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
 	if (!G_MissionOrderNext(mapname, next, sizeof next, spawnTarget, sizeof spawnTarget))
@@ -1691,7 +1691,7 @@ static qboolean G_MissionLevelChange(const gentity_t* self)
 
 void target_level_change_use(gentity_t* self, gentity_t* other, gentity_t* activator)
 {
-	vmCvar_t mapname;
+	vmCvar_t mapname = { 0 };
 	G_ActivateBehavior(self, BSET_USE);
 
 	//Add this map's name to the tiers_complete cvar
@@ -1740,7 +1740,7 @@ void target_level_change_use(gentity_t* self, gentity_t* other, gentity_t* activ
 void SP_target_level_change(gentity_t* self)
 {
 	char* s = NULL;
-	vmCvar_t mapname;
+	vmCvar_t mapname = { 0 };
 
 	trap->Cvar_Register(&mapname, "mapname", "", CVAR_SERVERINFO | CVAR_ROM);
 
@@ -1852,8 +1852,8 @@ spawn location vector down to the ground.
 */
 qboolean CheckforGoodSpawnPoint(vec3_t location, const qboolean playersolidcheck)
 {
-	trace_t tr;
-	vec3_t locend;
+	trace_t tr = { 0 };
+	vec3_t locend = { 0 };
 	const vec3_t playerMins = { -15, -15, DEFAULT_MINS_2 };
 	const vec3_t playerMaxs = { 15, 15, DEFAULT_MAXS_2 };
 
@@ -1892,8 +1892,8 @@ void Use_Autosave(gentity_t* ent, gentity_t* other, const gentity_t* activator)
 	// (no activator - a script or a relay fired it: the checkpoint is where the target_autosave stands)
 
 	gentity_t* oldspawn = NULL;
-	vec3_t spawnloc;
-	vec3_t spawnang;
+	vec3_t spawnloc = { 0 };
+	vec3_t spawnang = { 0 };
 
 	if (activator && activator->client && activator->NPC)
 	{
@@ -1916,8 +1916,8 @@ void Use_Autosave(gentity_t* ent, gentity_t* other, const gentity_t* activator)
 	{
 		const vec3_t box_mins = { -15.0f, -15.0f, -24.0f };
 		const vec3_t box_maxs = { 15.0f, 15.0f, 40.0f };
-		vec3_t up, down;
-		trace_t tr;
+		vec3_t up = { 0 }, down = { 0 };
+		trace_t tr = { 0 };
 		VectorCopy(spawnloc, up);
 		up[2] += 8.0f;
 		VectorCopy(spawnloc, down);
@@ -2161,8 +2161,8 @@ his own and a few seconds old at most, so a teammate can walk to it and revive h
 */
 static qboolean G_MissionOnSolidGround(const gentity_t* ent)
 {
-	trace_t tr;
-	vec3_t end;
+	trace_t tr = { 0 };
+	vec3_t end = { 0 };
 
 	VectorCopy(ent->r.currentOrigin, end);
 	end[2] -= 24.0f;
@@ -2189,8 +2189,8 @@ static void G_MissionRememberSafeGround(const gentity_t* ent)
 
 static void G_MissionPitRescue(gentity_t* ent, const missionDown_t* d)
 {
-	trace_t tr;
-	vec3_t org, end, angles;
+	trace_t tr = { 0 };
+	vec3_t org = { 0 }, end = { 0 }, angles = { 0 };
 
 	// on the floor under the spot
 	VectorCopy(d->safeOrigin, org);

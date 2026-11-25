@@ -315,9 +315,9 @@ CG_ShaderStateChanged
 */
 void CG_ShaderStateChanged(void)
 {
-	char originalShader[MAX_QPATH];
-	char newShader[MAX_QPATH];
-	char timeOffset[16];
+	char originalShader[MAX_QPATH] = { 0 };
+	char newShader[MAX_QPATH] = { 0 };
+	char timeOffset[16] = { 0 };
 
 	const char* o = CG_ConfigString(CS_SHADERSTATE);
 	while (o && *o)
@@ -460,7 +460,7 @@ static void CG_RegisterCustomSounds(clientInfo_t* ci, const int setType, const c
 
 		if (hSFX == 0)
 		{
-			char modifiedSound[MAX_QPATH];
+			char modifiedSound[MAX_QPATH] = { 0 };
 
 			strcpy(modifiedSound, s);
 			char* p = strchr(modifiedSound, '.');
@@ -901,7 +901,7 @@ static void CG_ConfigStringModified(void)
 	}
 	else if (num >= CS_MODELS && num < CS_MODELS + MAX_MODELS)
 	{
-		char modelName[MAX_QPATH];
+		char modelName[MAX_QPATH] = { 0 };
 		strcpy(modelName, str);
 		if (strstr(modelName, ".glm") || modelName[0] == '$')
 		{
@@ -1208,7 +1208,7 @@ static void CG_RemoveChatEscapeChar(char* text)
 static void CG_SVStringEdLookup(const char* ref, char* out, const int outSize)
 {
 	static const char* packages[] = { "MP_SVGAME", "SJE_MENUS", "SP_INGAME" };
-	char text[MAX_STRINGED_SV_STRING];
+	char text[MAX_STRINGED_SV_STRING] = { 0 };
 
 	if (outSize <= 0)
 	{
@@ -1471,7 +1471,7 @@ static void CG_AdminMenu_f(void)
 static void CG_inGameCinematic_f(void)
 {
 	fileHandle_t file = 0;
-	char name[MAX_STRING_CHARS];
+	char name[MAX_STRING_CHARS] = { 0 };
 	strcpy(name, va("video/%s.roq", CG_Argv(1)));
 
 	//precashe the file?
@@ -1669,7 +1669,7 @@ Pazaak: the board instructions of the game go on to the UI ("uipzk" console comm
 */
 static void CG_Pazaak_f(void)
 {
-	char buf[MAX_STRING_CHARS];
+	char buf[MAX_STRING_CHARS] = { 0 };
 	const int argc = trap->Cmd_Argc();
 	int i = 0;
 
@@ -1859,7 +1859,7 @@ static void CG_MissionObjectivesToCvars(void)
 		for (int i = 0; i < cgNumMissionObjectives && line < CG_MISSION_OBJ_LINES; i++)
 		{
 			const cgMissionObjective_t* obj = &cgMissionObjectives[i];
-			char text[512];
+			char text[512] = { 0 };
 
 			if (pass == 0 ? obj->state != 1 : obj->state != 2 && obj->state != 3)
 			{

@@ -184,7 +184,7 @@ NAV_HitNavGoal
 
 qboolean NAV_HitNavGoal(vec3_t point, vec3_t mins, vec3_t maxs, vec3_t dest, int radius, const qboolean flying)
 {
-	vec3_t dmins, dmaxs, pmins, pmaxs;
+	vec3_t dmins = { 0 }, dmaxs = { 0 }, pmins = { 0 }, pmaxs = { 0 };
 
 	if (radius & NAVGOAL_USE_RADIUS)
 	{
@@ -196,7 +196,7 @@ qboolean NAV_HitNavGoal(vec3_t point, vec3_t mins, vec3_t maxs, vec3_t dest, int
 		if (!flying)
 		{
 			//Allow for a little z difference
-			vec3_t diff;
+			vec3_t diff = { 0 };
 			VectorSubtract(point, dest, diff);
 			if (fabs(diff[2]) <= 24)
 			{
@@ -236,8 +236,8 @@ NAV_ClearPathToPoint
 qboolean NAV_ClearPathToPoint(gentity_t* self, vec3_t pmins, vec3_t pmaxs, vec3_t point, int clipmask,
 	const int ok_to_hit_ent_num)
 {
-	vec3_t mins, maxs;
-	trace_t trace;
+	vec3_t mins = { 0 }, maxs = { 0 };
+	trace_t trace = { 0 };
 
 	// Test if they're even conceivably close to one another
 	if (!trap->InPVS(self->r.currentOrigin, point))
@@ -466,9 +466,9 @@ NAV_Steer
 
 int NAV_Steer(gentity_t* self, vec3_t dir, const float distance)
 {
-	vec3_t right_test, left_test;
-	vec3_t deviation;
-	trace_t tr;
+	vec3_t right_test = { 0 }, left_test = { 0 };
+	vec3_t deviation = { 0 };
+	trace_t tr = { 0 };
 	const float right_ang = dir[YAW] + 45;
 	const float left_ang = dir[YAW] - 45;
 
@@ -518,7 +518,7 @@ NAV_CheckAhead
 
 qboolean NAV_CheckAhead(const gentity_t* self, vec3_t end, trace_t* trace, int clipmask)
 {
-	vec3_t mins;
+	vec3_t mins = { 0 };
 
 	//Offset the step height
 	VectorSet(mins, self->r.mins[0], self->r.mins[1], self->r.mins[2] + STEPSIZE);
@@ -577,9 +577,9 @@ NAV_TestBypass
 
 static qboolean NAV_TestBypass(gentity_t* self, const float yaw, const float blocked_dist, vec3_t movedir)
 {
-	trace_t tr;
-	vec3_t avoidAngles;
-	vec3_t block_test, block_pos;
+	trace_t tr = { 0 };
+	vec3_t avoidAngles = { 0 };
+	vec3_t block_test = { 0 }, block_pos = { 0 };
 
 	VectorClear(avoidAngles);
 	avoidAngles[YAW] = yaw;
@@ -612,7 +612,7 @@ NAV_Bypass
 static qboolean NAV_Bypass(gentity_t* self, gentity_t* blocker, vec3_t blocked_dir, const float blocked_dist, vec3_t movedir)
 {
 	float dot = 0.0f;
-	vec3_t right;
+	vec3_t right = { 0 };
 
 	//Draw debug info if requested
 	if (NAVDEBUG_showCollision)
@@ -638,14 +638,14 @@ static qboolean NAV_Bypass(gentity_t* self, gentity_t* blocker, vec3_t blocked_d
 	//Check to see what dir the other guy is moving in (if any) and pick the opposite dir
 	if (blocker->client && !VectorCompare(blocker->client->ps.velocity, vec3_origin))
 	{
-		vec3_t blocker_movedir;
+		vec3_t blocker_movedir = { 0 };
 		VectorNormalize2(blocker->client->ps.velocity, blocker_movedir);
 		dot = DotProduct(blocker_movedir, blocked_dir);
 		if (dot < 0.35f && dot > -0.35f)
 		{
 			//he's moving to the side of me
-			vec3_t block_pos;
-			trace_t tr;
+			vec3_t block_pos = { 0 };
+			trace_t tr = { 0 };
 			VectorScale(blocker_movedir, -1, blocker_movedir);
 			VectorMA(self->r.currentOrigin, blocked_dist, blocker_movedir, block_pos);
 			if (NAV_CheckAhead(self, block_pos, &tr, self->clipmask & ~CONTENTS_BODY | CONTENTS_BOTCLIP))
@@ -696,7 +696,7 @@ static qboolean NAV_MoveBlocker(const gentity_t* self, vec3_t shove_dir)
 
 	//FIXME: This will, of course, push blockers off of cliffs, into walls and all over the place
 
-	vec3_t temp_dir, forward;
+	vec3_t temp_dir = { 0 }, forward = { 0 };
 
 	vectoangles(shove_dir, temp_dir);
 
@@ -738,9 +738,9 @@ NAV_TrueCollision
 
 static qboolean NAV_TrueCollision(const gentity_t* self, const gentity_t* blocker, vec3_t movedir, vec3_t blocked_dir)
 {
-	vec3_t velocityDir;
-	vec3_t testPos;
-	vec3_t ptmins, ptmaxs, tmins, tmaxs;
+	vec3_t velocityDir = { 0 };
+	vec3_t testPos = { 0 };
+	vec3_t ptmins = { 0 }, ptmaxs = { 0 }, tmins = { 0 }, tmaxs = { 0 };
 
 	//TODO: Handle all ents
 	if (blocker->client == NULL)
@@ -780,9 +780,9 @@ NAV_StackedCanyon
 
 static qboolean NAV_StackedCanyon(const gentity_t* self, const gentity_t* blocker, vec3_t pathDir)
 {
-	vec3_t perp, cross, test;
+	vec3_t perp = { 0 }, cross = { 0 }, test = { 0 };
 	int extraClip = CONTENTS_BOTCLIP;
-	trace_t tr;
+	trace_t tr = { 0 };
 
 	PerpendicularVector(perp, pathDir);
 	CrossProduct(pathDir, perp, cross);
@@ -803,7 +803,7 @@ static qboolean NAV_StackedCanyon(const gentity_t* self, const gentity_t* blocke
 
 	if (NAVDEBUG_showCollision)
 	{
-		vec3_t mins, maxs;
+		vec3_t mins = { 0 }, maxs = { 0 };
 		vec3_t RED = { 1.0f, 0.0f, 0.0f };
 
 		VectorAdd(test, self->r.mins, mins);
@@ -830,7 +830,7 @@ static qboolean NAV_StackedCanyon(const gentity_t* self, const gentity_t* blocke
 
 	if (NAVDEBUG_showCollision)
 	{
-		vec3_t mins, maxs;
+		vec3_t mins = { 0 }, maxs = { 0 };
 		vec3_t RED = { 1.0f, 0.0f, 0.0f };
 
 		VectorAdd(test, self->r.mins, mins);
@@ -849,7 +849,7 @@ NAV_ResolveEntityCollision
 
 static qboolean NAV_ResolveEntityCollision(gentity_t* self, gentity_t* blocker, vec3_t movedir, vec3_t pathDir)
 {
-	vec3_t blocked_dir;
+	vec3_t blocked_dir = { 0 };
 
 	//Doors are ignored
 	if (G_EntIsUnlockedDoor(blocker->s.number))
@@ -933,8 +933,8 @@ qboolean NAV_AvoidCollision(gentity_t* self, gentity_t* goal, navInfo_t* info)
 		return qtrue; // safest fallback: treat as no collision
 	}
 
-	vec3_t movedir;
-	vec3_t movepos;
+	vec3_t movedir = { 0 };
+	vec3_t movepos = { 0 };
 
 	// Clear our block info for this frame
 	NAV_ClearBlockedInfo(NPCS.NPC);
@@ -993,9 +993,9 @@ NAV_TestBestNode
 int NAV_TestBestNode(const gentity_t* self, const int startID, const int endID, const qboolean failEdge)
 {
 	//check only against architectrure
-	vec3_t end;
-	trace_t trace;
-	vec3_t mins;
+	vec3_t end = { 0 };
+	trace_t trace = { 0 };
+	vec3_t mins = { 0 };
 	int clipmask = NPCS.NPC->clipmask & ~CONTENTS_BODY | CONTENTS_BOTCLIP;
 
 	//get the position for the test choice
@@ -1146,7 +1146,7 @@ NAV_MoveToGoal
 
 int NAV_MoveToGoal(gentity_t* self, navInfo_t* info)
 {
-	vec3_t origin, end;
+	vec3_t origin = { 0 }, end = { 0 };
 
 	//Must have a goal entity to move there
 	if (self->NPC->goalEntity == NULL)
@@ -1179,7 +1179,7 @@ int NAV_MoveToGoal(gentity_t* self, navInfo_t* info)
 	{
 		if (NAVDEBUG_showEnemyPath)
 		{
-			vec3_t neworigin, torigin;
+			vec3_t neworigin = { 0 }, torigin = { 0 };
 
 			trap->Nav_GetNodePosition(self->NPC->goalEntity->waypoint, torigin);
 			trap->Nav_GetNodePosition(self->waypoint, neworigin);
@@ -1230,7 +1230,7 @@ int NAV_MoveToGoal(gentity_t* self, navInfo_t* info)
 	//Draw any debug info, if requested
 	if (NAVDEBUG_showEnemyPath)
 	{
-		vec3_t dest, start;
+		vec3_t dest = { 0 }, start = { 0 };
 
 		//Get the positions
 		trap->Nav_GetNodePosition(self->NPC->goalEntity->waypoint, dest);
@@ -1253,10 +1253,10 @@ waypoint_testDirection
 
 static unsigned int waypoint_testDirection(vec3_t origin, const float yaw, const unsigned int minDist)
 {
-	vec3_t trace_dir, test_pos;
-	vec3_t maxs, mins;
-	vec3_t angles;
-	trace_t tr;
+	vec3_t trace_dir = { 0 }, test_pos = { 0 };
+	vec3_t maxs = { 0 }, mins = { 0 };
+	vec3_t angles = { 0 };
+	trace_t tr = { 0 };
 
 	//Setup the mins and max
 	VectorSet(maxs, 15, 15, DEFAULT_MAXS_2);
@@ -1559,7 +1559,7 @@ Svcmd_Nav_f
 
 void Svcmd_Nav_f()
 {
-	char cmd[1024];
+	char cmd[1024] = { 0 };
 	trap->Argv(1, cmd, 1024);
 
 	if (Q_stricmp(cmd, "show") == 0)
@@ -1913,7 +1913,7 @@ void NAV_ShowDebugInfo(void)
 		int nearestNode = trap->Nav_GetNearestNode((sharedEntity_t*)&g_entities[0], g_entities[0].waypoint, NF_ANY,
 			WAYPOINT_NONE);
 		const int testNode = trap->Nav_GetBestNode(nearestNode, NAVDEBUG_curGoal, NODE_NONE);
-		vec3_t dest, start;
+		vec3_t dest = { 0 }, start = { 0 };
 
 		nearestNode = NAV_TestBestNode(&g_entities[0], nearestNode, testNode, qfalse);
 

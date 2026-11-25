@@ -1077,7 +1077,7 @@ void NPC_Pain(gentity_t* self, gentity_t* attacker, const int damage)
 	gentity_t* other = attacker;
 	const int mod = gPainMOD;
 	const int hit_loc = gPainHitLoc;
-	vec3_t point;
+	vec3_t point = { 0 };
 
 	VectorCopy(gPainPoint, point);
 
@@ -1260,7 +1260,7 @@ void NPC_Touch(gentity_t* self, gentity_t* other, trace_t* trace)
 		{
 			//player touched me
 			char* text = NULL;
-			qboolean keyTaken;
+			qboolean keyTaken = qfalse;
 			//give him my key
 			if (Q_stricmp("goodie", self->message) == 0)
 			{
@@ -1380,7 +1380,7 @@ void NPC_Touch(gentity_t* self, gentity_t* other, trace_t* trace)
 		{
 			//player touched me
 			//char *text;
-			qboolean keyTaken;
+			qboolean keyTaken = qfalse;
 			//int sendnum = -1; // give him my key
 			if (Q_stricmp("goodie", self->message) == 0)
 			{

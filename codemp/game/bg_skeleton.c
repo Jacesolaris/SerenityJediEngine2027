@@ -159,7 +159,7 @@ static const char* const bgHumanoidKeyBones[] = {
 
 qboolean BG_GLAIsHumanoid(const char* glaName)
 {
-	char path[MAX_QPATH];
+	char path[MAX_QPATH] = { 0 };
 
 	Com_sprintf(path, sizeof path, "%s.gla", glaName);
 	const int glaLen = BG_ReadFileStart(path, bgGLAReadBuf, BG_GLA_READ_SIZE);
@@ -254,8 +254,8 @@ qboolean BG_IsHumanoidFamilyPath(const char* path)
 // the bone count of a GLA (name without ".gla"), 0 when it is missing or not a GLA
 static int BG_GLABoneCount(const char* gla)
 {
-	byte head[BG_MDXA_HEADER_SIZE];
-	char path[MAX_QPATH];
+	byte head[BG_MDXA_HEADER_SIZE] = { 0 };
+	char path[MAX_QPATH] = { 0 };
 
 	Com_sprintf(path, sizeof path, "%s.gla", gla);
 	const int len = BG_ReadFileStart(path, head, (int)sizeof head);
@@ -292,7 +292,7 @@ static qboolean BG_BoneCountIsOwnSkeleton(const int numBones)
 // does the GLA's folder ("models/players/<X>/<gla>") have an animation.cfg?
 static qboolean BG_GLAFolderHasAnimCfg(const char* gla)
 {
-	char path[MAX_QPATH];
+	char path[MAX_QPATH] = { 0 };
 	fileHandle_t f = 0;
 
 	Q_strncpyz(path, gla, sizeof path);
@@ -322,8 +322,8 @@ qboolean BG_IsOwnSkeletonModel(const char* model)
 	} cache[BG_OWN_SKEL_CACHE];
 	static int numCached = 0;
 	char folder[MAX_QPATH] = { 0 };
-	char path[MAX_QPATH];
-	byte head[BG_MDXM_HEADER_SIZE];
+	char path[MAX_QPATH] = { 0 };
+	byte head[BG_MDXM_HEADER_SIZE] = { 0 };
 	int n = 0;
 
 	if (!model || !model[0])
@@ -397,9 +397,9 @@ qboolean BG_GLAFallsBackToMaster(const char* gla, const int meshBones)
 // (BG_ClassSkeletonOk). The server (G_PlayerHasCustomSkeleton) and the client (CG_RegisterClientModelname) both use this.
 static int BG_ModelSkeletonCheck(const char* modelName, char* glaOut, const int glaOutSize)
 {
-	char folder[MAX_QPATH];
-	char path[MAX_QPATH];
-	char gla[MAX_QPATH];
+	char folder[MAX_QPATH] = { 0 };
+	char path[MAX_QPATH] = { 0 };
+	char gla[MAX_QPATH] = { 0 };
 	int flags = SKELF_OWN;
 
 	if (glaOut && glaOutSize > 0)
@@ -510,8 +510,8 @@ static int BG_ModelSkeletonCheck(const char* modelName, char* glaOut, const int 
 // as a player when this is true or its own skeleton has flags (the client draws the default model otherwise).
 qboolean BG_ModelUsesHumanoidGLA(const char* modelName)
 {
-	char folder[MAX_QPATH];
-	char path[MAX_QPATH];
+	char folder[MAX_QPATH] = { 0 };
+	char path[MAX_QPATH] = { 0 };
 
 	if (!modelName || !modelName[0])
 	{

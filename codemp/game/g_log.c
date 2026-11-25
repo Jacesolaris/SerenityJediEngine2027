@@ -264,19 +264,19 @@ void G_LogWeaponOutput(void)
 	int i = 0, j = 0, curwp = 0;
 	float pershot = 0.0f;
 	fileHandle_t weaponfile = 0;
-	char string[1024];
+	char string[1024] = { 0 };
 
-	int totalpickups[WP_NUM_WEAPONS];
-	int totaltime[WP_NUM_WEAPONS];
-	int totaldeaths[WP_NUM_WEAPONS];
-	int totaldamageMOD[MOD_MAX];
-	int totalkillsMOD[MOD_MAX];
-	int totaldamage[WP_NUM_WEAPONS];
-	int totalkills[WP_NUM_WEAPONS];
-	int totalshots[WP_NUM_WEAPONS];
-	int percharacter[WP_NUM_WEAPONS];
-	char info[1024];
-	char mapname[128];
+	int totalpickups[WP_NUM_WEAPONS] = { 0 };
+	int totaltime[WP_NUM_WEAPONS] = { 0 };
+	int totaldeaths[WP_NUM_WEAPONS] = { 0 };
+	int totaldamageMOD[MOD_MAX] = { 0 };
+	int totalkillsMOD[MOD_MAX] = { 0 };
+	int totaldamage[WP_NUM_WEAPONS] = { 0 };
+	int totalkills[WP_NUM_WEAPONS] = { 0 };
+	int totalshots[WP_NUM_WEAPONS] = { 0 };
+	int percharacter[WP_NUM_WEAPONS] = { 0 };
+	char info[1024] = { 0 };
+	char mapname[128] = { 0 };
 	char* nameptr = NULL, * unknownname = "<Unknown>";
 
 	if (!g_statLog.integer)
@@ -1005,8 +1005,8 @@ qboolean CalculateTactician(const gentity_t* ent, int* kills)
 #ifdef LOGGING_WEAPONS
 	int nBestPlayer = -1, nMostKills = 0;
 	int person = 0, weapon = 0;
-	int wasPickedUpBySomeone[WP_NUM_WEAPONS];
-	int killsWithWeapon[WP_NUM_WEAPONS];
+	int wasPickedUpBySomeone[WP_NUM_WEAPONS] = { 0 };
+	int killsWithWeapon[WP_NUM_WEAPONS] = { 0 };
 	const int playTime = (level.time - ent->client->pers.enterTime) / 60000;
 
 	if (HasSetSaberOnly())

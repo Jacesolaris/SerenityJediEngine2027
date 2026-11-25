@@ -35,7 +35,7 @@ void WP_FireStunBaton(gentity_t* ent, const qboolean alt_fire)
 	else
 	{
 		trace_t tr;
-		vec3_t mins, maxs, end, start;
+		vec3_t mins = {}, maxs = {}, end = {}, start = {};
 
 		G_Sound(ent, G_SoundIndex("sound/weapons/baton/fire"));
 

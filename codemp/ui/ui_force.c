@@ -228,7 +228,7 @@ void UI_UpdateClientForcePowers(const char* teamArg)
 {
 	{
 		// rank-side-<one digit per power> (all NUM_FORCE_POWERS: the ported SP powers follow FP_SABERTHROW)
-		char powers[128];
+		char powers[128] = { 0 };
 		Com_sprintf(powers, sizeof powers, "%i-%i-", uiForceRank, uiForceSide);
 		for (int i = 0; i < NUM_FORCE_POWERS; i++)
 		{
@@ -265,7 +265,7 @@ static int UI_TranslateFCFIndex(int index)
 void UI_SaveForceTemplate()
 {
 	char* selectedName = UI_Cvar_VariableString("ui_SaveFCF");
-	char fcfString[512];
+	char fcfString[512] = { 0 };
 	fileHandle_t f = 0;
 	int forcePlace = 0;
 	int i = 0;
@@ -297,7 +297,7 @@ void UI_SaveForceTemplate()
 
 	while (forcePlace < NUM_FORCE_POWERS)
 	{
-		char forceStringValue[4];
+		char forceStringValue[4] = { 0 };
 		Com_sprintf(forceStringValue, sizeof forceStringValue, "%i", uiForcePowersRank[forcePlace]);
 		//Just use the force digit even if multiple digits. Shouldn't be longer than 1.
 		fcfString[strPlace] = forceStringValue[0];
@@ -527,7 +527,7 @@ void UpdateForceUsed()
 //Puts the current UI stuff into a string, legalizes it, and then reads it back out.
 void UI_ReadLegalForce(void)
 {
-	char fcfString[512];
+	char fcfString[512] = { 0 };
 	int forcePlace = 0;
 	char singleBuf[64] = { 0 };
 	char info[MAX_INFO_VALUE] = { 0 };
@@ -541,7 +541,7 @@ void UI_ReadLegalForce(void)
 
 	while (forcePlace < NUM_FORCE_POWERS)
 	{
-		char forceStringValue[4];
+		char forceStringValue[4] = { 0 };
 		Com_sprintf(forceStringValue, sizeof forceStringValue, "%i", uiForcePowersRank[forcePlace]);
 		//Just use the force digit even if multiple digits. Shouldn't be longer than 1.
 		fcfString[strPlace] = forceStringValue[0];
@@ -1035,7 +1035,7 @@ qboolean UI_ForcePowerRank_HandleKey(int flags, float* special, int key, int num
 {
 	if (key == A_MOUSE1 || key == A_MOUSE2 || key == A_ENTER || key == A_KP_ENTER || key == A_BACKSPACE)
 	{
-		qboolean raising;
+		qboolean raising = qfalse;
 		int rank = 0;
 
 		//this will give us the index as long as UI_FORCE_RANK is always one below the first force rank index
@@ -1154,7 +1154,7 @@ void UI_ForceConfigHandle(int oldindex, int newindex)
 	int len = 0;
 	int i = 0;
 	int c = 0;
-	char fcfBuffer[8192];
+	char fcfBuffer[8192] = { 0 };
 	char singleBuf[64] = { 0 };
 	char info[MAX_INFO_VALUE] = { 0 };
 	int forceTeam = 0;

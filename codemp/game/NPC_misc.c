@@ -32,8 +32,8 @@ Debug_Printf
 void Debug_Printf(const vmCvar_t* cv, const int debug_level, char* fmt, ...)
 {
 	char* color = NULL;
-	va_list argptr;
-	char msg[1024];
+	va_list argptr = { 0 };
+	char msg[1024] = { 0 };
 
 	if (cv->value < debug_level)
 		return;
@@ -60,8 +60,8 @@ Debug_NPCPrintf
 void Debug_NPCPrintf(const gentity_t* printNPC, const vmCvar_t* cv, const int debugLevel, char* fmt, ...)
 {
 	int color = 0;
-	va_list argptr;
-	char msg[1024];
+	va_list argptr = { 0 };
+	char msg[1024] = { 0 };
 
 	if (cv->value < debugLevel)
 	{

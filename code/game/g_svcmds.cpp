@@ -258,7 +258,7 @@ static void Svcmd_SaberBlade_f()
 	{
 		return;
 	}
-	qboolean turnOn;
+	qboolean turnOn = qfalse;
 	if (gi.argc() > 3)	// SJE: the command and two numbers are 3 arguments - with > 2 it never toggled
 	{
 		//explicit

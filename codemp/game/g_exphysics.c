@@ -45,9 +45,9 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 void G_RunExPhys(gentity_t* ent, float gravity, float mass, float bounce, qboolean autoKill, int* g2Bolts,
 	int numG2Bolts)
 {
-	trace_t tr;
-	vec3_t projectedOrigin;
-	vec3_t vNorm;
+	trace_t tr = { 0 };
+	vec3_t projectedOrigin = { 0 };
+	vec3_t vNorm = { 0 };
 	float velScaling = 0.1f;
 	float vTotal = 0.0f;
 
@@ -55,7 +55,7 @@ void G_RunExPhys(gentity_t* ent, float gravity, float mass, float bounce, qboole
 
 	if (gravity)
 	{
-		vec3_t ground;
+		vec3_t ground = { 0 };
 		// factor it in before we do anything.
 		VectorCopy(ent->r.currentOrigin, ground);
 		// (Jace 2026-11-04) 1 unit, not 0.1: a trace stops 0.125 short of the floor (SURFACE_CLIP_EPSILON), so an object
@@ -147,11 +147,11 @@ void G_RunExPhys(gentity_t* ent, float gravity, float mass, float bounce, qboole
 	if (ent->ghoul2 && g2Bolts)
 	{
 		// Have we been passed a bolt index array to clip against points on the skeleton?
-		vec3_t tMins, tMaxs;
-		vec3_t trajDif;
+		vec3_t tMins = { 0 }, tMaxs = { 0 };
+		vec3_t trajDif = { 0 };
 		vec3_t gbmAngles = { 0 };
-		vec3_t collisionRootPos;
-		mdxaBone_t matrix;
+		vec3_t collisionRootPos = { 0 };
+		mdxaBone_t matrix = { 0 };
 		trace_t bestCollision = { 0 };
 		qboolean hasFirstCollision = qfalse;
 		int i = 0;
@@ -169,8 +169,8 @@ void G_RunExPhys(gentity_t* ent, float gravity, float mass, float bounce, qboole
 
 		while (i < numG2Bolts)
 		{
-			vec3_t projectedBoneOrg;
-			vec3_t boneOrg;
+			vec3_t projectedBoneOrg = { 0 };
+			vec3_t boneOrg = { 0 };
 			// Get the position of the actual bolt for this frame
 			trap->G2API_GetBoltMatrix(ent->ghoul2, 0, g2Bolts[i], &matrix, gbmAngles, ent->r.currentOrigin, level.time,
 				NULL, ent->modelScale);
@@ -221,7 +221,7 @@ void G_RunExPhys(gentity_t* ent, float gravity, float mass, float bounce, qboole
 			// at least one bolt collided
 			// We'll get the offset between the collided bolt and endpos, then trace there
 			// from the origin so that our desired position becomes that point.
-			vec3_t trajDif;
+			vec3_t trajDif = { 0 };
 			VectorSubtract(collisionRootPos, bestCollision.endpos, trajDif);
 
 			VectorAdd(ent->r.currentOrigin, trajDif, projectedOrigin);
@@ -237,8 +237,8 @@ void G_RunExPhys(gentity_t* ent, float gravity, float mass, float bounce, qboole
 	// Penetration recovery: if we start in solid, try nudging up a bit
 	if (tr.startsolid || tr.allsolid)
 	{
-		vec3_t recoverPos;
-		trace_t tr2;
+		vec3_t recoverPos = { 0 };
+		trace_t tr2 = { 0 };
 
 		VectorCopy(ent->r.currentOrigin, recoverPos);
 		recoverPos[2] += 4.0f;
@@ -263,12 +263,15 @@ void G_RunExPhys(gentity_t* ent, float gravity, float mass, float bounce, qboole
 			return;
 		}
 
-		// Recovery failed — only warn once
+		// Recovery failed: the piece is removed below (autoKill, e.g. severed limbs that spawned inside
+		// a wall or floor). Expected in play, so the warning is debug builds only.
+#ifdef _DEBUG
 		if (!ent->exPhysWarned)
 		{
 			Com_Printf("ExPhys object in solid (%i)\n", ent->s.number);
 			ent->exPhysWarned = qtrue;
 		}
+#endif
 
 		if (autoKill)
 		{

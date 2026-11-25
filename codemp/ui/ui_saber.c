@@ -291,7 +291,7 @@ static float UI_SaberBladeRadiusForSaber(const char* saber_name, int bladeNum)
 
 qboolean UI_SaberProperNameForSaber(const char* saber_name, char* saberProperName)
 {
-	char	stringedSaberName[1024];
+	char	stringedSaberName[1024] = { 0 };
 	const qboolean ret = WP_SaberParseParm(saber_name, "name", stringedSaberName);
 	// if it's a stringed reference translate it
 	if (ret && stringedSaberName[0] == '@')
@@ -332,7 +332,7 @@ void UI_SaberLoadParms(void)
 
 static void RGB_LerpColor(vec3_t from, vec3_t to, float frac, vec3_t out)
 {
-	vec3_t diff;
+	vec3_t diff = { 0 };
 
 	VectorSubtract(to, from, diff);
 
@@ -481,9 +481,9 @@ static void RGB_AdjustPimpSaberColor(vec3_t color, int n)
 
 static void UI_DoSaber(vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color, int snum)
 {
-	vec3_t		mid, rgb = { 1,1,1 };
+	vec3_t		mid = { 0 }, rgb = { 1,1,1 };
 	qhandle_t	blade = 0, glow = 0;
-	refEntity_t saber;
+	refEntity_t saber = { 0 };
 	float radiusmult = 0.0f;
 
 	if (length < 0.5f)
@@ -660,9 +660,9 @@ static void UI_DoSaber(vec3_t origin, vec3_t dir, float length, float lengthMax,
 
 static void UI_DobattlefrontSaber(vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color, int snum)
 {
-	vec3_t	    mid, rgb = { 1,1,1 };
+	vec3_t	    mid = { 0 }, rgb = { 1,1,1 };
 	qhandle_t	glow = 0, blade = 0;
-	refEntity_t saber;
+	refEntity_t saber = { 0 };
 	float	    radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
 
 	if (length < 0.5f)
@@ -816,9 +816,9 @@ static void UI_DobattlefrontSaber(vec3_t origin, vec3_t dir, float length, float
 
 static void UI_DoSFXSaber(vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color, int snum)
 {
-	vec3_t	    mid, rgb = { 1,1,1 };
+	vec3_t	    mid = { 0 }, rgb = { 1,1,1 };
 	qhandle_t	glow = 0, blade = 0;
-	refEntity_t saber;
+	refEntity_t saber = { 0 };
 	float	    radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
 
 	if (length < 0.5f)
@@ -970,9 +970,9 @@ static void UI_DoSFXSaber(vec3_t origin, vec3_t dir, float length, float lengthM
 
 static void UI_DoEp1Saber(vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color, int snum)
 {
-	vec3_t	    mid, rgb = { 1,1,1 };
+	vec3_t	    mid = { 0 }, rgb = { 1,1,1 };
 	qhandle_t	glow = 0, blade = 0;
-	refEntity_t saber;
+	refEntity_t saber = { 0 };
 	float	    radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
 
 	if (length < 0.5f)
@@ -1125,9 +1125,9 @@ static void UI_DoEp1Saber(vec3_t origin, vec3_t dir, float length, float lengthM
 
 static void UI_DoEp2Saber(vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color, int snum)
 {
-	vec3_t	    mid, rgb = { 1,1,1 };
+	vec3_t	    mid = { 0 }, rgb = { 1,1,1 };
 	qhandle_t	glow = 0, blade = 0;
-	refEntity_t saber;
+	refEntity_t saber = { 0 };
 	float	    radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
 
 	if (length < 0.5f)
@@ -1280,9 +1280,9 @@ static void UI_DoEp2Saber(vec3_t origin, vec3_t dir, float length, float lengthM
 
 static void UI_DoEp3Saber(vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color, int snum)
 {
-	vec3_t	    mid, rgb = { 1,1,1 };
+	vec3_t	    mid = { 0 }, rgb = { 1,1,1 };
 	qhandle_t	glow = 0, blade = 0;
-	refEntity_t saber;
+	refEntity_t saber = { 0 };
 	float	    radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
 
 	if (length < 0.5f)
@@ -1435,9 +1435,9 @@ static void UI_DoEp3Saber(vec3_t origin, vec3_t dir, float length, float lengthM
 
 static void UI_DoOTSaber(vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color, int snum)
 {
-	vec3_t	    mid, rgb = { 1,1,1 };
+	vec3_t	    mid = { 0 }, rgb = { 1,1,1 };
 	qhandle_t	glow = 0, blade = 0;
-	refEntity_t saber;
+	refEntity_t saber = { 0 };
 	float	    radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
 
 	if (length < 0.5f)
@@ -1589,9 +1589,9 @@ static void UI_DoOTSaber(vec3_t origin, vec3_t dir, float length, float lengthMa
 
 static void UI_DoTFASaber(vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color, int snum)
 {
-	vec3_t	    mid, rgb = { 1,1,1 };
+	vec3_t	    mid = { 0 }, rgb = { 1,1,1 };
 	qhandle_t	glow = 0, blade = 0;
-	refEntity_t saber;
+	refEntity_t saber = { 0 };
 	float	    radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
 
 	if (length < 0.5f)
@@ -1744,9 +1744,9 @@ static void UI_DoTFASaber(vec3_t origin, vec3_t dir, float length, float lengthM
 
 static void UI_DoSaberUnstable(vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color, int snum)
 {
-	vec3_t	    mid, rgb = { 1,1,1 };
+	vec3_t	    mid = { 0 }, rgb = { 1,1,1 };
 	qhandle_t	glow = 0, blade = 0;
-	refEntity_t saber;
+	refEntity_t saber = { 0 };
 	float	    radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
 
 	if (length < 0.5f)
@@ -1899,9 +1899,9 @@ static void UI_DoSaberUnstable(vec3_t origin, vec3_t dir, float length, float le
 
 static void UI_DoCustomSaber(vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color, int snum)
 {
-	vec3_t	    mid, rgb = { 1,1,1 };
+	vec3_t	    mid = { 0 }, rgb = { 1,1,1 };
 	qhandle_t	glow = 0, blade = 0;
-	refEntity_t saber;
+	refEntity_t saber = { 0 };
 	float	    radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f;
 
 	if (length < 0.5f)
@@ -2054,10 +2054,10 @@ static void UI_DoCustomSaber(vec3_t origin, vec3_t dir, float length, float leng
 
 static void UI_SaberDrawBlade(itemDef_t* item, const char* saber_name, int saberModel, saberType_t saberType, vec3_t origin, vec3_t angles, int bladeNum)
 {
-	char bladeColorString[MAX_QPATH];
+	char bladeColorString[MAX_QPATH] = { 0 };
 	vec3_t	bladeOrigin = { 0 };
-	matrix3_t	axis;
-	mdxaBone_t	boltMatrix;
+	matrix3_t	axis = { 0 };
+	mdxaBone_t	boltMatrix = { 0 };
 	qboolean tagHack = qfalse;
 	int snum = 0;
 
@@ -2493,7 +2493,7 @@ void UI_SaberDrawBlades(itemDef_t* item, vec3_t origin, vec3_t angles)
 
 	for (int saberNum = 0; saberNum < numSabers; saberNum++)
 	{
-		char saber[MAX_QPATH];
+		char saber[MAX_QPATH] = { 0 };
 		if (item->flags & ITF_ISCHARACTER)//hacked sabermoves sabers in character's hand
 		{
 			UI_GetSaberForMenu(saber, saberNum);
@@ -2566,8 +2566,8 @@ void UI_SaberAttachToChar(itemDef_t* item)
 	for (int saberNum = 0; saberNum < numSabers; saberNum++)
 	{
 		//bolt sabers
-		char modelPath[MAX_QPATH];
-		char saber[MAX_QPATH];
+		char modelPath[MAX_QPATH] = { 0 };
+		char saber[MAX_QPATH] = { 0 };
 
 		UI_GetSaberForMenu(saber, saberNum);
 
@@ -2578,7 +2578,7 @@ void UI_SaberAttachToChar(itemDef_t* item)
 			const int g2Saber = trap->G2API_InitGhoul2Model(&item->ghoul2, modelPath, 0, 0, 0, 0, 0); //add the model
 			if (g2Saber)
 			{
-				char skin_path[MAX_QPATH];
+				char skin_path[MAX_QPATH] = { 0 };
 				int boltNum = 0;
 				//get the customSkin, if any (a built hilt's parts first - the saber builder)
 				if (UI_CustomSaberSkin(saber, skin_path, saberNum) || UI_SaberSkinForSaber(saber, skin_path))

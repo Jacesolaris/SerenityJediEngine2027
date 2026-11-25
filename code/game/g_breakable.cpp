@@ -85,7 +85,7 @@ static void CacheChunkEffects(const material_t material)
 //--------------------------------------
 void funcBBrushDieGo(gentity_t* ent)
 {
-	vec3_t org, dir, up;
+	vec3_t org = {}, dir = {}, up = {};
 	gentity_t* attacker = ent->enemy;
 	int size = 0;
 	const material_t chunk_type = ent->material;
@@ -171,7 +171,7 @@ void funcBBrushDieGo(gentity_t* ent)
 		// a breakable turning in space (the asteroids of mp/siege_destroyer2) goes with a big bang, heard far off: its
 		// effect's own sound carries no farther than any other, and they are thousands of units away. It is played on
 		// the way to it, nearer the player the farther it is (fainter, but from where it is), out to about 25000.
-		vec3_t to_it, spot;
+		vec3_t to_it = {}, spot = {};
 		VectorSubtract(org, player->currentOrigin, to_it);
 		const float dist = VectorNormalize(to_it);
 		if (dist < 25000.0f)
@@ -261,7 +261,7 @@ void funcBBrushPain(gentity_t* self, gentity_t* inflictor, const gentity_t* atta
 		|| self->material == MAT_GREY_STONE
 		|| self->material == MAT_SNOWY_ROCK)
 	{
-		vec3_t org, dir;
+		vec3_t org = {}, dir = {};
 		VectorSubtract(self->absmax, self->absmin, org); // size
 		// This formula really has no logical basis other than the fact that it seemed to be the closest to yielding the results that I wanted.
 		// Volume is length * width * height...then break that volume down based on how many chunks we have
@@ -293,7 +293,7 @@ void funcBBrushPain(gentity_t* self, gentity_t* inflictor, const gentity_t* atta
 static void InitBBrush(gentity_t* ent)
 {
 	float light = 0.0f;
-	vec3_t color;
+	vec3_t color = {};
 
 	VectorCopy(ent->s.origin, ent->pos1);
 
@@ -480,7 +480,7 @@ void SP_func_breakable(gentity_t* self)
 	char* s = nullptr;
 	if (G_SpawnString("noise", "*NOSOUND*", &s))
 	{
-		char buffer[MAX_QPATH];
+		char buffer[MAX_QPATH] = {};
 		Q_strncpyz(buffer, s, sizeof buffer);
 		COM_DefaultExtension(buffer, sizeof buffer, ".wav");
 		self->noise_index = G_SoundIndex(buffer);
@@ -537,9 +537,9 @@ void misc_model_breakable_die(gentity_t* self, const gentity_t* inflictor, genti
 	}
 
 	float size = 0.0f;
-	vec3_t dir;
-	vec3_t up;
-	vec3_t dis;
+	vec3_t dir = {};
+	vec3_t up = {};
+	vec3_t dis = {};
 
 	// Already killed? Die func removed → avoid recursion
 	if (self->e_DieFunc == dieF_NULL)
@@ -641,7 +641,7 @@ void misc_model_breakable_die(gentity_t* self, const gentity_t* inflictor, genti
 		if (self->splashDamage > 0 && self->splashRadius > 0)
 		{
 			// Explosive break
-			vec3_t org;
+			vec3_t org = {};
 			AddSightEvent(attacker, self->currentOrigin, 256, AEL_DISCOVERED, 100);
 			AddSoundEvent(attacker, self->currentOrigin, 128, AEL_DISCOVERED, qfalse, qtrue);
 
@@ -704,7 +704,7 @@ void misc_model_breakable_die(gentity_t* self, const gentity_t* inflictor, genti
 
 static void misc_model_throw_at_target4(gentity_t* self, const gentity_t* activator)
 {
-	vec3_t push_dir, kvel;
+	vec3_t push_dir = {}, kvel = {};
 	float knockback = 200;
 	float mass = self->mass;
 	const gentity_t* target = G_Find(nullptr, FOFS(targetname), self->target4);
@@ -878,7 +878,7 @@ void TieFighterThink(gentity_t* self)
 	self->nextthink = level.time + FRAMETIME;
 	if (player)
 	{
-		vec3_t playerDir, fighterDir, fwd, rt;
+		vec3_t playerDir = {}, fighterDir = {}, fwd = {}, rt = {};
 
 		//use player eyepoint
 		VectorSubtract(player->currentOrigin, self->currentOrigin, playerDir);
@@ -981,7 +981,7 @@ void TieFighterUse(gentity_t* self, const gentity_t* other, const gentity_t* act
 	if (!self || !other || !activator)
 		return;
 
-	vec3_t fwd, rt;
+	vec3_t fwd = {}, rt = {};
 	AngleVectors(self->currentAngles, fwd, rt, nullptr);
 
 	gentity_t* bolt = G_Spawn();
@@ -1062,7 +1062,7 @@ void TieBomberThink(gentity_t* self)
 	self->nextthink = level.time + FRAMETIME;
 
 	const gentity_t* player = &g_entities[0];
-	vec3_t playerDir;
+	vec3_t playerDir = {};
 
 	//use player eyepoint
 	VectorSubtract(player->currentOrigin, self->currentOrigin, playerDir);
@@ -1082,7 +1082,7 @@ void TieBomberThink(gentity_t* self)
 		bomb->s.eFlags |= EF_NODRAW;
 
 		// Make the bombs go forward in the bombers direction a little.
-		vec3_t fwd, rt;
+		vec3_t fwd = {}, rt = {};
 		AngleVectors(self->currentAngles, fwd, rt, nullptr);
 		rt[2] -= 0.5f;
 		VectorMA(bomb->s.pos.trBase, -30.0, rt, bomb->s.pos.trBase);
@@ -1128,8 +1128,8 @@ void misc_model_breakable_gravity_init(gentity_t* ent, const qboolean dropToFloo
 
 	if (dropToFloor)
 	{
-		vec3_t bottom;
-		vec3_t top;
+		vec3_t bottom = {};
+		vec3_t top = {};
 		VectorCopy(ent->currentOrigin, top);
 		top[2] += 1;
 		VectorCopy(ent->currentOrigin, bottom);
@@ -1236,9 +1236,9 @@ Damage: default is none
 */
 void SP_misc_model_breakable(gentity_t* ent)
 {
-	char damageModel[MAX_QPATH];
-	char chunkModel[MAX_QPATH];
-	char useModel[MAX_QPATH];
+	char damageModel[MAX_QPATH] = {};
+	char chunkModel[MAX_QPATH] = {};
+	char useModel[MAX_QPATH] = {};
 
 	// Chris F. requested default for misc_model_breakable to be NONE...so don't arbitrarily change this.
 	G_SpawnInt("material", "8", reinterpret_cast<int*>(&ent->material));
@@ -1515,7 +1515,7 @@ extern cgs_t cgs;
 void funcGlassDie(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, int damage, int mod, int dflags,
 	int hit_loc)
 {
-	vec3_t verts[4], normal;
+	vec3_t verts[4] = {}, normal = {};
 
 	// if a missile is stuck to us, blow it up so we don't look dumb....we could, alternately, just let the missile drop off??
 	for (auto& g_entitie : g_entities)
@@ -1554,7 +1554,7 @@ void funcGlassDie(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, in
 //-----------------------------------------------------
 void funcGlassUse(gentity_t* self, gentity_t* other, gentity_t* activator)
 {
-	vec3_t temp1, temp2;
+	vec3_t temp1 = {}, temp2 = {};
 
 	// For now, we just break on use
 	G_ActivateBehavior(self, BSET_USE);

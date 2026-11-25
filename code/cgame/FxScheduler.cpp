@@ -123,7 +123,7 @@ void CFxScheduler::LoadSave_Read()
 	//
 	for (int iFX = 0; iFX < MAX_LOOPED_FX; iFX++)
 	{
-		char sFX_Filename[MAX_QPATH];
+		char sFX_Filename[MAX_QPATH] = {};
 
 		saved_game.read_chunk(
 			INT_ID('F', 'X', 'F', 'N'),
@@ -251,7 +251,7 @@ int CFxScheduler::ScheduleLoopedEffect(const int id, const int boltInfo, const b
 
 void CFxScheduler::StopEffect(const char* file, const int boltInfo, const bool isPortal)
 {
-	char sfile[MAX_QPATH];
+	char sfile[MAX_QPATH] = {};
 
 	// Get an extenstion stripped version of the file
 	COM_StripExtension(file, sfile, sizeof sfile);
@@ -427,7 +427,7 @@ int CFxScheduler::RegisterEffect(const char* path, const bool bHasCorrectPath /*
 	//
 
 	// FIXME: this could maybe be a cstring_view, if mEffectIDs were to use a transparent comparator, but those were only added in C++14, which we don't support yet (sigh)
-	char filenameNoExt[MAX_QPATH];
+	char filenameNoExt[MAX_QPATH] = {};
 
 	// Get an extension stripped version of the file
 	if (bHasCorrectPath)
@@ -459,7 +459,7 @@ int CFxScheduler::RegisterEffect(const char* path, const bool bHasCorrectPath /*
 
 	const char* pfile = nullptr;
 	// Must outlive the if/else: pfile may point into it and is used below.
-	char correctFilenameBuffer[MAX_QPATH];
+	char correctFilenameBuffer[MAX_QPATH] = {};
 	if (bHasCorrectPath)
 	{
 		pfile = path;
@@ -786,7 +786,7 @@ void CFxScheduler::PlayEffect(const int id, vec3_t origin, vec3_t forward, const
 void CFxScheduler::PlayEffect(const char* file, vec3_t origin, vec3_t axis[3], const int boltInfo, const int entNum,
 	const bool isPortal, const int iLoopTime, const bool isRelative)
 {
-	char sfile[MAX_QPATH];
+	char sfile[MAX_QPATH] = {};
 
 	// Get an extenstion stripped version of the file
 	COM_StripExtension(file, sfile, sizeof sfile);
@@ -824,7 +824,7 @@ void CFxScheduler::PlayEffect(const char* file, vec3_t origin, vec3_t axis[3], c
 //------------------------------------------------------
 void CFxScheduler::PlayEffect(const char* file, const int client_id, const bool isPortal)
 {
-	char sfile[MAX_QPATH];
+	char sfile[MAX_QPATH] = {};
 
 	// Get an extenstion stripped version of the file
 	COM_StripExtension(file, sfile, sizeof sfile);
@@ -941,9 +941,9 @@ bool gEffectsInPortal = false;
 //------------------------------------------------------
 void CFxScheduler::CreateEffect(CPrimitiveTemplate* fx, const int client_id) const
 {
-	vec3_t sRGB, eRGB;
-	vec3_t vel, accel;
-	vec3_t org, org2;
+	vec3_t sRGB = {}, eRGB = {};
+	vec3_t vel = {}, accel = {};
+	vec3_t org = {}, org2 = {};
 	int flags = 0;
 
 	// Origin calculations -- completely ignores most things
@@ -1282,7 +1282,7 @@ void CFxScheduler::PlayEffect(const int id, vec3_t origin, vec3_t axis[3], const
 //------------------------------------------------------
 void CFxScheduler::PlayEffect(const char* file, vec3_t origin, const bool isPortal)
 {
-	char sfile[MAX_QPATH];
+	char sfile[MAX_QPATH] = {};
 
 	// Get an extenstion stripped version of the file
 	COM_StripExtension(file, sfile, sizeof sfile);
@@ -1311,7 +1311,7 @@ void CFxScheduler::PlayEffect(const char* file, vec3_t origin, const bool isPort
 //------------------------------------------------------
 void CFxScheduler::PlayEffect(const char* file, vec3_t origin, vec3_t forward, const bool isPortal)
 {
-	char sfile[MAX_QPATH];
+	char sfile[MAX_QPATH] = {};
 
 	// Get an extenstion stripped version of the file
 	COM_StripExtension(file, sfile, sizeof sfile);
@@ -1401,8 +1401,8 @@ void CFxScheduler::AddScheduledEffects(const bool portal)
 			// ------------------------------------------------------------
 			else
 			{
-				vec3_t axis[3];
-				vec3_t origin;
+				vec3_t axis[3] = {};
+				vec3_t origin = {};
 
 				// Only re-fetch bolt matrix if something changed
 				if (effect->mModelNum != old_model_num ||
@@ -1507,11 +1507,11 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate* fx, const vec3_t origin, vec
 	const int client_id,
 	const int modelNum, const int boltNum)
 {
-	vec3_t org, org2, temp,
-		vel, accel,
-		sRGB, eRGB,
-		ang, angDelta,
-		ax[3];
+	vec3_t org = {}, org2 = {}, temp = {},
+		vel = {}, accel = {},
+		sRGB = {}, eRGB = {},
+		ang = {}, angDelta = {},
+		ax[3] = {};
 	trace_t tr;
 	int emitterModel = 0;
 
@@ -1572,7 +1572,7 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate* fx, const vec3_t origin, vec
 	}
 	else if (fx->mSpawnFlags & FX_ORG_ON_CYLINDER)
 	{
-		vec3_t pt;
+		vec3_t pt = {};
 
 		VectorScale(ax[1], fx->mRadius.GetVal(), pt);
 		VectorMA(pt, Q_flrand(-1.0f, 1.0f) * 0.5f * fx->mHeight.GetVal(), ax[0], pt);
@@ -1850,7 +1850,7 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate* fx, const vec3_t origin, vec
 		if (fx->mFlags & FX_GHOUL2_DECALS)
 		{
 			trace_t trace;
-			vec3_t end;
+			vec3_t end = {};
 
 			VectorMA(org, 64, ax[0], end);
 
@@ -1867,7 +1867,7 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate* fx, const vec3_t origin, vec
 					{
 						constexpr float firstModel = 0;
 						float entYaw = 0.0f;
-						vec3_t entOrg;
+						vec3_t entOrg = {};
 						//not drawn, no marks
 						if (ent->client)
 						{
@@ -1887,7 +1887,7 @@ void CFxScheduler::CreateEffect(CPrimitiveTemplate* fx, const vec3_t origin, vec
 						}
 						//if ( VectorCompare( tr.plane.normal, vec3_origin ) )
 						{
-							vec3_t hitDir;
+							vec3_t hitDir = {};
 							//hunh, no plane?  Use trace dir
 							VectorCopy(ax[0], hitDir);
 						}

@@ -39,7 +39,7 @@ extern void WP_FireVehicleWeapon(gentity_t* ent, vec3_t start, vec3_t dir, const
 static void VEH_TurretCalcMuzzle(gentity_t* parent, const int muzzle_num)
 {
 	Vehicle_t* p_veh = parent->m_pVehicle;
-	mdxaBone_t bolt_matrix;
+	mdxaBone_t bolt_matrix = {};
 
 	gi.G2API_GetBoltMatrix(parent->ghoul2, parent->playerModel, p_veh->m_iMuzzleTag[muzzle_num], &bolt_matrix,
 		p_veh->m_vOrientation, parent->currentOrigin, cg.time ? cg.time : level.time, nullptr, parent->s.modelScale);
@@ -129,12 +129,12 @@ static void VEH_TurretCheckFire(Vehicle_t* p_veh,
 static void VEH_TurretAnglesToEnemy(const Vehicle_t* p_veh, const int cur_muzzle, const float f_speed,
 	const gentity_t* turret_enemy, const qboolean b_ai_lead, vec3_t desired_angles)
 {
-	vec3_t enemy_dir, org;
+	vec3_t enemy_dir = {}, org = {};
 	VectorCopy(turret_enemy->currentOrigin, org);
 	if (b_ai_lead && f_speed > 0.0f)
 	{
 		//we want to lead them a bit
-		vec3_t diff, velocity;
+		vec3_t diff = {}, velocity = {};
 		VectorSubtract(org, p_veh->m_Muzzles[cur_muzzle].m_vMuzzlePos, diff);
 		const float dist = VectorNormalize(diff);
 		if (turret_enemy->client)
@@ -163,7 +163,7 @@ static qboolean VEH_TurretAim(Vehicle_t* p_veh,
 	const int turret_num, const int cur_muzzle, vec3_t desired_angles)
 	//-----------------------------------------------------
 {
-	vec3_t cur_angles, add_angles, new_angles = { 0 };
+	vec3_t cur_angles = {}, add_angles = {}, new_angles = { 0 };
 	qboolean aim_correct = qfalse;
 
 	VEH_TurretCalcMuzzle(parent, cur_muzzle);
@@ -238,7 +238,7 @@ static qboolean VEH_TurretAim(Vehicle_t* p_veh,
 	//set yaw
 	if (turret_stats->yawBone && turret_stats->yawAxis >= 0 && turret_stats->yawAxis < 3)
 	{
-		vec3_t yaw_angles;
+		vec3_t yaw_angles = {};
 		VectorClear(yaw_angles);
 		yaw_angles[turret_stats->yawAxis] = new_angles[YAW];
 		VEH_TurretSetBoneAngles(parent, turret_stats->yawBone, yaw_angles);
@@ -246,7 +246,7 @@ static qboolean VEH_TurretAim(Vehicle_t* p_veh,
 	//set pitch
 	if (turret_stats->pitchBone && turret_stats->pitchAxis >= 0 && turret_stats->pitchAxis < 3)
 	{
-		vec3_t pitch_angles;
+		vec3_t pitch_angles = {};
 		VectorClear(pitch_angles);
 		pitch_angles[turret_stats->pitchAxis] = new_angles[PITCH];
 		VEH_TurretSetBoneAngles(parent, turret_stats->pitchBone, pitch_angles);
@@ -344,7 +344,7 @@ static qboolean VEH_TurretFindEnemies(Vehicle_t* p_veh,
 {
 	qboolean found = qfalse;
 	float best_dist = turret_stats->fAIRange * turret_stats->fAIRange;
-	vec3_t org2;
+	vec3_t org2 = {};
 	qboolean found_client = qfalse;
 	static gentity_t* entity_list[MAX_GENTITIES]; // too big for the stack
 	const gentity_t* best_target = nullptr;
@@ -381,7 +381,7 @@ static qboolean VEH_TurretFindEnemies(Vehicle_t* p_veh,
 		if (tr.entityNum == target->s.number || !tr.allsolid && !tr.startsolid && tr.fraction == 1.0f)
 		{
 			// Only acquire if have a clear shot, Is it in range and closer than our best?
-			vec3_t enemy_dir;
+			vec3_t enemy_dir = {};
 			VectorSubtract(target->currentOrigin, org2, enemy_dir);
 			const float enemy_dist = VectorLengthSquared(enemy_dir);
 
@@ -493,7 +493,7 @@ void VEH_TurretThink(Vehicle_t* p_veh, gentity_t* parent, const int turret_num)
 	{
 		if (turret_enemy->health > 0)
 		{
-			vec3_t enemy_dir;
+			vec3_t enemy_dir = {};
 			// enemy is alive
 			VEH_TurretCalcMuzzle(parent, cur_muzzle);
 			VectorSubtract(turret_enemy->currentOrigin, p_veh->m_Muzzles[cur_muzzle].m_vMuzzlePos, enemy_dir);
@@ -520,7 +520,7 @@ void VEH_TurretThink(Vehicle_t* p_veh, gentity_t* parent, const int turret_num)
 
 	if (do_aim)
 	{
-		vec3_t aim_angles;
+		vec3_t aim_angles = {};
 		if (VEH_TurretAim(p_veh, parent, turret_enemy, turret_stats, veh_weapon, turret_num, cur_muzzle, aim_angles))
 		{
 			VEH_TurretCheckFire(p_veh, parent, turret_stats, veh_weapon, turret_num, cur_muzzle);

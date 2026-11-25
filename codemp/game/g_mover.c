@@ -106,7 +106,7 @@ G_TestEntityPosition
 */
 gentity_t* G_TestEntityPosition(const gentity_t* ent)
 {
-	trace_t tr;
+	trace_t tr = { 0 };
 	int mask = 0;
 
 	if (ent->clipmask)
@@ -119,7 +119,7 @@ gentity_t* G_TestEntityPosition(const gentity_t* ent)
 	}
 	if (ent->client)
 	{
-		vec3_t vMax;
+		vec3_t vMax = { 0 };
 		VectorCopy(ent->r.maxs, vMax);
 		if (vMax[2] < 1)
 		{
@@ -174,7 +174,7 @@ G_RotatePoint
 */
 static void G_RotatePoint(vec3_t point, matrix3_t matrix)
 {
-	vec3_t tvec;
+	vec3_t tvec = { 0 };
 
 	VectorCopy(point, tvec);
 	point[0] = DotProduct(matrix[0], tvec);
@@ -191,8 +191,8 @@ Returns qfalse if the move is blocked
 */
 static qboolean G_TryPushingEntity(gentity_t* check, gentity_t* pusher, vec3_t move, vec3_t amove)
 {
-	matrix3_t matrix, transpose;
-	vec3_t org, org2, move2;
+	matrix3_t matrix = { 0 }, transpose = { 0 };
+	vec3_t org = { 0 }, org2 = { 0 }, move2 = { 0 };
 
 	//This was only serverside not to mention it was never set.
 	/*
@@ -488,10 +488,10 @@ static void G_MoverTeam(gentity_t* ent)
 	pushed_p = pushed;
 	for (part = ent; part; part = part->teamchain)
 	{
-		vec3_t angles;
-		vec3_t origin;
-		vec3_t amove;
-		vec3_t move;
+		vec3_t angles = { 0 };
+		vec3_t origin = { 0 };
+		vec3_t amove = { 0 };
+		vec3_t move = { 0 };
 		// get current position
 		BG_EvaluateTrajectory(&part->s.pos, level.time, origin);
 		BG_EvaluateTrajectory(&part->s.apos, level.time, angles);
@@ -572,7 +572,7 @@ static void G_MoverSanityCheck(gentity_t* ent)
 {
 	if (!G_VecSane(ent->s.pos.trBase) || !G_VecSane(ent->s.pos.trDelta))
 	{
-		vec3_t good;
+		vec3_t good = { 0 };
 		VectorCopy(G_VecSane(ent->r.currentOrigin) ? ent->r.currentOrigin : ent->s.origin, good);
 		if (!G_VecSane(good))
 		{
@@ -641,7 +641,7 @@ void CalcTeamDoorCenter(const gentity_t* ent, vec3_t center)
 	VectorScale(center, 0.5, center);
 	for (const gentity_t* slave = ent->teamchain; slave; slave = slave->teamchain)
 	{
-		vec3_t slavecenter;
+		vec3_t slavecenter = { 0 };
 		//Find slave's center
 		VectorAdd(slave->r.mins, slave->r.maxs, slavecenter);
 		VectorScale(slavecenter, 0.5, slavecenter);
@@ -658,7 +658,7 @@ SetMoverState
 */
 void SetMoverState(gentity_t* ent, const moverState_t moverState, const int time)
 {
-	vec3_t delta;
+	vec3_t delta = { 0 };
 	float f = 0.0f;
 
 	ent->moverState = moverState;
@@ -754,7 +754,7 @@ void ReturnToPos1(gentity_t* ent)
 // (thinner than it is wide either way) that moves up or down. It goes back after its wait, as in SP.
 static qboolean G_DoorIsLift(const gentity_t* ent)
 {
-	vec3_t size, move;
+	vec3_t size = { 0 }, move = { 0 };
 
 	VectorSubtract(ent->r.maxs, ent->r.mins, size);
 	VectorSubtract(ent->pos2, ent->pos1, move);
@@ -786,7 +786,7 @@ void Reached_BinaryMover(gentity_t* ent)
 	if (ent->moverState == MOVER_1TO2)
 	{
 		//reached open
-		vec3_t doorcenter;
+		vec3_t doorcenter = { 0 };
 
 		// reached pos2
 		SetMoverState(ent, MOVER_POS2, level.time);
@@ -834,7 +834,7 @@ void Reached_BinaryMover(gentity_t* ent)
 	else if (ent->moverState == MOVER_2TO1)
 	{
 		//closed
-		vec3_t doorcenter;
+		vec3_t doorcenter = { 0 };
 
 		// reached pos1
 		SetMoverState(ent, MOVER_POS1, level.time);
@@ -873,7 +873,7 @@ void Use_BinaryMover_Go(gentity_t* ent)
 
 	if (ent->moverState == MOVER_POS1)
 	{
-		vec3_t doorcenter;
+		vec3_t doorcenter = { 0 };
 
 		// start moving 50 msec later, becase if this was player
 		// triggered, level.time hasn't been advanced yet
@@ -926,7 +926,7 @@ void Use_BinaryMover_Go(gentity_t* ent)
 	{
 		if (ent->s.pos.trType == TR_NONLINEAR_STOP)
 		{
-			vec3_t curDelta;
+			vec3_t curDelta = { 0 };
 			total = ent->s.pos.trDuration - 50;
 			VectorSubtract(ent->r.currentOrigin, ent->pos1, curDelta);
 			float fPartial = VectorLength(curDelta) / VectorLength(ent->s.pos.trDelta);
@@ -962,7 +962,7 @@ void Use_BinaryMover_Go(gentity_t* ent)
 	{
 		if (ent->s.pos.trType == TR_NONLINEAR_STOP)
 		{
-			vec3_t curDelta;
+			vec3_t curDelta = { 0 };
 			total = ent->s.pos.trDuration - 50;
 			VectorSubtract(ent->r.currentOrigin, ent->pos2, curDelta);
 			float fPartial = VectorLength(curDelta) / VectorLength(ent->s.pos.trDelta);
@@ -1079,7 +1079,7 @@ so the movement delta can be calculated
 */
 void InitMoverTrData(gentity_t* ent)
 {
-	vec3_t move;
+	vec3_t move = { 0 };
 
 	ent->s.pos.trType = TR_STATIONARY;
 	VectorCopy(ent->pos1, ent->s.pos.trBase);
@@ -1109,7 +1109,7 @@ static void InitMover(gentity_t* ent)
 	}
 
 	float  light = 0.0f;
-	vec3_t color;
+	vec3_t color = { 0 };
 
 	// ----------------------------------------------------------------------
 	// No locked doors in MP, ever: clear MOVER_LOCKED on self and parent
@@ -1271,8 +1271,8 @@ static vec3_t doorangles = { 10000000.0, 0, 0 };
 
 static void Touch_DoorTriggerSpectator(const gentity_t* ent, gentity_t* other, trace_t* trace)
 {
-	vec3_t origin, pMins, pMaxs;
-	trace_t tr;
+	vec3_t origin = { 0 }, pMins = { 0 }, pMaxs = { 0 };
+	trace_t tr = { 0 };
 
 	const int axis = ent->count;
 	// the constants below relate to constants in Think_SpawnNewDoorTrigger()
@@ -1404,7 +1404,7 @@ void Think_SpawnNewDoorTrigger(gentity_t* ent)
 	}
 
 	gentity_t* other = NULL;
-	vec3_t mins, maxs;
+	vec3_t mins = { 0 }, maxs = { 0 };
 
 	// set all of the slaves as shootable
 	if (ent->takedamage)
@@ -1621,7 +1621,7 @@ INACTIVE	must be used by a target_activate before it can be used
 void SP_func_door(gentity_t* ent)
 {
 	vec3_t abs_movedir = { 0 };
-	vec3_t size;
+	vec3_t size = { 0 };
 	float lip = 0.0f;
 
 	G_SpawnInt("vehopen", "0", &ent->genericValue14);
@@ -1667,7 +1667,7 @@ void SP_func_door(gentity_t* ent)
 	// if "start_open", reverse position 1 and 2
 	if (ent->spawnflags & 1)
 	{
-		vec3_t temp;
+		vec3_t temp = { 0 };
 
 		VectorCopy(ent->pos2, temp);
 		VectorCopy(ent->s.origin, ent->pos2);
@@ -1915,7 +1915,7 @@ When a button is touched, it moves some distance in the direction of it's angle,
 void SP_func_button(gentity_t* ent)
 {
 	vec3_t abs_movedir = { 0 };
-	vec3_t size;
+	vec3_t size = { 0 };
 	float lip = 0.0f;
 
 	//	ent->sound1to2 = G_SoundIndex("sound/movers/switches/butn2.wav");
@@ -1996,7 +1996,7 @@ Reached_Train
 void Reached_Train(gentity_t* ent)
 {
 	float speed = 0.0f;
-	vec3_t move;
+	vec3_t move = { 0 };
 
 	// copy the apropriate values
 	gentity_t* next = ent->nextTrain;
@@ -2404,7 +2404,7 @@ void SP_func_breakable(gentity_t* self);
 
 void SP_func_rotating(gentity_t* ent)
 {
-	vec3_t spinangles;
+	vec3_t spinangles = { 0 };
 	if (ent->health)
 	{
 		const int sav_spawnflags = ent->spawnflags;
@@ -2658,7 +2658,7 @@ void CacheChunkEffects(const material_t material)
 
 void G_MiscModelExplosion(vec3_t mins, vec3_t maxs, const int size, const material_t chunkType)
 {
-	vec3_t mid;
+	vec3_t mid = { 0 };
 
 	VectorAdd(mins, maxs, mid);
 	VectorScale(mid, 0.5f, mid);
@@ -2693,7 +2693,7 @@ void G_Chunks(const int owner, vec3_t origin, const vec3_t normal, const vec3_t 
 //--------------------------------------
 void funcBBrushDieGo(gentity_t* ent)
 {
-	vec3_t org, dir, up;
+	vec3_t org = { 0 }, dir = { 0 }, up = { 0 };
 	gentity_t* attacker = ent->enemy;
 	int size = 0;
 	const material_t chunkType = ent->material;
@@ -2769,7 +2769,7 @@ void funcBBrushDieGo(gentity_t* ent)
 	if (ent->genericValue15)
 	{
 		//a custom effect to play
-		vec3_t ang;
+		vec3_t ang = { 0 };
 		VectorSet(ang, 0.0f, 1.0f, 0.0f);
 		G_PlayEffectID(ent->genericValue15, org, ang);
 	}
@@ -2787,7 +2787,7 @@ void funcBBrushDieGo(gentity_t* ent)
 			{
 				continue;
 			}
-			vec3_t to_it, spot;
+			vec3_t to_it = { 0 }, spot = { 0 };
 			VectorSubtract(org, pl->client->ps.origin, to_it);
 			const float dist = VectorNormalize(to_it);
 			if (dist < 25000.0f)
@@ -2888,7 +2888,7 @@ void funcBBrushPain(gentity_t* self, gentity_t* attacker, int damage)
 		|| self->material == MAT_GREY_STONE
 		|| self->material == MAT_SNOWY_ROCK)
 	{
-		vec3_t org, dir;
+		vec3_t org = { 0 }, dir = { 0 };
 		VectorSubtract(self->r.absmax, self->r.absmin, org); // size
 		// This formula really has no logical basis other than the fact that it seemed to be the closest to yielding the results that I wanted.
 		// Volume is length * width * height...then break that volume down based on how many chunks we have
@@ -2928,7 +2928,7 @@ void funcBBrushPain(gentity_t* self, gentity_t* attacker, int damage)
 static void InitBBrush(gentity_t* ent)
 {
 	float light = 0.0f;
-	vec3_t color;
+	vec3_t color = { 0 };
 
 	VectorCopy(ent->s.origin, ent->pos1);
 
@@ -3138,7 +3138,7 @@ void SP_func_breakable(gentity_t* self)
 
 	if (G_SpawnString("noise", "*NOSOUND*", &s))
 	{
-		char buffer[MAX_QPATH];
+		char buffer[MAX_QPATH] = { 0 };
 		Q_strncpyz(buffer, s, sizeof buffer);
 		COM_DefaultExtension(buffer, sizeof buffer, ".wav");
 		self->noise_index = G_SoundIndex(buffer);
@@ -3279,7 +3279,7 @@ static void GlassPain(gentity_t* self, gentity_t* attacker, int damage)
 
 static void GlassUse(gentity_t* self, gentity_t* other, gentity_t* activator)
 {
-	vec3_t temp1, temp2;
+	vec3_t temp1 = { 0 }, temp2 = { 0 };
 
 	//no direct object to blame for the break, so fill the values with whatever
 	VectorAdd(self->r.mins, self->r.maxs, temp1);

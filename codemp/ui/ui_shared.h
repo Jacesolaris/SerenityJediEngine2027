@@ -531,7 +531,7 @@ displayContextDef_t* Display_GetContext();
 void* Display_CaptureItem(int x, int y);
 qboolean Display_MouseMove(void* p, int x, int y);
 int Display_CursorType(int x, int y);
-qboolean Display_KeyBindPending();
+qboolean Display_KeyBindPending(void);
 void Menus_OpenByName(const char* p);
 menuDef_t* Menus_FindByName(const char* p);
 void Menus_ShowByName(const char* p);
@@ -546,7 +546,7 @@ void Menu_SetItemBackground(const menuDef_t* menu, const char* itemName, const c
 
 void* UI_Alloc(int size);
 void UI_InitMemory(void);
-qboolean UI_OutOfMemory();
+qboolean UI_OutOfMemory(void);
 
 void Controls_GetConfig(void);
 void Controls_SetConfig(void);

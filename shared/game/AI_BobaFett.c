@@ -114,8 +114,8 @@ static void Boba_LevelCheck(void)
 
 static qboolean Boba_TryJumpTo(const vec3_t pos)
 {
-	trace_t tr;
-	vec3_t groundTest;
+	trace_t tr = { 0 };
+	vec3_t groundTest = { 0 };
 
 	if (NPCS.NPCInfo->jumpNextCheckTime > level.time || NPCS.NPC->client->ps.groundEntityNum == ENTITYNUM_NONE)
 	{
@@ -421,14 +421,14 @@ void Boba_DustFallNear(const vec3_t origin, const int dustcount)
 		return;
 	}
 
-	trace_t test_trace;
+	trace_t test_trace = { qfalse };
 	vec3_t test_direction{};
-	vec3_t test_start_pos;
+	vec3_t test_start_pos = { 0 };
 
 	VectorCopy(origin, test_start_pos);
 	for (int i = 0; i < dustcount; i++)
 	{
-		vec3_t test_end_pos;
+		vec3_t test_end_pos = { 0 };
 		test_direction[0] = Q_flrand(0.0f, 1.0f) * 2.0f - 1.0f;
 		test_direction[1] = Q_flrand(0.0f, 1.0f) * 2.0f - 1.0f;
 		test_direction[2] = 1.0f;
@@ -449,8 +449,8 @@ void Boba_DustFallNear(const vec3_t origin, const int dustcount)
 #else // MP keeps its own version of this function
 void Boba_DustFallNear(const vec3_t origin, const int dustcount)
 {
-	trace_t testTrace;
-	vec3_t testDirection, testEndPos, start;
+	trace_t testTrace = { 0 };
+	vec3_t testDirection = { 0 }, testEndPos = { 0 }, start = { 0 };
 
 	VectorCopy(origin, start);
 	for (int i = 0; i < dustcount; i++)
@@ -473,14 +473,14 @@ void Boba_DustFallNear(const vec3_t origin, const int dustcount)
 #ifdef SP_GAME // SP only: the MP game has no version of this
 void Do_DustFallNear(const vec3_t origin, const int dustcount)
 {
-	trace_t test_trace;
+	trace_t test_trace = { qfalse };
 	vec3_t test_direction{};
-	vec3_t test_start_pos;
+	vec3_t test_start_pos = { 0 };
 
 	VectorCopy(origin, test_start_pos);
 	for (int i = 0; i < dustcount; i++)
 	{
-		vec3_t testEndPos;
+		vec3_t testEndPos = { 0 };
 		test_direction[0] = Q_flrand(0.0f, 1.0f) * 2.0f - 1.0f;
 		test_direction[1] = Q_flrand(0.0f, 1.0f) * 2.0f - 1.0f;
 		test_direction[2] = 1.0f;
@@ -532,7 +532,7 @@ qboolean Boba_StopKnockdown(gentity_t* self, const gentity_t* pusher, const vec3
 		return qtrue;
 	}
 
-	vec3_t p_dir, fwd, right;
+	vec3_t p_dir = { 0 }, fwd = { 0 }, right = { 0 };
 	const vec3_t ang = { 0, self->SHR_currentAngles[YAW], 0 };
 	const int strafe_time = Q_irand(1000, 2000);
 
@@ -737,8 +737,8 @@ void Boba_FlyStop(gentity_t* self)
 #ifdef SP_GAME // SP only: the MP game has no version of this
 void Boba_FireFlameThrower(gentity_t* self)
 {
-	trace_t tr;
-	vec3_t start, end, dir;
+	trace_t tr = { qfalse };
+	vec3_t start = { 0 }, end = { 0 }, dir = { 0 };
 	CVec3 trace_mins(self->SHR_mins);
 	CVec3 trace_maxs(self->SHR_maxs);
 	const int damage = BOBA_FLAMETHROWDAMAGEMIN;
@@ -978,9 +978,9 @@ static void Boba_VibrobladePunch(gentity_t* self)
 		return;
 	}
 
-	mdxaBone_t boltMatrix;
-	vec3_t muzzlePoint;
-	vec3_t muzzle_dir;
+	mdxaBone_t boltMatrix = { 0 };
+	vec3_t muzzlePoint = { 0 };
+	vec3_t muzzle_dir = { 0 };
 	SHR_GetBoltMatrix(self, self->handRBolt, boltMatrix, self->SHR_currentAngles, self->SHR_currentOrigin);
 	// work the matrix axis stuff into the original axis and origins used.
 	SHR_GiveMeVector(boltMatrix, ORIGIN, muzzlePoint);
@@ -1119,9 +1119,9 @@ void Boba_FireWristMissile(gentity_t* self, const int whichMissile)
 
 	if (effect)
 	{
-		mdxaBone_t boltMatrix;
-		vec3_t muzzlePoint;
-		vec3_t muzzle_dir;
+		mdxaBone_t boltMatrix = { 0 };
+		vec3_t muzzlePoint = { 0 };
+		vec3_t muzzle_dir = { 0 };
 		SHR_GetBoltMatrix(self, missileStates[whichMissile].leftBolt ? self->genericBolt3 : self->handRBolt, boltMatrix, self->SHR_currentAngles, self->SHR_currentOrigin);
 		// work the matrix axis stuff into the original axis and origins used.
 		SHR_GiveMeVector(boltMatrix, ORIGIN, muzzlePoint);
@@ -1552,7 +1552,7 @@ bool Boba_Respawn(void)
 	//-----------------------------------------
 	if (AverageEnemyDirectionSamples && NPCS.NPC->behaviorSet[BSET_DEATH] == NULL)
 	{
-		vec3_t end_pos;
+		vec3_t end_pos = { 0 };
 		VectorMA(NPCS.NPC->enemy->SHR_currentOrigin, 1000.0f / (float)(AverageEnemyDirectionSamples),
 			AverageEnemyDirection, end_pos);
 		cp = NPC_FindCombatPoint(end_pos, NULL, end_pos, CP_FLEE | CP_TRYFAR | CP_HORZ_DIST_COLL, 0, -1);
@@ -1603,7 +1603,7 @@ static qboolean Boba_Respawn(void)
 	// Try To Predict Where The Enemy Is Going
 	if (averageEnemyDirectionSamples && !NPCS.NPC->behaviorSet[BSET_DEATH])
 	{
-		vec3_t endPos;
+		vec3_t endPos = { 0 };
 		VectorMA(NPCS.NPC->enemy->r.currentOrigin, 1000.0f / (float)averageEnemyDirectionSamples,
 			averageEnemyDirection, endPos);
 		cp = NPC_FindCombatPoint(endPos, NULL, endPos, CP_FLEE | CP_TRYFAR | CP_HORZ_DIST_COLL, 0, -1);
@@ -1666,8 +1666,8 @@ void Boba_Update(void)
 	{
 		if (!(NPCS.NPC->SHR_svFlags & SVF_NOCLIENT))
 		{
-			trace_t test_trace;
-			vec3_t eyes;
+			trace_t test_trace = { qfalse };
+			vec3_t eyes = { 0 };
 			CalcEntitySpot(NPCS.NPC, SPOT_HEAD_LEAN, eyes);
 			SHR_Trace(&test_trace, eyes, NULL, NULL, NPCS.NPC->enemy->SHR_currentOrigin, NPCS.NPC->s.number, MASK_SHOT);
 
@@ -1801,8 +1801,8 @@ void Boba_Update(void)
 	{
 		if (!(NPCS.NPC->r.svFlags & SVF_NOCLIENT))
 		{
-			trace_t testTrace;
-			vec3_t eyes;
+			trace_t testTrace = { 0 };
+			vec3_t eyes = { 0 };
 			CalcEntitySpot(NPCS.NPC, SPOT_HEAD_LEAN, eyes);
 			trap->Trace(&testTrace, eyes, NULL, NULL, NPCS.NPC->enemy->r.currentOrigin, NPCS.NPC->s.number, MASK_SHOT,
 				qfalse, 0, 0);
@@ -1952,7 +1952,7 @@ bool Boba_Flee(void)
 				TIMER_Set(NPCS.NPC, "ResampleEnemyDirection", Q_irand(500, 1000));
 				AverageEnemyDirectionSamples++;
 
-				vec3_t moveDir;
+				vec3_t moveDir = { 0 };
 				VectorCopy(NPCS.NPC->enemy->client->ps.velocity, moveDir);
 				VectorNormalize(moveDir);
 
@@ -1961,7 +1961,7 @@ bool Boba_Flee(void)
 
 			if (SHR_CVAR(g_bobaDebug).integer && AverageEnemyDirectionSamples)
 			{
-				vec3_t end_pos;
+				vec3_t end_pos = { 0 };
 				VectorMA(NPCS.NPC->enemy->SHR_currentOrigin, 500.0f / (float)(AverageEnemyDirectionSamples),
 					AverageEnemyDirection, end_pos);
 				CG_DrawEdge(NPCS.NPC->enemy->SHR_currentOrigin, end_pos, EDGE_IMPACT_POSSIBLE);
@@ -2067,7 +2067,7 @@ qboolean Boba_Flee(void)
 		{
 			if (TIMER_Done(NPCS.NPC, "SpookPlayerTimer"))
 			{
-				vec3_t testDirection;
+				vec3_t testDirection = { 0 };
 				TIMER_Set(NPCS.NPC, "SpookPlayerTimer", Q_irand(2000, 10000));
 				if (!Q_irand(0, 1))
 				{
@@ -2098,7 +2098,7 @@ qboolean Boba_Flee(void)
 			if (TIMER_Done(NPCS.NPC, "ResampleEnemyDirection") && NPCS.NPC->enemy->client
 				&& VectorLength(NPCS.NPC->enemy->client->ps.velocity) > 10.0f)
 			{
-				vec3_t moveDir;
+				vec3_t moveDir = { 0 };
 				TIMER_Set(NPCS.NPC, "ResampleEnemyDirection", Q_irand(500, 1000));
 				averageEnemyDirectionSamples++;
 

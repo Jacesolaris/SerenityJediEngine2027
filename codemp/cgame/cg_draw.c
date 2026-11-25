@@ -499,8 +499,8 @@ void CG_Draw3DModel(const float x, const float y, const float w, const float h, 
 	const int g2_radius, const qhandle_t skin,
 	vec3_t origin, vec3_t angles)
 {
-	refdef_t refdef;
-	refEntity_t ent;
+	refdef_t refdef = { 0 };
+	refEntity_t ent = { 0 };
 
 	if (!cg_draw3DIcons.integer || !cg_drawIcons.integer)
 	{
@@ -575,9 +575,9 @@ void CG_DrawFlagModel(float x, float y, float w, float h, const int team, const 
 	if (!force_2d && cg_draw3DIcons.integer)
 	{
 		qhandle_t handle = 0;
-		vec3_t maxs;
-		vec3_t mins;
-		vec3_t angles;
+		vec3_t maxs = { 0 };
+		vec3_t mins = { 0 };
+		vec3_t angles = { 0 };
 		vec3_t origin = { 0 };
 		x *= cgs.screenXScale;
 		y *= cgs.screenYScale;
@@ -654,7 +654,7 @@ CG_DrawHealth
 
 static void CG_DrawCusHealth(const menuDef_t* menu_hud)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 	itemDef_t* focus_item = NULL;
 
 	// Can we find the menu?
@@ -756,7 +756,7 @@ static void CG_DrawCusHealth(const menuDef_t* menu_hud)
 
 static void CG_DrawJK2HealthSJE(const int x, const int y)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 
 	const playerState_t* ps = &cg.snap->ps;
 
@@ -782,7 +782,7 @@ static void CG_DrawJK2HealthSJE(const int x, const int y)
 
 static void CG_DrawJK2blockPoints(const int x, const int y, const menuDef_t* menu_hud)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 
 	if (cg.snap->ps.clientNum != cg.clientNum)
 	{
@@ -904,7 +904,7 @@ static void CG_DrawJK2blockPoints(const int x, const int y, const menuDef_t* men
 
 static void CG_DrawJK2Health(const int x, const int y)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 
 	const playerState_t* ps = &cg.snap->ps;
 
@@ -935,7 +935,7 @@ CG_DrawArmor
 
 static void CG_Draw_JKA_Armor(const menuDef_t* menu_hud)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 	itemDef_t* focus_item = NULL;
 
 	//ps = &cg.snap->ps;
@@ -1078,7 +1078,7 @@ static void CG_Draw_JKA_Armor(const menuDef_t* menu_hud)
 
 static void CG_DrawJK2Armor(const centity_t* cent, const int x, const int y)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 
 	const playerState_t* ps = &cg.snap->ps;
 
@@ -1162,7 +1162,7 @@ static void CG_DrawJK2Armor(const centity_t* cent, const int x, const int y)
 
 static void CG_DrawJK2CusArmor(const centity_t* cent, const int x, const int y)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 
 	const playerState_t* ps = &cg.snap->ps;
 
@@ -1260,7 +1260,7 @@ static void CG_SaberWearSetColor(const float* base)
 	static int last_wear = 0;
 	static int flash_time = 0;
 	const int wear = cg.predictedPlayerState.stats[STAT_SABER_WEAR];
-	vec4_t color;
+	vec4_t color = { 0 };
 
 	if (wear > last_wear)
 	{
@@ -1773,7 +1773,7 @@ CG_Drawgunfatigue
 static void CG_DrawCusgunfatigue(const menuDef_t* menu_hud)
 {
 	//render the CG_Drawgunfatigue meter.
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 	const int max_blaster_attack_chain_count = BLASTERMISHAPLEVEL_MAX;
 	qboolean flash = qfalse;
 
@@ -1877,7 +1877,7 @@ static void CG_DrawCusgunfatigue(const menuDef_t* menu_hud)
 static void CG_DrawCussaberfatigue(const menuDef_t* menu_hud)
 {
 	//render the balance/mishap meter.
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 	const int saber_fatigue_chain_count = MISHAPLEVEL_MAX;
 	qboolean flash = qfalse;
 
@@ -2129,7 +2129,7 @@ static void CG_DrawoldblockPoints(void)
 
 static void CG_DrawCusblockPoints(const int x, const int y, const menuDef_t* menu_hud)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 
 	if (cg.snap->ps.clientNum != cg.clientNum)
 	{
@@ -2257,7 +2257,7 @@ CG_DrawAmmo
 
 static void CG_DrawCusAmmo(const centity_t* cent, const menuDef_t* menu_hud)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 	float inc = 0.0f;
 
 	const playerState_t* ps = &cg.snap->ps;
@@ -2405,7 +2405,7 @@ static void CG_DrawCusAmmo(const centity_t* cent, const menuDef_t* menu_hud)
 
 static void CG_DrawJK2Ammo(const centity_t* cent, const int x, const int y)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 
 	const playerState_t* ps = &cg.snap->ps;
 
@@ -2509,7 +2509,7 @@ CG_DrawForcePower
 
 static void CG_Draw_JKA_ForcePower(const centity_t* cent, const menuDef_t* menu_hud)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 	itemDef_t* focus_item = NULL;
 	const int max_force_power = 100;
 	qboolean flash = qfalse;
@@ -2663,7 +2663,7 @@ static void CG_Draw_JKA_ForcePower(const centity_t* cent, const menuDef_t* menu_
 
 static void CG_DrawJK2ForcePower(const centity_t* cent, const int x, const int y, const menuDef_t* menu_hud)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 	itemDef_t* focus_item = NULL;
 
 	const float inc = (float)100 / MAX_TICS;
@@ -2743,7 +2743,7 @@ static void CG_DrawJK2ForcePower(const centity_t* cent, const int x, const int y
 
 static void CG_DrawJK2NoSaberForcePower(const centity_t* cent, const int x, const int y, const menuDef_t* menu_hud)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 
 	const float inc = (float)100 / MAX_TICS;
 	float value = cg.snap->ps.fd.forcePower;
@@ -3543,7 +3543,7 @@ static void CG_DrawPersonalShield(void)
 		static vec4_t half = { 0.25f, 0.65f, 1.0f, 0.45f };
 		static vec4_t spent = { 0.35f, 0.35f, 0.38f, 0.55f };
 		vec4_t top = { 0.25f, 0.65f, 1.0f, 1.0f };
-		int i;
+		int i = 0;
 
 		if (charge <= 0)
 		{
@@ -3597,7 +3597,7 @@ static void CG_DrawGrenadeCook(void)
 	const char* cook_on = Info_ValueForKey(CG_ConfigString(CS_SERVERINFO), "g_grenadeCook");
 	const int fuse = 2000 + 500; // TD_TIME + GRENADE_WARN_TIME (g_weapon.c)
 	const int warn = 500;
-	int cook;
+	int cook = 0;
 
 	if (cook_on[0] && !atoi(cook_on))
 	{
@@ -4359,8 +4359,8 @@ void cg_draw_inventory_select(void)
 		if (bg_itemlist[item_ndex].classname)
 		{
 			vec4_t text_color = { .312f, .75f, .621f, 1.0f };
-			char text[1024];
-			char upper_key[1024];
+			char text[1024] = { 0 };
+			char upper_key[1024] = { 0 };
 
 			strcpy(upper_key, bg_itemlist[item_ndex].classname);
 
@@ -4501,7 +4501,7 @@ static qboolean CG_CheckTargetVehicle(centity_t** p_target_veh, float* alpha)
 
 static float CG_DrawVehicleShields(const menuDef_t* menu_hud, const centity_t* veh)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 
 	const itemDef_t* item = Menu_FindItemByName((menuDef_t*)menu_hud, "armorbackground");
 
@@ -4525,7 +4525,7 @@ static float CG_DrawVehicleShields(const menuDef_t* menu_hud, const centity_t* v
 	const float inc = (float)max_shields / MAX_VHUD_ARMOR_TICS;
 	for (int i = 1; i <= MAX_VHUD_ARMOR_TICS; i++)
 	{
-		char item_name[64];
+		char item_name[64] = { 0 };
 		sprintf(item_name, "armor_tic%d", i);
 
 		item = Menu_FindItemByName((menuDef_t*)menu_hud, item_name);
@@ -4567,7 +4567,7 @@ int cg_vehicleAmmoWarningTime = 0;
 
 static void CG_DrawVehicleAmmo(const menuDef_t* menu_hud, const centity_t* veh)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 
 	const itemDef_t* item = Menu_FindItemByName((menuDef_t*)menu_hud, "ammobackground");
 
@@ -4588,7 +4588,7 @@ static void CG_DrawVehicleAmmo(const menuDef_t* menu_hud, const centity_t* veh)
 	const float inc = (float)max_ammo / MAX_VHUD_AMMO_TICS;
 	for (int i = 1; i <= MAX_VHUD_AMMO_TICS; i++)
 	{
-		char itemName[64];
+		char itemName[64] = { 0 };
 		sprintf(itemName, "ammo_tic%d", i);
 
 		item = Menu_FindItemByName((menuDef_t*)menu_hud, itemName);
@@ -4634,7 +4634,7 @@ static void CG_DrawVehicleAmmo(const menuDef_t* menu_hud, const centity_t* veh)
 
 static void CG_DrawVehicleAmmoUpper(const menuDef_t* menu_hud, const centity_t* veh)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 
 	const itemDef_t* item = Menu_FindItemByName((menuDef_t*)menu_hud, "ammoupperbackground");
 
@@ -4655,7 +4655,7 @@ static void CG_DrawVehicleAmmoUpper(const menuDef_t* menu_hud, const centity_t* 
 	const float inc = (float)max_ammo / MAX_VHUD_AMMO_TICS;
 	for (int i = 1; i < MAX_VHUD_AMMO_TICS; i++)
 	{
-		char itemName[64];
+		char itemName[64] = { 0 };
 		sprintf(itemName, "ammoupper_tic%d", i);
 
 		item = Menu_FindItemByName((menuDef_t*)menu_hud, itemName);
@@ -4701,7 +4701,7 @@ static void CG_DrawVehicleAmmoUpper(const menuDef_t* menu_hud, const centity_t* 
 
 static void CG_DrawVehicleAmmoLower(const menuDef_t* menu_hud, const centity_t* veh)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 
 	const itemDef_t* item = Menu_FindItemByName((menuDef_t*)menu_hud, "ammolowerbackground");
 
@@ -4722,7 +4722,7 @@ static void CG_DrawVehicleAmmoLower(const menuDef_t* menu_hud, const centity_t* 
 	const float inc = (float)max_ammo / MAX_VHUD_AMMO_TICS;
 	for (int i = 1; i < MAX_VHUD_AMMO_TICS; i++)
 	{
-		char item_name[64];
+		char item_name[64] = { 0 };
 		sprintf(item_name, "ammolower_tic%d", i);
 
 		item = Menu_FindItemByName((menuDef_t*)menu_hud, item_name);
@@ -4855,7 +4855,7 @@ static void CG_DrawVehicleWeaponsLinked(const menuDef_t* menu_hud, const centity
 
 static void CG_DrawVehicleSpeed(const menuDef_t* menu_hud, const centity_t* veh)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 
 	const itemDef_t* item = Menu_FindItemByName((menuDef_t*)menu_hud, "speedbackground");
 
@@ -4879,7 +4879,7 @@ static void CG_DrawVehicleSpeed(const menuDef_t* menu_hud, const centity_t* veh)
 	const float inc = (float)max_speed / MAX_VHUD_SPEED_TICS;
 	for (int i = 1; i <= MAX_VHUD_SPEED_TICS; i++)
 	{
-		char item_name[64];
+		char item_name[64] = { 0 };
 		sprintf(item_name, "speed_tic%d", i);
 
 		item = Menu_FindItemByName((menuDef_t*)menu_hud, item_name);
@@ -4943,7 +4943,7 @@ static void CG_DrawVehicleSpeed(const menuDef_t* menu_hud, const centity_t* veh)
 
 static void CG_DrawVehicleArmor(const menuDef_t* menu_hud, const centity_t* veh)
 {
-	vec4_t calc_color;
+	vec4_t calc_color = { 0 };
 
 	const float max_armor = veh->m_pVehicle->m_pVehicleInfo->armor;
 	float curr_value = cg.predictedVehicleState.stats[STAT_HEALTH];
@@ -4967,7 +4967,7 @@ static void CG_DrawVehicleArmor(const menuDef_t* menu_hud, const centity_t* veh)
 	const float inc = (float)max_armor / MAX_VHUD_SHIELD_TICS;
 	for (int i = 1; i <= MAX_VHUD_SHIELD_TICS; i++)
 	{
-		char item_name[64];
+		char item_name[64] = { 0 };
 		sprintf(item_name, "shield_tic%d", i);
 
 		item = Menu_FindItemByName((menuDef_t*)menu_hud, item_name);
@@ -5032,7 +5032,7 @@ static void CG_DrawVehicleDamage(const centity_t* veh, const int broken_limbs, c
 	const itemDef_t* item = Menu_FindItemByName((menuDef_t*)menu_hud, vehDamageData[index].itemName);
 	if (item)
 	{
-		vec4_t color;
+		vec4_t color = { 0 };
 		int graphic_handle = 0;
 		int color_i = 0;
 		if (broken_limbs & 1 << vehDamageData[index].heavyDamage)
@@ -5381,7 +5381,7 @@ static float CG_DrawMiniScoreboard(float y)
 	if (cgs.gametype >= GT_TEAM)
 	{
 		const int x_offset = 0;
-		char temp[MAX_QPATH];
+		char temp[MAX_QPATH] = { 0 };
 		Q_strncpyz(temp, va("%s: ", CG_GetStringEdString("MP_INGAME", "RED")), sizeof temp);
 		Q_strcat(temp, sizeof temp, cgs.scores1 == SCORE_NOT_PRESENT ? "-" : va("%i", cgs.scores1));
 		Q_strcat(temp, sizeof temp, va(" %s: ", CG_GetStringEdString("MP_INGAME", "BLUE")));
@@ -5526,7 +5526,7 @@ static float CG_DrawEnemyInfo(float y)
 		TEAM_SPECTATOR)
 	{
 		//also print their score
-		char text[1024];
+		char text[1024] = { 0 };
 		y += 15;
 		Com_sprintf(text, sizeof text, "%i/%i", cgs.clientinfo[clientNum].score, cgs.fraglimit);
 		CG_Text_Paint(630 - CG_Text_Width(text, 0.7f, FONT_MEDIUM) + x_offset, y, 0.7f, colorWhite, text, 0, 0, 0,
@@ -5687,7 +5687,7 @@ static int impactSoundDebounceTime = 0;
 // players are all on one side. qfalse: no team to go by (the gametype's colour, as before).
 static qboolean CG_TeamColorForEnt(const centity_t* cent, vec4_t colour)
 {
-	int c;
+	int c = 0;
 
 	if (cent->currentState.number < MAX_CLIENTS)
 	{
@@ -5802,8 +5802,8 @@ static float cg_draw_radar(float y)
 	// Draw all of the radar entities.  Draw them backwards so players are drawn last
 	for (i = cg.radarEntityCount - 1; i >= 0; i--)
 	{
-		vec3_t dir_look;
-		vec3_t dir_player;
+		vec3_t dir_look = { 0 };
+		vec3_t dir_player = { 0 };
 		float angle_look = 0.0f;
 		float angle_player = 0.0f;
 		float angle = 0.0f;
@@ -5898,7 +5898,7 @@ static float cg_draw_radar(float y)
 				//slightly misleading to use this value, but don't want to add more to entstate.
 				//any ent with brokenLimbs non-0 and on radar is an objective ent.
 				//brokenLimbs is literal team value.
-				char obj_state[1024];
+				char obj_state[1024] = { 0 };
 				int complete = 0;
 
 				//we only want to draw it if the objective for it is not complete.
@@ -6036,7 +6036,7 @@ static float cg_draw_radar(float y)
 			else
 			{
 				// Normal NPCs...
-				vec4_t colour, base;
+				vec4_t colour = { 0 }, base = { 0 };
 
 				if (cent->currentState.eFlags & EF_DEAD)
 				{
@@ -6129,9 +6129,9 @@ static float cg_draw_radar(float y)
 					float new_dist = 0.0f;
 					for (predict_time = timeStep; predict_time < 5000; predict_time += timeStep)
 					{
-						vec3_t moveDir;
-						vec3_t my_pos;
-						vec3_t asteroid_pos;
+						vec3_t moveDir = { 0 };
+						vec3_t my_pos = { 0 };
+						vec3_t asteroid_pos = { 0 };
 						//asteroid dir, speed, size, + my dir & speed...
 						BG_EvaluateTrajectory(&cent->currentState.pos, cg.time + predict_time, asteroid_pos);
 						//FIXME: I don't think it's calcing "myPos" correctly
@@ -6174,7 +6174,7 @@ static float cg_draw_radar(float y)
 					arrow_base_scale = 6.0f * asteroid_scale;
 					if (impactSoundDebounceTime < cg.time)
 					{
-						vec3_t soundOrg;
+						vec3_t soundOrg = { 0 };
 						if (surface_dist > RADAR_ASTEROID_RANGE * 0.66f)
 						{
 							impactSoundDebounceTime = cg.time + 1000;
@@ -6239,7 +6239,7 @@ static float cg_draw_radar(float y)
 					{
 						if (radarLockSoundDebounceTime < cg.time)
 						{
-							vec3_t sound_org;
+							vec3_t sound_org = { 0 };
 							int alarm_sound = 0;
 							if (actual_dist > RADAR_MISSILE_RANGE * 0.66f)
 							{
@@ -6328,7 +6328,7 @@ static float cg_draw_radar(float y)
 
 		case ET_PLAYER:
 		{
-			vec4_t colour, base;
+			vec4_t colour = { 0 }, base = { 0 };
 
 			cl = &cgs.clientinfo[cent->currentState.number];
 
@@ -6552,7 +6552,7 @@ static float CG_DrawTeamOverlay(float y, const qboolean right, const qboolean up
 		ci = cgs.clientinfo + sortedTeamPlayers[i];
 		if (ci->infoValid && ci->team == cg.snap->ps.persistant[PERS_TEAM])
 		{
-			char st[16];
+			char st[16] = { 0 };
 			hcolor[0] = hcolor[1] = hcolor[2] = hcolor[3] = 1.0;
 
 			int xx = x + TINYCHAR_WIDTH;
@@ -6892,7 +6892,7 @@ Should we draw something different for long lag vs no packets?
 */
 static void CG_DrawDisconnect(void)
 {
-	usercmd_t cmd;
+	usercmd_t cmd = { 0 };
 	const char* s = NULL;
 	int w = 0; // bk010215 - FIXME char message[1024];
 
@@ -7090,7 +7090,7 @@ void CG_DrawSiegeMessage(const char* str, const int objective_screen)
 
 void CG_DrawSiegeMessageNonMenu(const char* str)
 {
-	char text[1024]; // outside the if: str may point into it below
+	char text[1024] = { 0 }; // outside the if: str may point into it below
 	if (str[0] == '@')
 	{
 		trap->SE_GetStringTextString(str + 1, text, sizeof text);
@@ -7704,7 +7704,7 @@ static qboolean CG_HeadBarEnt(const centity_t* cent)
 // size on screen)
 static qboolean CG_OverheadAnchor(const centity_t* cent, float* x, float* y, float* scale)
 {
-	vec3_t pos;
+	vec3_t pos = { 0 };
 	float top = DEFAULT_MAXS_2;
 
 	if (cent->currentState.solid && cent->currentState.solid != SOLID_BMODEL)
@@ -7806,7 +7806,7 @@ static void CG_DrawOverheadBars(const qboolean drawHealth, const qboolean drawBl
 				colors[bars++] = healthColor;
 			}
 
-			float x, y, scale;
+			float x = 0, y = 0, scale = 0;
 			if (!bars || !CG_OverheadAnchor(cent, &x, &y, &scale))
 			{
 				continue;
@@ -7833,7 +7833,7 @@ static void CG_DrawOverheadBars(const qboolean drawHealth, const qboolean drawBl
 // the crosshair name over cent's head, with the bars' anchor, scale and fade, just above its top bar this frame
 static void CG_DrawOverheadName(const centity_t* cent, const char* name, const float* color)
 {
-	float x, y, scale;
+	float x = 0, y = 0, scale = 0;
 	if (!cent || !name || !name[0] || !CG_OverheadAnchor(cent, &x, &y, &scale))
 	{
 		return;
@@ -8037,14 +8037,14 @@ static qboolean CG_TargetLockValid(const int num)
 
 static qboolean CG_TargetLockLOS(const vec3_t eye, const int num, const vec3_t center)
 {
-	trace_t tr;
+	trace_t tr = { 0 };
 	CG_Trace(&tr, eye, NULL, NULL, center, cg.snap->ps.clientNum, CONTENTS_SOLID | CONTENTS_TERRAIN);
 	return tr.fraction >= 1.0f || tr.entityNum == num ? qtrue : qfalse;
 }
 
 static int CG_TargetLockAcquire(const vec3_t eye, const int skip)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 	const float min_dot = cos(DEG2RAD(TARGETLOCK_CONE));
 	float best_dot = min_dot;
 	int best = ENTITYNUM_NONE;
@@ -8054,7 +8054,7 @@ static int CG_TargetLockAcquire(const vec3_t eye, const int skip)
 	for (int i = 0; i < cg.snap->numEntities; i++)
 	{
 		const int num = cg.snap->entities[i].number;
-		vec3_t center, dir;
+		vec3_t center = { 0 }, dir = { 0 };
 
 		if (!CG_TargetLockValid(num) || num == skip)
 		{
@@ -8100,7 +8100,7 @@ void CG_SaberTargetLock(void)
 	static int smooth_ent = ENTITYNUM_NONE;
 
 	const playerState_t* ps = &cg.predictedPlayerState;
-	usercmd_t cmd;
+	usercmd_t cmd = { 0 };
 
 	memset(&cmd, 0, sizeof cmd);
 	trap->GetUserCmd(trap->GetCurrentCmdNumber(), &cmd);
@@ -8137,7 +8137,7 @@ void CG_SaberTargetLock(void)
 		return;
 	}
 
-	vec3_t eye, center;
+	vec3_t eye = { 0 }, center = { 0 };
 	VectorCopy(ps->origin, eye);
 	eye[2] += ps->viewheight;
 
@@ -8206,7 +8206,7 @@ void CG_SaberTargetLock(void)
 	}
 
 	//turn smoothly towards it: a smoothed aim point, so a target moving sideways is followed without shaking
-	vec3_t dir, angles;
+	vec3_t dir = { 0 }, angles = { 0 };
 	CG_TargetLockCenter(&cg_entities[cg_saberTargetLockEnt], center);
 	VectorSubtract(center, eye, dir);
 	const float aim_yaw = vectoyaw(dir);
@@ -8408,7 +8408,7 @@ static void CG_DrawCrosshair(vec3_t world_point, const int ch_ent_valid)
 
 	if (cg_crosshairHealth.integer)
 	{
-		vec4_t hcolor;
+		vec4_t hcolor = { 0 };
 
 		CG_ColorForHealth(hcolor);
 		trap->R_SetColor(hcolor);
@@ -8879,7 +8879,7 @@ static void CG_DrawCrosshair(vec3_t world_point, const int ch_ent_valid)
 
 qboolean CG_WorldCoordToScreenCoordFloat(vec3_t world_coord, float* x, float* y)
 {
-	vec3_t trans;
+	vec3_t trans = { 0 };
 
 	const float px = tan(cg.refdef.fov_x * (M_PI / 360));
 	const float py = tan(cg.refdef.fov_y * (M_PI / 360));
@@ -8936,10 +8936,10 @@ static float CG_SaberFlareWidthRatio(void)
 void CG_SaberClashFlare(void)
 {
 	const int max_time = 150;
-	vec3_t dif;
-	vec4_t color;
+	vec3_t dif = { 0 };
+	vec4_t color = { 0 };
 	int x = 0, y = 0;
-	trace_t tr;
+	trace_t tr = { 0 };
 
 	const int t = cg.time - cg_saberFlashTime;
 
@@ -8996,10 +8996,10 @@ void CG_SaberClashFlare(void)
 void CG_SaberBlockFlare(void)
 {
 	const int max_time = 150;
-	vec3_t dif;
-	vec4_t color;
+	vec3_t dif = { 0 };
+	vec4_t color = { 0 };
 	int x = 0, y = 0;
-	trace_t tr;
+	trace_t tr = { 0 };
 
 	const int t = cg.time - cg_saberFlashTime;
 
@@ -9050,7 +9050,7 @@ void CG_SaberBlockFlare(void)
 static void CG_DottedLine(const float x1, const float y1, const float x2, const float y2, const float dot_size,
 	const int num_dots, vec4_t color, const float alpha)
 {
-	vec4_t color_rgba;
+	vec4_t color_rgba = { 0 };
 
 	VectorCopy4(color, color_rgba);
 	color_rgba[3] = alpha;
@@ -9073,8 +9073,8 @@ static void CG_DottedLine(const float x1, const float y1, const float x2, const 
 
 static void CG_BracketEntity(centity_t* cent, const float radius)
 {
-	trace_t tr;
-	vec3_t dif;
+	trace_t tr = { 0 };
+	vec3_t dif = { 0 };
 	float size = 0.0f;
 	float x = 0.0f, y = 0.0f;
 	qboolean is_enemy = qfalse;
@@ -9241,7 +9241,7 @@ static void CG_BracketEntity(centity_t* cent, const float radius)
 								&& veh_weapon->fSpeed) //primary weapon's shot has speed
 							{
 								//our primary weapon's projectile has a speed
-								vec3_t veh_diff, veh_lead_pos;
+								vec3_t veh_diff = { 0 }, veh_lead_pos = { 0 };
 								float lead_x = 0.0f, lead_y = 0.0f;
 
 								VectorSubtract(cent->lerpOrigin, cg.predictedVehicleState.origin, veh_diff);
@@ -9438,7 +9438,7 @@ static void CG_DrawRocketLocking(const int lock_ent_num)
 //--------------------------------------------------------------
 {
 	int cx = 0, cy = 0;
-	vec3_t org;
+	vec3_t org = { 0 };
 	const centity_t* cent = &cg_entities[lock_ent_num];
 	vec4_t color = { 0.0f, 0.0f, 0.0f, 0.0f };
 	float lock_time_interval = (cgs.gametype == GT_SIEGE ? 2400.0f : 1200.0f) / 16.0f;
@@ -9730,7 +9730,7 @@ static void CG_CalcEWebmuzzlePoint(centity_t* cent, vec3_t start, vec3_t d_f, ve
 
 	if (bolt != -1)
 	{
-		mdxaBone_t boltMatrix;
+		mdxaBone_t boltMatrix = { 0 };
 
 		trap->G2API_GetBoltMatrix_NoRecNoRot(cent->ghoul2, 0, bolt, &boltMatrix, cent->lerpAngles, cent->lerpOrigin,
 			cg.time, NULL, cent->modelScale);
@@ -9756,15 +9756,15 @@ void CG_TraceItem(trace_t* result, const vec3_t start, const vec3_t mins, const 
 
 static void CG_ScanForCrosshairEntity(void)
 {
-	trace_t trace;
-	vec3_t start, end;
+	trace_t trace = { 0 };
+	vec3_t start = { 0 }, end = { 0 };
 	qboolean b_veh_check_trace_from_cam_pos = qfalse;
 
 	int ignore = cg.predictedPlayerState.clientNum;
 
 	if (cg_dynamicCrosshair.integer)
 	{
-		vec3_t d_f, d_rt, d_up;
+		vec3_t d_f = { 0 }, d_rt = { 0 }, d_up = { 0 };
 
 		// For now we still want to draw the crosshair in relation to the player's world coordinates
 		// even if we have a melee weapon/no weapon.
@@ -9803,7 +9803,7 @@ static void CG_ScanForCrosshairEntity(void)
 		{
 			if (cg.snap->ps.weapon == WP_EMPLACED_GUN && cg.snap->ps.emplacedIndex)
 			{
-				vec3_t pitch_constraint;
+				vec3_t pitch_constraint = { 0 };
 
 				ignore = cg.snap->ps.emplacedIndex;
 
@@ -9825,7 +9825,7 @@ static void CG_ScanForCrosshairEntity(void)
 			}
 			else
 			{
-				vec3_t pitchConstraint;
+				vec3_t pitchConstraint = { 0 };
 
 				if (cg.renderingThirdPerson)
 				{
@@ -9859,8 +9859,8 @@ static void CG_ScanForCrosshairEntity(void)
 		{
 			// This MUST stay up to date with the method used in WP_VehCheckTraceFromCamPos.
 			const centity_t* veh = &cg_entities[cg.predictedPlayerState.m_iVehicleNum];
-			trace_t extra_trace;
-			vec3_t view_dir2_end, extra_end;
+			trace_t extra_trace = { 0 };
+			vec3_t view_dir2_end = { 0 }, extra_end = { 0 };
 			const float min_auto_aim_dist =
 				Distance(veh->lerpOrigin, cg.refdef.vieworg) +
 				veh->m_pVehicle->m_pVehicleInfo->length / 2.0f +
@@ -10013,8 +10013,8 @@ qboolean currently_visible[MAX_GENTITIES];
 
 static qboolean CG_CheckClientVisibility(const centity_t* cent)
 {
-	trace_t trace;
-	vec3_t start, end; //, forward, right, up;
+	trace_t trace = { 0 };
+	vec3_t start = { 0 }, end = { 0 }; //, forward, right, up;
 
 	if (next_vischeck[cent->currentState.number] > cg.time)
 	{
@@ -10054,7 +10054,7 @@ static void CG_DrawCrosshairItem(void)
 
 	if (cg_entities[cg.crosshairclientNum].currentState.eType == ET_ITEM)
 	{
-		vec3_t diff;
+		vec3_t diff = { 0 };
 		VectorSubtract(cg_entities[cg.crosshairclientNum].lerpOrigin, cg.refdef.vieworg, diff);
 
 		float distSq = VectorLengthSquared(diff);
@@ -10120,7 +10120,7 @@ static void CG_DrawTalkHint(void)
 
 static void CG_DrawCrosshairNames(void)
 {
-	char      sanitized[1024];
+	char      sanitized[1024] = { 0 };
 	qboolean  is_veh = qfalse;
 
 	// No crosshair names during cameras/cutscenes
@@ -10193,7 +10193,7 @@ static void CG_DrawCrosshairNames(void)
 	const int idx = cg.crosshairclientNum;
 	const qboolean isClient = (idx >= 0 && idx < MAX_CLIENTS) ? qtrue : qfalse;
 	const qboolean isEntity = (idx >= 0 && idx < ENTITYNUM_WORLD) ? qtrue : qfalse;
-	vec3_t diff;
+	vec3_t diff = { 0 };
 	if (isEntity == qfalse)
 	{
 		trap->R_SetColor(NULL);
@@ -10255,7 +10255,7 @@ static void CG_DrawCrosshairNames(void)
 		tcolor[2] = color[2];
 		tcolor[3] = color[3];
 
-		char str[MAX_STRING_CHARS];
+		char str[MAX_STRING_CHARS] = { 0 };
 		Com_sprintf(str, sizeof(str), "%s (pilot)", sanitized);
 
 		CG_DrawProportionalString(320, 170, str, UI_CENTER, tcolor);
@@ -11405,7 +11405,7 @@ static void CG_DrawSiegeTimer(const int timeRemaining, const qboolean isMyTeam)
 {
 	int f_color = 0;
 	int minutes = 0;
-	char time_str[1024];
+	char time_str[1024] = { 0 };
 
 	const menuDef_t* menu_hud = Menus_FindByName("mp_timer");
 	if (!menu_hud)
@@ -11460,7 +11460,7 @@ static void CG_DrawSiegeTimer(const int timeRemaining, const qboolean isMyTeam)
 static void CG_DrawSiegeDeathTimer(const int timeRemaining)
 {
 	int minutes = 0;
-	char time_str[1024];
+	char time_str[1024] = { 0 };
 
 	const menuDef_t* menu_hud = Menus_FindByName("mp_timer");
 	if (!menu_hud)
@@ -11517,7 +11517,7 @@ static void CG_DrawSiegeHUDItem(void)
 	void* g2 = NULL;
 	qhandle_t handle = 0;
 	vec3_t origin = { 0.0f, 0.0f, 0.0f }, angles = { 0.0f, 0.0f, 0.0f };
-	vec3_t mins, maxs;
+	vec3_t mins = { 0 }, maxs = { 0 };
 	const centity_t* cent = &cg_entities[cgSiegeEntityRender];
 
 	if (cent->ghoul2)
@@ -11676,7 +11676,7 @@ static void CG_ChatBox_ArrayInsert(chatBoxItem_t** array, const int ins_point, c
 //go through all the chat strings and draw them if they are not yet expired
 static void CG_ChatBox_DrawStrings(void)
 {
-	chatBoxItem_t* draw_these[MAX_CHATBOX_ITEMS];
+	chatBoxItem_t* draw_these[MAX_CHATBOX_ITEMS] = { 0 };
 	int num_to_draw = 0;
 	int lines_to_draw = 0;
 	int i = 0;
@@ -12328,8 +12328,8 @@ static qboolean CG_DynamicHudEnemyNear(void)
 		}
 
 		{
-			vec3_t spot;
-			trace_t tr;
+			vec3_t spot = { 0 };
+			trace_t tr = { 0 };
 
 			VectorCopy(cent->lerpOrigin, spot);
 			spot[2] += 16.0f;
@@ -12541,7 +12541,7 @@ static float CG_SaberLockMeterProgress(float* time_frac)
 	{
 		progress = 1.0f;
 	}
-	qboolean increment_to_win;
+	qboolean increment_to_win = qfalse;
 	if (ps->torsoAnim == BOTH_CCWCIRCLELOCK || ps->torsoAnim == BOTH_BF2LOCK)
 	{
 		increment_to_win = qfalse; // old locks: these two win by dropping the frame
@@ -12966,7 +12966,7 @@ static void CG_Draw2D(void)
 
 	if (cgSiegeRoundState)
 	{
-		char p_str[1024];
+		char p_str[1024] = { 0 };
 		int r_time = 0;
 
 		switch (cgSiegeRoundState)
@@ -13155,8 +13155,8 @@ qboolean CG_CullPointAndRadius(const vec3_t pt, float radius);
 
 static void CG_DrawMiscStaticModels(void)
 {
-	refEntity_t ent;
-	vec3_t cullorg;
+	refEntity_t ent = { 0 };
+	vec3_t cullorg = { 0 };
 
 	memset(&ent, 0, sizeof ent);
 
@@ -13169,7 +13169,7 @@ static void CG_DrawMiscStaticModels(void)
 
 	for (int i = 0; i < cgs.numMiscStaticModels; i++)
 	{
-		vec3_t diff;
+		vec3_t diff = { 0 };
 		VectorCopy(cgs.miscStaticModels[i].org, cullorg);
 		cullorg[2] += 1.0f;
 
@@ -13221,7 +13221,7 @@ Perform all drawing needed to completely fill the screen
 void CG_DrawActive(const stereoFrame_t stereo_view)
 {
 	float separation = 0.0f;
-	vec3_t base_org;
+	vec3_t base_org = { 0 };
 
 	// optionally draw the info screen instead
 	if (!cg.snap)

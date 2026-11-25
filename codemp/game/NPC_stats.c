@@ -53,8 +53,8 @@ stringID_table_t TeamTable[] =
 // cairn, doom scripts).
 int G_NPCTeamForName(const char* name)
 {
-	char buf[64];
-	int team;
+	char buf[64] = { 0 };
+	int team = 0;
 
 	if (!name || !name[0])
 	{
@@ -557,9 +557,9 @@ void NPC_Precache(gentity_t* spawner)
 	const char* p = NULL;
 	char* patch = NULL;
 	qboolean md3Model = qfalse;
-	char playerModel[MAX_QPATH];
-	char customSkin[MAX_QPATH];
-	char sessionName[MAX_QPATH + 15];
+	char playerModel[MAX_QPATH] = { 0 };
+	char customSkin[MAX_QPATH] = { 0 };
+	char sessionName[MAX_QPATH + 15] = { 0 };
 	qboolean added = qfalse;
 
 	if (!Q_stricmp("random", spawner->NPC_type))
@@ -611,7 +611,7 @@ void NPC_Precache(gentity_t* spawner)
 	// parse the NPC info block
 	while (1)
 	{
-		char sound[MAX_QPATH];
+		char sound[MAX_QPATH] = { 0 };
 		token = COM_ParseExt(&p, qtrue);
 		if (!token[0])
 		{
@@ -700,7 +700,7 @@ void NPC_Precache(gentity_t* spawner)
 		// playerTeam
 		if (!Q_stricmp(token, "playerTeam"))
 		{
-			char tk[4096];
+			char tk[4096] = { 0 };
 
 			if (COM_ParseString(&p, &value))
 			{
@@ -842,7 +842,7 @@ void NPC_Precache(gentity_t* spawner)
 		}
 		else
 		{
-			char modelName[MAX_QPATH];
+			char modelName[MAX_QPATH] = { 0 };
 			//if we have a model/skin then index them so they'll be registered immediately
 			//when the client gets a configstring update.
 			Com_sprintf(modelName, sizeof modelName, "models/players/%s/model.glm", playerModel);
@@ -875,16 +875,16 @@ qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 	const char* p = NULL;
 	int n = 0;
 	float f = 0.0f;
-	char playerModel[MAX_QPATH];
-	char customSkin[MAX_QPATH];
+	char playerModel[MAX_QPATH] = { 0 };
+	char customSkin[MAX_QPATH] = { 0 };
 	renderInfo_t* ri = &npc->client->renderInfo;
 	gNPCstats_t* stats = NULL;
 	qboolean md3Model = qtrue;
-	char surfOff[1024];
-	char surfOn[1024];
+	char surfOff[1024] = { 0 };
+	char surfOn[1024] = { 0 };
 	qboolean parsingPlayer = qfalse;
-	vec3_t playerMins;
-	vec3_t playerMaxs;
+	vec3_t playerMins = { 0 };
+	vec3_t playerMaxs = { 0 };
 	int npcSaber1 = 0;
 	int npcSaber2 = 0;
 
@@ -965,7 +965,7 @@ qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 	}
 	else
 	{
-		char session_name[MAX_QPATH + 17];
+		char session_name[MAX_QPATH + 17] = { 0 };
 		char* patch = NULL;
 		const char* token = NULL;
 		int fp = 0;
@@ -1012,7 +1012,7 @@ qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 		// parse the NPC info block
 		while (1)
 		{
-			char sound[MAX_QPATH];
+			char sound[MAX_QPATH] = { 0 };
 			token = COM_ParseExt(&p, qtrue);
 			if (!token[0])
 			{
@@ -2023,7 +2023,7 @@ qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 			// playerTeam
 			if (!Q_stricmp(token, "playerTeam"))
 			{
-				char tk[4096]; //rww - hackilicious!
+				char tk[4096] = { 0 }; //rww - hackilicious!
 
 				if (COM_ParseString(&p, &value))
 				{
@@ -2037,7 +2037,7 @@ qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 			// enemyTeam
 			if (!Q_stricmp(token, "enemyTeam"))
 			{
-				char tk[4096]; //rww - hackilicious!
+				char tk[4096] = { 0 }; //rww - hackilicious!
 
 				if (COM_ParseString(&p, &value))
 				{
@@ -3516,7 +3516,7 @@ qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 			}
 			else
 			{
-				char userinfo[MAX_INFO_STRING];
+				char userinfo[MAX_INFO_STRING] = { 0 };
 				trap->GetUserinfo(player->s.number, userinfo, sizeof userinfo);
 				Q_strncpyz(playerModel, Info_ValueForKey(userinfo, "model"), sizeof playerModel);
 				//copy over the customRGB data
@@ -3614,13 +3614,13 @@ static int NPC_LoadParmsFolder(const char* folder, int totallen, const int room,
 	char* marker = NPCParms + totallen;
 	char* holdChar = npcExtensionListBuf;
 	const int fileCnt = trap->FS_GetFileList(folder, ".npc", npcExtensionListBuf, sizeof npcExtensionListBuf);
-	int i;
+	int i = 0;
 
 	*marker = 0;
 	for (i = 0; i < fileCnt; i++, holdChar += npcExtFNLen + 1)
 	{
 		fileHandle_t f = 0;
-		int len;
+		int len = 0;
 
 		npcExtFNLen = strlen(holdChar);
 
@@ -3668,7 +3668,7 @@ static int NPC_LoadParmsFolder(const char* folder, int totallen, const int room,
 static int NPC_ParmsFolderSize(const char* folder)
 {
 	static char npcSizeListBuf[16384];
-	int npcExtFNLen = 0, size = 0, i;
+	int npcExtFNLen = 0, size = 0, i = 0;
 	char* holdChar = npcSizeListBuf;
 	const int fileCnt = trap->FS_GetFileList(folder, ".npc", npcSizeListBuf, sizeof npcSizeListBuf);
 
@@ -3695,7 +3695,7 @@ extern qboolean G_IsOutcastSPMap(const char* mapname);
 // the SP folder whose NPCs come first on this map (NULL: none)
 static const char* NPC_MissionSPFolder(void)
 {
-	char mapname[MAX_QPATH];
+	char mapname[MAX_QPATH] = { 0 };
 
 	if (!NPC_SP_OUTCAST_FOLDER[0] || g_missionSPNPCs.integer <= 0
 		|| (g_missionSPNPCs.integer < 2 && level.gametype != GT_SINGLE_PLAYER))
@@ -3733,7 +3733,7 @@ qboolean NPC_AddMissingParms(const char* npc_name)
 {
 	static const char* folders[] = { NPC_SP_FOLDERS };
 	static char npcMissingListBuf[16384];
-	int i, k;
+	int i = 0, k = 0;
 
 	if (!npc_name || !npc_name[0] || !Q_stricmp(npc_name, "random"))
 	{
@@ -3757,7 +3757,7 @@ qboolean NPC_AddMissingParms(const char* npc_name)
 		{
 			fileHandle_t f = 0;
 			const int len = trap->FS_Open(va("%s/%s", folders[k], holdChar), &f, FS_READ);
-			const char* p;
+			const char* p = NULL;
 
 			npcExtFNLen = strlen(holdChar);
 			if (!f)
@@ -3779,7 +3779,7 @@ qboolean NPC_AddMissingParms(const char* npc_name)
 			while (p)
 			{
 				const char* token = COM_ParseExt(&p, qtrue);
-				const char* block;
+				const char* block = NULL;
 
 				if (!token[0])
 				{
@@ -3833,7 +3833,7 @@ extern void NPC_Remote_Precache(void);
 extern void NPC_R2D2_Precache(void);
 extern void NPC_R5D2_Precache(void);
 extern void NPC_Probe_Precache(void);
-extern void NPC_Interrogator_Precache(gentity_t* self);
+extern void NPC_Interrogator_Precache(void);
 extern void NPC_MineMonster_Precache(void);
 extern void NPC_Howler_Precache(void);
 extern void NPC_Rancor_Precache(void);
@@ -3911,7 +3911,7 @@ void NPC_PrecacheByClassName(const char* type)
 	}
 	else if (!Q_stricmp("interrogator", type))
 	{
-		NPC_Interrogator_Precache(NULL);
+		NPC_Interrogator_Precache();
 	}
 	else if (!Q_stricmp("probe", type))
 	{

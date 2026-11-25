@@ -183,10 +183,10 @@ void SP_misc_model_static(void)
 {
 	char* model = NULL;
 	float angle = 0.0f;
-	vec3_t angles;
+	vec3_t angles = { 0 };
 	float scale = 0.0f;
-	vec3_t v_scale;
-	vec3_t org;
+	vec3_t v_scale = { 0 };
+	vec3_t org = { 0 };
 	float zoffset = 0.0f;
 
 	if (cgs.numMiscStaticModels >= MAX_STATIC_MODELS)
@@ -254,7 +254,7 @@ void SP_misc_model_static(void)
 
 	if (staticmodel->model)
 	{
-		vec3_t mins, maxs;
+		vec3_t mins = { 0 }, maxs = { 0 };
 
 		trap->R_ModelBounds(staticmodel->model, mins, maxs);
 
@@ -273,7 +273,7 @@ qboolean cg_noFogOutsidePortal = qfalse;
 
 void SP_misc_skyportal(void)
 {
-	qboolean onlyfoghere;
+	qboolean onlyfoghere = qfalse;
 
 	CG_SpawnBoolean("onlyfoghere", "0", &onlyfoghere);
 
@@ -298,7 +298,7 @@ void SP_misc_skyportal_orient(void)
 void SP_misc_weather_zone(void)
 {
 	char* model = NULL;
-	vec3_t mins, maxs;
+	vec3_t mins = { 0 }, maxs = { 0 };
 
 	CG_SpawnString("model", "", &model);
 
@@ -441,7 +441,7 @@ This does not actually spawn an entity.
 */
 qboolean CG_ParseSpawnVars(void)
 {
-	char com_token[MAX_TOKEN_CHARS];
+	char com_token[MAX_TOKEN_CHARS] = { 0 };
 
 	cg.numSpawnVars = 0;
 	cg.numSpawnVarChars = 0;
@@ -461,7 +461,7 @@ qboolean CG_ParseSpawnVars(void)
 	// go through all the key / value pairs
 	while (1)
 	{
-		char keyname[MAX_TOKEN_CHARS];
+		char keyname[MAX_TOKEN_CHARS] = { 0 };
 		// parse key
 		if (!trap->R_GetEntityToken(keyname, sizeof keyname))
 		{

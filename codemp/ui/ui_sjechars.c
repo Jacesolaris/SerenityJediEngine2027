@@ -279,7 +279,7 @@ static const sjeOverride_t* SJE_OverrideFor(const char* folder)
 static const char* SJE_VariantFolderFor(const char* modelString)
 {
 	static char found[64];
-	char candidate[64];
+	char candidate[64] = { 0 };
 
 	for (int i = 0; i < sjeNumVFolders; i++)
 	{
@@ -380,7 +380,7 @@ static void SJE_LoadOverrides(void)
 			}
 			while (1)
 			{
-				char key[32];
+				char key[32] = { 0 };
 				token = COM_ParseExt(&p, qtrue);
 				if (!token[0] || !Q_stricmp(token, "}"))
 				{
@@ -432,7 +432,7 @@ static void SJE_LoadOverrides(void)
 		}
 		else if (!Q_stricmp(token, "variant"))
 		{
-			char folder[48], model[MAX_QPATH];
+			char folder[48] = { 0 }, model[MAX_QPATH] = { 0 };
 			Q_strncpyz(folder, COM_ParseExt(&p, qfalse), sizeof folder);
 			Q_strncpyz(model, COM_ParseExt(&p, qfalse), sizeof model);
 			token = COM_ParseExt(&p, qfalse);
@@ -446,7 +446,7 @@ static void SJE_LoadOverrides(void)
 		}
 		else if (!Q_stricmp(token, "alias"))
 		{
-			char model[MAX_QPATH];
+			char model[MAX_QPATH] = { 0 };
 			Q_strncpyz(model, COM_ParseExt(&p, qfalse), sizeof model);
 			token = COM_ParseExt(&p, qfalse);
 			if (model[0] && token[0] && sjeNumAliases < SJE_MAX_VFOLDERS)
@@ -458,7 +458,7 @@ static void SJE_LoadOverrides(void)
 		}
 		else if (!Q_stricmp(token, "saber"))
 		{
-			char from[48];
+			char from[48] = { 0 };
 			Q_strncpyz(from, COM_ParseExt(&p, qfalse), sizeof from);
 			token = COM_ParseExt(&p, qfalse);
 			if (from[0] && token[0] && sjeNumSaberMaps < SJE_MAX_SABERMAP)
@@ -487,7 +487,7 @@ static void SJE_ScanVariantFolders(void)
 	for (int i = 0; i < numDirs && *d; i++)
 	{
 		const size_t len = strlen(d);
-		char folder[64];
+		char folder[64] = { 0 };
 		Q_strncpyz(folder, d, sizeof folder);
 		d += len + 1;
 		if (len && folder[strlen(folder) - 1] == '/')
@@ -551,7 +551,7 @@ static const sjeFolderInfo_t* SJE_FolderInfo(const char* folder)
 // the ui's BG_ParseAnimationFileForGLA for bg_skeleton.c (game/cgame: bg_panimate.c): the animation.cfg next to the GLA
 int BG_ParseAnimationFileForGLA(const char* glaName)
 {
-	char cfgName[MAX_QPATH];
+	char cfgName[MAX_QPATH] = { 0 };
 
 	if (!glaName || !glaName[0])
 	{
@@ -673,9 +673,9 @@ static qboolean SJE_IsGroupClass(const char* c)
 
 static void SJE_AddNpc(const sjeNpc_t* n)
 {
-	char model[48];
+	char model[48] = { 0 };
 	char skin[MAX_QPATH] = { 0 };
-	char modelString[MAX_QPATH];
+	char modelString[MAX_QPATH] = { 0 };
 
 	Q_strncpyz(model, n->model, sizeof model);
 	SJE_Lower(model);
@@ -792,7 +792,7 @@ static void SJE_ParseNpcFile(const char* path)
 	COM_BeginParseSession(path);
 	while (1)
 	{
-		sjeNpc_t n;
+		sjeNpc_t n = { 0 };
 		const char* token = COM_ParseExt(&p, qtrue);
 		if (!token[0])
 		{
@@ -812,7 +812,7 @@ static void SJE_ParseNpcFile(const char* path)
 		int depth = 1;
 		while (depth > 0)
 		{
-			char key[32];
+			char key[32] = { 0 };
 			token = COM_ParseExt(&p, qtrue);
 			if (!token[0])
 			{
@@ -1046,7 +1046,7 @@ static void SJE_FinishChars(void)
 			}
 			if (!have && ch->numVariants < SJE_MAX_VARIANTS)
 			{
-				char model[48];
+				char model[48] = { 0 };
 				Q_strncpyz(model, vl->modelString, sizeof model);
 				char* slash = strchr(model, '/');
 				if (slash)
@@ -1082,12 +1082,12 @@ static void SJE_FinishChars(void)
 		}
 		else
 		{
-			char folderName[64];
+			char folderName[64] = { 0 };
 			SJE_CleanName(ch->folder, folderName, sizeof folderName);
 			Q_strncpyz(ch->name, folderName, sizeof ch->name);
 			for (int v = 0; v < ch->numVariants; v++)
 			{
-				char npcName[64];
+				char npcName[64] = { 0 };
 				char a[64] = { 0 }, b[64] = { 0 };
 				int na = 0, nb = 0;
 				SJE_CleanName(ch->variants[v].npc, npcName, sizeof npcName);
@@ -1231,7 +1231,7 @@ static void SJE_FinishChars(void)
 		for (int v = 0; v < ch->numVariants; v++)
 		{
 			sjeVariant_t* var = &ch->variants[v];
-			char folder[48];
+			char folder[48] = { 0 };
 			Q_strncpyz(folder, var->modelString, sizeof folder);
 			char* slash = strchr(folder, '/');
 			if (slash)
@@ -1261,7 +1261,7 @@ static void SJE_FinishChars(void)
 	for (int c = 0; c < sjeNumChars; c++)
 	{
 		sjeChar_t* ch = &sjeChars[c];
-		char base[48];
+		char base[48] = { 0 };
 		Q_strncpyz(base, ch->folder, sizeof base);
 		const int len = (int)strlen(base);
 		if (len > 3 && !Q_stricmp(base + len - 3, "jk2"))
@@ -1609,7 +1609,7 @@ static void SJE_SetFaction(const int faction, const qboolean selectFirst)
 // the faction cvar changed (the FACTION multi, or the console)
 static void SJE_CheckFactionCvar(void)
 {
-	char buf[64];
+	char buf[64] = { 0 };
 	trap->Cvar_VariableStringBuffer("fraction", buf, sizeof buf);
 	const int f = SJE_FactionForKey(buf);
 	if (f >= 0 && f != sjeFaction)
@@ -1694,9 +1694,9 @@ static void SJE_SaberColor(const char* npcColor, char* name, const int nameSize,
 // getsabercvars, which puts them back from saber1/saber2 if the player leaves without APPLY.
 static void SJE_SetPreviewSaberCvars(const sjeVariant_t* v, const qboolean forApply)
 {
-	char s1[48], s2[48];
-	char c1[16], c2[16];
-	int rgb1[3], rgb2[3];
+	char s1[48] = { 0 }, s2[48] = { 0 };
+	char c1[16] = { 0 }, c2[16] = { 0 };
+	int rgb1[3] = { 0 }, rgb2[3] = { 0 };
 
 	uiSJECharDualPreview = qfalse;
 	if (!v->saber[0][0])
@@ -1757,7 +1757,7 @@ static void SJE_Apply(void)
 // preselect the character the player is using now
 static qboolean SJE_SelectCurrent(void)
 {
-	char model[MAX_QPATH];
+	char model[MAX_QPATH] = { 0 };
 	trap->Cvar_VariableStringBuffer("model", model, sizeof model);
 	for (int c = 0; c < sjeNumChars; c++)
 	{
@@ -1801,7 +1801,7 @@ qboolean UI_SJEChars_Script(const char* name, char** args)
 		uiInfo.movesTitleIndex = 0;
 		if (!SJE_SelectCurrent())
 		{
-			char buf[64];
+			char buf[64] = { 0 };
 			trap->Cvar_VariableStringBuffer("fraction", buf, sizeof buf);
 			const int f = SJE_FactionForKey(buf);
 			sjeFaction = -1;
@@ -1884,7 +1884,7 @@ qboolean UI_SJEChars_Script(const char* name, char** args)
 		const char* folder = NULL;
 		if (String_Parse(args, &folder))
 		{
-			char f[48];
+			char f[48] = { 0 };
 			Q_strncpyz(f, folder, sizeof f);
 			if (!Int_Parse(args, &n))
 			{
@@ -1952,7 +1952,7 @@ static void SJE_DumpList(const char* fileName)
 
 qboolean UI_SJEChars_ConsoleCommand(const char* cmd)
 {
-	char arg[MAX_STRING_CHARS];
+	char arg[MAX_STRING_CHARS] = { 0 };
 
 	if (!Q_stricmp(cmd, "sje_charlist"))
 	{
@@ -1988,7 +1988,7 @@ qboolean UI_SJEChars_ConsoleCommand(const char* cmd)
 		const char* name = NULL;
 		if (String_Parse(&p, &name))
 		{
-			char script[64];
+			char script[64] = { 0 };
 			Q_strncpyz(script, name, sizeof script);
 			UI_SJEChars_Script(script, &p);
 		}

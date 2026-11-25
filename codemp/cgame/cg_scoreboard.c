@@ -130,7 +130,7 @@ static void CG_DrawClientScore(const int y, const score_t* score, float* color, 
 	// highlight your position
 	if (score->client == cg.snap->ps.clientNum)
 	{
-		float hcolor[4];
+		float hcolor[4] = { 0 };
 		int rank = 0;
 
 		localClient = qtrue;
@@ -223,7 +223,7 @@ CG_TeamScoreboard
 static int CG_TeamScoreboard(const int y, const team_t team, const float fade, const int maxClients,
 	const int lineHeight, const qboolean countOnly)
 {
-	float color[4];
+	float color[4] = { 0 };
 
 	color[0] = color[1] = color[2] = 1.0;
 	color[3] = fade;
@@ -419,9 +419,9 @@ qboolean CG_DrawOldScoreboard(void)
 	{
 		if (cg.snap->ps.persistant[PERS_TEAM] != TEAM_SPECTATOR)
 		{
-			char sPlace[256];
-			char sOf[256];
-			char sWith[256];
+			char sPlace[256] = { 0 };
+			char sOf[256] = { 0 };
+			char sWith[256] = { 0 };
 
 			trap->SE_GetStringTextString("MP_INGAME_PLACE", sPlace, sizeof sPlace);
 			trap->SE_GetStringTextString("MP_INGAME_OF", sOf, sizeof sOf);
@@ -488,7 +488,7 @@ qboolean CG_DrawOldScoreboard(void)
 		ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM);
 	if (cgs.gametype == GT_DUEL || cgs.gametype == GT_POWERDUEL)
 	{
-		char sWL[100];
+		char sWL[100] = { 0 };
 		trap->SE_GetStringTextString("MP_INGAME_W_L", sWL, sizeof sWL);
 
 		CG_Text_Paint(SB_SCORE_X, y, 1.0f, colorWhite, sWL, 0, 0, ITEM_TEXTSTYLE_OUTLINED, FONT_MEDIUM);

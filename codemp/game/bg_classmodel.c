@@ -113,7 +113,7 @@ static int bgNumCharVariants;
 static void BG_ReadCharVariant(const char* folder, char* origin, const int originSize)
 {
 	fileHandle_t f = 0;
-	char buf[MAX_QPATH * 2];
+	char buf[MAX_QPATH * 2] = { 0 };
 
 	origin[0] = 0;
 	const int len = trap->FS_Open(va("models/players/%s/charvariant.txt", folder), &f, FS_READ);
@@ -177,7 +177,7 @@ const char* BG_CharVariantOrigin(const char* folder)
 // 3. else (as before) the first row whose pattern is somewhere in the model string.
 static int BG_ClassModelLookup(const char* model)
 {
-	char clean[MAX_QPATH], folder[MAX_QPATH], uniform[MAX_QPATH];
+	char clean[MAX_QPATH] = { 0 }, folder[MAX_QPATH] = { 0 }, uniform[MAX_QPATH] = { 0 };
 	int n = 0;
 
 	for (const char* s = model; *s && n < (int)sizeof clean - 1; s++)
@@ -199,7 +199,7 @@ static int BG_ClassModelLookup(const char* model)
 		{
 			*slash = 0;
 			// "head_X|torso_X|lower_X" with the same X three times -> "folder/X"
-			char head[MAX_QPATH], torso[MAX_QPATH], lower[MAX_QPATH];
+			char head[MAX_QPATH] = { 0 }, torso[MAX_QPATH] = { 0 }, lower[MAX_QPATH] = { 0 };
 			const char* skin = strchr(clean, '/') + 1;
 			if (sscanf(skin, "head_%63[^|]|torso_%63[^|]|lower_%63s", head, torso, lower) == 3 &&
 				!Q_stricmp(head, torso) && !Q_stricmp(head, lower))
@@ -250,7 +250,7 @@ static int BG_ClassModelLookup(const char* model)
 
 int BG_ClassModelIndex(const char* model)
 {
-	char folder[MAX_QPATH];
+	char folder[MAX_QPATH] = { 0 };
 
 	if (!model || !model[0])
 	{

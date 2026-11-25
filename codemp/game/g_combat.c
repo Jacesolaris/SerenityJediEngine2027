@@ -120,9 +120,9 @@ qboolean G_HeavyMelee(const gentity_t* attacker)
 
 int G_GetHitLocation(const gentity_t* target, vec3_t ppoint)
 {
-	vec3_t point, point_dir;
-	vec3_t forward, right, up;
-	vec3_t tangles, tcenter;
+	vec3_t point = { 0 }, point_dir = { 0 };
+	vec3_t forward = { 0 }, right = { 0 }, up = { 0 };
+	vec3_t tangles = { 0 }, tcenter = { 0 };
 	int vertical = 0, Forward = 0, lateral = 0;
 
 	// Get target forward, right and up.
@@ -369,7 +369,7 @@ int G_PickPainAnim(const gentity_t* self, vec3_t point, int hit_loc)
 
 void ExplodeDeath(gentity_t* self)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	self->takedamage = qfalse; //stop chain reaction runaway loops
 
@@ -1148,7 +1148,7 @@ static int G_CheckSpecialDeathAnim(gentity_t* self)
 			else
 			{
 				//crouch death
-				vec3_t fwd;
+				vec3_t fwd = { 0 };
 				float thrown = 0;
 
 				AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
@@ -1181,7 +1181,7 @@ static int G_CheckSpecialDeathAnim(gentity_t* self)
 			else if (self->client->ps.legsTimer < 800)
 			{
 				//crouching
-				vec3_t fwd;
+				vec3_t fwd = { 0 };
 				float thrown = 0;
 
 				AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
@@ -1218,7 +1218,7 @@ static int G_CheckSpecialDeathAnim(gentity_t* self)
 			else if (self->client->ps.legsTimer < 850)
 			{
 				//crouching
-				vec3_t fwd;
+				vec3_t fwd = { 0 };
 				float thrown = 0;
 
 				AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
@@ -1256,7 +1256,7 @@ static int G_CheckSpecialDeathAnim(gentity_t* self)
 			else if (self->client->ps.legsTimer < 600)
 			{
 				//crouching
-				vec3_t fwd;
+				vec3_t fwd = { 0 };
 				float thrown = 0;
 				AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
 				thrown = DotProduct(fwd, self->client->ps.velocity);
@@ -1293,7 +1293,7 @@ static int G_CheckSpecialDeathAnim(gentity_t* self)
 			else if (self->client->ps.legsTimer < 600)
 			{
 				//crouching
-				vec3_t fwd;
+				vec3_t fwd = { 0 };
 				float thrown = 0;
 
 				AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
@@ -1343,7 +1343,7 @@ static int G_CheckSpecialDeathAnim(gentity_t* self)
 			if (self->client->ps.legsTimer < 800)
 			{
 				//crouching
-				vec3_t fwd;
+				vec3_t fwd = { 0 };
 				float thrown = 0;
 
 				AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
@@ -1377,7 +1377,7 @@ static int G_CheckSpecialDeathAnim(gentity_t* self)
 			if (self->client->ps.legsTimer < 800)
 			{
 				//crouching
-				vec3_t fwd;
+				vec3_t fwd = { 0 };
 				float thrown = 0;
 
 				AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
@@ -1420,7 +1420,7 @@ static int G_CheckSpecialDeathAnim(gentity_t* self)
 			else if (self->client->ps.legsTimer < 900)
 			{
 				//crouching
-				vec3_t fwd;
+				vec3_t fwd = { 0 };
 				float thrown = 0;
 
 				AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
@@ -1463,7 +1463,7 @@ static int G_CheckSpecialDeathAnim(gentity_t* self)
 			else if (self->client->ps.legsTimer < 900)
 			{
 				//crouching
-				vec3_t fwd;
+				vec3_t fwd = { 0 };
 				float thrown = 0;
 
 				AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
@@ -1555,7 +1555,7 @@ static int G_CheckSpecialDeathAnim(gentity_t* self)
 			else if (self->client->ps.legsTimer < 425)
 			{
 				//crouching up
-				vec3_t fwd;
+				vec3_t fwd = { 0 };
 				float thrown = 0;
 
 				AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
@@ -1800,7 +1800,7 @@ static int G_PickDeathAnim(gentity_t* self, vec3_t point, const int damage, int 
 		if (death_anim == -1)
 		{
 			// base on hit_loc
-			vec3_t fwd;
+			vec3_t fwd = { 0 };
 
 			// Analyzer-safe pointer
 			gclient_t* cl = self->client;
@@ -1933,8 +1933,8 @@ int G_CheckLedgeDive(gentity_t* self, const float check_dist, const vec3_t check
 	//		How should/would/could this interact with knockback if we already have some?
 	//		Ideally - apply knockback if there are no ledges or a ledge in that dir
 	//		But if there is a ledge and it's not in the dir of my knockback, fall off the ledge instead
-	vec3_t fall_forward_dir, fall_right_dir;
-	vec3_t angles;
+	vec3_t fall_forward_dir = { 0 }, fall_right_dir = { 0 };
+	vec3_t angles = { 0 };
 	int cliff_fall = 0;
 
 	VectorCopy(vec3_origin, angles);
@@ -2038,7 +2038,7 @@ G_AlertTeam
 
 void G_AlertTeam(const gentity_t* victim, gentity_t* attacker, const float radius, const float sound_dist)
 {
-	int radius_ents[128];
+	int radius_ents[128] = { 0 };
 	vec3_t mins = { 0 }, maxs = { 0 };
 	int i = 0;
 	const float snd_dist_sq = sound_dist * sound_dist;
@@ -2252,8 +2252,8 @@ void G_DroidVanishThink(gentity_t* ent)
 
 static void G_SpawnProbeWreck(const gentity_t* ent)
 {
-	trace_t tr;
-	vec3_t start, end, angles;
+	trace_t tr = { 0 };
+	vec3_t start = { 0 }, end = { 0 }, angles = { 0 };
 	gentity_t* wreck = NULL;
 
 	VectorCopy(ent->r.currentOrigin, start);
@@ -2291,8 +2291,8 @@ static void G_SpawnProbeWreck(const gentity_t* ent)
 
 void DeathFX(gentity_t* ent)
 {
-	vec3_t effect_pos, right;
-	vec3_t default_dir;
+	vec3_t effect_pos = { 0 }, right = { 0 };
+	vec3_t default_dir = { 0 };
 
 	if (!ent || !ent->client)
 		return;
@@ -2507,8 +2507,8 @@ void DeathFX(gentity_t* ent)
 
 static void death_fxextra(gentity_t* ent)
 {
-	vec3_t effect_pos, right;
-	vec3_t default_dir;
+	vec3_t effect_pos = { 0 }, right = { 0 };
+	vec3_t default_dir = { 0 };
 
 	VectorSet(default_dir, 0, 0, 1);
 
@@ -3022,7 +3022,7 @@ void G_PushCorpse(gentity_t* ent, const vec3_t push)
 	}
 	// the body que copy is a physics object (G_RunItem): start a new arc from where it is
 	{
-		vec3_t vel;
+		vec3_t vel = { 0 };
 		if (ent->s.pos.trType == TR_STATIONARY)
 		{
 			VectorClear(vel);
@@ -3044,7 +3044,7 @@ void G_CorpseTouchPush(gentity_t* corpse)
 {
 	// static: too big for the stack (C6262); filled by EntitiesInBox before it is read
 	static int touch[MAX_GENTITIES];
-	vec3_t mins, maxs, cur;
+	vec3_t mins = { 0 }, maxs = { 0 }, cur = { 0 };
 	int i = 0, num = 0;
 
 	if (!G_CorpsePushable(corpse) || corpse->corpseTouchTime > level.time)
@@ -3069,7 +3069,7 @@ void G_CorpseTouchPush(gentity_t* corpse)
 	for (i = 0; i < num; i++)
 	{
 		gentity_t* other = &g_entities[touch[i]];
-		vec3_t move, push;
+		vec3_t move = { 0 }, push = { 0 };
 		float speed = 0.0f;
 
 		if (other == corpse || !other->client || other->health <= 0)
@@ -3100,7 +3100,7 @@ void G_ForceThrowCorpses(gentity_t* self, const qboolean pull, const int radius,
 {
 	// static: too big for the stack (C6262); filled by EntitiesInBox before it is read
 	static int list[MAX_GENTITIES];
-	vec3_t eye, mins, maxs;
+	vec3_t eye = { 0 }, mins = { 0 }, maxs = { 0 };
 	int i = 0, num = 0;
 	const int level_ = self->client->ps.fd.forcePowerLevel[pull ? FP_PULL : FP_PUSH];
 	const float strength = 250.0f + 150.0f * level_;
@@ -3116,8 +3116,8 @@ void G_ForceThrowCorpses(gentity_t* self, const qboolean pull, const int radius,
 	for (i = 0; i < num; i++)
 	{
 		gentity_t* ent = &g_entities[list[i]];
-		vec3_t dir, ang, push;
-		trace_t tr;
+		vec3_t dir = { 0 }, ang = { 0 }, push = { 0 };
+		trace_t tr = { 0 };
 		float dist = 0.0f, s = 0.0f;
 
 		if (ent == self || !G_CorpsePushable(ent))
@@ -3465,7 +3465,7 @@ void player_die(gentity_t* self, const gentity_t* inflictor, gentity_t* attacker
 		case CLASS_R2D2:
 			if (!trap->G2API_GetSurfaceRenderStatus(self->ghoul2, 0, "head"))
 			{
-				vec3_t up;
+				vec3_t up = { 0 };
 				AngleVectors(self->r.currentAngles, NULL, NULL, up);
 				G_PlayEffectID(G_EffectIndex("chunks/r2d2head_veh"), self->r.currentOrigin, up);
 			}
@@ -3474,7 +3474,7 @@ void player_die(gentity_t* self, const gentity_t* inflictor, gentity_t* attacker
 		case CLASS_R5D2:
 			if (!trap->G2API_GetSurfaceRenderStatus(self->ghoul2, 0, "head"))
 			{
-				vec3_t up;
+				vec3_t up = { 0 };
 				AngleVectors(self->r.currentAngles, NULL, NULL, up);
 				G_PlayEffectID(G_EffectIndex("chunks/r5d2head_veh"), self->r.currentOrigin, up);
 			}
@@ -4727,7 +4727,7 @@ static void G_CheckLightningKnockdown(gentity_t* targ, gentity_t* attacker, vec3
 
 void G_ApplyKnockback(gentity_t* targ, vec3_t new_dir, float knockback)
 {
-	vec3_t kvel;
+	vec3_t kvel = { 0 };
 	float mass = 0.0f;
 
 	// FIX: prevent NULL dereference warning C6011
@@ -4816,8 +4816,8 @@ static int G_CheckForLedge(const gentity_t* self, vec3_t fall_check_dir, const f
 	//racc - this function checks to see if there is a ledge/cliff/empty in fallCheckDir @ checkDist away from the player.
 	//This also checks to see if there's a clear path between the player and the point from which the fall check is made.
 	//Returns the length of the drop.
-	vec3_t start, end;
-	trace_t tr;
+	vec3_t start = { 0 }, end = { 0 };
+	trace_t tr = { 0 };
 
 	VectorMA(self->r.currentOrigin, check_dist, fall_check_dir, end);
 	//Should have clip burshes masked out by now and have bbox resized to death size
@@ -4919,7 +4919,7 @@ char* hitLocName[HL_MAX] =
 static void G_GetDismemberLoc(const gentity_t* self, vec3_t bolt_point, const int limb_type)
 {
 	//Just get the general area without using server-side ghoul2
-	vec3_t fwd, right, up;
+	vec3_t fwd = { 0 }, right = { 0 }, up = { 0 };
 
 	AngleVectors(self->r.currentAngles, fwd, right, up);
 
@@ -4989,9 +4989,9 @@ static void G_GetDismemberLoc(const gentity_t* self, vec3_t bolt_point, const in
 
 static void G_GetDismemberBolt(gentity_t* self, vec3_t bolt_point, const int limbType)
 {
-	vec3_t properOrigin, properAngles, add_vel;
+	vec3_t properOrigin = { 0 }, properAngles = { 0 }, add_vel = { 0 };
 	//matrix3_t legAxis;
-	mdxaBone_t boltMatrix;
+	mdxaBone_t boltMatrix = { 0 };
 	float f_v_speed = 0;
 	const char* rotate_bone = NULL;
 
@@ -5174,10 +5174,10 @@ surfaces on the source ghoul2 model.
 */
 void G_Dismember(const gentity_t* ent, const gentity_t* enemy, vec3_t point, const int limb_type)
 {
-	vec3_t new_point, dir, vel;
-	char limb_name[MAX_QPATH];
-	char stub_name[MAX_QPATH];
-	char stub_cap_name[MAX_QPATH];
+	vec3_t new_point = { 0 }, dir = { 0 }, vel = { 0 };
+	char limb_name[MAX_QPATH] = { 0 };
+	char stub_name[MAX_QPATH] = { 0 };
+	char stub_cap_name[MAX_QPATH] = { 0 };
 
 	int old_team = TEAM_FREE;
 
@@ -5346,7 +5346,7 @@ void G_Dismember(const gentity_t* ent, const gentity_t* enemy, vec3_t point, con
 		enemy->client->olderIsValid &&
 		(level.time - enemy->client->lastSaberStorageTime) < 200)
 	{
-		vec3_t dif;
+		vec3_t dif = { 0 };
 		float  total_distance = 0.0f;
 		const float dist_scale = 1.2f;
 
@@ -5364,7 +5364,7 @@ void G_Dismember(const gentity_t* ent, const gentity_t* enemy, vec3_t point, con
 			(ent->client->ps.torsoTimer > 0 ||
 				!BG_InDeathAnim(ent->client->ps.torsoAnim)))
 		{
-			vec3_t pre_vel;
+			vec3_t pre_vel = { 0 };
 
 			VectorCopy(limb->epVelocity, pre_vel);
 			pre_vel[2] = 0.0f;
@@ -5440,7 +5440,7 @@ void DismembermentTest(gentity_t* self)
 
 	while (sect <= G2_MODELPART_RLEG)
 	{
-		vec3_t bolt_point;
+		vec3_t bolt_point = { 0 };
 		G_GetDismemberBolt(self, bolt_point, sect);
 		G_Dismember(self, self, bolt_point, sect);
 		sect++;
@@ -5450,7 +5450,7 @@ void DismembermentTest(gentity_t* self)
 void DismembermentByNum(gentity_t* self, const int num)
 {
 	int sect = G2_MODELPART_HEAD;
-	vec3_t bolt_point;
+	vec3_t bolt_point = { 0 };
 
 	switch (num)
 	{
@@ -5485,8 +5485,8 @@ void DismembermentByNum(gentity_t* self, const int num)
 
 static int G_GetHitQuad(const gentity_t* self, vec3_t hitloc)
 {
-	vec3_t diff, fwdangles = { 0, 0, 0 }, right;
-	vec3_t cl_eye;
+	vec3_t diff = { 0 }, fwdangles = { 0, 0, 0 }, right = { 0 };
+	vec3_t cl_eye = { 0 };
 	int hit_loc = 0;
 
 	if (self->client)
@@ -5721,8 +5721,8 @@ qboolean G_GetHitLocFromSurfName(gentity_t* ent, const char* surfName, int* hit_
 		*hit_loc = HL_WAIST;
 		if (ent->client != NULL && ent->ghoul2)
 		{
-			mdxaBone_t boltMatrix;
-			vec3_t tagOrg, angles;
+			mdxaBone_t boltMatrix = { 0 };
+			vec3_t tagOrg = { 0 }, angles = { 0 };
 
 			VectorSet(angles, 0, ent->r.currentAngles[YAW], 0);
 			if (knee_l_bolt >= 0)
@@ -5762,7 +5762,7 @@ qboolean G_GetHitLocFromSurfName(gentity_t* ent, const char* surfName, int* hit_
 		}
 		else
 		{
-			vec3_t t_fwd, t_rt, t_up, dirToImpact;
+			vec3_t t_fwd = { 0 }, t_rt = { 0 }, t_up = { 0 }, dirToImpact = { 0 };
 			AngleVectors(ent->client->renderInfo.torsoAngles, t_fwd, t_rt, t_up);
 
 			if (ent->client->renderInfo.boltValidityTime != level.time)
@@ -5842,13 +5842,13 @@ qboolean G_GetHitLocFromSurfName(gentity_t* ent, const char* surfName, int* hit_
 		*hit_loc = HL_ARM_RT;
 		if (ent->client != NULL && ent->ghoul2)
 		{
-			mdxaBone_t boltMatrix;
-			vec3_t angles;
+			mdxaBone_t boltMatrix = { 0 };
+			vec3_t angles = { 0 };
 
 			VectorSet(angles, 0, ent->r.currentAngles[YAW], 0);
 			if (hand_r_bolt >= 0)
 			{
-				vec3_t tag_org;
+				vec3_t tag_org = { 0 };
 				trap->G2API_GetBoltMatrix(ent->ghoul2, 0, hand_r_bolt,
 					&boltMatrix, angles, ent->r.currentOrigin,
 					actual_time, NULL, ent->modelScale);
@@ -5866,13 +5866,13 @@ qboolean G_GetHitLocFromSurfName(gentity_t* ent, const char* surfName, int* hit_
 		*hit_loc = HL_ARM_LT;
 		if (ent->client != NULL && ent->ghoul2)
 		{
-			mdxaBone_t boltMatrix;
-			vec3_t angles;
+			mdxaBone_t boltMatrix = { 0 };
+			vec3_t angles = { 0 };
 
 			VectorSet(angles, 0, ent->r.currentAngles[YAW], 0);
 			if (hand_l_bolt >= 0)
 			{
-				vec3_t tag_org;
+				vec3_t tag_org = { 0 };
 				trap->G2API_GetBoltMatrix(ent->ghoul2, 0, hand_l_bolt,
 					&boltMatrix, angles, ent->r.currentOrigin,
 					actual_time, NULL, ent->modelScale);
@@ -5890,13 +5890,13 @@ qboolean G_GetHitLocFromSurfName(gentity_t* ent, const char* surfName, int* hit_
 		*hit_loc = HL_LEG_RT;
 		if (ent->client != NULL && ent->ghoul2)
 		{
-			mdxaBone_t boltMatrix;
-			vec3_t angles;
+			mdxaBone_t boltMatrix = { 0 };
+			vec3_t angles = { 0 };
 
 			VectorSet(angles, 0, ent->r.currentAngles[YAW], 0);
 			if (foot_r_bolt >= 0)
 			{
-				vec3_t tag_org;
+				vec3_t tag_org = { 0 };
 				trap->G2API_GetBoltMatrix(ent->ghoul2, 0, foot_r_bolt,
 					&boltMatrix, angles, ent->r.currentOrigin,
 					actual_time, NULL, ent->modelScale);
@@ -5914,13 +5914,13 @@ qboolean G_GetHitLocFromSurfName(gentity_t* ent, const char* surfName, int* hit_
 		*hit_loc = HL_LEG_LT;
 		if (ent->client != NULL && ent->ghoul2)
 		{
-			mdxaBone_t boltMatrix;
-			vec3_t angles;
+			mdxaBone_t boltMatrix = { 0 };
+			vec3_t angles = { 0 };
 
 			VectorSet(angles, 0, ent->r.currentAngles[YAW], 0);
 			if (foot_l_bolt >= 0)
 			{
-				vec3_t tag_org;
+				vec3_t tag_org = { 0 };
 				trap->G2API_GetBoltMatrix(ent->ghoul2, 0, foot_l_bolt,
 					&boltMatrix, angles, ent->r.currentOrigin,
 					actual_time, NULL, ent->modelScale);
@@ -6018,8 +6018,8 @@ qboolean G_GetHitLocFromSurfName(gentity_t* ent, const char* surfName, int* hit_
 					const int tag_bolt = trap->G2API_AddBolt(ent->ghoul2, 0, tag_name);
 					if (tag_bolt != -1)
 					{
-						mdxaBone_t boltMatrix;
-						vec3_t tag_org, tag_dir, angles;
+						mdxaBone_t boltMatrix = { 0 };
+						vec3_t tag_org = { 0 }, tag_dir = { 0 }, angles = { 0 };
 
 						VectorSet(angles, 0, ent->r.currentAngles[YAW], 0);
 						trap->G2API_GetBoltMatrix(ent->ghoul2, 0, tag_bolt,
@@ -6095,7 +6095,7 @@ void G_SaberSliceSetHit(const gentity_t* victim, const vec3_t point, const vec3_
 // bone matrix the way the server traces the body (G_GetDismemberBolt, saber collision)
 static qboolean G_SaberSliceBoltMatrix(const gentity_t* ent, const int bolt, mdxaBone_t* matrix)
 {
-	vec3_t angles, origin;
+	vec3_t angles = { 0 }, origin = { 0 };
 	if (bolt < 0 || !ent->client)
 	{
 		return qfalse;
@@ -6108,7 +6108,7 @@ static qboolean G_SaberSliceBoltMatrix(const gentity_t* ent, const int bolt, mdx
 
 static qboolean G_SaberSliceBonePos(const gentity_t* ent, const char* bone_name, vec3_t out)
 {
-	mdxaBone_t matrix;
+	mdxaBone_t matrix = { 0 };
 	const int bolt = trap->G2API_AddBolt(ent->ghoul2, 0, bone_name);
 	if (!G_SaberSliceBoltMatrix(ent, bolt, &matrix))
 	{
@@ -6122,7 +6122,7 @@ static qboolean G_SaberSliceBonePos(const gentity_t* ent, const char* bone_name,
 
 static float G_SaberSliceSegmentDist(const vec3_t p, const vec3_t a, const vec3_t b)
 {
-	vec3_t ab, ap, closest;
+	vec3_t ab = { 0 }, ap = { 0 }, closest = { 0 };
 	VectorSubtract(b, a, ab);
 	VectorSubtract(p, a, ap);
 	const float len_sq = DotProduct(ab, ab);
@@ -6225,10 +6225,10 @@ static qboolean G_SaberSlice(gentity_t* ent, const gentity_t* enemy)
 	int best_bone = -1;
 	const saberSliceSeg_t* best_seg = NULL;
 	float best_score = 9999.0f;
-	vec3_t best_joint, best_child;
+	vec3_t best_joint = { 0 }, best_child = { 0 };
 	for (int b = 0; b < SABERSLICE_SLOT_COUNT; b++)
 	{
-		vec3_t joint, child;
+		vec3_t joint = { 0 }, child = { 0 };
 		if (ent->saberSliceBones & 1 << b)
 		{
 			continue;
@@ -6259,7 +6259,7 @@ static qboolean G_SaberSlice(gentity_t* ent, const gentity_t* enemy)
 	}
 
 	// the plane the blade swept through, turned towards the bone so a limb is never cut lengthwise
-	vec3_t axis, normal;
+	vec3_t axis = { 0 }, normal = { 0 };
 	VectorSubtract(best_child, best_joint, axis);
 	const float seg_len = VectorNormalize(axis);
 	if (seg_len < 1.0f)
@@ -6280,7 +6280,7 @@ static qboolean G_SaberSlice(gentity_t* ent, const gentity_t* enemy)
 		const float cos_a = DotProduct(normal, axis);
 		if (cos_a < min_cos)
 		{
-			vec3_t perp;
+			vec3_t perp = { 0 };
 			VectorMA(normal, -cos_a, axis, perp);
 			if (VectorNormalize(perp) < 0.001f)
 			{
@@ -6294,7 +6294,7 @@ static qboolean G_SaberSlice(gentity_t* ent, const gentity_t* enemy)
 
 	// through the contact point, but crossing the bone inside its segment
 	float dist = DotProduct(normal, s_saberSliceHit.point);
-	vec3_t cut_center;
+	vec3_t cut_center = { 0 };
 	{
 		const float n_joint = DotProduct(normal, best_joint);
 		const float n_len = DotProduct(normal, axis) * seg_len;
@@ -6313,13 +6313,13 @@ static qboolean G_SaberSlice(gentity_t* ent, const gentity_t* enemy)
 
 	// store the cut in the anchor bone's space
 	const int bolt = trap->G2API_AddBolt(ent->ghoul2, 0, best_seg->bone);
-	mdxaBone_t bone_matrix;
+	mdxaBone_t bone_matrix = { 0 };
 	if (!G_SaberSliceBoltMatrix(ent, bolt, &bone_matrix))
 	{
 		return qfalse;
 	}
 	const float world_plane[4] = { normal[0], normal[1], normal[2], dist };
-	float bone_plane[4];
+	float bone_plane[4] = { 0 };
 	SaberSlice_PlaneToBone((const float(*)[4])bone_matrix.matrix, world_plane, bone_plane);
 
 	// the piece: the clients copy the body and cut both
@@ -6362,7 +6362,7 @@ static qboolean G_SaberSlice(gentity_t* ent, const gentity_t* enemy)
 
 	// thrown along the swing (ExPhys units, like the old limbs), a little up
 	{
-		vec3_t swing;
+		vec3_t swing = { 0 };
 		VectorCopy(s_saberSliceHit.swing, swing);
 		VectorNormalize(swing);
 		piece->epGravFactor = 0;
@@ -6372,7 +6372,7 @@ static qboolean G_SaberSlice(gentity_t* ent, const gentity_t* enemy)
 		piece->epVelocity[2] += SaberSlice_IsTorso(best_bone) ? 8.0f : 18.0f;
 	}
 	{
-		trace_t tr;
+		trace_t tr = { 0 };
 		trap->Trace(&tr, piece->r.currentOrigin, piece->r.mins, piece->r.maxs, piece->r.currentOrigin, piece->s.number,
 			piece->clipmask, qfalse, 0, 0);
 		if (tr.startsolid)
@@ -6409,7 +6409,7 @@ void G_CheckForDismemberment(gentity_t* ent, const gentity_t* enemy, vec3_t poin
 {
 	int hit_loc = -1;
 	int hit_loc_use = 0;
-	vec3_t bolt_point;
+	vec3_t bolt_point = { 0 };
 	const int dismember = g_dismember.integer;
 
 	if (WP_SaberBodyNoCut(ent))
@@ -6479,7 +6479,7 @@ void G_CheckForDismemberment(gentity_t* ent, const gentity_t* enemy, vec3_t poin
 	{
 		if (d_saberGhoul2Collision.integer && ent->client && ent->client->g2LastSurfaceTime == level.time)
 		{
-			char hit_surface[MAX_QPATH];
+			char hit_surface[MAX_QPATH] = { 0 };
 
 			trap->G2API_GetSurfaceName(ent->ghoul2, ent->client->g2LastSurfaceHit, 0, hit_surface);
 
@@ -6571,7 +6571,7 @@ void G_CheckForDismemberment(gentity_t* ent, const gentity_t* enemy, vec3_t poin
 
 void G_CheckForblowingup(gentity_t* ent, const gentity_t* enemy, const int damage)
 {
-	vec3_t bolt_point;
+	vec3_t bolt_point = { 0 };
 	const int dismember = g_dismember.integer;
 
 	if (!ent->ghoul2 || !trap->G2API_HaveWeGhoul2Models(ent->ghoul2))
@@ -6669,7 +6669,7 @@ static void G_LocationBasedDamageModifier(gentity_t* ent, vec3_t point, const in
 		d_projectileGhoul2Collision.integer && ent->client && ent->client->g2LastSurfaceTime == level.time)
 		//It's safe to assume we died from the projectile that just set our surface index. So, go ahead and use that as the surf I guess.
 	{
-		char hit_surface[MAX_QPATH];
+		char hit_surface[MAX_QPATH] = { 0 };
 
 		trap->G2API_GetSurfaceName(ent->ghoul2, ent->client->g2LastSurfaceHit, 0, hit_surface);
 
@@ -6843,7 +6843,7 @@ void G_Knockdown(gentity_t* self, gentity_t* attacker, const vec3_t push_dir, fl
 			else
 			{
 				//plain old knockdown
-				vec3_t pLFwd, pLAngles;
+				vec3_t pLFwd = { 0 }, pLAngles = { 0 };
 				VectorSet(pLAngles, 0, self->client->ps.viewangles[YAW], 0);
 				AngleVectors(pLAngles, pLFwd, NULL, NULL);
 				if (DotProduct(pLFwd, push_dir) > 0.2f)
@@ -6990,7 +6990,7 @@ void G_KnockOver(gentity_t* self, gentity_t* attacker, const vec3_t push_dir, fl
 			else
 			{
 				//plain old knockdown
-				vec3_t pLFwd, pLAngles;
+				vec3_t pLFwd = { 0 }, pLAngles = { 0 };
 				VectorSet(pLAngles, 0, self->client->ps.viewangles[YAW], 0);
 				AngleVectors(pLAngles, pLFwd, NULL, NULL);
 				if (DotProduct(pLFwd, push_dir) > 0.2f)
@@ -7045,8 +7045,8 @@ G_LocationDamage
 */
 static int G_LocationDamage(vec3_t point, const gentity_t* targ, int take)
 {
-	vec3_t bullet_path;
-	vec3_t bullet_angle;
+	vec3_t bullet_path = { 0 };
+	vec3_t bullet_angle = { 0 };
 
 	// First things first.  If we're not damaging them, why are we here?
 	if (!take)
@@ -7361,7 +7361,7 @@ static void G_DeathImpulse(gentity_t* targ, const gentity_t* inflictor, const ve
 	const int dflags, const int mod)
 {
 	float speed = 0.0f, lift = 0.0f;
-	vec3_t d, push;
+	vec3_t d = { 0 }, push = { 0 };
 
 	if (!targ || !targ->client || g_deathImpulse.value <= 0.0f || targ->client->ps.m_iVehicleNum)
 	{
@@ -7452,7 +7452,7 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, vec3_t
 	int asave = 0;
 	int knockback = 0;
 	float shield_absorbed = 0;
-	vec3_t new_dir;
+	vec3_t new_dir = { 0 };
 
 	if (!targ)
 		return;
@@ -7486,7 +7486,7 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, vec3_t
 
 	if (dir && damage > 0 && G_CorpsePushable(targ))
 	{// ragdoll: hits push the body (saber, shots, explosions, kicks)
-		vec3_t push;
+		vec3_t push = { 0 };
 		const float strength = damage * 6.0f < 150.0f ? 150.0f : damage * 6.0f > 450.0f ? 450.0f : damage * 6.0f;
 		VectorNormalize2(dir, push);
 		VectorScale(push, strength, push);
@@ -7918,7 +7918,7 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, vec3_t
 
 	if (knockback && targ->client)
 	{
-		vec3_t kvel;
+		vec3_t kvel = { 0 };
 		float mass = 0.0f;
 
 		mass = 200;
@@ -8304,7 +8304,7 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, vec3_t
 				//get the last surf that was hit
 				if (targ->client && targ->client->g2LastSurfaceTime == level.time)
 				{
-					char hit_surface[MAX_QPATH];
+					char hit_surface[MAX_QPATH] = { 0 };
 
 					trap->G2API_GetSurfaceName(targ->ghoul2, targ->client->g2LastSurfaceHit, 0, hit_surface);
 
@@ -8374,7 +8374,7 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, vec3_t
 					&& targ->m_pVehicle->m_LandTrace.fraction >= 1.0f)
 				{
 					//just took a hit, knock us around
-					vec3_t v_up, impact_dir;
+					vec3_t v_up = { 0 }, impact_dir = { 0 };
 					float impact_strength = damage / 200.0f * 10.0f;
 					float dot = 0.0f;
 					if (impact_strength > 10.0f)
@@ -8388,7 +8388,7 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, vec3_t
 					if (surface <= 0)
 					{
 						//no surf guess where we were hit, then
-						vec3_t v_fwd, v_right;
+						vec3_t v_fwd = { 0 }, v_right = { 0 };
 						AngleVectors(targ->m_pVehicle->m_vOrientation, v_fwd, v_right, v_up);
 						dot = DotProduct(v_right, impact_dir);
 						if (dot > 0.4f)
@@ -8575,10 +8575,10 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, vec3_t
 
 		if (mod == MOD_SLIME)
 		{
-			trace_t		testTrace;
+			trace_t		testTrace = { 0 };
 			vec3_t		testDirection = { 0, 0, 0 };
-			vec3_t		testStartPos;
-			vec3_t		testEndPos;
+			vec3_t		testStartPos = { 0 };
+			vec3_t		testEndPos = { 0 };
 
 			testDirection[0] = (Q_flrand(0.0f, 1.0f) * 0.5f) - 0.25f;
 			testDirection[1] = (Q_flrand(0.0f, 1.0f) * 0.5f) - 0.25f;
@@ -8945,7 +8945,7 @@ void G_Damage(gentity_t* targ, gentity_t* inflictor, gentity_t* attacker, vec3_t
 		if (targ->client && targ->ghoul2 && targ->client->g2LastSurfaceTime == level.time)
 		{
 			//We updated the hit surface this frame, so it's valid.
-			char hit_surface[MAX_QPATH];
+			char hit_surface[MAX_QPATH] = { 0 };
 
 			trap->G2API_GetSurfaceName(targ->ghoul2, targ->client->g2LastSurfaceHit, 0, hit_surface);
 
@@ -9181,9 +9181,9 @@ explosions and melee attacks.
 */
 qboolean CanDamage(const gentity_t* targ, vec3_t origin)
 {
-	vec3_t dest;
-	trace_t tr;
-	vec3_t midpoint;
+	vec3_t dest = { 0 };
+	trace_t tr = { 0 };
+	vec3_t midpoint = { 0 };
 
 	// use the midpoint of the bounds instead of the origin, because
 	// bmodels may have their origin is 0,0,0
@@ -9237,14 +9237,14 @@ qboolean G_DoDodge(gentity_t* self, gentity_t* shooter, vec3_t impactPoint, int 
 
 void Do_DustFallNear(const vec3_t origin, const int dustcount)
 {
-	trace_t test_trace;
+	trace_t test_trace = { 0 };
 	vec3_t test_direction = { 0 };
-	vec3_t test_start_pos;
+	vec3_t test_start_pos = { 0 };
 
 	VectorCopy(origin, test_start_pos);
 	for (int i = 0; i < dustcount; i++)
 	{
-		vec3_t test_end_pos;
+		vec3_t test_end_pos = { 0 };
 		test_direction[0] = Q_flrand(0.0f, 1.0f) * 2.0f - 1.0f;
 		test_direction[1] = Q_flrand(0.0f, 1.0f) * 2.0f - 1.0f;
 		test_direction[2] = 1.0f;
@@ -9270,7 +9270,7 @@ qboolean g_radius_damage(vec3_t origin, gentity_t* attacker, const float damage,
 	vec3_t mins = { 0 };
 	vec3_t maxs = { 0 };
 	vec3_t v = { 0 };
-	vec3_t dir;
+	vec3_t dir = { 0 };
 	int i = 0;
 	qboolean hit_client = qfalse;
 	int dodge_dmg = 0;

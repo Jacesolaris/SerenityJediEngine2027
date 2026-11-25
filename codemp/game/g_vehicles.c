@@ -39,7 +39,7 @@ void G_VehUpdateShields(const gentity_t* targ);
 extern void VEH_TurretThink(Vehicle_t* p_veh, gentity_t* parent, int turretNum);
 #endif
 
-extern qboolean BG_UnrestrainedPitchRoll(const playerState_t* ps, Vehicle_t* p_veh);
+extern qboolean BG_UnrestrainedPitchRoll(const playerState_t* ps, const Vehicle_t* p_veh);
 
 void Vehicle_SetAnim(gentity_t* ent, const int setAnimParts, const int anim, const int setAnimFlags, int i_blend)
 {
@@ -138,7 +138,7 @@ void G_VehicleSpawn(gentity_t* self)
 // Attachs an entity to the vehicle it's riding (it's owner).
 void G_AttachToVehicle(gentity_t* pEnt, usercmd_t** ucmd)
 {
-	mdxaBone_t boltMatrix;
+	mdxaBone_t boltMatrix = { 0 };
 
 	if (!pEnt || !ucmd)
 		return;
@@ -181,11 +181,11 @@ static void Animate(Vehicle_t* p_veh)
 static qboolean ValidateBoard(Vehicle_t* p_veh, bgEntity_t* pEnt)
 {
 	// Determine where the entity is entering the vehicle from (left, right, or back).
-	vec3_t vVehToEnt;
-	vec3_t vVehDir;
+	vec3_t vVehToEnt = { 0 };
+	vec3_t vVehDir = { 0 };
 	const gentity_t* parent = (gentity_t*)p_veh->m_pParentEntity;
 	const gentity_t* ent = (gentity_t*)pEnt;
-	vec3_t vVehAngles;
+	vec3_t vVehAngles = { 0 };
 
 	if (p_veh->m_iDieTime > 0)
 	{
@@ -303,7 +303,7 @@ static void FighterStorePilotViewAngles(Vehicle_t* p_veh, bgEntity_t* parent)
 // Board this Vehicle (get on). The first entity to board an empty vehicle becomes the Pilot.
 static qboolean Board(Vehicle_t* p_veh, bgEntity_t* pEnt)
 {
-	vec3_t vPlayerDir;
+	vec3_t vPlayerDir = { 0 };
 
 	// SAFETY: ent must be valid (fixes C6011)
 	gentity_t* ent = (gentity_t*)pEnt;
@@ -492,8 +492,8 @@ static qboolean VEH_TryEject(const Vehicle_t* p_veh,
 	const int ejectDir,
 	vec3_t vExitPos)
 {
-	vec3_t vEntMins, vEntMaxs, vVehLeaveDir, vVehAngles;
-	trace_t m_ExitTrace;
+	vec3_t vEntMins = { 0 }, vEntMaxs = { 0 }, vVehLeaveDir = { 0 }, vVehAngles = { 0 };
+	trace_t m_ExitTrace = { 0 };
 
 	// Make sure that the entity is not 'stuck' inside the vehicle (since their bboxes will now intersect).
 	// This makes the entity leave the vehicle from the right side.
@@ -626,7 +626,7 @@ static void G_EjectDroidUnit(Vehicle_t* p_veh, const qboolean kill)
 static qboolean Eject(Vehicle_t* p_veh, bgEntity_t* pEnt, const qboolean forceEject)
 {
 	gentity_t* parent = NULL;
-	vec3_t vExitPos;
+	vec3_t vExitPos = { 0 };
 	gentity_t* ent = (gentity_t*)pEnt;
 
 	qboolean taintedRider = qfalse;
@@ -1005,12 +1005,12 @@ static void DeathUpdate(Vehicle_t* p_veh)
 		if (!p_veh->m_pVehicleInfo->Inhabited(p_veh))
 		{
 			//explode now as long as we managed to kick everyone out
-			vec3_t bottom;
-			trace_t trace;
+			vec3_t bottom = { 0 };
+			trace_t trace = { 0 };
 
 			if (p_veh->m_pVehicleInfo->iExplodeFX)
 			{
-				vec3_t fxAng;
+				vec3_t fxAng = { 0 };
 
 				VectorSet(fxAng, -90.0f, 0.0f, 0.0f);
 				G_PlayEffectID(p_veh->m_pVehicleInfo->iExplodeFX, parent->r.currentOrigin, fxAng);
@@ -1031,8 +1031,8 @@ static void DeathUpdate(Vehicle_t* p_veh)
 			parent->takedamage = qfalse; //so we don't recursively damage ourselves
 			if (p_veh->m_pVehicleInfo->explosionRadius > 0 && p_veh->m_pVehicleInfo->explosionDamage > 0)
 			{
-				vec3_t lMaxs;
-				vec3_t lMins;
+				vec3_t lMaxs = { 0 };
+				vec3_t lMins = { 0 };
 				VectorCopy(parent->r.mins, lMins);
 				lMins[2] = -4; //to keep it off the ground a *little*
 				VectorCopy(parent->r.maxs, lMaxs);
@@ -1184,7 +1184,7 @@ static qboolean Update(Vehicle_t* p_veh, const usercmd_t* pUmcd)
 	playerState_t* parent_ps = parent->playerState;
 
 	gentity_t* pilotEnt = NULL;
-	vec3_t vVehAngles;
+	vec3_t vVehAngles = { 0 };
 	int i = 0;
 	int prevSpeed = 0;
 	int nextSpeed = 0;
@@ -1351,7 +1351,7 @@ static qboolean Update(Vehicle_t* p_veh, const usercmd_t* pUmcd)
 			}
 			else
 			{
-				vec3_t v;
+				vec3_t v = { 0 };
 				VectorSubtract(parent->client->ps.origin, oldPilot->client->ps.origin, v);
 
 				if (VectorLength(v) < parent->speed)
@@ -1657,7 +1657,7 @@ static qboolean UpdateRider(Vehicle_t* p_veh, bgEntity_t* pRider, const usercmd_
 			{
 				if (p_veh->m_pVehicleInfo->Eject(p_veh, pRider, qfalse))
 				{
-					animNumber_t Anim;
+					animNumber_t Anim = FACE_TALK0;
 					const int iFlags = SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_HOLDLESS;
 					const int i_blend = 300;
 
@@ -1682,7 +1682,7 @@ static qboolean UpdateRider(Vehicle_t* p_veh, bgEntity_t* pRider, const usercmd_
 			}
 			else
 			{
-				animNumber_t Anim;
+				animNumber_t Anim = FACE_TALK0;
 				const int iFlags = SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD;
 				const int i_blend = 500;
 
@@ -1830,8 +1830,8 @@ static void AttachRiders(const Vehicle_t* p_veh)
 	{
 		if (p_veh->m_ppPassengers[i])
 		{
-			mdxaBone_t boltMatrix;
-			vec3_t yawOnlyAngles;
+			mdxaBone_t boltMatrix = { 0 };
+			vec3_t yawOnlyAngles = { 0 };
 			gentity_t* parent = (gentity_t*)p_veh->m_pParentEntity;
 			gentity_t* pilot = (gentity_t*)p_veh->m_ppPassengers[i];
 
@@ -1858,7 +1858,7 @@ static void AttachRiders(const Vehicle_t* p_veh)
 	if (p_veh->m_pDroidUnit
 		&& p_veh->m_iDroidUnitTag != -1)
 	{
-		mdxaBone_t boltMatrix;
+		mdxaBone_t boltMatrix = { 0 };
 		gentity_t* parent = (gentity_t*)p_veh->m_pParentEntity;
 		gentity_t* droid = (gentity_t*)p_veh->m_pDroidUnit;
 
@@ -1868,8 +1868,8 @@ static void AttachRiders(const Vehicle_t* p_veh)
 
 		if (droid->client)
 		{
-			vec3_t fwd;
-			vec3_t yaw_only_angles;
+			vec3_t fwd = { 0 };
+			vec3_t yaw_only_angles = { 0 };
 			VectorSet(yaw_only_angles, 0, parent->client->ps.viewangles[YAW], 0);
 
 			// Get the droid tag.
@@ -1936,10 +1936,10 @@ static void UnGhost(Vehicle_t* p_veh, bgEntity_t* pEnt)
 //try to resize the bounding box around a torn apart ship
 void G_VehicleDamageBoxSizing(const Vehicle_t* p_veh)
 {
-	vec3_t fwd, right, up;
-	vec3_t nose; //maxs
-	vec3_t back; //mins
-	trace_t trace;
+	vec3_t fwd = { 0 }, right = { 0 }, up = { 0 };
+	vec3_t nose = { 0 }; //maxs
+	vec3_t back = { 0 }; //mins
+	trace_t trace = { 0 };
 	const float fDist = 256.0f; //estimated distance to nose from origin
 	const float bDist = 256.0f; //estimated distance to back from origin
 	const float wDist = 32.0f; //width on each side from origin
@@ -1998,10 +1998,10 @@ void G_VehicleDamageBoxSizing(const Vehicle_t* p_veh)
 //get one of 4 possible impact locations based on the trace direction
 static int G_FlyVehicleImpactDir(const gentity_t* veh, const trace_t* trace)
 {
-	trace_t localTrace;
-	vec3_t testMins, testMaxs;
-	vec3_t fwd, right;
-	vec3_t fPos;
+	trace_t localTrace = { 0 };
+	vec3_t testMins = { 0 }, testMaxs = { 0 };
+	vec3_t fwd = { 0 }, right = { 0 };
+	vec3_t fPos = { 0 };
 	const Vehicle_t* p_veh = veh->m_pVehicle;
 	qboolean noseClear = qfalse;
 
@@ -2026,8 +2026,8 @@ static int G_FlyVehicleImpactDir(const gentity_t* veh, const trace_t* trace)
 
 	if (noseClear)
 	{
-		vec3_t lWing;
-		vec3_t rWing;
+		vec3_t lWing = { 0 };
+		vec3_t rWing = { 0 };
 		//if nose is clear check for tearing the wings off
 		//sadly, the trace endpos given always matches the vehicle origin, so we
 		//can't get a real impact direction. First we'll trace forward and see if the wings are colliding
@@ -2511,8 +2511,8 @@ static void G_FighterTestOpenAir(const gentity_t* player, const float height, ve
 		{
 			for (int iy = -4; iy <= 4; iy++)
 			{
-				vec3_t p;
-				trace_t tr;
+				vec3_t p = { 0 };
+				trace_t tr = { 0 };
 				float score = 0.0f;
 				qboolean ok = qtrue;
 
@@ -2525,7 +2525,7 @@ static void G_FighterTestOpenAir(const gentity_t* player, const float height, ve
 				}
 				for (int d = 0; d < 6 && ok; d++)
 				{
-					vec3_t end;
+					vec3_t end = { 0 };
 					VectorMA(p, 4096.0f, dirs[d], end);
 					trap->Trace(&tr, p, boxMins, boxMaxs, end, ENTITYNUM_NONE, MASK_NPCSOLID, qfalse, 0, 0);
 					score += tr.fraction;
@@ -2547,10 +2547,10 @@ static void G_FighterTestOpenAir(const gentity_t* player, const float height, ve
 
 void G_FighterTest_f(void)
 {
-	char vehName[MAX_QPATH];
-	char arg[32];
+	char vehName[MAX_QPATH] = { 0 };
+	char arg[32] = { 0 };
 	gentity_t* player = &g_entities[0];
-	vec3_t top;
+	vec3_t top = { 0 };
 	float height = 1024.0f;
 
 	if (!trap->Cvar_VariableIntegerValue("sv_cheats"))
@@ -2578,7 +2578,7 @@ void G_FighterTest_f(void)
 		for (int i = MAX_CLIENTS; i < level.num_entities; i++)
 		{
 			gentity_t* e = &g_entities[i];
-			vec3_t d;
+			vec3_t d = { 0 };
 
 			if (!e->inuse || !e->client || !e->m_pVehicle || !e->m_pVehicle->m_pVehicleInfo || e->m_pVehicle->m_pPilot
 				|| e->health <= 0 || e->think == NPC_Begin)
@@ -2649,7 +2649,7 @@ void G_FighterTest_f(void)
 	{
 		//step back out of the ship (a ship that runs into the pilot standing in it gets wrecked)
 		vec3_t yawOnly = { 0.0f, 0.0f, 0.0f };
-		vec3_t fwd;
+		vec3_t fwd = { 0 };
 		yawOnly[YAW] = player->client->ps.viewangles[YAW];
 		AngleVectors(yawOnly, fwd, NULL, NULL);
 		VectorMA(top, -700.0f, fwd, top);

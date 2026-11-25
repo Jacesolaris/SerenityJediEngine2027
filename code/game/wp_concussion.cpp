@@ -41,15 +41,15 @@ static void WP_FireConcussionAlt(gentity_t* ent)
 	int damage = weaponData[WP_CONCUSSION].altDamage;
 	constexpr int traces = DISRUPTOR_ALT_TRACES;
 	qboolean render_impact = qtrue;
-	vec3_t start;
-	vec3_t muzzle2, spot, dir;
+	vec3_t start = {};
+	vec3_t muzzle2 = {}, spot = {}, dir = {};
 	trace_t tr;
 	gentity_t* tent = nullptr;
 	qboolean hitDodged = qfalse;
 
 	if (ent->s.number >= MAX_CLIENTS)
 	{
-		vec3_t angles;
+		vec3_t angles = {};
 		vectoangles(forward_vec, angles);
 		angles[PITCH] += Q_flrand(-1.0f, 1.0f) * (CONC_NPC_SPREAD + (6 - ent->NPC->currentAim) * 0.25f); //was 0.5f
 		angles[YAW] += Q_flrand(-1.0f, 1.0f) * (CONC_NPC_SPREAD + (6 - ent->NPC->currentAim) * 0.25f); //was 0.5f
@@ -105,14 +105,14 @@ static void WP_FireConcussionAlt(gentity_t* ent)
 	int skip = ent->s.number;
 
 	//Make it a little easier to hit guys at long range
-	vec3_t shot_mins, shot_maxs;
+	vec3_t shot_mins = {}, shot_maxs = {};
 	VectorSet(shot_mins, -1, -1, -1);
 	VectorSet(shot_maxs, 1, 1, 1);
 
 	for (int i = 0; i < traces; i++)
 	{
 		constexpr float shot_range = 8192;
-		vec3_t end;
+		vec3_t end = {};
 		VectorMA(start, shot_range, forward_vec, end);
 
 		gi.trace(&tr, start, shot_mins, shot_maxs, end, skip, MASK_SHOT, G2_COLLIDE, 10);
@@ -200,7 +200,7 @@ static void WP_FireConcussionAlt(gentity_t* ent)
 					if (traceEnt->client)
 					{
 						//only if we hit a client
-						vec3_t push_dir;
+						vec3_t push_dir = {};
 						VectorCopy(forward_vec, push_dir);
 						if (push_dir[2] < 0.2f)
 						{
@@ -286,13 +286,13 @@ static void WP_FireConcussionAlt(gentity_t* ent)
 static void WP_FireConcussion(gentity_t* ent)
 {
 	//a fast rocket-like projectile
-	vec3_t start;
+	vec3_t start = {};
 	int damage = weaponData[WP_CONCUSSION].damage;
 	constexpr float vel = CONC_VELOCITY;
 
 	if (ent->s.number >= MAX_CLIENTS)
 	{
-		vec3_t angles;
+		vec3_t angles = {};
 		vectoangles(forward_vec, angles);
 		angles[PITCH] += Q_flrand(-1.0f, 1.0f) * (CONC_NPC_SPREAD + (6 - ent->NPC->currentAim) * 0.25f); //was 0.5f
 		angles[YAW] += Q_flrand(-1.0f, 1.0f) * (CONC_NPC_SPREAD + (6 - ent->NPC->currentAim) * 0.25f); //was 0.5f

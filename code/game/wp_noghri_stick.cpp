@@ -29,7 +29,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 void WP_FireNoghriStick(gentity_t* ent)
 //---------------------------------------------------------
 {
-	vec3_t dir, angs;
+	vec3_t dir = {}, angs = {};
 
 	vectoangles(forward_vec, angs);
 

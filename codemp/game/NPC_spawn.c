@@ -50,7 +50,7 @@ extern void NPC_Remote_Precache(void);
 extern void NPC_R2D2_Precache(void);
 extern void NPC_R5D2_Precache(void);
 extern void NPC_Probe_Precache(void);
-extern void NPC_Interrogator_Precache(gentity_t* self);
+extern void NPC_Interrogator_Precache(void);
 extern void NPC_MineMonster_Precache(void);
 extern void NPC_Howler_Precache(void);
 extern void NPC_ATST_Precache(void);
@@ -165,7 +165,7 @@ typedef void (PAIN_FUNC)(gentity_t* self, gentity_t* attacker, int damage);
 
 static PAIN_FUNC* NPC_PainFunc(const gentity_t* ent)
 {
-	void (*func)(gentity_t * self, gentity_t * attacker, int damage);
+	void (*func)(gentity_t * self, gentity_t * attacker, int damage) = NULL;
 
 	if (ent->client->ps.weapon == WP_SABER)
 	{
@@ -1236,7 +1236,7 @@ static qboolean NPC_SpotWouldTelefrag(const gentity_t* npc)
 	// static: too big for the stack, and BG_Alloc is never freed: asked for on every call, this ran the pool dry
 	static int touch[MAX_GENTITIES];
 
-	vec3_t mins, maxs;
+	vec3_t mins = { 0 }, maxs = { 0 };
 
 	// Compute bounding box for telefrag check
 	VectorAdd(npc->r.currentOrigin, npc->r.mins, mins);
@@ -1282,8 +1282,8 @@ extern qboolean WP_SaberCanTurnOffSomeBlades(const saberInfo_t* saber);
 //--------------------------------------------------------------
 void NPC_Begin(gentity_t* ent)
 {
-	vec3_t spawn_origin, spawn_angles;
-	usercmd_t ucmd;
+	vec3_t spawn_origin = { 0 }, spawn_angles = { 0 };
+	usercmd_t ucmd = { 0 };
 	gentity_t* spawnPoint = NULL;
 
 	memset(&ucmd, 0, sizeof ucmd);
@@ -1843,7 +1843,7 @@ extern void G_CreateFighterNPC(Vehicle_t** p_veh, const char* strType);
 
 static qboolean NPC_SafeSpawn(const gentity_t* ent, const float safeRadius)
 {
-	int radius_ents[MAX_SAFESPAWN_ENTS];
+	int radius_ents[MAX_SAFESPAWN_ENTS] = { 0 };
 	vec3_t safeMins = { 0 }, safeMaxs = { 0 };
 	int i = 0;
 	const float safeRadiusSquared = safeRadius * safeRadius;
@@ -1890,7 +1890,7 @@ static qboolean NPC_SafeSpawn(const gentity_t* ent, const float safeRadius)
 
 gentity_t* NPC_Spawn_Do(gentity_t* ent)
 {
-	vec3_t saveOrg;
+	vec3_t saveOrg = { 0 };
 
 	if (ent->spawnflags & 4096)
 	{
@@ -1903,8 +1903,8 @@ gentity_t* NPC_Spawn_Do(gentity_t* ent)
 	//Test for drop to floor
 	if (ent->spawnflags & NSF_DROP_TO_FLOOR)
 	{
-		trace_t tr;
-		vec3_t bottom;
+		trace_t tr = { 0 };
+		vec3_t bottom = { 0 };
 
 		VectorCopy(ent->r.currentOrigin, saveOrg);
 		VectorCopy(ent->r.currentOrigin, bottom);
@@ -2503,7 +2503,7 @@ static qboolean NPC_MissionNeeded(const gentity_t* self)
 {
 	static char buf[MISSION_NPCS_MAXSIZE];
 	static int loadedLevel = -1;
-	char mapname[MAX_QPATH];
+	char mapname[MAX_QPATH] = { 0 };
 	char* s = NULL;
 
 	if (level.gametype != GT_SINGLE_PLAYER)
@@ -2587,7 +2587,7 @@ static qboolean NPC_MissionCutsceneActor(const gentity_t* self)
 {
 	static char buf[MISSION_ACTORS_MAXSIZE];
 	static int loadedLevel = -1;
-	char mapname[MAX_QPATH];
+	char mapname[MAX_QPATH] = { 0 };
 	char* s = NULL;
 
 	if (level.gametype != GT_SINGLE_PLAYER || !self->NPC_targetname || !self->NPC_targetname[0])
@@ -4674,7 +4674,7 @@ void SP_NPC_Droid_Interrogator(gentity_t* self)
 
 	SP_NPC_spawner(self);
 
-	NPC_Interrogator_Precache(self);
+	NPC_Interrogator_Precache();
 }
 
 /*QUAKED NPC_Droid_Probe (1 0 0) (-12 -12 -24) (12 12 40) x x x x DROPTOFLOOR CINEMATIC NOTSOLID STARTINSOLID SHY
@@ -4942,8 +4942,8 @@ NPC_Spawn_f
 gentity_t* NPC_SpawnType(const gentity_t* ent, const char* npc_type, const char* targetname, const qboolean isVehicle)
 {
 	gentity_t* NPCspawner = G_Spawn();
-	vec3_t forward, end;
-	trace_t trace;
+	vec3_t forward = { 0 }, end = { 0 };
+	trace_t trace = { 0 };
 
 	if (!NPCspawner)
 	{
@@ -5039,7 +5039,7 @@ gentity_t* NPC_SpawnType(const gentity_t* ent, const char* npc_type, const char*
 	}
 	else if (!Q_stricmp("interrogator", NPCspawner->NPC_type))
 	{
-		NPC_Interrogator_Precache(NULL);
+		NPC_Interrogator_Precache();
 	}
 	else if (!Q_stricmp("rosh_dark", NPCspawner->NPC_type))
 	{
@@ -5095,8 +5095,8 @@ gentity_t* NPC_SpawnType(const gentity_t* ent, const char* npc_type, const char*
 
 static void NPC_Spawn_f(gentity_t* ent)
 {
-	char npc_type[1024];
-	char targetname[1024];
+	char npc_type[1024] = { 0 };
+	char targetname[1024] = { 0 };
 	qboolean isVehicle = qfalse;
 
 	trap->Argv(2, npc_type, 1024);
@@ -5122,7 +5122,7 @@ extern stringID_table_t TeamTable[];
 static void NPC_Kill_f(void)
 {
 	int n = 0;
-	char name[1024];
+	char name[1024] = { 0 };
 	npcteam_t killTeam = NPCTEAM_FREE;
 	qboolean killNonSF = qfalse;
 
@@ -5265,7 +5265,7 @@ qboolean showBBoxes = qfalse;
 
 void Cmd_NPC_f(gentity_t* ent)
 {
-	char cmd[1024];
+	char cmd[1024] = { 0 };
 
 	trap->Argv(1, cmd, 1024);
 
@@ -5292,7 +5292,7 @@ void Cmd_NPC_f(gentity_t* ent)
 	}
 	else if (Q_stricmp(cmd, "score") == 0)
 	{
-		char cmd2[1024];
+		char cmd2[1024] = { 0 };
 		const gentity_t* thisent = NULL;
 
 		trap->Argv(2, cmd2, sizeof cmd2);
@@ -5328,7 +5328,7 @@ void Cmd_NPC_f(gentity_t* ent)
 
 void Cmd_AdminNPC_f(gentity_t* ent)
 {
-	char cmd[1024];
+	char cmd[1024] = { 0 };
 
 	if (!(ent->r.svFlags & SVF_ADMIN))
 	{
@@ -5496,7 +5496,7 @@ static qboolean G_RancorPitIsMap(void)
 {
 	const char* name = level.mapname;
 	const char* want = g_rancorPitMap.string;
-	size_t len;
+	size_t len = 0;
 
 	if (!want[0])
 	{
@@ -5516,7 +5516,7 @@ static qboolean G_RancorPitIsMap(void)
 
 static qboolean G_RancorPitAlive(void)
 {
-	int i;
+	int i = 0;
 
 	for (i = MAX_CLIENTS; i < level.num_entities; i++)
 	{
@@ -5538,8 +5538,8 @@ static qboolean G_RancorPitAlive(void)
 // drops spot onto the floor below it; qfalse when there is no floor within 512 units
 static qboolean G_RancorPitFloor(vec3_t spot)
 {
-	vec3_t start, end;
-	trace_t tr;
+	vec3_t start = { 0 }, end = { 0 };
+	trace_t tr = { 0 };
 
 	VectorCopy(spot, start);
 	start[2] += 32;
@@ -5559,8 +5559,8 @@ static qboolean G_RancorPitRoom(const vec3_t pos)
 {
 	static const vec3_t mins = { -RANCORPIT_HALFWIDTH, -RANCORPIT_HALFWIDTH, 0 };
 	static const vec3_t maxs = { RANCORPIT_HALFWIDTH, RANCORPIT_HALFWIDTH, RANCORPIT_HEIGHT };
-	vec3_t start;
-	trace_t tr;
+	vec3_t start = { 0 };
+	trace_t tr = { 0 };
 
 	VectorCopy(pos, start);
 	start[2] += 18; // step height, so a bumpy floor does not count as a wall
@@ -5570,7 +5570,7 @@ static qboolean G_RancorPitRoom(const vec3_t pos)
 
 static qboolean G_RancorPitNobodyNear(const vec3_t spot)
 {
-	int i;
+	int i = 0;
 
 	for (i = 0; i < level.num_entities; i++)
 	{
@@ -5591,8 +5591,8 @@ static qboolean G_RancorPitNobodyNear(const vec3_t spot)
 // a straight, open line between the two floor points (so the spot is in the same pit, not behind a wall)
 static qboolean G_RancorPitClearLine(const vec3_t a, const vec3_t b)
 {
-	vec3_t start, end;
-	trace_t tr;
+	vec3_t start = { 0 }, end = { 0 };
+	trace_t tr = { 0 };
 
 	VectorCopy(a, start);
 	start[2] += 64;
@@ -5604,10 +5604,10 @@ static qboolean G_RancorPitClearLine(const vec3_t a, const vec3_t b)
 
 static qboolean G_RancorPitSpawn(void)
 {
-	vec3_t spots[64], center, spot, face;
-	int numSpots = 0, i, ring, step;
+	vec3_t spots[64] = { 0 }, center = { 0 }, spot = { 0 }, face = { 0 };
+	int numSpots = 0, i = 0, ring = 0, step = 0;
 	gentity_t* found = NULL;
-	gentity_t* spawner;
+	gentity_t* spawner = NULL;
 	qboolean ok = qfalse;
 
 	// the middle of the deathmatch spawn points is the middle of the pit
@@ -5785,8 +5785,8 @@ static unsigned civilianBadTypes; // types that failed to spawn (bit per positio
 // can any player see this spot (or is one closer than near)
 static qboolean G_CivilianSeen(const vec3_t pos, const float near, float* closest)
 {
-	int p;
-	trace_t tr;
+	int p = 0;
+	trace_t tr = { 0 };
 
 	*closest = 999999.0f;
 	for (p = 0; p < level.maxclients; p++)
@@ -5797,7 +5797,7 @@ static qboolean G_CivilianSeen(const vec3_t pos, const float near, float* closes
 			continue;
 		}
 		{
-			vec3_t eye, top;
+			vec3_t eye = { 0 }, top = { 0 };
 			const float d = Distance(pl->r.currentOrigin, pos);
 
 			if (d < *closest)
@@ -5825,7 +5825,7 @@ static qboolean G_CivilianSeen(const vec3_t pos, const float near, float* closes
 // a free spot on the ground out of sight near a random player, qfalse = none found this time
 static qboolean G_CivilianSpot(vec3_t out)
 {
-	int tries, p, count = 0, pick;
+	int tries = 0, p = 0, count = 0, pick = 0;
 	const gentity_t* around = NULL;
 	vec3_t mins = { -16, -16, -24 }, maxs = { 16, 16, 40 };
 
@@ -5862,9 +5862,9 @@ static qboolean G_CivilianSpot(vec3_t out)
 	}
 	for (tries = 0; tries < 8; tries++)
 	{
-		trace_t tr;
-		vec3_t start, end;
-		float closest;
+		trace_t tr = { 0 };
+		vec3_t start = { 0 }, end = { 0 };
+		float closest = 0;
 		const float yaw = Q_flrand(0.0f, 2.0f * M_PI), dist = Q_flrand(CIVILIAN_NEAR, CIVILIAN_FAR);
 
 		VectorCopy(around->r.currentOrigin, start);
@@ -5913,13 +5913,13 @@ static void G_CivilianCalm(gentity_t* civ)
 
 static void G_CivilianSpawn(void)
 {
-	char list[512];
-	char* types[32];
-	int num_types = 0, i, pick;
-	char* s;
-	gentity_t* spawner;
-	gentity_t* civ;
-	vec3_t pos;
+	char list[512] = { 0 };
+	char* types[32] = { 0 };
+	int num_types = 0, i = 0, pick = 0;
+	char* s = NULL;
+	gentity_t* spawner = NULL;
+	gentity_t* civ = NULL;
+	vec3_t pos = { 0 };
 
 	Q_strncpyz(list, g_civilianTypes.string, sizeof list);
 	for (s = strtok(list, " ,;"); s && num_types < 32; s = strtok(NULL, " ,;"))
@@ -5977,7 +5977,7 @@ static void G_CivilianSpawn(void)
 void G_CivilianThink(void)
 {
 	const int want = g_civilians.integer > MAX_CIVILIANS ? MAX_CIVILIANS : g_civilians.integer;
-	int i, have = 0;
+	int i = 0, have = 0;
 
 	if (level.time < civilianNextSpawn)
 	{
@@ -5987,8 +5987,8 @@ void G_CivilianThink(void)
 
 	for (i = 0; i < MAX_CIVILIANS; i++)
 	{
-		gentity_t* civ;
-		float closest;
+		gentity_t* civ = NULL;
+		float closest = 0;
 
 		if (!civilianEnts[i])
 		{

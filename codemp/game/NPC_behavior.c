@@ -41,7 +41,7 @@ extern void NPC_CheckGetNewWeapon(void);
 extern qboolean PM_InKnockDown(const playerState_t* ps);
 
 extern void NPC_AimAdjust(int change);
-extern qboolean NPC_SomeoneLookingAtMe(gentity_t* ent);
+extern qboolean NPC_SomeoneLookingAtMe(const gentity_t* ent);
 
 void NPC_BSAdvanceFight(void)
 {
@@ -58,9 +58,9 @@ void NPC_BSAdvanceFight(void)
 	if (NPCS.NPC->enemy)
 	{
 		//See if we can shoot him
-		vec3_t delta;
-		vec3_t angleToEnemy;
-		vec3_t muzzle, enemy_org;
+		vec3_t delta = { 0 };
+		vec3_t angleToEnemy = { 0 };
+		vec3_t muzzle = { 0 }, enemy_org = { 0 };
 		qboolean attack_ok = qfalse;
 		qboolean dead_on = qfalse;
 		float attack_scale = 1.0;
@@ -87,15 +87,15 @@ void NPC_BSAdvanceFight(void)
 
 			if (NPCS.enemyVisibility == VIS_FOV)
 			{
-				vec3_t enemy_head;
-				vec3_t hitspot;
+				vec3_t enemy_head = { 0 };
+				vec3_t hitspot = { 0 };
 				//He's in our FOV
 				attack_ok = qtrue;
 				CalcEntitySpot(NPCS.NPC->enemy, SPOT_HEAD, enemy_head);
 
 				if (attack_ok)
 				{
-					trace_t tr;
+					trace_t tr = { 0 };
 					//are we gonna hit him if we shoot at his center?
 					trap->Trace(&tr, muzzle, NULL, NULL, enemy_org, NPCS.NPC->s.number, MASK_SHOT, qfalse, 0, 0);
 					const gentity_t* traceEnt = &g_entities[tr.entityNum];
@@ -144,8 +144,8 @@ void NPC_BSAdvanceFight(void)
 					if (!dead_on)
 					{
 						const float max_aim_off = 64;
-						vec3_t diff;
-						vec3_t forward;
+						vec3_t diff = { 0 };
+						vec3_t forward = { 0 };
 						//We're not going to hit him directly, try a suppressing fire
 						//see if where we're going to shoot is too far from his origin
 						AngleVectors(NPCS.NPCInfo->shootAngles, forward, NULL, NULL);
@@ -241,7 +241,7 @@ void NPC_BSCinematic(void)
 	{
 		//have an entity which we want to keep facing
 		//NOTE: this will override any angles set by NPC_MoveToGoal
-		vec3_t eyes, viewSpot, viewvec, viewangles;
+		vec3_t eyes = { 0 }, viewSpot = { 0 }, viewvec = { 0 }, viewangles = { 0 };
 
 		CalcEntitySpot(NPCS.NPC, SPOT_HEAD_LEAN, eyes);
 		CalcEntitySpot(NPCS.NPCInfo->watchTarget, SPOT_HEAD_LEAN, viewSpot);
@@ -266,7 +266,7 @@ qboolean NPC_CheckInvestigate(const int alert_event_num)
 {
 	gentity_t* owner = level.alertEvents[alert_event_num].owner;
 	const int invAdd = level.alertEvents[alert_event_num].level;
-	vec3_t soundPos;
+	vec3_t soundPos = { 0 };
 	const float soundRad = level.alertEvents[alert_event_num].radius;
 	const float earshot = NPCS.NPCInfo->stats.earshot;
 
@@ -526,7 +526,7 @@ qboolean NPC_BSFollowLeader_AttackEnemy(void)
 	if (NPCS.enemyVisibility > VIS_PVS)
 	{
 		//face
-		vec3_t enemy_org, muzzle, delta, angleToEnemy;
+		vec3_t enemy_org = { 0 }, muzzle = { 0 }, delta = { 0 }, angleToEnemy = { 0 };
 
 		CalcEntitySpot(NPCS.NPC->enemy, SPOT_HEAD, enemy_org);
 		NPC_AimWiggle(enemy_org);
@@ -593,7 +593,7 @@ qboolean NPC_BSFollowLeader_InFullBodyAttack(void)
 void NPC_BSFollowLeader_LookAtLeader(void)
 {
 	//look at our leader
-	vec3_t head, leaderHead, delta, angleToLeader;
+	vec3_t head = { 0 }, leaderHead = { 0 }, delta = { 0 }, angleToLeader = { 0 };
 
 	CalcEntitySpot(NPCS.NPC->client->leader, SPOT_HEAD, leaderHead);
 	CalcEntitySpot(NPCS.NPC, SPOT_HEAD, head);
@@ -615,9 +615,9 @@ static void NPC_FollowLeader_AllyTactics(void)
 {
 	static vmCvar_t g_allyTactics;
 	static qboolean registered = qfalse;
-	gentity_t* leader;
-	vec3_t fwd, lright;
-	int lw;
+	gentity_t* leader = NULL;
+	vec3_t fwd = { 0 }, lright = { 0 };
+	int lw = 0;
 
 	if (!registered)
 	{
@@ -643,8 +643,8 @@ static void NPC_FollowLeader_AllyTactics(void)
 	lw = leader->client->ps.weapon;
 	if (lw != WP_NONE && lw != WP_SABER && lw != WP_MELEE)
 	{
-		vec3_t to_me, closest, off;
-		float along;
+		vec3_t to_me = { 0 }, closest = { 0 }, off = { 0 };
+		float along = 0;
 		VectorSubtract(NPCS.NPC->r.currentOrigin, leader->r.currentOrigin, to_me);
 		along = DotProduct(to_me, fwd);
 		if (along > 0.0f && along < 400.0f)
@@ -654,8 +654,8 @@ static void NPC_FollowLeader_AllyTactics(void)
 			off[2] = 0.0f;
 			if (VectorLengthSquared(off) < 40.0f * 40.0f)
 			{
-				vec3_t want, my_fwd, my_right;
-				float r, f;
+				vec3_t want = { 0 }, my_fwd = { 0 }, my_right = { 0 };
+				float r = 0, f = 0;
 				VectorScale(lright, DotProduct(off, lright) >= 0.0f ? 1.0f : -1.0f, want);
 				AngleVectors(NPCS.NPC->client->ps.viewangles, my_fwd, my_right, NULL);
 				r = DotProduct(want, my_right);
@@ -670,8 +670,8 @@ static void NPC_FollowLeader_AllyTactics(void)
 	if (TIMER_Done(NPCS.NPC, "allyWarn"))
 	{
 		static int list[MAX_GENTITIES];
-		vec3_t mins, maxs;
-		int i, num;
+		vec3_t mins = { 0 }, maxs = { 0 };
+		int i = 0, num = 0;
 		for (i = 0; i < 3; i++)
 		{
 			mins[i] = leader->r.currentOrigin[i] - 256.0f;
@@ -681,7 +681,7 @@ static void NPC_FollowLeader_AllyTactics(void)
 		for (i = 0; i < num; i++)
 		{
 			gentity_t* e = &g_entities[list[i]];
-			vec3_t to_e;
+			vec3_t to_e = { 0 };
 			if (!e->inuse || !e->client || e->health <= 0 || e == NPCS.NPC || e == leader
 				|| e->client->playerTeam != NPCS.NPC->client->enemyTeam)
 			{
@@ -749,7 +749,7 @@ void NPC_BSFollowLeader(void)
 	//Follow leader, stay within visibility and a certain distance, maintain a distance from.
 	{
 		const visibility_t leaderVis = NPC_CheckVisibility(NPCS.NPC->client->leader, CHECK_PVS | CHECK_360 | CHECK_SHOOT);
-		vec3_t vec;
+		vec3_t vec = { 0 };
 		//Don't move toward leader if we're in a full-body attack anim
 		float followDist = NPCS.NPCInfo->followDist ? NPCS.NPCInfo->followDist : 110.0f;
 
@@ -802,7 +802,7 @@ void NPC_BSFollowLeader(void)
 
 void NPC_BSJump(void)
 {
-	vec3_t dir, p1, p2, apex;
+	vec3_t dir = { 0 }, p1 = { 0 }, p2 = { 0 }, apex = { 0 };
 	float time = 0.0f, height = 0.0f, forward = 0.0f, z = 0.0f, xy = 0.0f, dist = 0.0f, apexHeight = 0.0f;
 
 	if (!NPCS.NPCInfo->goalEntity)
@@ -813,7 +813,7 @@ void NPC_BSJump(void)
 
 	if (NPCS.NPCInfo->jumpState != JS_JUMPING && NPCS.NPCInfo->jumpState != JS_LANDING)
 	{
-		vec3_t angles;
+		vec3_t angles = { 0 };
 		//Face navgoal
 		VectorSubtract(NPCS.NPCInfo->goalEntity->r.currentOrigin, NPCS.NPC->r.currentOrigin, dir);
 		vectoangles(dir, angles);
@@ -1020,7 +1020,7 @@ void NPC_BSSearch(void)
 	{
 		//On our way to a tempGoal
 		float minGoalReachedDistSquared = 32 * 32;
-		vec3_t vec;
+		vec3_t vec = { 0 };
 
 		//Keep moving toward our tempGoal
 		NPCS.NPCInfo->goalEntity = NPCS.NPCInfo->tempGoal;
@@ -1102,7 +1102,7 @@ void NPC_BSSearch(void)
 					{
 						const int branchNum = Q_irand(0, numEdges - 1);
 
-						vec3_t branchPos, lookDir;
+						vec3_t branchPos = { 0 }, lookDir = { 0 };
 
 						const int nextWp = trap->Nav_GetNodeEdge(NPCS.NPCInfo->tempGoal->waypoint, branchNum);
 						trap->Nav_GetNodePosition(nextWp, branchPos);
@@ -1181,7 +1181,7 @@ void NPC_BSNoClip(void)
 {
 	if (UpdateGoal())
 	{
-		vec3_t dir, forward, right, angles;
+		vec3_t dir = { 0 }, forward = { 0 }, right = { 0 }, angles = { 0 };
 		const vec3_t up = { 0, 0, 1 };
 
 		VectorSubtract(NPCS.NPCInfo->goalEntity->r.currentOrigin, NPCS.NPC->r.currentOrigin, dir);
@@ -1240,7 +1240,7 @@ void NPC_BSWander(void)
 	{
 		//Starting out
 		float minGoalReachedDistSquared = 64; //32*32;
-		vec3_t vec;
+		vec3_t vec = { 0 };
 
 		//Keep moving toward our tempGoal
 		NPCS.NPCInfo->goalEntity = NPCS.NPCInfo->tempGoal;
@@ -1291,7 +1291,7 @@ void NPC_BSWander(void)
 					{
 						const int branchNum = Q_irand(0, numEdges - 1);
 
-						vec3_t branchPos, lookDir;
+						vec3_t branchPos = { 0 }, lookDir = { 0 };
 
 						const int nextWp = trap->Nav_GetNodeEdge(NPCS.NPCInfo->tempGoal->waypoint, branchNum);
 						trap->Nav_GetNodePosition(nextWp, branchPos);
@@ -1453,7 +1453,7 @@ void NPC_Surrender(void)
 		NPCS.NPC->s.weapon != WP_MELEE &&
 		NPCS.NPC->s.weapon != WP_SABER)
 	{
-		vec3_t tossAngle;
+		vec3_t tossAngle = { 0 };
 
 		AngleVectors(NPCS.NPC->client->ps.viewangles, tossAngle, NULL, NULL);
 
@@ -1920,7 +1920,7 @@ void NPC_BSFlee(void)
 				// Try To Get To The Farthest Combat Point From Him
 				//--------------------------------------------------
 				const int nbr = NAV_ChooseFarthestNeighbor(NPCS.NPC, NPCS.NPC->enemy->r.currentOrigin, 0.25f);
-				vec3_t nbrPos;
+				vec3_t nbrPos = { 0 };
 				if (nbr > 0 && NAV_NodePosition(nbr, nbrPos))
 				{
 					moveSuccess = STEER_GoToPos(NPCS.NPC, nbrPos, 1.0f, qtrue);
@@ -2134,7 +2134,7 @@ void NPC_BSEmplaced(void)
 
 	if (NPC_ClearLOS4(NPCS.NPC->enemy))
 	{
-		vec3_t impactPos;
+		vec3_t impactPos = { 0 };
 		enemyLOS = qtrue;
 
 		const int hit = NPC_ShotEntity(NPCS.NPC->enemy, impactPos);

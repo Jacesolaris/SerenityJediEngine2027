@@ -57,7 +57,7 @@ extern qboolean G_FxRunnerIsFire(const gentity_t* ent); // burning (wp_saber.cpp
 
 void fx_runner_think(gentity_t* ent)
 {
-	vec3_t temp;
+	vec3_t temp = {};
 
 	EvaluateTrajectory(&ent->s.pos, level.time, ent->currentOrigin);
 	EvaluateTrajectory(&ent->s.apos, level.time, ent->currentAngles);
@@ -181,7 +181,7 @@ void fx_runner_link(gentity_t* ent)
 		}
 		else
 		{
-			vec3_t dir;
+			vec3_t dir = {};
 			// Our target is valid so let's override the default UP vector
 			VectorSubtract(target->s.origin, ent->s.origin, dir);
 			VectorNormalize(dir);
@@ -381,8 +381,8 @@ void SP_CreateWind(gentity_t* ent)
 	//---------------
 	if (ent->spawnflags & 2)
 	{
-		char temp[256];
-		vec3_t wind_dir;
+		char temp[256] = {};
+		vec3_t wind_dir = {};
 		AngleVectors(ent->s.angles, wind_dir, nullptr, nullptr);
 		G_SpawnFloat("speed", "500", &ent->speed);
 		VectorScale(wind_dir, ent->speed, wind_dir);
@@ -436,12 +436,12 @@ void SP_CreateWindZone(gentity_t* ent)
 
 	gi.SetBrushModel(ent, ent->model);
 
-	vec3_t wind_dir;
+	vec3_t wind_dir = {};
 	AngleVectors(ent->s.angles, wind_dir, nullptr, nullptr);
 	G_SpawnFloat("speed", "500", &ent->speed);
 	VectorScale(wind_dir, ent->speed, wind_dir);
 
-	char temp[256];
+	char temp[256] = {};
 	sprintf(temp, "windzone ( %f %f %f ) ( %f %f %f ) ( %f %f %f )",
 		ent->mins[0], ent->mins[1], ent->mins[2],
 		ent->maxs[0], ent->maxs[1], ent->maxs[2],
@@ -505,8 +505,8 @@ void fx_rain_think(gentity_t* ent)
 		}
 		else if (gi.WE_IsOutside(player->currentOrigin))
 		{
-			vec3_t effect_pos;
-			vec3_t effect_dir;
+			vec3_t effect_pos = {};
+			vec3_t effect_dir = {};
 			VectorClear(effect_dir);
 			effect_dir[0] += Q_flrand(-1.0f, 1.0f);
 			effect_dir[1] += Q_flrand(-1.0f, 1.0f);
@@ -713,7 +713,7 @@ blowing size ( minX minY minZ )
 //----------------------------------------------------------
 void SP_CreatePuffSystem(gentity_t* ent)
 {
-	char temp[128];
+	char temp[128] = {};
 
 	// Initialize the puff system to either 1000 particles or whatever they choose.
 	G_SpawnInt("count", "1000", &ent->count);
@@ -804,7 +804,7 @@ void SP_CreatePuffSystem(gentity_t* ent)
 //----------------------------------------------------------
 void fx_explosion_trail_think(gentity_t* ent)
 {
-	vec3_t origin;
+	vec3_t origin = {};
 	trace_t tr;
 
 	if (ent->spawnflags & 1) // gravity
@@ -926,7 +926,7 @@ void fx_explosion_trail_use(gentity_t* self, gentity_t* other, gentity_t* activa
 //----------------------------------------------------------
 void fx_explosion_trail_link(gentity_t* ent)
 {
-	vec3_t dir;
+	vec3_t dir = {};
 
 	// we ony activate when used
 	ent->e_UseFunc = useF_fx_explosion_trail_use;
@@ -1053,8 +1053,8 @@ static void fx_target_beam_set_debounce(gentity_t* self)
 static void fx_target_beam_fire(gentity_t* ent)
 {
 	trace_t trace;
-	vec3_t dir, org, end;
-	qboolean open;
+	vec3_t dir = {}, org = {}, end = {};
+	qboolean open = qfalse;
 
 	if (!ent->enemy || !ent->enemy->inuse)
 	{
@@ -1169,7 +1169,7 @@ void fx_target_beam_think(gentity_t* self)
 void fx_target_beam_link(gentity_t* self)
 {
 	gentity_t* target = nullptr;
-	vec3_t dir;
+	vec3_t dir = {};
 
 	target = G_Find(target, FOFS(targetname), self->target);
 

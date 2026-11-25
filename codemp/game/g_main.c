@@ -288,7 +288,7 @@ qboolean G_IsOutcastSPMap(const char* mapname)
 		"yavin_swamp", "yavin_canyon", "yavin_courtyard", "yavin_final", "dtention", "fuelstat", "gromas", "jabship",
 		"narshada", "robotics", "secbase", "sewers", "talay", "testbase"
 	};
-	int i;
+	int i = 0;
 
 	for (i = 0; i < (int)ARRAY_LEN(maps); i++)
 	{
@@ -303,8 +303,8 @@ qboolean G_IsOutcastSPMap(const char* mapname)
 void G_InitGame(int levelTime, int randomSeed, int restart)
 {
 	int i = 0;
-	vmCvar_t mapname;
-	vmCvar_t ckSum;
+	vmCvar_t mapname = { 0 };
+	vmCvar_t ckSum = { 0 };
 	char serverinfo[MAX_INFO_STRING] = { 0 };
 
 	// variable used in the SP buged maps fix
@@ -559,7 +559,7 @@ void G_InitGame(int levelTime, int randomSeed, int restart)
 	{
 		const qboolean academy = !Q_stricmpn(sje_mapname, "academy", 7) && sje_mapname[7] >= '1' && sje_mapname[7] <= '6'
 			&& !sje_mapname[8] ? qtrue : qfalse;
-		char tried[MAX_QPATH];
+		char tried[MAX_QPATH] = { 0 };
 
 		trap->Cvar_VariableStringBuffer("g_missionGametypeFix", tried, sizeof tried);
 		if (level.gametype != GT_SINGLE_PLAYER && (level.sp_map || G_IsOutcastSPMap(sje_mapname) || academy))
@@ -2684,7 +2684,7 @@ void FindIntermissionPoint(void)
 			const gentity_t* target = G_PickTarget(ent->target);
 			if (target)
 			{
-				vec3_t dir;
+				vec3_t dir = { 0 };
 				VectorSubtract(target->s.origin, level.intermission_origin, dir);
 				vectoangles(dir, level.intermission_angle);
 			}
@@ -2876,7 +2876,7 @@ Print to the logfile with a time stamp if it is open
 */
 void QDECL G_LogPrintf(const char* fmt, ...)
 {
-	va_list		argptr;
+	va_list		argptr = { 0 };
 	char		string[1024] = { 0 };
 	int			mins = 0, seconds = 0, msec = 0, l = 0;
 
@@ -2912,7 +2912,7 @@ Print to the security logfile with a time stamp if it is open
 */
 void QDECL G_SecurityLogPrintf(const char* fmt, ...)
 {
-	va_list argptr;
+	va_list argptr = { 0 };
 	char string[1024] = { 0 };
 	time_t rawtime = 0;
 
@@ -4326,8 +4326,8 @@ static void NAV_CheckCalcPaths(void)
 	if (navCalcPathTime && navCalcPathTime < level.time)
 	{
 		//first time we've ever loaded this map...
-		vmCvar_t mapname;
-		vmCvar_t ckSum;
+		vmCvar_t mapname = { 0 };
+		vmCvar_t ckSum = { 0 };
 
 		trap->Cvar_Register(&mapname, "mapname", "", CVAR_SERVERINFO | CVAR_ROM);
 		trap->Cvar_Register(&ckSum, "sv_mapChecksum", "", CVAR_ROM);
@@ -4528,7 +4528,7 @@ void G_RunFrame(const int levelTime)
 	{
 		if (level.restarted)
 		{
-			char buf[128];
+			char buf[128] = { 0 };
 
 			trap->Cvar_VariableStringBuffer("timescale", buf, sizeof buf);
 
@@ -4564,7 +4564,7 @@ void G_RunFrame(const int levelTime)
 			}
 			else
 			{
-				char buf[128];
+				char buf[128] = { 0 };
 
 				trap->Cvar_VariableStringBuffer("timescale", buf, sizeof buf);
 
@@ -4793,7 +4793,7 @@ void G_RunFrame(const int levelTime)
 			if (ent->client->isHacking > MAX_CLIENTS)
 			{ //hacking checks
 				gentity_t* hacked = &g_entities[ent->client->isHacking];
-				vec3_t angDif;
+				vec3_t angDif = { 0 };
 
 				VectorSubtract(ent->client->ps.viewangles, ent->client->hackingAngles, angDif);
 
@@ -4879,7 +4879,7 @@ void G_RunFrame(const int levelTime)
 			if (ent->client->isHacking)
 			{ //hacking checks
 				gentity_t* hacked = &g_entities[ent->client->isHacking];
-				vec3_t angDif;
+				vec3_t angDif = { 0 };
 
 				VectorSubtract(ent->client->ps.viewangles, ent->client->hackingAngles, angDif);
 
@@ -5160,6 +5160,8 @@ void G_RunFrame(const int levelTime)
 #endif
 	// see if it is time to do a tournament restart
 	CheckTournament();
+
+	G_MissionSquadThink(); // Missions: the squad's queue (g_cmds.c)
 
 	// see if it is time to end the level
 	CheckExitRules();

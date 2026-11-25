@@ -57,7 +57,7 @@ CG_LoadingItem
 */
 void CG_LoadingItem(const int itemNum)
 {
-	char upper_key[1024];
+	char upper_key[1024] = { 0 };
 
 	const gitem_t* item = &bg_itemlist[itemNum];
 
@@ -78,7 +78,7 @@ CG_LoadingClient
 */
 void CG_LoadingClient(const int clientNum)
 {
-	char personality[MAX_QPATH];
+	char personality[MAX_QPATH] = { 0 };
 
 	const char* info = CG_ConfigString(CS_PLAYERS + clientNum);
 
@@ -243,7 +243,7 @@ static void LoadTips(void)
 void CG_DrawInformation(void)
 {
 	int value = 0;
-	char buf[1024];
+	char buf[1024] = { 0 };
 	const int i_prop_height = 18; // I know, this is total crap, but as a post release asian-hack....  -Ste
 
 	const char* info = CG_ConfigString(CS_SERVERINFO);
@@ -312,7 +312,7 @@ void CG_DrawInformation(void)
 
 		{
 			// display global MOTD at bottom (mirrors ui_main UI_DrawConnectScreen
-			char motd_string[1024];
+			char motd_string[1024] = { 0 };
 			trap->Cvar_VariableStringBuffer("cl_motdString", motd_string, sizeof motd_string);
 
 			if (motd_string[0])
@@ -412,7 +412,7 @@ void CG_DrawInformation(void)
 		value = atoi(Info_ValueForKey(info, "g_maxForceRank"));
 		if (value && value_nofp != FORCE_ALLOFF && value < NUM_FORCE_MASTERY_LEVELS)
 		{
-			char fm_str[1024];
+			char fm_str[1024] = { 0 };
 
 			trap->SE_GetStringTextString("MP_INGAME_MAXFORCERANK", fm_str, sizeof fm_str);
 
@@ -423,7 +423,7 @@ void CG_DrawInformation(void)
 		}
 		else if (value_nofp != FORCE_ALLOFF)
 		{
-			char fm_str[1024];
+			char fm_str[1024] = { 0 };
 			trap->SE_GetStringTextString("MP_INGAME_MAXFORCERANK", fm_str, sizeof fm_str);
 
 			CG_DrawProportionalString(

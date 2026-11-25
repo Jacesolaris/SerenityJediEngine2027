@@ -1395,7 +1395,7 @@ qboolean G_ParseSpawnVars(const char** data)
 	// go through all the key / value pairs
 	while (true)
 	{
-		char keyname[MAX_STRING_CHARS];
+		char keyname[MAX_STRING_CHARS] = {};
 		// parse key
 		com_token = COM_Parse(data);
 		if (!*data)
@@ -1711,7 +1711,7 @@ static void SP_worldspawn()
 
 	for (i = 1; i < LS_NUM_STYLES; i++)
 	{
-		char temp[32];
+		char temp[32] = {};
 		Com_sprintf(temp, sizeof temp, "ls_%dr", i);
 		G_SpawnString(temp, defaultStyles[i][0], &s);
 		const int lengthRed = strlen(s);

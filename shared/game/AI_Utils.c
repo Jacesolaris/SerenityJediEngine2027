@@ -185,7 +185,7 @@ AI_GetGroupSize
 #ifdef SP_GAME
 int AI_GetGroupSize(vec3_t origin, const int radius, const team_t playerTeam, const gentity_t* avoid)
 {
-	gentity_t* radius_ents[MAX_RADIUS_ENTS];
+	gentity_t* radius_ents[MAX_RADIUS_ENTS] = { NULL };
 	vec3_t mins{}, maxs{};
 	int realCount = 0;
 
@@ -202,6 +202,8 @@ int AI_GetGroupSize(vec3_t origin, const int radius, const team_t playerTeam, co
 	//Cull this list
 	for (int j = 0; j < num_ents; j++)
 	{
+		if (!radius_ents[j])
+			continue;
 		//Validate clients
 		if (radius_ents[j]->client == NULL)
 			continue;
@@ -226,8 +228,8 @@ int AI_GetGroupSize(vec3_t origin, const int radius, const team_t playerTeam, co
 #else // MP keeps its own version of this function
 int AI_GetGroupSize(vec3_t origin, const int radius, const team_t playerTeam, const gentity_t* avoid)
 {
-	int radius_ents[MAX_RADIUS_ENTS];
-	vec3_t mins, maxs;
+	int radius_ents[MAX_RADIUS_ENTS] = { 0 };
+	vec3_t mins = { 0 }, maxs = { 0 };
 	int real_count = 0;
 
 	//Setup the bbox to search in
@@ -409,7 +411,7 @@ static void AI_SortGroupByPathCostToEnemy(AIGroupInfo_t* group)
 #else // MP keeps its own version of this function
 static void AI_SortGroupByPathCostToEnemy(AIGroupInfo_t* group)
 {
-	AIGroupMember_t best_members[MAX_GROUP_MEMBERS];
+	AIGroupMember_t best_members[MAX_GROUP_MEMBERS] = { 0 };
 	int i = 0;
 	qboolean sort = qfalse;
 
@@ -643,7 +645,7 @@ static qboolean AI_ValidateNoEnemyGroupMember(const AIGroupInfo_t* group, const 
 	{
 		return qfalse;
 	}
-	vec3_t center;
+	vec3_t center = { 0 };
 	if (group->commander)
 	{
 		VectorCopy(group->commander->SHR_currentOrigin, center);
@@ -672,7 +674,7 @@ static qboolean AI_ValidateNoEnemyGroupMember(const AIGroupInfo_t* group, const 
 #else // MP keeps its own version of this function
 static qboolean AI_ValidateNoEnemyGroupMember(const AIGroupInfo_t* group, const gentity_t* member)
 {
-	vec3_t center;
+	vec3_t center = { 0 };
 
 	if (!group)
 	{
@@ -1945,13 +1947,15 @@ gentity_t* AI_DistributeAttack(const gentity_t* attacker, gentity_t* enemy, cons
 	}
 
 	//Get the number of entities in a given space
-	gentity_t* radius_ents[MAX_RADIUS_ENTS];
+	gentity_t* radius_ents[MAX_RADIUS_ENTS] = { NULL };
 
 	const int num_ents = gi.EntitiesInBox(mins, maxs, radius_ents, MAX_RADIUS_ENTS);
 
 	//Cull this list
 	for (int j = 0; j < num_ents; j++)
 	{
+		if (!radius_ents[j])
+			continue;
 		//Validate clients
 		if (radius_ents[j]->client == NULL)
 			continue;
@@ -1980,8 +1984,8 @@ gentity_t* AI_DistributeAttack(const gentity_t* attacker, gentity_t* enemy, cons
 #else // MP keeps its own version of this function
 gentity_t* AI_DistributeAttack(const gentity_t* attacker, gentity_t* enemy, const team_t team, const int threshold)
 {
-	int radius_ents[MAX_RADIUS_ENTS];
-	vec3_t mins, maxs;
+	int radius_ents[MAX_RADIUS_ENTS] = { 0 };
+	vec3_t mins = { 0 }, maxs = { 0 };
 
 	//Don't take new targets
 	//	if ( NPC->svFlags & SVF_LOCKEDENEMY )
@@ -2049,3 +2053,226 @@ gentity_t* AI_DistributeAttack(const gentity_t* attacker, gentity_t* enemy, cons
 	return NULL;
 }
 #endif
+
+/*
+==================
+Fight reading shared by the NPC Jedi (SP and MP) and the MP bots (2026-11-25, bot / NPC plan phase 2)
+
+Ideas from the TaystJK "AI Improved Bots" fork (BotAnalyzeMovementPattern / BotPredict*Movement, Bot_EvadeSwingArc,
+Bot_SelectOptimalSaberStyle; GPLv2), written again for SJE.
+	SHR_ReadMove: how a fighter is moving, from a short history of his velocity (sampled every 100 ms, smoothed):
+		still, straight, strafing (his sideways movement reversed twice within 1.5 s), charging (closing on the
+		watcher at 150+), retreating (moving off at 150+) or in the air; and where he will be after lookahead
+		seconds (a strafer is led by his smoothed sideways speed, halved, as he will turn again; one in the air by
+		his flight under gravity).
+	SHR_SwingThreat: an enemy saber swing (start or attack) that will reach me: he faces me, I am within reach. The
+		answer is which way to step out of it: the side the blade starts from (by the time one reacts it has left
+		it), or back for a swing straight down or up.
+	SHR_CounterSaberStyle: the single-saber stance that does best against his (fast against strong / Desann,
+		medium against fast / Tavion, strong against medium). 0 = none (staff, duals, others).
+==================
+*/
+extern qboolean PM_SaberInAttack(int move);
+extern qboolean PM_SaberInStart(int move);
+
+#define SHR_MR_SAMPLE_MS	100
+#define SHR_MR_FLIP_MS		1500
+
+static vec3_t shr_mr_avgVel[MAX_GENTITIES];
+static int shr_mr_time[MAX_GENTITIES];
+static int shr_mr_latSign[MAX_GENTITIES];
+static int shr_mr_flipTime[MAX_GENTITIES];
+static int shr_mr_flips[MAX_GENTITIES];
+
+int SHR_ReadMove(const gentity_t* watcher, const gentity_t* target, const float lookahead, vec3_t predicted)
+{
+	vec3_t vel = { 0 }, to_target = { 0 }, side = { 0 };
+	const vec3_t up = { 0.0f, 0.0f, 1.0f };
+	int pattern = SHR_MOVE_LINEAR;
+	const int n = target ? target->s.number : -1;
+
+	if (!target)
+	{
+		VectorClear(predicted);
+		return SHR_MOVE_STILL;
+	}
+	VectorCopy(target->SHR_currentOrigin, predicted);
+	if (!watcher || !target->client || n < 0 || n >= MAX_GENTITIES)
+	{
+		return SHR_MOVE_STILL;
+	}
+	VectorCopy(target->client->ps.velocity, vel);
+
+	// the line watcher -> target and its sideways
+	VectorSubtract(target->SHR_currentOrigin, watcher->SHR_currentOrigin, to_target);
+	to_target[2] = 0.0f;
+	if (VectorNormalize(to_target) < 1.0f)
+	{
+		VectorSet(to_target, 1.0f, 0.0f, 0.0f);
+	}
+	CrossProduct(to_target, up, side);
+
+	// history (a new map starts level.time again)
+	if (shr_mr_time[n] > level.time)
+	{
+		shr_mr_time[n] = 0;
+		shr_mr_flips[n] = 0;
+	}
+	if (level.time - shr_mr_time[n] >= SHR_MR_SAMPLE_MS)
+	{
+		const float lat_now = DotProduct(vel, side);
+		const int sign = lat_now > 60.0f ? 1 : lat_now < -60.0f ? -1 : 0;
+
+		if (shr_mr_time[n] == 0 || level.time - shr_mr_time[n] > 1000)
+		{
+			VectorCopy(vel, shr_mr_avgVel[n]); // first look (or not watched for a while)
+			shr_mr_flips[n] = 0;
+		}
+		else
+		{
+			for (int k = 0; k < 3; k++)
+			{
+				shr_mr_avgVel[n][k] = shr_mr_avgVel[n][k] * 0.65f + vel[k] * 0.35f;
+			}
+		}
+		if (shr_mr_flipTime[n] < level.time - SHR_MR_FLIP_MS)
+		{
+			shr_mr_flips[n] = 0;
+		}
+		if (sign && shr_mr_latSign[n] && sign != shr_mr_latSign[n])
+		{
+			shr_mr_flips[n]++;
+			shr_mr_flipTime[n] = level.time;
+		}
+		if (sign)
+		{
+			shr_mr_latSign[n] = sign;
+		}
+		shr_mr_time[n] = level.time;
+	}
+
+	{
+		const float radial = DotProduct(vel, to_target);	// + = moving away from the watcher
+		const float lateral = DotProduct(vel, side);
+		const float speed = sqrtf(vel[0] * vel[0] + vel[1] * vel[1]);
+
+		if (target->client->ps.groundEntityNum == ENTITYNUM_NONE)
+		{
+			pattern = SHR_MOVE_AIR;
+		}
+		else if (speed < 40.0f)
+		{
+			pattern = SHR_MOVE_STILL;
+		}
+		else if (shr_mr_flips[n] >= 2 && fabsf(lateral) >= fabsf(radial) * 0.5f)
+		{
+			pattern = SHR_MOVE_STRAFE;
+		}
+		else if (radial < -150.0f)
+		{
+			pattern = SHR_MOVE_CHARGE;
+		}
+		else if (radial > 150.0f)
+		{
+			pattern = SHR_MOVE_RETREAT;
+		}
+
+		switch (pattern)
+		{
+		case SHR_MOVE_STILL:
+			break;
+		case SHR_MOVE_AIR:
+		{
+			const float gravity = target->client->ps.gravity > 0 ? (float)target->client->ps.gravity : 800.0f;
+			VectorMA(predicted, lookahead, vel, predicted);
+			predicted[2] -= 0.5f * gravity * lookahead * lookahead;
+			if (predicted[2] < target->SHR_currentOrigin[2] - 512.0f)
+			{
+				predicted[2] = target->SHR_currentOrigin[2] - 512.0f;
+			}
+			break;
+		}
+		case SHR_MOVE_STRAFE:
+		{
+			// along the line as he moves now; sideways by his smoothed sideways speed, halved (he turns again)
+			const float avg_lat = DotProduct(shr_mr_avgVel[n], side);
+			VectorMA(predicted, radial * lookahead, to_target, predicted);
+			VectorMA(predicted, avg_lat * 0.5f * lookahead, side, predicted);
+			break;
+		}
+		default:
+			predicted[0] += vel[0] * lookahead;
+			predicted[1] += vel[1] * lookahead;
+			break;
+		}
+	}
+	return pattern;
+}
+
+int SHR_SwingThreat(const gentity_t* self, const gentity_t* attacker, const float reach)
+{
+	vec3_t dir = { 0 }, fwd = { 0 }, ang = { 0 };
+	playerState_t* aps = NULL; // not const: SP SaberActive() is not a const method
+
+	if (!self || !attacker || !attacker->client || attacker == self)
+	{
+		return 0;
+	}
+	aps = &attacker->client->ps;
+	if (aps->weapon != WP_SABER || !SHR_SaberActive(aps) || aps->saberMove < 0 || aps->saberMove >= LS_MOVE_MAX)
+	{
+		return 0;
+	}
+	if (!PM_SaberInAttack(aps->saberMove) && !PM_SaberInStart(aps->saberMove))
+	{
+		return 0;
+	}
+
+	VectorSubtract(self->SHR_currentOrigin, attacker->SHR_currentOrigin, dir);
+	if (fabsf(dir[2]) > 72.0f)
+	{
+		return 0;
+	}
+	dir[2] = 0.0f;
+	if (VectorNormalize(dir) > reach)
+	{
+		return 0;
+	}
+	VectorSet(ang, 0.0f, aps->viewangles[YAW], 0.0f);
+	AngleVectors(ang, fwd, NULL, NULL);
+	if (DotProduct(fwd, dir) < 0.6f)
+	{
+		return 0; // not swinging at me
+	}
+
+	switch (saberMoveData[aps->saberMove].startQuad)
+	{
+	case Q_L:
+	case Q_TL:
+	case Q_BL:
+		return 1;	// starts on his left = my right: step right
+	case Q_R:
+	case Q_TR:
+	case Q_BR:
+		return -1;	// starts on his right = my left: step left
+	default:
+		return 2;	// straight down / up: step back
+	}
+}
+
+int SHR_CounterSaberStyle(const int enemy_style)
+{
+	switch (enemy_style)
+	{
+	case SS_STRONG:
+	case SS_DESANN:
+		return SS_FAST;
+	case SS_FAST:
+	case SS_TAVION:
+		return SS_MEDIUM;
+	case SS_MEDIUM:
+		return SS_STRONG;
+	default:
+		return 0;
+	}
+}

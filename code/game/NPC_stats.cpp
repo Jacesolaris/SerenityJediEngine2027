@@ -374,7 +374,7 @@ saber_colors_t TranslateSaberColor(const char* name)
 	{
 		return static_cast<saber_colors_t>(Q_irand(SABER_ORANGE, SABER_PURPLE));
 	}
-	float colors[3];
+	float colors[3] = {};
 	Q_parseSaberColor(name, colors);
 	int colour_array[3]{};
 	for (int i = 0; i < 3; i++)
@@ -492,7 +492,7 @@ static void ParseAnimationEvtBlock(const int gla_index, const unsigned short mod
 	// read information for each frame
 	while (qtrue)
 	{
-		char string_data[MAX_QPATH];
+		char string_data[MAX_QPATH] = {};
 
 		// Get base frame of sequence
 		token = COM_Parse(text_p);
@@ -853,7 +853,7 @@ static void G_ParseAnimationEvtFile(const int gla_index, const char* events_dire
 	std::vector<char> text;
 
 	fileHandle_t f = 0;
-	char events_path[MAX_QPATH];
+	char events_path[MAX_QPATH] = {};
 	int modelIndex = 0;
 
 	// Validate file index
@@ -973,7 +973,7 @@ static qboolean G_ParseAnimationFile(const int gla_index, const char* skeletonNa
 	std::vector<char> text;
 	animation_t* animations = level.knownAnimFileSets[file_index].animations;
 
-	char skeleton_path[MAX_QPATH];
+	char skeleton_path[MAX_QPATH] = {};
 
 	// -------------------------------------------------------------------------
 	// Load animation.cfg
@@ -1023,13 +1023,13 @@ static qboolean G_ParseAnimationFile(const int gla_index, const char* skeletonNa
 
 		// COM_Parse overwrites com_token on the next call, so keep the name for
 		// the warning messages below.
-		char anim_name[MAX_QPATH];
+		char anim_name[MAX_QPATH] = {};
 		Q_strncpyz(anim_name, token, sizeof(anim_name));
 
 		// ---------------------------------------------------------------------
 		// Parse animation fields
 		// ---------------------------------------------------------------------
-		AnimCFG_Row row;
+		AnimCFG_Row row = {};
 		if (!AnimCFG_ReadRow(&text_p, row))
 		{
 			Com_Printf(S_COLOR_YELLOW "WARNING: %s: %s has an incomplete row, ignored\n",
@@ -1102,7 +1102,7 @@ static qboolean G_CinematicGLAHandles(const char* skeletonName, int& normal_gla,
 	map_name = map_name ? map_name + 1 : level.mapname;
 	Com_sprintf(skeleton_map_name, MAX_QPATH, "_humanoid_%s", map_name);
 
-	char normal_path[MAX_QPATH];
+	char normal_path[MAX_QPATH] = {};
 	Com_sprintf(normal_path, sizeof normal_path, "models/players/%s/_humanoid.gla", skeletonName);
 	normal_gla = gi.G2API_PrecacheGhoul2Model(normal_path);
 	if (normal_gla <= 0)
@@ -1113,7 +1113,7 @@ static qboolean G_CinematicGLAHandles(const char* skeletonName, int& normal_gla,
 
 	// The cutscene GLA is optional. Its path can only be a file if it fits in MAX_QPATH, so for long map names
 	// (duel_tradefed: 66 chars) skip the probe instead of the renderer warning on every map load.
-	char cine_path[MAX_QPATH * 3];
+	char cine_path[MAX_QPATH * 3] = {};
 	Com_sprintf(cine_path, sizeof cine_path, "models/players/%s/%s.gla", skeleton_map_name, skeleton_map_name);
 	if (strlen(cine_path) >= MAX_QPATH)
 	{
@@ -1139,7 +1139,7 @@ int G_AnimGLAOffset(const int file_index, const int gla_slot)
 	}
 	int normal_gla = 0;
 	int cine_gla = 0;
-	char skeleton_map_name[MAX_QPATH];
+	char skeleton_map_name[MAX_QPATH] = {};
 	if (!G_CinematicGLAHandles(level.knownAnimFileSets[file_index].filename, normal_gla, cine_gla, skeleton_map_name))
 	{
 		return 0;
@@ -1228,7 +1228,7 @@ int G_ParseAnimFileSet(const char* skeletonName, const char* modelName = nullptr
 			// This set's own GLA and the map's cutscene GLA (optional), with their real handles (item 355)
 			int normalGLAIndex = 0;
 			int cineGLAIndex = 0;
-			char skeletonMapName[MAX_QPATH];
+			char skeletonMapName[MAX_QPATH] = {};
 			G_CinematicGLAHandles(skeletonName, normalGLAIndex, cineGLAIndex, skeletonMapName);
 
 			G_ParseAnimationFile(0, skeletonName, fileIndex);
@@ -1302,7 +1302,7 @@ void G_LoadAnimFileSet(gentity_t* ent, const char* pModelName)
 	char* modelName = nullptr;
 	const char* stripped_name = nullptr;
 	// Must live for the whole function: stripped_name points into it and is used after the if/else below.
-	char anim_name[MAX_QPATH];
+	char anim_name[MAX_QPATH] = {};
 
 	if (ent->playerModel == -1)
 	{
@@ -1396,7 +1396,7 @@ void NPC_PrecacheAnimationCFG(const char* npc_type)
 	// parse the NPC info block
 	while (true)
 	{
-		char filename[MAX_QPATH];
+		char filename[MAX_QPATH] = {};
 		token = COM_ParseExt(&p, qtrue);
 		if (!token[0])
 		{
@@ -1438,7 +1438,7 @@ void NPC_PrecacheAnimationCFG(const char* npc_type)
 				const char* GLAName = gi.G2API_GetAnimFileNameIndex(handle);
 				if (GLAName)
 				{
-					char anim_name[MAX_QPATH];
+					char anim_name[MAX_QPATH] = {};
 					Q_strncpyz(anim_name, GLAName, sizeof anim_name);
 					char* slash = strrchr(anim_name, '/');
 					if (slash)
@@ -1474,7 +1474,7 @@ static void NPC_PrecacheWeapons(const team_t player_team, const int spawnflags, 
 			CG_RegisterItemVisuals(item - bg_itemlist);
 			//precache the in-hand/in-world ghoul2 weapon model
 
-			char weapon_model[64];
+			char weapon_model[64] = {};
 
 			strcpy(weapon_model, weaponData[cur_weap].weaponMdl);
 			if (char* spot = strstr(weapon_model, ".md3"))
@@ -1710,7 +1710,7 @@ void CG_NPC_Precache(gentity_t* spawner)
 	char* patch = nullptr;
 	qboolean md3_model = qfalse;
 	char player_model[MAX_QPATH] = { 0 };
-	char customSkin[MAX_QPATH];
+	char customSkin[MAX_QPATH] = {};
 
 	if (!Q_stricmp("random", spawner->NPC_type))
 	{
@@ -1756,7 +1756,7 @@ void CG_NPC_Precache(gentity_t* spawner)
 	// parse the NPC info block
 	while (true)
 	{
-		char sound[MAX_QPATH];
+		char sound[MAX_QPATH] = {};
 		COM_EndParseSession(); // if still in session (or using continue;)
 		COM_BeginParseSession();
 		token = COM_ParseExt(&p, qtrue);
@@ -1987,7 +1987,7 @@ void CG_NPC_Precache(gentity_t* spawner)
 				continue;
 			}
 			char* saber_name = G_NewString(value);
-			saberInfo_t saber;
+			saberInfo_t saber = {};
 			WP_SaberParseParms(saber_name, &saber);
 			if (saber.model && saber.model[0])
 			{
@@ -2034,7 +2034,7 @@ void CG_NPC_Precache(gentity_t* spawner)
 				continue;
 			}
 			char* saber_name = G_NewString(value);
-			saberInfo_t saber;
+			saberInfo_t saber = {};
 			WP_SaberParseParms(saber_name, &saber);
 			if (saber.model && saber.model[0])
 			{
@@ -2056,7 +2056,7 @@ void CG_NPC_Precache(gentity_t* spawner)
 	}
 	else
 	{
-		char skin_name[MAX_QPATH];
+		char skin_name[MAX_QPATH] = {};
 		//precache ghoul2 model
 		gi.G2API_PrecacheGhoul2Model(va("models/players/%s/model.glm", player_model));
 		//precache skin
@@ -2099,8 +2099,8 @@ qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 	const char* p = nullptr;
 	int n = 0;
 	float f = 0.0f;
-	char player_model[MAX_QPATH];
-	char customSkin[MAX_QPATH];
+	char player_model[MAX_QPATH] = {};
+	char customSkin[MAX_QPATH] = {};
 	clientInfo_t* ci = &npc->client->clientInfo;
 	renderInfo_t* ri = &npc->client->renderInfo;
 	gNPCstats_t* stats = nullptr;
@@ -2255,7 +2255,7 @@ qboolean NPC_ParseParms(const char* npc_name, gentity_t* npc)
 		// parse the NPC info block
 		while (true)
 		{
-			char sound[MAX_QPATH];
+			char sound[MAX_QPATH] = {};
 			token = COM_ParseExt(&p, qtrue);
 			if (!token[0])
 			{

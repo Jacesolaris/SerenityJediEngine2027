@@ -181,7 +181,7 @@ static void P_DamageFeedback(gentity_t* player)
 	}
 	else
 	{
-		vec3_t angles;
+		vec3_t angles = { 0 };
 		vectoangles(client->damage_from, angles);
 		client->ps.damagePitch = angles[PITCH] / 360.0 * 256;
 		client->ps.damageYaw = angles[YAW] / 360.0 * 256;
@@ -272,7 +272,7 @@ static int lavaWeatherPainTime[MAX_GENTITIES];
 // (all the "*" strings in index order; the weather command blanks old ones, so empty slots are skipped, not the end)
 void G_WeatherRescan(void)
 {
-	char s[MAX_STRING_CHARS];
+	char s[MAX_STRING_CHARS] = { 0 };
 
 	BG_WeatherReset();
 
@@ -666,7 +666,7 @@ void G_GetMassAndVelocityForEnt(const gentity_t* ent, float* mass, vec3_t veloci
 void DoImpact(gentity_t* self, gentity_t* other, const qboolean damageSelf)
 {
 	float my_mass = 0.0f;
-	vec3_t velocity;
+	vec3_t velocity = { 0 };
 
 	G_GetMassAndVelocityForEnt(self, &my_mass, velocity);
 
@@ -676,7 +676,7 @@ void DoImpact(gentity_t* self, gentity_t* other, const qboolean damageSelf)
 		.time)
 	{
 		float force = 0;
-		vec3_t defaultDir;
+		vec3_t defaultDir = { 0 };
 
 		if (other->material == MAT_GLASS
 			|| other->material == MAT_GLASS_METAL
@@ -695,8 +695,8 @@ void DoImpact(gentity_t* self, gentity_t* other, const qboolean damageSelf)
 			//FORCE-SMACKED into something
 			if (TIMER_Done(self, "impactEffect"))
 			{
-				vec3_t right;
-				vec3_t effectPos;
+				vec3_t right = { 0 };
+				vec3_t effectPos = { 0 };
 				AngleVectors(self->r.currentAngles, NULL, right, NULL);
 				VectorMA(self->r.currentOrigin, 10, right, effectPos);
 				effectPos[2] -= 15;
@@ -709,8 +709,8 @@ void DoImpact(gentity_t* self, gentity_t* other, const qboolean damageSelf)
 		//damage them
 		if (magnitude >= 100 && other->s.number < ENTITYNUM_WORLD)
 		{
-			vec3_t dir2;
-			vec3_t dir1;
+			vec3_t dir2 = { 0 };
+			vec3_t dir1 = { 0 };
 			VectorCopy(velocity, dir1);
 			VectorNormalize(dir1);
 			if (VectorCompare(other->r.currentOrigin, vec3_origin))
@@ -872,7 +872,7 @@ void DoImpact(gentity_t* self, gentity_t* other, const qboolean damageSelf)
 static void DoImpactPlayer(gentity_t* self, gentity_t* other, const qboolean damageSelf) //mp
 {
 	float my_mass = 0.0f;
-	vec3_t velocity;
+	vec3_t velocity = { 0 };
 	qboolean easyBreakBrush = qtrue;
 
 	if (self->client)
@@ -930,8 +930,8 @@ static void DoImpactPlayer(gentity_t* self, gentity_t* other, const qboolean dam
 		//damage them
 		if (magnitude >= 100 && other->s.number < ENTITYNUM_WORLD)
 		{
-			vec3_t dir2;
-			vec3_t dir1;
+			vec3_t dir2 = { 0 };
+			vec3_t dir1 = { 0 };
 			VectorCopy(velocity, dir1);
 			VectorNormalize(dir1);
 			if (VectorCompare(other->r.currentOrigin, vec3_origin))
@@ -1135,10 +1135,10 @@ static void G_NPCPmoveImpacts(gentity_t* ent, const vec3_t pre_org, const vec3_t
 {
 	const float mass = ent->mass ? (float)ent->mass : 10.0f;
 	const float speed = VectorLength(pre_vel);
-	int hit[MAXTOUCH + 1];
+	int hit[MAXTOUCH + 1] = { 0 };
 	int num_hit = 0;
-	vec3_t cur_vel, dir, end;
-	trace_t tr;
+	vec3_t cur_vel = { 0 }, dir = { 0 }, end = { 0 };
+	trace_t tr = { 0 };
 
 	if (speed * (mass / 10.0f) < 100.0f || pre_last_on_ground + 100 >= level.time || msec <= 0)
 	{
@@ -1164,7 +1164,7 @@ static void G_NPCPmoveImpacts(gentity_t* ent, const vec3_t pre_org, const vec3_t
 	for (int i = 0; i < pm->numtouch && ent->inuse && ent->client; i++)
 	{
 		const int n = pm->touchents[i];
-		int k;
+		int k = 0;
 
 		if (n == ent->s.number || n < 0 || n >= ENTITYNUM_NONE)
 		{
@@ -1246,8 +1246,8 @@ void G_TouchTriggers(gentity_t* ent)
 	// per-call stack bloat.
 	static int touch[MAX_GENTITIES];
 
-	trace_t trace;
-	vec3_t mins, maxs;
+	trace_t trace = { 0 };
+	vec3_t mins = { 0 }, maxs = { 0 };
 	static vec3_t range = { 40.0f, 40.0f, 52.0f };
 
 	// ------------------------------------------------------------
@@ -1373,8 +1373,8 @@ void g_mover_touch_push_triggers(gentity_t* ent, vec3_t old_org)
 	// ------------------------------------------------------------
 	static int touch[MAX_GENTITIES];
 
-	trace_t trace;
-	vec3_t dir, size;
+	trace_t trace = { 0 };
+	vec3_t dir = { 0 }, size = { 0 };
 	const vec3_t range = { 40.0f, 40.0f, 52.0f };
 
 	// ------------------------------------------------------------
@@ -1406,9 +1406,9 @@ void g_mover_touch_push_triggers(gentity_t* ent, vec3_t old_org)
 	// ------------------------------------------------------------
 	for (float step = 0.0f; step <= dist; step += stepSize)
 	{
-		vec3_t checkSpot;
-		vec3_t mins;
-		vec3_t maxs;
+		vec3_t checkSpot = { 0 };
+		vec3_t mins = { 0 };
+		vec3_t maxs = { 0 };
 
 		// Position along movement path
 		VectorMA(ent->r.currentOrigin, step, dir, checkSpot);
@@ -1475,7 +1475,7 @@ SpectatorThink
 */
 static void SpectatorThink(gentity_t* ent, const usercmd_t* ucmd)
 {
-	pmove_t pmove;
+	pmove_t pmove = { 0 };
 
 	gclient_t* client = ent->client;
 
@@ -1797,8 +1797,8 @@ static void G_VehicleAttachDroidUnit(gentity_t* vehEnt)
 	if (vehEnt && vehEnt->m_pVehicle && vehEnt->m_pVehicle->m_pDroidUnit != NULL)
 	{
 		gentity_t* droidEnt = (gentity_t*)vehEnt->m_pVehicle->m_pDroidUnit;
-		mdxaBone_t boltMatrix;
-		vec3_t fwd;
+		mdxaBone_t boltMatrix = { 0 };
+		vec3_t fwd = { 0 };
 
 		trap->G2API_GetBoltMatrix(vehEnt->ghoul2, 0, vehEnt->m_pVehicle->m_iDroidUnitTag, &boltMatrix,
 			vehEnt->r.currentAngles, vehEnt->r.currentOrigin, level.time,
@@ -1963,7 +1963,7 @@ static void ClientEvents(gentity_t* ent, int old_event_sequence)
 	// ------------------------------------------------------------
 	for (int i = old_event_sequence; i < Client->ps.eventSequence; i++)
 	{
-		vec3_t dir;
+		vec3_t dir = { 0 };
 		const int index = (i & (MAX_PS_EVENTS - 1));
 		const int event = Client->ps.events[index];
 
@@ -2232,7 +2232,7 @@ void G_ThrownDeathAnimForDeathAnim(gentity_t* hitEnt, vec3_t impactPoint)
 	case BOTH_DEATH3: //knee collapse, twist & fall forward
 	case BOTH_DEATH7: //knee collapse, twist & fall forward
 	{
-		vec3_t dir2Impact, fwdAngles, facing;
+		vec3_t dir2Impact = { 0 }, fwdAngles = { 0 }, facing = { 0 };
 		VectorSubtract(impactPoint, hitEnt->r.currentOrigin, dir2Impact);
 		dir2Impact[2] = 0;
 		VectorNormalize(dir2Impact);
@@ -2379,7 +2379,7 @@ static void G_UpdateClientBroadcasts(gentity_t* self)
 	for (i = 0, other = g_entities; i < MAX_CLIENTS; i++, other++)
 	{
 		qboolean send = qfalse;
-		vec3_t angles;
+		vec3_t angles = { 0 };
 
 		if (!other->inuse || other->client->pers.connected != CON_CONNECTED)
 		{
@@ -2428,7 +2428,7 @@ static void G_UpdateClientBroadcasts(gentity_t* self)
 
 static void G_AddPushVecToUcmd(const gentity_t* self, usercmd_t* ucmd)
 {
-	vec3_t forward, right, moveDir;
+	vec3_t forward = { 0 }, right = { 0 }, moveDir = { 0 };
 
 	if (!self->client)
 	{
@@ -2533,7 +2533,7 @@ static qboolean G_ActionButtonPressed(const int buttons)
 
 static void G_CheckClientIdleSabers(gentity_t* ent, usercmd_t* ucmd)
 {
-	vec3_t viewChange;
+	vec3_t viewChange = { 0 };
 
 	if (!ent || !ent->client || ent->health <= 0 || ent->client->ps.stats[STAT_HEALTH] <= 0 ||
 		ent->client->sess.sessionTeam == TEAM_SPECTATOR || ent->client->ps.pm_flags & PMF_FOLLOW)
@@ -2591,7 +2591,7 @@ static void G_CheckClientIdleSabers(gentity_t* ent, usercmd_t* ucmd)
 			//|| ent->client->ps.weapon == WP_MELEE
 			|| ent->client->ps.weapon != ent->client->pers.cmd.weapon && ent->s.eType != ET_NPC)
 		{
-			qboolean broke_out;
+			qboolean broke_out = qfalse;
 			//if in an idle, break out
 			switch (ent->client->ps.legsAnim)
 			{
@@ -2764,7 +2764,7 @@ static qboolean GunisBomb(const gentity_t* ent)
 
 static void G_CheckClientIdleGuns(gentity_t* ent, usercmd_t* ucmd)
 {
-	vec3_t viewChange;
+	vec3_t viewChange = { 0 };
 
 	if (!ent || !ent->client || ent->health <= 0 || ent->client->ps.stats[STAT_HEALTH] <= 0 ||
 		ent->client->sess.sessionTeam == TEAM_SPECTATOR || ent->client->ps.pm_flags & PMF_FOLLOW)
@@ -2821,7 +2821,7 @@ static void G_CheckClientIdleGuns(gentity_t* ent, usercmd_t* ucmd)
 			|| ent->client->ps.saberBlocking >= level.time
 			|| ent->client->ps.weapon != ent->client->pers.cmd.weapon && ent->s.eType != ET_NPC)
 		{
-			qboolean broke_out;
+			qboolean broke_out = qfalse;
 			//if in an idle, break out
 			switch (ent->client->ps.legsAnim)
 			{
@@ -4065,8 +4065,8 @@ void G_SetTauntAnim(gentity_t* ent, int taunt)
 		// ----------------------------------------------------------------------
 		if (BG_IsAlreadyinTauntAnim(ent->client->ps.torsoAnim))
 		{
-			vec3_t forward, start, end;
-			trace_t tr;
+			vec3_t forward = { 0 }, start = { 0 }, end = { 0 };
+			trace_t tr = { 0 };
 
 			AngleVectors(ent->client->ps.viewangles, forward, NULL, NULL);
 
@@ -5096,14 +5096,14 @@ static void ClientThink_real(gentity_t* ent)
 	}
 
 	gclient_t* client = NULL;
-	pmove_t pmove;
+	pmove_t pmove = { 0 };
 	int old_event_sequence = 0;
 	int msec = 0;
 	usercmd_t* ucmd = NULL;
 	qboolean isNPC = qfalse;
 	qboolean controlledByPlayer = qfalse;
 	qboolean killJetFlags = qtrue;
-	qboolean isFollowing;
+	qboolean isFollowing = qfalse;
 	playerState_t* ps = &ent->client->ps;
 
 	client = ent->client;
@@ -5360,7 +5360,7 @@ static void ClientThink_real(gentity_t* ent)
 		}
 		// a cutscene is skipped by any newly pressed key (BUTTON_ANY: every key, also the weapon / force keys and
 		// the mouse buttons), not only use; not in its first half second (2026-11-16, DH)
-		qboolean cine_pressed;
+		qboolean cine_pressed = qfalse;
 		{
 			static int cine_prev_buttons[MAX_CLIENTS];
 			const int now = ucmd->buttons & ~BUTTON_TALK;
@@ -5644,9 +5644,9 @@ static void ClientThink_real(gentity_t* ent)
 		}
 		else
 		{
-			mdxaBone_t rhMat;
-			vec3_t rhOrg, tAng;
-			vec3_t bodyDir;
+			mdxaBone_t rhMat = { 0 };
+			vec3_t rhOrg = { 0 }, tAng = { 0 };
+			vec3_t bodyDir = { 0 };
 			float bodyDist = 0.0f;
 
 			ent->client->ps.forceHandExtend = HANDEXTEND_DRAGGING;
@@ -6168,7 +6168,7 @@ static void ClientThink_real(gentity_t* ent)
 		}
 		else
 		{
-			vec3_t vSub;
+			vec3_t vSub = { 0 };
 			float subLen = 0;
 
 			VectorSubtract(ent->client->ps.origin, duelAgainst->client->ps.origin, vSub);
@@ -6880,11 +6880,11 @@ static void ClientThink_real(gentity_t* ent)
 #endif
 			{
 				float pDif = 40.0f;
-				vec3_t bolt_org = { 0 }, pBoltOrg;
-				vec3_t tAngles;
-				vec3_t vDif;
-				vec3_t entDir, otherAngles;
-				vec3_t fwd, right;
+				vec3_t bolt_org = { 0 }, pBoltOrg = { 0 };
+				vec3_t tAngles = { 0 };
+				vec3_t vDif = { 0 };
+				vec3_t entDir = { 0 }, otherAngles = { 0 };
+				vec3_t fwd = { 0 }, right = { 0 };
 
 				//Always look at the thrower.
 				VectorSubtract(thrower->client->ps.origin, ent->client->ps.origin, entDir);
@@ -6979,8 +6979,8 @@ static void ClientThink_real(gentity_t* ent)
 				{
 					//see if we can move to be next to the hand.. if it's not clear, break the throw.
 					vec3_t intendedOrigin = { 0 };
-					trace_t tr;
-					trace_t tr2;
+					trace_t tr = { 0 };
+					trace_t tr2 = { 0 };
 
 					VectorSubtract(bolt_org, pBoltOrg, vDif);
 					VectorNormalize(vDif);
@@ -7042,7 +7042,7 @@ static void ClientThink_real(gentity_t* ent)
 	// it flies into (G_NPCPmoveImpacts, 2026-11-19). Players and bots keep MP's rules.
 	const qboolean npc_impacts = ent->s.number >= MAX_CLIENTS && ent->NPC && ent->client->NPC_class != CLASS_VEHICLE
 		? qtrue : qfalse;
-	vec3_t npc_pre_org, npc_pre_vel;
+	vec3_t npc_pre_org = { 0 }, npc_pre_vel = { 0 };
 	const int npc_pre_last_on_ground = ent->client->ps.lastOnGround;
 	const int npc_pre_ground = ent->client->ps.groundEntityNum;
 	VectorCopy(ent->client->ps.origin, npc_pre_org);
@@ -7215,7 +7215,7 @@ static void ClientThink_real(gentity_t* ent)
 
 		if (blockOpp && blockOpp->inuse && blockOpp->client)
 		{
-			vec3_t lockDir, lockAng;
+			vec3_t lockDir = { 0 }, lockAng = { 0 };
 
 			VectorSubtract(blockOpp->r.currentOrigin, ent->r.currentOrigin, lockDir);
 			vectoangles(lockDir, lockAng);
@@ -8003,7 +8003,7 @@ static void ClientThink_real(gentity_t* ent)
 			if (face_kicked && face_kicked->client && face_kicked->health && face_kicked->takedamage)
 			{
 				//push them away and do pain
-				vec3_t oppDir;
+				vec3_t oppDir = { 0 };
 				int strength = (int)VectorNormalize2(client->ps.velocity, oppDir);
 
 				strength *= 0.05;

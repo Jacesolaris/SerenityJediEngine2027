@@ -159,8 +159,8 @@ Remote_Strafe
 */
 void Remote_Strafe(void)
 {
-	vec3_t end, right;
-	trace_t tr;
+	vec3_t end = { 0 }, right = { 0 };
+	trace_t tr = { qfalse };
 
 	AngleVectors(NPCS.NPC->client->renderInfo.eyeAngles, NULL, right, NULL);
 
@@ -197,7 +197,7 @@ Remote_Hunt
 */
 static void Remote_Hunt(const qboolean visible, const qboolean advance, const qboolean retreat)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	//If we're not supposed to stand still, pursue the player
 	if (NPCS.NPCInfo->standTime < level.time)
@@ -243,8 +243,8 @@ Remote_Fire
 */
 static void Remote_Fire(void)
 {
-	vec3_t delta1, enemy_org1, muzzle1;
-	vec3_t angle_to_enemy1;
+	vec3_t delta1 = { 0 }, enemy_org1 = { 0 }, muzzle1 = { 0 };
+	vec3_t angle_to_enemy1 = { 0 };
 	static vec3_t forward, vright, up;
 
 	CalcEntitySpot(NPCS.NPC->enemy, SPOT_HEAD, enemy_org1);

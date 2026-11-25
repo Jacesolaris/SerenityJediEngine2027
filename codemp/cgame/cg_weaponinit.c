@@ -33,9 +33,9 @@ CG_GrappleTrail
 */
 void CG_GrappleTrail(centity_t* ent, const weaponInfo_t* wi)
 {
-	vec3_t origin;
-	vec3_t forward, up;
-	refEntity_t beam;
+	vec3_t origin = { 0 };
+	vec3_t forward = { 0 }, up = { 0 };
+	refEntity_t beam = { 0 };
 
 	const entityState_t* es = &ent->currentState;
 
@@ -66,9 +66,9 @@ void CG_GrappleTrail(centity_t* ent, const weaponInfo_t* wi)
 
 static void CG_StunTrail(centity_t* ent, const weaponInfo_t* wi)
 {
-	vec3_t origin;
-	vec3_t forward, up;
-	refEntity_t beam;
+	vec3_t origin = { 0 };
+	vec3_t forward = { 0 }, up = { 0 };
+	refEntity_t beam = { 0 };
 
 	const entityState_t* es = &ent->currentState;
 
@@ -107,8 +107,8 @@ The server says this item is used on this level
 void CG_RegisterWeapon(const int weapon_num)
 {
 	gitem_t* item = NULL, * ammo = NULL;
-	char path[MAX_QPATH];
-	vec3_t mins, maxs;
+	char path[MAX_QPATH] = { 0 };
+	vec3_t mins = { 0 }, maxs = { 0 };
 
 	weaponInfo_t* weaponInfo = &cg_weapons[weapon_num];
 

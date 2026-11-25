@@ -175,7 +175,7 @@ extern void G_Knockdown(gentity_t* self, gentity_t* attacker, const vec3_t push_
 static float VectorBlockDistance(vec3_t v1, vec3_t v2)
 {
 	//returns the distance between the two points.
-	vec3_t dir;
+	vec3_t dir = { 0 };
 
 	VectorSubtract(v2, v1, dir);
 	return VectorLength(dir);
@@ -466,8 +466,8 @@ void BG_ReduceSaberMishapLevel(playerState_t* ps)
 //#ifdef DEBUG_SABER_BOX
 static void G_DebugBoxLines(vec3_t mins, vec3_t maxs, const int duration)
 {
-	vec3_t start;
-	vec3_t end;
+	vec3_t start = { 0 };
+	vec3_t end = { 0 };
 
 	const float x = maxs[0] - mins[0];
 	const float y = maxs[1] - mins[1];
@@ -500,8 +500,8 @@ static void G_DebugBoxLines(vec3_t mins, vec3_t maxs, const int duration)
 
 static void G_DebugBlockBoxLines(vec3_t mins, vec3_t maxs, const int duration)
 {
-	vec3_t start;
-	vec3_t end;
+	vec3_t start = { 0 };
+	vec3_t end = { 0 };
 
 	const float x = maxs[0] - mins[0];
 	const float y = maxs[1] - mins[1];
@@ -590,7 +590,7 @@ static QINLINE int g_saber_attack_power(gentity_t* ent, const qboolean attacking
 		if (ent->client->lastSaberStorageTime >= level.time - 50 &&
 			ent->client->olderIsValid)
 		{
-			vec3_t v_sub;
+			vec3_t v_sub = { 0 };
 			int tolerance_amt = 0;
 
 			//We want different "tolerance" levels for adding in the distance of the last swing
@@ -800,7 +800,7 @@ void WP_SaberUpdateSelf(gentity_t* ent)
 		if ((d_saberInfo.integer || g_DebugSaberCombat.integer) &&
 			!PM_SaberInAttack(ps->saberMove))
 		{
-			vec3_t dbg_mins, dbg_maxs;
+			vec3_t dbg_mins = { 0 }, dbg_maxs = { 0 };
 			VectorAdd(ent->r.currentOrigin, ent->r.mins, dbg_mins);
 			VectorAdd(ent->r.currentOrigin, ent->r.maxs, dbg_maxs);
 			G_DebugBlockBoxLines(dbg_mins, dbg_maxs, 10.0f / (float)sv_fps.integer * 100);
@@ -976,7 +976,7 @@ static QINLINE void WP_SetSaberBoxSize(gentity_t* saberent)
 				if (forceBlock && !alwaysBlock[s][b])
 					continue;
 
-				vec3_t org, tip;
+				vec3_t org = { 0 }, tip = { 0 };
 				VectorCopy(saber->blade[b].muzzlePoint, org);
 				VectorMA(org, saber->blade[b].lengthMax, saber->blade[b].muzzleDir, tip);
 
@@ -1091,7 +1091,7 @@ static QINLINE qboolean G_CheckLookTarget(const gentity_t* ent, vec3_t look_angl
 	//Now calc head angle to lookTarget, if any
 	if (ent->client->renderInfo.lookTarget >= 0 && ent->client->renderInfo.lookTarget < ENTITYNUM_WORLD)
 	{
-		vec3_t look_dir, look_org, eye_org;
+		vec3_t look_dir = { 0 }, look_org = { 0 }, eye_org = { 0 };
 
 		if (ent->client->renderInfo.lookMode == LM_ENT)
 		{
@@ -1186,8 +1186,8 @@ static QINLINE void G_G2NPCAngles(gentity_t* ent, matrix3_t legs, vec3_t angles)
 	// Local working variables
 	//===========================
 	vec3_t trailing_legs_angles = { 0.0f, 0.0f, 0.0f };
-	vec3_t look_angles;
-	vec3_t view_angles;
+	vec3_t look_angles = { 0 };
+	vec3_t view_angles = { 0 };
 
 	const char* cranium_bone = "cranium";
 
@@ -1264,7 +1264,7 @@ static QINLINE void G_G2NPCAngles(gentity_t* ent, matrix3_t legs, vec3_t angles)
 	//===========================
 	if (ent->client->renderInfo.lookingDebounceTime > level.time)
 	{
-		vec3_t old_look_angles;
+		vec3_t old_look_angles = { 0 };
 		VectorCopy(ent->client->renderInfo.lastHeadAngles, old_look_angles);
 
 		// Normalize yaw
@@ -1324,7 +1324,7 @@ static QINLINE void G_G2PlayerAngles(gentity_t* ent, matrix3_t legs, vec3_t legs
 	const int ci_legs = ent->client->ps.legsAnim;
 	const int ci_torso = ent->client->ps.torsoAnim;
 
-	vec3_t lerp_org, lerp_ang;
+	vec3_t lerp_org = { 0 }, lerp_ang = { 0 };
 
 	if (ent->s.eType == ET_NPC && ent->client)
 	{
@@ -1358,9 +1358,9 @@ static QINLINE void G_G2PlayerAngles(gentity_t* ent, matrix3_t legs, vec3_t legs
 
 	if (BG_AnimSetIsHumanoidLike(ent->localAnimIndex))
 	{
-		vec3_t tur_angles;
+		vec3_t tur_angles = { 0 };
 		//don't do these things on non-humanoids
-		vec3_t look_angles;
+		vec3_t look_angles = { 0 };
 		const entityState_t* emplaced = NULL;
 
 		if (ent->client->ps.hasLookTarget)
@@ -1410,9 +1410,9 @@ static QINLINE void G_G2PlayerAngles(gentity_t* ent, matrix3_t legs, vec3_t legs
 
 			if (l_hand_bolt)
 			{
-				mdxaBone_t boltMatrix;
+				mdxaBone_t boltMatrix = { 0 };
 				vec3_t bolt_org = { 0 };
-				vec3_t t_angles;
+				vec3_t t_angles = { 0 };
 
 				VectorCopy(other->client->ps.viewangles, t_angles);
 				t_angles[PITCH] = t_angles[ROLL] = 0;
@@ -1457,7 +1457,7 @@ static QINLINE void G_G2PlayerAngles(gentity_t* ent, matrix3_t legs, vec3_t legs
 	}
 	else if (ent->m_pVehicle && ent->m_pVehicle->m_pVehicleInfo->type == VH_WALKER)
 	{
-		vec3_t look_angles;
+		vec3_t look_angles = { 0 };
 
 		VectorCopy(ent->client->ps.viewangles, legs_angles);
 		legs_angles[PITCH] = 0;
@@ -1692,7 +1692,7 @@ static QINLINE qboolean WP_SabersCheckLock2(gentity_t* attacker, gentity_t* defe
 	vec3_t new_org = { 0, 0, 0 };
 	vec3_t att_dir = { 0, 0, 0 };
 	float diff = 0;
-	trace_t trace;
+	trace_t trace = { 0 };
 
 	//MATCH ANIMS
 
@@ -2269,7 +2269,7 @@ static QINLINE qboolean G_G2TraceCollide(trace_t* tr, vec3_t last_valid_start, v
 	vec3_t trace_maxs)
 {
 	//Hit the ent with the normal trace, try the collision trace.
-	G2Trace_t g2_trace;
+	G2Trace_t g2_trace = { 0 };
 	int t_n = 0;
 	float f_radius = 0;
 
@@ -2306,7 +2306,7 @@ static QINLINE qboolean G_G2TraceCollide(trace_t* tr, vec3_t last_valid_start, v
 	if (g2_hit && g2_hit->inuse && g2_hit->ghoul2)
 	{
 		vec3_t angles = { 0 };
-		vec3_t g2_hit_origin;
+		vec3_t g2_hit_origin = { 0 };
 
 		angles[ROLL] = angles[PITCH] = 0;
 
@@ -2371,7 +2371,7 @@ static qboolean PointInTriangle_Barycentric(
 	const vec3_t B,
 	const vec3_t C)
 {
-	vec3_t v0, v1, v2;
+	vec3_t v0 = { 0 }, v1 = { 0 }, v2 = { 0 };
 	VectorSubtract(B, A, v0);
 	VectorSubtract(C, A, v1);
 	VectorSubtract(P, A, v2);
@@ -2417,8 +2417,8 @@ static void g_build_saber_faces(
 	int i = 0;
 	const float* d1 = NULL;
 	const float* d2 = NULL;
-	vec3_t inv_fwd;
-	vec3_t inv_right;
+	vec3_t inv_fwd = { 0 };
+	vec3_t inv_right = { 0 };
 
 	VectorCopy(fwd, inv_fwd);
 	VectorInverse(inv_fwd);
@@ -2548,7 +2548,7 @@ static void g_sab_col_calc_plane_eq(
 		z[0] * (x[1] * y[2] - y[1] * x[2]));
 
 	// Normalize the normal (A,B,C) and adjust D accordingly
-	vec3_t n;
+	vec3_t n = { 0 };
 	VectorSet(n, plane_eq[0], plane_eq[1], plane_eq[2]);
 
 	float len = VectorLength(n);
@@ -2600,7 +2600,7 @@ static qboolean g_saber_face_collision_check(
 	vec3_t impact_point)
 {
 	float side = 0.0f, side2 = 0.0f, dist = 0.0f;
-	vec3_t dir;
+	vec3_t dir = { 0 };
 
 	// If mins/maxs are zero, give the saber a default thickness
 	if (VectorCompare(atk_mins, vec3_origin) &&
@@ -2615,7 +2615,7 @@ static qboolean g_saber_face_collision_check(
 
 	for (int i = 0; i < f_num; i++, f_list++)
 	{
-		float plane_eq[4];
+		float plane_eq[4] = { 0 };
 		g_sab_col_calc_plane_eq(f_list->v1, f_list->v2, f_list->v3, plane_eq);
 
 		int side_start = g_sab_col_point_relative_to_plane(atk_start, &side, plane_eq);
@@ -2628,7 +2628,7 @@ static qboolean g_saber_face_collision_check(
 		}
 
 		// plane_eq[0..2] is already a normalized normal
-		vec3_t plane_normal;
+		vec3_t plane_normal = { 0 };
 		VectorSet(plane_normal, plane_eq[0], plane_eq[1], plane_eq[2]);
 
 		side2 = DotProduct(plane_normal, dir);
@@ -2640,7 +2640,7 @@ static qboolean g_saber_face_collision_check(
 
 		dist = side / side2;
 
-		vec3_t point;
+		vec3_t point = { 0 };
 		VectorMA(atk_start, -dist, dir, point);
 
 		// ---- Option A: conservative thickness test ----
@@ -2652,7 +2652,7 @@ static qboolean g_saber_face_collision_check(
 		}
 
 		// 2) Point offset by atk_mins
-		vec3_t p_min;
+		vec3_t p_min = { 0 };
 		VectorAdd(point, atk_mins, p_min);
 		if (PointInTriangle_Barycentric(p_min, f_list->v1, f_list->v2, f_list->v3))
 		{
@@ -2661,7 +2661,7 @@ static qboolean g_saber_face_collision_check(
 		}
 
 		// 3) Point offset by atk_maxs
-		vec3_t p_max;
+		vec3_t p_max = { 0 };
 		VectorAdd(point, atk_maxs, p_max);
 		if (PointInTriangle_Barycentric(p_max, f_list->v1, f_list->v2, f_list->v3))
 		{
@@ -2754,11 +2754,11 @@ static qboolean g_saber_collide(
 				continue;
 			}
 
-			vec3_t tip;
-			vec3_t base;
-			vec3_t right;
-			vec3_t fwd;
-			vec3_t v;
+			vec3_t tip = { 0 };
+			vec3_t base = { 0 };
+			vec3_t right = { 0 };
+			vec3_t fwd = { 0 };
+			vec3_t v = { 0 };
 
 			// Recently updated: first get base and tip of blade
 			VectorCopy(blade->muzzlePoint, base);
@@ -2803,7 +2803,7 @@ static qboolean g_saber_collide(
 				tr->endpos))
 			{
 				// Collided: determine the plane of impact for the viewlocking stuff.
-				vec3_t result;
+				vec3_t result = { 0 };
 
 				tr->fraction = calc_trace_fraction(atk_start, atk_end, tr->endpos);
 
@@ -3579,11 +3579,11 @@ int wp_saber_must_block(gentity_t* self, const gentity_t* atk, const qboolean ch
 
 	if (atk && atk->client && rSaberNum != -1 && rBladeNum != -1)
 	{
-		vec3_t saber_move_dir;
-		vec3_t dir_to_body;
-		vec3_t body_max;
-		vec3_t body_min;
-		vec3_t closest_body_point;
+		vec3_t saber_move_dir = { 0 };
+		vec3_t dir_to_body = { 0 };
+		vec3_t body_max = { 0 };
+		vec3_t body_min = { 0 };
+		vec3_t closest_body_point = { 0 };
 		//player attacker, if they are here they're using their saber to attack.
 		//Check to make sure that we only block the blade if it is moving towards the player
 
@@ -3857,7 +3857,7 @@ int WP_SaberMustBoltBlock(gentity_t* self, const gentity_t* atk, const qboolean 
 	{
 		// Jedi cannot block shots from behind (the cone of a bolt that hits the blade, as SP). A bolt hitting the body
 		// was blocked from any direction.
-		vec3_t bolt_org;
+		vec3_t bolt_org = { 0 };
 		VectorCopy(atk->r.currentOrigin, bolt_org);
 		if (!InFront(bolt_org, self->r.currentOrigin, self->client->ps.viewangles, SABER_REFLECT_MISSILE_CONE))
 		{
@@ -3953,11 +3953,11 @@ int WP_SaberMustBoltBlock(gentity_t* self, const gentity_t* atk, const qboolean 
 
 	if (atk && atk->client && rSaberNum != -1 && rBladeNum != -1)
 	{
-		vec3_t body_min;
-		vec3_t body_max;
-		vec3_t closest_body_point;
-		vec3_t dir_to_body;
-		vec3_t saber_move_dir;
+		vec3_t body_min = { 0 };
+		vec3_t body_max = { 0 };
+		vec3_t closest_body_point = { 0 };
+		vec3_t dir_to_body = { 0 };
+		vec3_t saber_move_dir = { 0 };
 		//player attacker, if they are here they're using their saber to attack.
 		//Check to make sure that we only block the blade if it is moving towards the player
 
@@ -4129,8 +4129,8 @@ int g_real_trace(
 	int rBladeNum
 )
 {
-	vec3_t current_start;
-	trace_t closest_trace;
+	vec3_t current_start = { 0 };
+	trace_t closest_trace = { 0 };
 	float closest_fraction = 1.1f;
 
 	const qboolean atk_is_saberer =
@@ -4149,7 +4149,7 @@ int g_real_trace(
 
 	for (int misses = 0; misses < MAX_REAL_PASSTHRU; misses++)
 	{
-		vec3_t current_end_pos;
+		vec3_t current_end_pos = { 0 };
 
 		trap->Trace(
 			tr,
@@ -4601,11 +4601,11 @@ static QINLINE void G_SetViewLockDebounce(const gentity_t* self)
 static QINLINE void G_SetViewLock(const gentity_t* self, vec3_t impact_pos, vec3_t impact_normal)
 {
 	//Sets the view/movement lock flags based on the given information
-	vec3_t cross;
-	vec3_t length;
-	vec3_t forward;
-	vec3_t right;
-	vec3_t up;
+	vec3_t cross = { 0 };
+	vec3_t length = { 0 };
+	vec3_t forward = { 0 };
+	vec3_t right = { 0 };
+	vec3_t up = { 0 };
 
 	if (!self || !self->client)
 	{
@@ -4888,8 +4888,8 @@ static void DoNormalDodge(gentity_t* self, const int dodge_anim)
 static qboolean DodgeRollCheck(const gentity_t* self, const int dodge_anim, vec3_t forward, vec3_t right)
 {
 	//checks to see if there's a cliff in the direction that dodgeAnim would travel.
-	vec3_t mins = { 0 }, maxs = { 0 }, traceto_mod, tracefrom_mod, moveDir;
-	trace_t tr;
+	vec3_t mins = { 0 }, maxs = { 0 }, traceto_mod = { 0 }, tracefrom_mod = { 0 }, moveDir = { 0 };
+	trace_t tr = { 0 };
 	int dodge_distance = 200; //how far away do we do the scans.
 
 	//determine which direction we're traveling in.
@@ -5279,7 +5279,7 @@ qboolean G_DoDodge(gentity_t* self, gentity_t* shooter, vec3_t dmg_origin, int h
 		|| mod == MOD_ROCKET)
 	{
 		//splash damage dodge, dodged by throwing oneself away from the blast into a knockdown
-		vec3_t blow_back_dir;
+		vec3_t blow_back_dir = { 0 };
 		int blow_back_power = saved_dmg;
 		VectorSubtract(self->client->ps.origin, dmg_origin, blow_back_dir);
 		VectorNormalize(blow_back_dir);
@@ -5305,7 +5305,7 @@ qboolean G_DoDodge(gentity_t* self, gentity_t* shooter, vec3_t dmg_origin, int h
 			&& self->client->g2LastSurfaceModel == G2MODEL_PLAYER
 			&& self->client->g2LastSurfaceTime == level.time)
 		{
-			char hit_surface[MAX_QPATH];
+			char hit_surface[MAX_QPATH] = { 0 };
 
 			trap->G2API_GetSurfaceName(self->ghoul2, self->client->g2LastSurfaceHit, 0, hit_surface);
 
@@ -5446,10 +5446,10 @@ qboolean G_DoDodge(gentity_t* self, gentity_t* shooter, vec3_t dmg_origin, int h
 		{
 			//can't just do a simple dodge
 			int rolled = 0;
-			vec3_t tangles;
-			vec3_t forward;
-			vec3_t right;
-			vec3_t impactpoint;
+			vec3_t tangles = { 0 };
+			vec3_t forward = { 0 };
+			vec3_t right = { 0 };
+			vec3_t impactpoint = { 0 };
 			int x = 0;
 			int fall_check_max = 0;
 
@@ -5856,7 +5856,7 @@ static qboolean G_DoSaberDodge(gentity_t* dodger, gentity_t* attacker, vec3_t dm
 		|| mod == MOD_ROCKET)
 	{
 		//splash damage dodge, dodged by throwing oneself away from the blast into a knockdown
-		vec3_t blow_back_dir;
+		vec3_t blow_back_dir = { 0 };
 		int blow_back_power = saved_dmg;
 		VectorSubtract(dodger->client->ps.origin, dmg_origin, blow_back_dir);
 		VectorNormalize(blow_back_dir);
@@ -5882,7 +5882,7 @@ static qboolean G_DoSaberDodge(gentity_t* dodger, gentity_t* attacker, vec3_t dm
 			&& dodger->client->g2LastSurfaceModel == G2MODEL_PLAYER
 			&& dodger->client->g2LastSurfaceTime == level.time)
 		{
-			char hit_surface[MAX_QPATH];
+			char hit_surface[MAX_QPATH] = { 0 };
 
 			trap->G2API_GetSurfaceName(dodger->ghoul2, dodger->client->g2LastSurfaceHit, 0, hit_surface);
 
@@ -6023,10 +6023,10 @@ static qboolean G_DoSaberDodge(gentity_t* dodger, gentity_t* attacker, vec3_t dm
 		{
 			//can't just do a simple dodge
 			int rolled = 0;
-			vec3_t tangles;
-			vec3_t forward;
-			vec3_t right;
-			vec3_t impactpoint;
+			vec3_t tangles = { 0 };
+			vec3_t forward = { 0 };
+			vec3_t right = { 0 };
+			vec3_t impactpoint = { 0 };
 			int x = 0;
 			int fall_check_max = 0;
 
@@ -6248,7 +6248,7 @@ void WP_SaberClearDamageForEntNum(gentity_t* attacker, const int entityNum, cons
 				gentity_t* victim = &g_entities[victimentity_num[i]];
 				if (victim && victim->client)
 				{
-					vec3_t center, dir_to_center;
+					vec3_t center = { 0 }, dir_to_center = { 0 };
 					float knock_down_thresh_hold = 0.0f;
 					const float knockback = knock_back_scale * totalDmg[i] * 0.5f;
 
@@ -6378,9 +6378,9 @@ static qboolean WP_GetSaberBoltOrigin(gentity_t* ent, int saberNum, const char**
 	// ----------------------------------------------------------------------
 	// Compute bolt matrix
 	// ----------------------------------------------------------------------
-	mdxaBone_t boltMatrix;
-	vec3_t angles;
-	vec3_t tmpOrigin;
+	mdxaBone_t boltMatrix = { 0 };
+	vec3_t angles = { 0 };
+	vec3_t tmpOrigin = { 0 };
 
 	VectorSet(angles, 0.0f, ent->r.currentAngles[YAW], 0.0f);
 
@@ -6430,7 +6430,7 @@ static void G_PlayerSaberSmash(gentity_t* owner)
 		"*blade2"
 	};
 
-	vec3_t bladeOrigin;
+	vec3_t bladeOrigin = { 0 };
 
 	// Try secondary saber first, then primary
 	const int numBladeCandidates = (int)(sizeof(bladeCandidates) / sizeof(bladeCandidates[0]));
@@ -6486,15 +6486,15 @@ static void G_PlayerSaberSmash(gentity_t* owner)
 
 	vec3_t handle = { 0.0f, 0.0f, 0.0f };
 	vec3_t bottom = { 0.0f, 0.0f, 0.0f };
-	vec3_t angles;
-	trace_t trace;
+	vec3_t angles = { 0 };
+	trace_t trace = { 0 };
 
 	const float radius = 300.0f;
 	const float halfRad = radius * 0.5f;
 
 	vec3_t mins = { 0.0f, 0.0f, 0.0f };
 	vec3_t maxs = { 0.0f, 0.0f, 0.0f };
-	vec3_t entDir;
+	vec3_t entDir = { 0 };
 
 	// ----------------------------------------------------------------------
 	// Compute bolt matrix (use owner->ghoul2 model index 2 as in your code)
@@ -6727,9 +6727,9 @@ static void WP_SwingAddHit(const gentity_t* ent, const gentity_t* victim)
 
 static QINLINE qboolean CheckSaberDamage(gentity_t* self, const int rSaberNum, const int rBladeNum, vec3_t saber_start, vec3_t saber_end, const int trMask)
 {
-	trace_t tr;
-	vec3_t dir;
-	vec3_t saber_tr_mins, saber_tr_maxs;
+	trace_t tr = { 0 };
+	vec3_t dir = { 0 };
+	vec3_t saber_tr_mins = { 0 }, saber_tr_maxs = { 0 };
 	int self_saber_level = 0;
 	int dmg = 0;
 	qboolean idle_damage = qfalse;
@@ -7516,7 +7516,7 @@ static QINLINE qboolean CheckSaberDamage(gentity_t* self, const int rSaberNum, c
 			// the blade and its swing, so a killing hit can cut the body where the blade touched (g_combat.c G_SaberSlice)
 			const bladeInfo_t* blade = &self->client->saber[rSaberNum].blade[rBladeNum];
 			const float len = blade->lengthMax > 0.0f ? blade->lengthMax : 40.0f;
-			vec3_t tip, tip_old, swing;
+			vec3_t tip = { 0 }, tip_old = { 0 }, swing = { 0 };
 			VectorMA(blade->muzzlePoint, len, blade->muzzleDir, tip);
 			VectorMA(blade->muzzlePointOld, len, blade->muzzleDirOld, tip_old);
 			VectorSubtract(tip, tip_old, swing);
@@ -7687,7 +7687,7 @@ int invert_quad(int quad);
 
 void wp_saber_start_missile_block_check(gentity_t* self, usercmd_t* ucmd)
 {
-	qboolean swing_block;
+	qboolean swing_block = qfalse;
 	qboolean closest_swing_block = qfalse; //default setting makes the compiler happy.
 	int swing_block_quad = Q_T;
 	int closest_swing_quad = Q_T;
@@ -7698,9 +7698,9 @@ void wp_saber_start_missile_block_check(gentity_t* self, usercmd_t* ucmd)
 	int i = 0, e = 0;
 	vec3_t mins = { 0 }, maxs = { 0 };
 	float closest_dist = 0.0f, radius = 256;
-	vec3_t forward, fwdangles = { 0 };
-	trace_t trace;
-	vec3_t trace_to, ent_dir;
+	vec3_t forward = { 0 }, fwdangles = { 0 };
+	trace_t trace = { 0 };
+	vec3_t trace_to = { 0 }, ent_dir = { 0 };
 	float look_t_dist = -1;
 	gentity_t* look_t = NULL;
 	qboolean do_full_routine = qtrue;
@@ -7839,7 +7839,7 @@ void wp_saber_start_missile_block_check(gentity_t* self, usercmd_t* ucmd)
 	for (e = 0; e < num_listed_entities; e++)
 	{
 		float dot1 = 0.0f;
-		vec3_t dir;
+		vec3_t dir = { 0 };
 		ent = &g_entities[entity_list[e]];
 		swing_block = qfalse;
 
@@ -7857,7 +7857,7 @@ void wp_saber_start_missile_block_check(gentity_t* self, usercmd_t* ucmd)
 			ent->health > 0)
 		{
 			//seems like a valid enemy to look at.
-			vec3_t vec_sub;
+			vec3_t vec_sub = { 0 };
 			float vec_len = 0.0f;
 
 			VectorSubtract(self->client->ps.origin, ent->client->ps.origin, vec_sub);
@@ -7865,8 +7865,8 @@ void wp_saber_start_missile_block_check(gentity_t* self, usercmd_t* ucmd)
 
 			if (look_t_dist == -1 || vec_len < look_t_dist)
 			{
-				trace_t tr;
-				vec3_t my_eyes;
+				trace_t tr = { 0 };
+				vec3_t my_eyes = { 0 };
 
 				VectorCopy(self->client->ps.origin, my_eyes);
 				my_eyes[2] += self->client->ps.viewheight;
@@ -8008,7 +8008,7 @@ void wp_saber_start_missile_block_check(gentity_t* self, usercmd_t* ucmd)
 					if (G_ClearLOS4(self, ent))
 					{
 						//can see it
-						vec3_t throw_dir;
+						vec3_t throw_dir = { 0 };
 						//make the gesture
 						if (((self->client->ps.ManualBlockingFlags & 1 << MBF_HOLDINGBLOCK) != 0)
 							&& self->client->pers.botclass != BCLASS_BOBAFETT
@@ -8094,7 +8094,7 @@ void wp_saber_start_missile_block_check(gentity_t* self, usercmd_t* ucmd)
 		if (!swing_block)
 		{
 			float dot2 = 0.0f;
-			vec3_t missile_dir;
+			vec3_t missile_dir = { 0 };
 			VectorCopy(ent->s.pos.trDelta, missile_dir);
 			VectorNormalize(missile_dir);
 			if ((dot2 = DotProduct(dir, missile_dir)) > 0)
@@ -8233,7 +8233,7 @@ void wp_saber_start_missile_block_check(gentity_t* self, usercmd_t* ucmd)
 			}
 			else
 			{
-				vec3_t diff, start, end;
+				vec3_t diff = { 0 }, start = { 0 }, end = { 0 };
 				VectorSubtract(incoming->r.currentOrigin, self->r.currentOrigin, diff);
 				float scale = VectorLength(diff);
 				VectorNormalize2(incoming->s.pos.trDelta, ent_dir);
@@ -8267,7 +8267,7 @@ static QINLINE qboolean WP_CheckThrownSaberDamaged(gentity_t* saberent,
 	const int  returning,
 	const qboolean no_d_check)
 {
-	vec3_t    vecsub;
+	vec3_t    vecsub = { 0 };
 	float     veclen = 0.0f;
 	gentity_t* te = NULL;
 
@@ -8309,7 +8309,7 @@ static QINLINE qboolean WP_CheckThrownSaberDamaged(gentity_t* saberent,
 
 		if (veclen < dist)
 		{
-			trace_t tr;
+			trace_t tr = { 0 };
 			// Slightly expanded trace box ONLY for saber‑blocking
 			static const vec3_t blockMins = { -16.0f, -16.0f, -16.0f };
 			static const vec3_t blockMaxs = { 16.0f,  16.0f,  16.0f };
@@ -8365,7 +8365,7 @@ static QINLINE qboolean WP_CheckThrownSaberDamaged(gentity_t* saberent,
 				else
 				{
 					// Good hit
-					vec3_t dir;
+					vec3_t dir = { 0 };
 					int    dflags = 0;
 
 					VectorSubtract(tr.endpos, saberent->r.currentOrigin, dir);
@@ -8444,8 +8444,8 @@ static QINLINE qboolean WP_CheckThrownSaberDamaged(gentity_t* saberent,
 
 		if (veclen < dist)
 		{
-			trace_t tr;
-			vec3_t  ent_origin;
+			trace_t tr = { 0 };
+			vec3_t  ent_origin = { 0 };
 
 			if (ent->s.eType == ET_MOVER)
 			{
@@ -8472,7 +8472,7 @@ static QINLINE qboolean WP_CheckThrownSaberDamaged(gentity_t* saberent,
 
 			if (tr.fraction == 1.0f || tr.entityNum == ent->s.number)
 			{
-				vec3_t dir;
+				vec3_t dir = { 0 };
 				int    dflags = 0;
 
 				VectorSubtract(tr.endpos, ent_origin, dir);
@@ -8537,7 +8537,7 @@ static QINLINE qboolean WP_CheckThrownSaberDamaged(gentity_t* saberent,
 
 static QINLINE void WP_saberMoveBack(gentity_t* ent)
 {
-	vec3_t origin, old_org;
+	vec3_t origin = { 0 }, old_org = { 0 };
 
 	ent->s.pos.trType = TR_LINEAR;
 
@@ -8576,11 +8576,11 @@ static void MakeDeadSaber(const gentity_t* ent)
 {
 	//spawn a "dead" saber entity here so it looks like the saber fell out of the air.
 	//This entity will remove itself after a very short time period.
-	vec3_t startorg;
-	vec3_t startang;
+	vec3_t startorg = { 0 };
+	vec3_t startang = { 0 };
 	const gentity_t* owner = NULL;
 	//trace stuct used for determining if it's safe to spawn at current location
-	trace_t tr;
+	trace_t tr = { 0 };
 
 	if (level.gametype == GT_JEDIMASTER)
 	{
@@ -8966,7 +8966,7 @@ void WP_saberReactivate(gentity_t* saberent, gentity_t* saber_owner)
 
 static void WP_saberKnockDown(gentity_t* saberent, gentity_t* saber_owner, const gentity_t* other)
 {
-	trace_t tr;
+	trace_t tr = { 0 };
 
 	// ------------------------------------------------------------
 	// Saber is no longer attached to the player
@@ -9086,7 +9086,7 @@ static void WP_saberKnockDown(gentity_t* saberent, gentity_t* saber_owner, const
 	// ------------------------------------------------------------
 	if (saber_owner != other && other->inuse && other->client)
 	{
-		vec3_t other_fwd;
+		vec3_t other_fwd = { 0 };
 		const float deflect_speed = 200.0f;
 
 		AngleVectors(other->client->ps.viewangles, other_fwd, NULL, NULL);
@@ -9396,9 +9396,9 @@ qboolean WP_saberKnockOutOfHand(gentity_t* saberent, gentity_t* saber_owner, vec
 //Knock the saber out of the hands of saberOwner using the net momentum between saberOwner and others net momentum
 qboolean WP_ButterFingers(gentity_t* saberent, gentity_t* saber_owner, const gentity_t* other, const trace_t* tr)
 {
-	vec3_t svelocity, ovelocity;
-	vec3_t sswing, oswing;
-	vec3_t dir;
+	vec3_t svelocity = { 0 }, ovelocity = { 0 };
+	vec3_t sswing = { 0 }, oswing = { 0 };
+	vec3_t dir = { 0 };
 
 	VectorClear(svelocity);
 	VectorClear(ovelocity);
@@ -9533,7 +9533,7 @@ qboolean WP_saberCheckKnockdown_Thrown(gentity_t* saberent, gentity_t* saberOwne
 void WP_saberBackToOwner(gentity_t* saberent)
 {
 	gentity_t* saber_owner = &g_entities[saberent->r.ownerNum];
-	vec3_t dir;
+	vec3_t dir = { 0 };
 
 	if (saberent->r.ownerNum == ENTITYNUM_NONE)
 	{
@@ -9746,11 +9746,11 @@ void WP_thrownSaberTouch(gentity_t* saberent, gentity_t* other, const trace_t* t
 		else
 		{
 			// Blade direction is the UP vector, not forward
-			vec3_t bladeDir;
+			vec3_t bladeDir = { 0 };
 			AngleVectors(saberent->r.currentAngles, NULL, NULL, bladeDir);
 
 			// Wall normal points OUT of the wall → invert it
-			vec3_t wallInward;
+			vec3_t wallInward = { 0 };
 			VectorScale(trace->plane.normal, -1.0f, wallInward);
 
 			// Blade must be pointing INTO the wall
@@ -9839,7 +9839,7 @@ static void WP_SaberThrowComeBack(gentity_t* saberent, gentity_t* saber_own)
 static qboolean WP_SaberThrowGripAim(const gentity_t* self, const vec3_t from, vec3_t dir_out)
 {
 	const gentity_t* target = NULL;
-	vec3_t chest, dir;
+	vec3_t chest = { 0 }, dir = { 0 };
 
 	if (!g_saberThrowGripAim.integer || !self->client)
 	{
@@ -9872,7 +9872,7 @@ static qboolean WP_SaberThrowGripAim(const gentity_t* self, const vec3_t from, v
 
 static void WP_saberFirstThrown(gentity_t* saberent)
 {
-	vec3_t v_sub;
+	vec3_t v_sub = { 0 };
 	gentity_t* saber_own = &g_entities[saberent->r.ownerNum];
 
 	if (saberent->r.ownerNum == ENTITYNUM_NONE)
@@ -10014,8 +10014,8 @@ static void WP_saberFirstThrown(gentity_t* saberent)
 	//bots need this!
 	if (saber_own->r.svFlags & SVF_BOT && saberent->speed < level.time)
 	{
-		vec3_t fwd, trace_from, trace_to, dir;
-		trace_t tr;
+		vec3_t fwd = { 0 }, trace_from = { 0 }, trace_to = { 0 }, dir = { 0 };
+		trace_t tr = { 0 };
 
 		AngleVectors(saber_own->client->ps.viewangles, fwd, 0, 0);
 
@@ -10072,7 +10072,7 @@ static void WP_saberFirstThrown(gentity_t* saberent)
 	if (!(saber_own->r.svFlags & SVF_BOT) && saberent->think == WP_saberFirstThrown
 		&& saberent->s.pos.trType == TR_LINEAR && !(saberent->s.eFlags & EF_MISSILE_STICK))
 	{
-		vec3_t aim;
+		vec3_t aim = { 0 };
 		if (WP_SaberThrowGripAim(saber_own, saberent->r.currentOrigin, aim))
 		{
 			float speed = VectorLength(saberent->s.pos.trDelta);
@@ -10091,7 +10091,7 @@ runMin:
 
 void UpdateClientRenderBolts(gentity_t* self, vec3_t render_origin, vec3_t render_angles)
 {
-	mdxaBone_t boltMatrix;
+	mdxaBone_t boltMatrix = { 0 };
 	renderInfo_t* ri = &self->client->renderInfo;
 
 	if (!self->ghoul2)
@@ -10237,7 +10237,7 @@ static void UpdateClientRenderinfo(gentity_t* self, vec3_t render_origin, vec3_t
 			//From now on if we want this data to be valid we're going to have to make a verify call for it before
 			//accessing it. I'm only doing this now if we want to debug the server skel by drawing lines from bolt
 			//positions every frame.
-			mdxaBone_t boltMatrix;
+			mdxaBone_t boltMatrix = { 0 };
 
 			if (!self->ghoul2)
 			{
@@ -10606,10 +10606,10 @@ static gentity_t* G_KickTrace(gentity_t* ent, vec3_t kick_dir, const float kick_
 	const float kick_push,
 	const qboolean do_sound_on_walls)
 {
-	vec3_t trace_org, trace_end;
+	vec3_t trace_org = { 0 }, trace_end = { 0 };
 	const vec3_t kick_maxs = { 4, 4, 4 };
 	const vec3_t kick_mins = { -2, -2, -2 };
-	trace_t trace;
+	trace_t trace = { 0 };
 	gentity_t* hitEnt = NULL;
 
 	if (kick_end && !VectorCompare(kick_end, vec3_origin))
@@ -10710,7 +10710,7 @@ static gentity_t* G_KickTrace(gentity_t* ent, vec3_t kick_dir, const float kick_
 						}
 						else
 						{
-							vec3_t fx_org, fx_dir;
+							vec3_t fx_org = { 0 }, fx_dir = { 0 };
 							VectorCopy(kick_dir, fx_dir);
 							VectorMA(trace.endpos, Q_flrand(5.0f, 10.0f), fx_dir, fx_org);
 							VectorScale(fx_dir, -1, fx_dir);
@@ -10886,7 +10886,7 @@ static gentity_t* G_KickTrace(gentity_t* ent, vec3_t kick_dir, const float kick_
 
 static void G_PunchSomeMofos(gentity_t* ent)
 {
-	trace_t tr;
+	trace_t tr = { 0 };
 	const renderInfo_t* ri = &ent->client->renderInfo;
 	int boltIndex = 0;
 
@@ -10904,9 +10904,9 @@ static void G_PunchSomeMofos(gentity_t* ent)
 
 	if (boltIndex != -1)
 	{
-		vec3_t hand;
-		vec3_t maxs;
-		vec3_t mins;
+		vec3_t hand = { 0 };
+		vec3_t maxs = { 0 };
+		vec3_t mins = { 0 };
 		//safety check, this shouldn't ever not be valid
 		G_GetBoltPosition(ent, boltIndex, hand, 0);
 
@@ -10921,7 +10921,7 @@ static void G_PunchSomeMofos(gentity_t* ent)
 		if (tr.fraction != 1)
 		{
 			//hit something
-			vec3_t forward;
+			vec3_t forward = { 0 };
 			gentity_t* tr_ent = &g_entities[tr.entityNum];
 
 			VectorSubtract(hand, ent->client->ps.origin, forward);
@@ -11025,7 +11025,7 @@ static void G_PunchSomeMofos(gentity_t* ent)
 
 static void G_KickSomeMofos(gentity_t* ent)
 {
-	vec3_t kick_dir, kick_end, kick_dir2, kick_end2, fwd_angs;
+	vec3_t kick_dir = { 0 }, kick_end = { 0 }, kick_dir2 = { 0 }, kick_end2 = { 0 }, fwd_angs = { 0 };
 	float anim_length = BG_AnimLength(ent->localAnimIndex, ent->client->ps.legsAnim);
 	float elapsed_time = anim_length - ent->client->ps.legsTimer;
 	float remaining_time = anim_length - elapsed_time;
@@ -11980,11 +11980,11 @@ static QINLINE qboolean G_PrettyCloseIGuess(float a, const float b, const float 
 static void G_GrabSomeMofos(gentity_t* self)
 {
 	renderInfo_t* ri = &self->client->renderInfo;
-	mdxaBone_t boltMatrix;
-	vec3_t flatAng;
-	vec3_t pos;
-	vec3_t grabMins, grabMaxs;
-	trace_t trace;
+	mdxaBone_t boltMatrix = { 0 };
+	vec3_t flatAng = { 0 };
+	vec3_t pos = { 0 };
+	vec3_t grabMins = { 0 }, grabMaxs = { 0 };
+	trace_t trace = { 0 };
 
 	if (!self->ghoul2 || ri->handRBolt == -1)
 	{ //no good
@@ -12100,19 +12100,19 @@ void WP_SaberPositionUpdate(gentity_t* self, usercmd_t* ucmd)
 	//rww - keep the saber position as updated as possible on the server so that we can try to do realistic-looking contact stuff
 	//Note that this function also does the majority of working in maintaining the server g2 client instance (updating angles/anims/etc)
 	gentity_t* mySaber = NULL;
-	mdxaBone_t boltMatrix;
-	vec3_t properAngles = { 0 }, properOrigin;
-	vec3_t boltAngles, boltOrigin;
-	vec3_t end;
-	vec3_t legAxis[3];
-	vec3_t rawAngles;
+	mdxaBone_t boltMatrix = { 0 };
+	vec3_t properAngles = { 0 }, properOrigin = { 0 };
+	vec3_t boltAngles = { 0 }, boltOrigin = { 0 };
+	vec3_t end = { 0 };
+	vec3_t legAxis[3] = { 0 };
+	vec3_t rawAngles = { 0 };
 	int returnAfterUpdate = 0;
 	float animSpeedScale = 1.0f;
 	int saberNum = 0;
-	qboolean clientOverride;
+	qboolean clientOverride = qfalse;
 	gentity_t* vehEnt = NULL;
 	float fVSpeed = 0;
-	vec3_t addVel;
+	vec3_t addVel = { 0 };
 
 	const qboolean self_is_holding_block_button = ((self->client->ps.ManualBlockingFlags & 1 << MBF_HOLDINGBLOCK) != 0) ? qtrue : qfalse;
 
@@ -12220,7 +12220,7 @@ void WP_SaberPositionUpdate(gentity_t* self, usercmd_t* ucmd)
 		}
 		else
 		{
-			vec3_t grapAng;
+			vec3_t grapAng = { 0 };
 
 			VectorSubtract(grappler->client->ps.origin, self->client->ps.origin, grapAng);
 
@@ -12248,8 +12248,8 @@ void WP_SaberPositionUpdate(gentity_t* self, usercmd_t* ucmd)
 				{ //grapplee
 					//try to position myself at the correct distance from my grappler
 					float idealDist = 0.0f;
-					vec3_t gFwd, idealSpot;
-					trace_t trace;
+					vec3_t gFwd = { 0 }, idealSpot = { 0 };
+					trace_t trace = { 0 };
 
 					// 2026-11-10 (audit): "if (grappler->client->ps.torsoAnim == BOTH_KYLE_PA_1)" had the same code in both branches; kept one
 					{ //head lock
@@ -12336,7 +12336,7 @@ void WP_SaberPositionUpdate(gentity_t* self, usercmd_t* ucmd)
 						{ //SMACK!
 							if (self->client->ps.torsoTimer < 1300)
 							{
-								vec3_t tossDir;
+								vec3_t tossDir = { 0 };
 
 								G_Damage(grappler, self, self, NULL, self->client->ps.origin, 30, 0, MOD_MELEE);
 
@@ -12465,7 +12465,7 @@ void WP_SaberPositionUpdate(gentity_t* self, usercmd_t* ucmd)
 						{
 							if (self->client->ps.torsoTimer < 758)
 							{
-								vec3_t tossDir;
+								vec3_t tossDir = { 0 };
 
 								VectorSubtract(grappler->client->ps.origin, self->client->ps.origin, tossDir);
 								VectorNormalize(tossDir);
@@ -12741,7 +12741,7 @@ nextStep:
 		{
 			if (!self->client->ps.saberEntityState && self->client->ps.saberEntityNum)
 			{
-				vec3_t startorg, startang, dir;
+				vec3_t startorg = { 0 }, startang = { 0 }, dir = { 0 };
 
 				VectorCopy(boltOrigin, saberent->r.currentOrigin);
 
@@ -13006,7 +13006,7 @@ nextStep:
 						continue;
 					}
 					gentity_t* saberEnt = &g_entities[self->client->ps.saberEntityNum];
-					vec3_t saber_org, saber_angles;
+					vec3_t saber_org = { 0 }, saber_angles = { 0 };
 					if (!saberEnt
 						|| !saberEnt->inuse
 						|| !saberEnt->ghoul2)
@@ -13025,7 +13025,7 @@ nextStep:
 					else
 					{
 						//coming right back
-						vec3_t saber_dir;
+						vec3_t saber_dir = { 0 };
 						BG_EvaluateTrajectory(&saberEnt->s.pos, level.time, saber_org);
 						VectorSubtract(self->r.currentOrigin, saber_org, saber_dir);
 						vectoangles(saber_dir, saber_angles);
@@ -13103,10 +13103,10 @@ nextStep:
 						{
 							if (!CheckSaberDamage(self, rSaberNum, rBladeNum, boltOrigin, end, trMask))
 							{
-								vec3_t oldSaberStart;
-								vec3_t oldSaberEnd;
-								vec3_t saberAngleNow;
-								vec3_t saberAngleBefore;
+								vec3_t oldSaberStart = { 0 };
+								vec3_t oldSaberEnd = { 0 };
+								vec3_t saberAngleNow = { 0 };
+								vec3_t saberAngleBefore = { 0 };
 								float delta_x = 0.0f;
 								float delta_y = 0.0f;
 								float delta_z = 0.0f;
@@ -13138,11 +13138,11 @@ nextStep:
 									delta_z < 180 && (PM_SaberInAttack(self->client->ps.saberMove) ||
 										PM_SaberInTransition(self->client->ps.saberMove)))
 								{
-									vec3_t saber_sub_base;
+									vec3_t saber_sub_base = { 0 };
 									vec3_t saber_mid_end = { 0 };
 									vec3_t saber_mid_point = { 0 };
 									vec3_t saber_mid_angle = { 0 };
-									vec3_t saber_mid_dir;
+									vec3_t saber_mid_dir = { 0 };
 									//don't go beyond here if we aren't attacking/transitioning or the angle is too large.
 									//and don't bother if the angle is the same
 									saber_mid_angle[0] = saberAngleBefore[0] + delta_x / 2;
@@ -13217,7 +13217,7 @@ nextStep:
 					if (level.time - self->client->saber[rSaberNum].blade[rBladeNum].trail.lastTime < 100 &&
 						(PM_SaberInFullDamageMove(&self->client->ps, self->localAnimIndex) || self_is_holding_block_button))
 					{
-						vec3_t olddir;
+						vec3_t olddir = { 0 };
 						float dist = (d_saberBoxTraceSize.value + self->client->saber[rSaberNum].blade[rBladeNum].radius) * 0.5f;
 						VectorSubtract(self->client->saber[rSaberNum].blade[rBladeNum].trail.tip, self->client->saber[rSaberNum].blade[rBladeNum].trail.base, olddir);
 						VectorNormalize(olddir);
@@ -13234,8 +13234,8 @@ nextStep:
 							//of the saber.
 							while (dist < self->client->saber[rSaberNum].blade[rBladeNum].lengthMax)
 							{
-								vec3_t startpos;
-								vec3_t endpos;
+								vec3_t startpos = { 0 };
+								vec3_t endpos = { 0 };
 								//set new blade position
 								VectorMA(boltOrigin, dist, self->client->saber[rSaberNum].blade[rBladeNum].muzzleDir, endpos);
 
@@ -13743,7 +13743,7 @@ float manual_npc_saberblocking(const gentity_t* defender)
 
 int PlayerCanAbsorbKick(const gentity_t* defender, const vec3_t push_dir) //Can the player absorb a kick
 {
-	vec3_t p_l_angles, p_l_fwd;
+	vec3_t p_l_angles = { 0 }, p_l_fwd = { 0 };
 
 	if (!defender || !defender->client)
 	{
@@ -13805,7 +13805,7 @@ int PlayerCanAbsorbKick(const gentity_t* defender, const vec3_t push_dir) //Can 
 
 int BotCanAbsorbKick(const gentity_t* defender, const vec3_t push_dir) //Can the player absorb a kick
 {
-	vec3_t p_l_angles, p_l_fwd;
+	vec3_t p_l_angles = { 0 }, p_l_fwd = { 0 };
 
 	if (!defender || !defender->client)
 	{
@@ -14990,8 +14990,8 @@ static void WP_SaberPoseAnim_BlockBolt(gentity_t* self, const float zdiff, const
 
 qboolean WP_SaberMBlockDirection(gentity_t* self, vec3_t hitloc, const qboolean missileBlock)
 {
-	vec3_t diff, fwdangles = { 0, 0, 0 }, right;
-	vec3_t cl_eye;
+	vec3_t diff = { 0 }, fwdangles = { 0, 0, 0 }, right = { 0 };
+	vec3_t cl_eye = { 0 };
 	const qboolean inFront = InFront(hitloc, self->client->ps.origin, self->client->ps.viewangles, -0.7f);
 
 	VectorCopy(self->client->ps.origin, cl_eye);
@@ -15080,8 +15080,8 @@ qboolean WP_SaberMBlockDirection(gentity_t* self, vec3_t hitloc, const qboolean 
 
 qboolean WP_SaberBlockNonRandom(gentity_t* self, vec3_t hitloc, const qboolean missileBlock)
 {
-	vec3_t diff, fwdangles = { 0, 0, 0 }, right;
-	vec3_t cl_eye;
+	vec3_t diff = { 0 }, fwdangles = { 0, 0, 0 }, right = { 0 };
+	vec3_t cl_eye = { 0 };
 	const qboolean inFront = InFront(hitloc, self->client->ps.origin, self->client->ps.viewangles, -0.7f);
 
 	VectorCopy(self->client->ps.origin, cl_eye);
@@ -15335,8 +15335,8 @@ static void WP_SaberPoseAnim_ParryNonRandom(gentity_t* self, const float zdiff, 
 // "can't block now" checks) and a wider front (-0.6)
 qboolean WP_SaberParryNonRandom(gentity_t* self, vec3_t hitloc, const qboolean missileBlock)
 {
-	vec3_t diff, fwdangles = { 0, 0, 0 }, right;
-	vec3_t cl_eye;
+	vec3_t diff = { 0 }, fwdangles = { 0, 0, 0 }, right = { 0 };
+	vec3_t cl_eye = { 0 };
 	const qboolean inFront = InFront(hitloc, self->client->ps.origin, self->client->ps.viewangles, -0.6f);
 
 	VectorCopy(self->client->ps.origin, cl_eye);
@@ -15372,8 +15372,8 @@ qboolean WP_SaberParryNonRandom(gentity_t* self, vec3_t hitloc, const qboolean m
 
 qboolean WP_SaberBouncedSaberDirection(gentity_t* self, vec3_t hitloc, const qboolean missileBlock)
 {
-	vec3_t diff, fwdangles = { 0, 0, 0 }, right;
-	vec3_t cl_eye;
+	vec3_t diff = { 0 }, fwdangles = { 0, 0, 0 }, right = { 0 };
+	vec3_t cl_eye = { 0 };
 	const qboolean inFront = InFront(hitloc, self->client->ps.origin, self->client->ps.viewangles, -0.7f);
 
 	VectorCopy(self->client->ps.origin, cl_eye);
@@ -15462,8 +15462,8 @@ qboolean WP_SaberBouncedSaberDirection(gentity_t* self, vec3_t hitloc, const qbo
 
 qboolean WP_SaberFatiguedParryDirection(gentity_t* self, vec3_t hitloc, const qboolean missileBlock)
 {
-	vec3_t diff, fwdangles = { 0, 0, 0 }, right;
-	vec3_t cl_eye;
+	vec3_t diff = { 0 }, fwdangles = { 0, 0, 0 }, right = { 0 };
+	vec3_t cl_eye = { 0 };
 	const qboolean inFront = InFront(hitloc, self->client->ps.origin, self->client->ps.viewangles, -0.7f);
 
 	VectorCopy(self->client->ps.origin, cl_eye);
@@ -15568,7 +15568,7 @@ qboolean wp_saber_block_non_random_missile(gentity_t* self, vec3_t hitloc, const
 		return qfalse;
 
 	// Compute directional info
-	vec3_t cl_eye, diff, right, fwdangles = { 0 };
+	vec3_t cl_eye = { 0 }, diff = { 0 }, right = { 0 }, fwdangles = { 0 };
 	VectorCopy(self->client->ps.origin, cl_eye);
 	cl_eye[2] += self->client->ps.viewheight;
 
@@ -15649,8 +15649,8 @@ qboolean wp_saber_block_non_random_missile(gentity_t* self, vec3_t hitloc, const
 
 qboolean WP_SaberBlockBolt(gentity_t* self, vec3_t hitloc, const qboolean missileBlock)
 {
-	vec3_t diff, fwdangles = { 0, 0, 0 }, right;
-	vec3_t cl_eye;
+	vec3_t diff = { 0 }, fwdangles = { 0, 0, 0 }, right = { 0 };
+	vec3_t cl_eye = { 0 };
 	const qboolean inFront = InFront(hitloc, self->client->ps.origin, self->client->ps.viewangles, -0.7f);
 
 	VectorCopy(self->client->ps.origin, cl_eye);
@@ -15838,10 +15838,10 @@ extern qboolean G_CheckEnemyPresence(int dir, float radius);
 
 saberMoveName_t G_PickAutoKick(gentity_t* self, const gentity_t* enemy)
 {
-	vec3_t v_fwd;
-	vec3_t v_rt;
-	vec3_t enemy_dir;
-	vec3_t fwd_angs;
+	vec3_t v_fwd = { 0 };
+	vec3_t v_rt = { 0 };
+	vec3_t enemy_dir = { 0 };
+	vec3_t fwd_angs = { 0 };
 	saberMoveName_t kick_move = LS_NONE;
 	if (!self || !self->client)
 	{
@@ -16168,7 +16168,7 @@ qboolean WP_SaberTryStickInBody(gentity_t* owner, gentity_t* victim)
 // that hit (damage) then repeats until the saber falls out or is taken back (WP_SaberBodyStuckDamage)
 static qboolean WP_SaberTryStickInBodyDmg(gentity_t* owner, gentity_t* victim, const int damage)
 {
-	vec3_t flight;
+	vec3_t flight = { 0 };
 
 	if (!owner || !owner->client || !victim || victim == owner || !victim->client)
 	{
@@ -16240,7 +16240,7 @@ static qboolean WP_SaberBodyRespawned(const gentity_t* saberEnt, const gentity_t
 static void WP_SaberBodyStuckDamage(gentity_t* saberEnt, gentity_t* saber_owner, gentity_t* body)
 {
 	const int n = saberEnt->s.number;
-	vec3_t dir;
+	vec3_t dir = { 0 };
 
 	if (s_saberBodyDamage[n] <= 0 || body->health <= 0)
 	{
@@ -16303,7 +16303,7 @@ static void WP_SaberBallisticsThink(gentity_t* saberEnt)
 
 	if (saberEnt->s.eFlags & EF_MISSILE_STICK)
 	{
-		vec3_t dir;
+		vec3_t dir = { 0 };
 		gentity_t* saber_owner = &g_entities[saberEnt->r.ownerNum];
 
 		//racc - Apparently pos1 is the hand bolt.
@@ -16681,7 +16681,7 @@ static qboolean G_BurnPutOut(const gentity_t* self)
 static qboolean G_IsFireEffectName(const char* name)
 {
 	static const char* fire_words[] = { "fire", "flame", "burn", "torch", "lava", "inferno", "blaze" };
-	char lower[MAX_QPATH];
+	char lower[MAX_QPATH] = { 0 };
 	int i = 0;
 
 	if (!name || !name[0])
@@ -16706,7 +16706,7 @@ static qboolean G_IsFireEffectName(const char* name)
 // an fx_runner whose effect is fire
 qboolean G_FxRunnerIsFire(const gentity_t* ent)
 {
-	char name[MAX_QPATH];
+	char name[MAX_QPATH] = { 0 };
 
 	if (!ent || ent->s.modelIndex <= 0)
 	{

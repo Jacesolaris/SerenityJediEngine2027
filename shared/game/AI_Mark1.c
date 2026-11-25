@@ -98,8 +98,8 @@ static void NPC_Mark1_Part_Explode(gentity_t* self, const int bolt)
 {
 	if (bolt >= 0)
 	{
-		mdxaBone_t boltMatrix;
-		vec3_t org, dir;
+		mdxaBone_t boltMatrix = { 0 };
+		vec3_t org = { 0 }, dir = { 0 };
 
 		SHR_GetBoltMatrix(self, bolt, boltMatrix, self->SHR_currentAngles, self->SHR_currentOrigin);
 
@@ -131,8 +131,8 @@ Mark1Dead_FireRocket
 */
 void Mark1Dead_FireRocket(void)
 {
-	mdxaBone_t boltMatrix;
-	vec3_t muzzle1, muzzle_dir;
+	mdxaBone_t boltMatrix = { 0 };
+	vec3_t muzzle1 = { 0 }, muzzle_dir = { 0 };
 
 	const int damage = 50;
 
@@ -172,8 +172,8 @@ Mark1Dead_FireBlaster
 */
 void Mark1Dead_FireBlaster(void)
 {
-	vec3_t muzzle1, muzzle_dir;
-	mdxaBone_t boltMatrix;
+	vec3_t muzzle1 = { 0 }, muzzle_dir = { 0 };
+	mdxaBone_t boltMatrix = { 0 };
 
 	const int bolt = SHR_Bolt(NPCS.NPC, genericBolt1, "*flash1");
 
@@ -386,9 +386,9 @@ Mark1_FireBlaster
 */
 void Mark1_FireBlaster(void)
 {
-	vec3_t muzzle1;
+	vec3_t muzzle1 = { 0 };
 	static vec3_t forward, vright, up;
-	mdxaBone_t boltMatrix;
+	mdxaBone_t boltMatrix = { 0 };
 	int bolt = 0;
 
 	// Which muzzle to fire from?
@@ -419,9 +419,9 @@ void Mark1_FireBlaster(void)
 
 	if (NPCS.NPC->health)
 	{
-		vec3_t angle_to_enemy1;
-		vec3_t delta1;
-		vec3_t enemy_org1;
+		vec3_t angle_to_enemy1 = { 0 };
+		vec3_t delta1 = { 0 };
+		vec3_t enemy_org1 = { 0 };
 		CalcEntitySpot(NPCS.NPC->enemy, SPOT_HEAD, enemy_org1);
 		VectorSubtract(enemy_org1, muzzle1, delta1);
 		vectoangles(delta1, angle_to_enemy1);
@@ -511,8 +511,8 @@ Mark1_FireRocket
 */
 void Mark1_FireRocket(void)
 {
-	mdxaBone_t boltMatrix;
-	vec3_t muzzle1, enemy_org1, delta1, angle_to_enemy1;
+	mdxaBone_t boltMatrix = { 0 };
+	vec3_t muzzle1 = { 0 }, enemy_org1 = { 0 }, delta1 = { 0 }, angle_to_enemy1 = { 0 };
 	static vec3_t forward, vright, up;
 
 	const int damage = 50;

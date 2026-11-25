@@ -147,7 +147,7 @@ static qboolean Sniper_Move(void)
 	NPCS.NPCInfo->combatMove = qtrue; //always doMove straight toward our goal
 
 	const qboolean moved = NPC_MoveToGoal(qtrue);
-	navInfo_t info;
+	navInfo_t info SHR_NAVINFO_INIT;
 
 	//Get the doMove info
 	SHR_NAV_GetLastMove(info);
@@ -270,7 +270,7 @@ static void NPC_BSSniper_Patrol(void)
 			{
 				//FIXME: walk over to it, maybe?  Not if not chase enemies flag
 				//NOTE: stops walking or doing anything else below
-				vec3_t dir, angles;
+				vec3_t dir = { 0 }, angles = { 0 };
 
 				VectorSubtract(NPCS.NPCInfo->investigateGoal, NPCS.NPC->client->renderInfo.eyePoint, dir);
 				vectoangles(dir, angles);
@@ -502,7 +502,7 @@ static void Sniper_CheckFireState(void)
 		if (!VectorCompare(vec3_origin, NPCS.NPCInfo->enemyLastSeenLocation))
 		{
 			//Fire on the last known position
-			vec3_t muzzle, dir, angles;
+			vec3_t muzzle = { 0 }, dir = { 0 }, angles = { 0 };
 
 			CalcEntitySpot(NPCS.NPC, SPOT_WEAPON, muzzle);
 			VectorSubtract(NPCS.NPCInfo->enemyLastSeenLocation, muzzle, dir);
@@ -550,7 +550,7 @@ static void Sniper_FaceEnemy(void)
 {
 	if (NPCS.NPC->enemy)
 	{
-		vec3_t muzzle, target, angles, forward, right, up;
+		vec3_t muzzle = { 0 }, target = { 0 }, angles = { 0 }, forward = { 0 }, right = { 0 }, up = { 0 };
 
 		// Get muzzle position
 		AngleVectors(NPCS.NPC->client->ps.viewangles, forward, right, up);
@@ -572,7 +572,7 @@ static void Sniper_FaceEnemy(void)
 					qboolean aim_error = qfalse;
 					qboolean hit = qtrue;
 					int try_miss_count = 0;
-					trace_t trace;
+					trace_t trace = { qfalse };
 
 					GetAnglesForDirection(muzzle, target, angles);
 					AngleVectors(angles, forward, right, up);
@@ -790,7 +790,7 @@ static void NPC_BSSniper_Attack(void)
 			if (NPCS.NPCInfo->scriptFlags & SCF_ALT_FIRE)
 			{
 				//use primary fire
-				trace_t trace;
+				trace_t trace = { qfalse };
 				SHR_Trace(&trace, NPCS.NPC->enemy->SHR_currentOrigin, NPCS.NPC->enemy->SHR_mins, NPCS.NPC->enemy->SHR_maxs, NPCS.NPC->SHR_currentOrigin,
 					NPCS.NPC->enemy->s.number, NPCS.NPC->enemy->clipmask);
 				if (!trace.allsolid && !trace.startsolid && (trace.fraction == 1.0 || trace.entityNum == NPCS.NPC->s.number))
@@ -834,8 +834,8 @@ static void NPC_BSSniper_Attack(void)
 		const float max_shoot_dist = NPC_MaxDistSquaredForWeapon();
 		if (enemyDist < max_shoot_dist)
 		{
-			vec3_t fwd, right, up, muzzle, end;
-			trace_t tr;
+			vec3_t fwd = { 0 }, right = { 0 }, up = { 0 }, muzzle = { 0 }, end = { 0 };
+			trace_t tr = { qfalse };
 			AngleVectors(NPCS.NPC->client->ps.viewangles, fwd, right, up);
 			SHR_CalcMuzzlePoint(NPCS.NPC, fwd, right, muzzle, 0);
 			VectorMA(muzzle, 8192, fwd, end);

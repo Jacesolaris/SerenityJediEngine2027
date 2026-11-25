@@ -34,7 +34,7 @@ FX_RepeaterProjectileThink
 
 void FX_RepeaterProjectileThink(centity_t* cent, const struct weaponInfo_s* weapon)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	if (VectorNormalize2(cent->currentState.pos.trDelta, forward) == 0.0f)
 	{
@@ -76,8 +76,8 @@ void FX_RepeaterHitPlayer(vec3_t origin, vec3_t normal, const qboolean humanoid)
 
 static void CG_DistortionOrb(centity_t* cent)
 {
-	refEntity_t ent;
-	vec3_t ang;
+	refEntity_t ent = { 0 };
+	vec3_t ang = { 0 };
 	const float scale = 0.5f;
 
 	if (!cg_renderToTextureFX.integer)
@@ -150,7 +150,7 @@ FX_RepeaterAltProjectileThink
 
 void FX_RepeaterAltProjectileThink(centity_t* cent, const struct weaponInfo_s* weapon)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	if (VectorNormalize2(cent->currentState.pos.trDelta, forward) == 0.0f)
 	{

@@ -176,8 +176,8 @@ static void C_G2Trace(void)
 static void C_G2Mark(void)
 {
 	const TCGG2Mark* td = &cg.sharedBuffer.g2Mark;
-	trace_t tr;
-	vec3_t end;
+	trace_t tr = { 0 };
+	vec3_t end = { 0 };
 
 	VectorMA(td->start, 64.0f, td->dir, end);
 	CG_G2Trace(&tr, td->start, NULL, NULL, end, ENTITYNUM_NONE, MASK_PLAYERSOLID);
@@ -197,7 +197,7 @@ static void C_G2Mark(void)
 
 static void CG_DebugBoxLines(vec3_t mins, vec3_t maxs, const int duration)
 {
-	vec3_t start = { 0 }, end, vert = { 0 };
+	vec3_t start = { 0 }, end = { 0 }, vert = { 0 };
 	const float x = maxs[0] - mins[0];
 	const float y = maxs[1] - mins[1];
 
@@ -257,7 +257,7 @@ static void CG_DebugBoxLines(vec3_t mins, vec3_t maxs, const int duration)
 // the server's saber combat debug cvar (the debug renderer's ragdoll boxes and lines only show with it on)
 static qboolean CG_SaberCombatDebug(void)
 {
-	char buf[8];
+	char buf[8] = { 0 };
 	trap->Cvar_VariableStringBuffer("g_DebugSaberCombat", buf, sizeof buf);
 	return atoi(buf) ? qtrue : qfalse;
 }
@@ -372,7 +372,7 @@ void CG_MiscEnt(void)
 
 	if (staticmodel->model)
 	{
-		vec3_t mins, maxs;
+		vec3_t mins = { 0 }, maxs = { 0 };
 
 		trap->R_ModelBounds(staticmodel->model, mins, maxs);
 
@@ -490,7 +490,7 @@ The server says this item is used on this level
 */
 static void CG_RegisterItemSounds(const int itemNum)
 {
-	char data[MAX_QPATH];
+	char data[MAX_QPATH] = { 0 };
 	char* start = NULL;
 	int len = 0;
 
@@ -749,7 +749,7 @@ extern int cg_siegeWinTeam;
 static void CG_RegisterSounds(void)
 {
 	int i = 0;
-	char items[MAX_ITEMS + 1];
+	char items[MAX_ITEMS + 1] = { 0 };
 	const char* soundName = NULL;
 
 	CG_AS_Register();
@@ -1166,7 +1166,7 @@ static void CG_RegisterSounds(void)
 
 	for (i = 0; i < 4; i++)
 	{
-		char name[MAX_QPATH];
+		char name[MAX_QPATH] = { 0 };
 		Com_sprintf(name, sizeof name, "sound/player/footsteps/stone_step%i.wav", i + 1);
 		cgs.media.footsteps[FOOTSTEP_STONEWALK][i] = trap->S_RegisterSound(name);
 		Com_sprintf(name, sizeof name, "sound/player/footsteps/stone_run%i.wav", i + 1);
@@ -1419,7 +1419,7 @@ This function may execute for a couple of minutes with a slow disk.
 static void CG_RegisterGraphics(void)
 {
 	int i = 0;
-	char items[MAX_ITEMS + 1];
+	char items[MAX_ITEMS + 1] = { 0 };
 
 	static char* sb_nums[11] = {
 		"gfx/2d/numbers/zero",
@@ -1809,8 +1809,8 @@ static void CG_RegisterGraphics(void)
 	int breakPoint = cgs.numInlineModels = trap->CM_NumInlineModels();
 	for (i = 1; i < cgs.numInlineModels; i++)
 	{
-		char name[10];
-		vec3_t mins, maxs;
+		char name[10] = { 0 };
+		vec3_t mins = { 0 }, maxs = { 0 };
 
 		Com_sprintf(name, sizeof name, "*%i", i);
 		cgs.inlineDrawModel[i] = trap->R_RegisterModel(name);
@@ -1832,7 +1832,7 @@ static void CG_RegisterGraphics(void)
 	// register all the server specified models
 	for (i = 1; i < MAX_MODELS; i++)
 	{
-		char modelName[MAX_QPATH];
+		char modelName[MAX_QPATH] = { 0 };
 
 		const char* cModelName = CG_ConfigString(CS_MODELS + i);
 		if (!cModelName[0])
@@ -1878,7 +1878,7 @@ static void CG_RegisterGraphics(void)
 
 	for (i = 1; i < MAX_SUB_BSP; i++)
 	{
-		vec3_t mins, maxs;
+		vec3_t mins = { 0 }, maxs = { 0 };
 		int j = 0;
 
 		const char* bspName = CG_ConfigString(CS_BSP_MODELS + i);
@@ -1897,7 +1897,7 @@ static void CG_RegisterGraphics(void)
 		breakPoint++;
 		for (int sub = 1; sub < MAX_MODELS; sub++)
 		{
-			char temp[MAX_QPATH];
+			char temp[MAX_QPATH] = { 0 };
 			Com_sprintf(temp, MAX_QPATH, "*%d-%d", i, sub);
 			cgs.inlineDrawModel[breakPoint] = trap->R_RegisterModel(temp);
 			if (!cgs.inlineDrawModel[breakPoint])
@@ -2095,7 +2095,7 @@ CG_StartMusic
 void CG_StartMusic(const qboolean bForceStart)
 {
 	char* s = NULL;
-	char parm1[MAX_QPATH], parm2[MAX_QPATH];
+	char parm1[MAX_QPATH] = { 0 }, parm2[MAX_QPATH] = { 0 };
 
 	// start the background music
 	s = (char*)CG_ConfigString(CS_MUSIC);
@@ -2145,7 +2145,7 @@ static char* CG_GetMenuBuffer(const char* filename)
 //
 static qboolean CG_Asset_Parse(const int handle)
 {
-	pc_token_t token;
+	pc_token_t token = { 0 };
 
 	if (!trap->PC_ReadToken(handle, &token))
 		return qfalse;
@@ -2340,7 +2340,7 @@ static qboolean CG_Asset_Parse(const int handle)
 
 static void CG_ParseMenu(const char* menuFile)
 {
-	pc_token_t token;
+	pc_token_t token = { 0 };
 
 	int handle = trap->PC_LoadSource(menuFile);
 	if (!handle)
@@ -2946,7 +2946,7 @@ Will perform callbacks to make the loading info screen update.
 void CG_Init(const int serverMessageNum, const int serverCommandSequence, const int clientNum)
 {
 	static gitem_t* item;
-	char buf[64];
+	char buf[64] = { 0 };
 
 	BG_InitAnimsets(); //clear it out
 
@@ -3310,7 +3310,7 @@ CG_NextForcePower_f
 */
 void CG_NextForcePower_f(void)
 {
-	usercmd_t cmd;
+	usercmd_t cmd = { 0 };
 	if (!cg.snap)
 	{
 		return;
@@ -3360,7 +3360,7 @@ CG_PrevForcePower_f
 */
 void CG_PrevForcePower_f(void)
 {
-	usercmd_t cmd;
+	usercmd_t cmd = { 0 };
 	if (!cg.snap)
 	{
 		return;

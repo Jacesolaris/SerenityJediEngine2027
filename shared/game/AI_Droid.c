@@ -408,7 +408,7 @@ void NPC_Droid_Pain(SHR_PAIN_PARAMS)
 	else if (self->client->NPC_class == CLASS_INTERROGATOR &&
 		(SHR_PAIN_MOD == MOD_DEMP2 || SHR_PAIN_MOD == MOD_DEMP2_ALT) && other)
 	{
-		vec3_t dir;
+		vec3_t dir = { 0 };
 
 		VectorSubtract(self->SHR_currentOrigin, other->SHR_currentOrigin, dir);
 		VectorNormalize(dir);

@@ -138,10 +138,10 @@ void SabBeh_SaberShouldBeDisarmedBlocker(gentity_t* blocker, const int saberNum)
 
 qboolean g_accurate_blocking(const gentity_t* blocker, const gentity_t* attacker, vec3_t hit_loc)
 {
-	vec3_t p_angles;
-	vec3_t p_right;
+	vec3_t p_angles = {};
+	vec3_t p_right = {};
 	vec3_t parrier_move = { 0 };
-	vec3_t hit_pos;
+	vec3_t hit_pos = {};
 	vec3_t hit_flat = { 0 };
 
 	// MP uses 0.0f tolerance
@@ -1825,7 +1825,7 @@ qboolean sab_beh_block_vs_attack(gentity_t* blocker, gentity_t* attacker, const 
 
 					// 2026-11-10 bug fix: blocking a heavy style cost nothing here. Now it costs the normal block
 					// cost for the blocker's block points plus 2.
-					int heavy_cost;
+					int heavy_cost = 0;
 					if (WP_SaberIsAI(blocker))
 					{
 						heavy_cost = blocker->client->ps.blockPoints <= BLOCKPOINTS_FOURTY ? BLOCKPOINTS_FIVE
@@ -2180,7 +2180,7 @@ qboolean WP_SaberWearHiltHit(gentity_t* ent, const char* surfName, const saberTy
 static void WP_SaberWearBreak(gentity_t* ent, const qboolean heavy)
 {
 	gclient_t* client = ent->client;
-	vec3_t fwd, push;
+	vec3_t fwd = {}, push = {};
 
 	client->ps.stats[STAT_SABER_WEAR] = 0;
 	client->ps.stats[STAT_SABER_WEAR_TIMER] = 0;

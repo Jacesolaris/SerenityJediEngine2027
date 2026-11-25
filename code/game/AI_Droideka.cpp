@@ -65,8 +65,8 @@ static void droideka_create_explosion(gentity_t* self, const int bolt_id, const 
 {
 	if (bolt_id >= 0)
 	{
-		mdxaBone_t boltMatrix;
-		vec3_t org, dir;
+		mdxaBone_t boltMatrix = {};
+		vec3_t org = {}, dir = {};
 		gi.G2API_GetBoltMatrix(self->ghoul2, self->playerModel, bolt_id, &boltMatrix, self->currentAngles,
 			self->currentOrigin, level.time, nullptr, self->s.modelScale);
 		gi.G2API_GiveMeVectorFromMatrix(boltMatrix, ORIGIN, org);
@@ -403,7 +403,7 @@ static void droideka_attack()
 			TIMER_Set(NPC, "attackDelay", NPC->client->ps.torsoAnimTimer);
 			NPCInfo->touchedByPlayer = nullptr;
 			NPC->client->ps.powerups[PW_BATTLESUIT] = level.time + SHIELD_EFFECT_TIME;
-			vec3_t smack_dir;
+			vec3_t smack_dir = {};
 			VectorSubtract(NPC->enemy->currentOrigin, NPC->currentOrigin, smack_dir);
 			smack_dir[2] += 30;
 			VectorNormalize(smack_dir);

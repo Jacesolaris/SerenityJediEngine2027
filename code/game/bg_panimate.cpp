@@ -2956,7 +2956,7 @@ static qboolean PM_CheckEnemyInBack(const float backCheckDist)
 		return qfalse;
 	}
 	trace_t trace;
-	vec3_t end, fwd;
+	vec3_t end = {}, fwd = {};
 	const vec3_t fwdAngles = { 0, pm->ps->viewangles[YAW], 0 };
 
 	AngleVectors(fwdAngles, fwd, nullptr, nullptr);
@@ -3120,7 +3120,7 @@ static saberMoveName_t PM_CheckStabDown()
 			return LS_NONE;
 		}
 	}
-	vec3_t enemy_dir, face_fwd;
+	vec3_t enemy_dir = {}, face_fwd = {};
 	const vec3_t facing_angles = { 0, pm->ps->viewangles[YAW], 0 };
 	AngleVectors(facing_angles, face_fwd, nullptr, nullptr);
 	VectorSubtract(pm->gent->enemy->currentOrigin, pm->ps->origin, enemy_dir);
@@ -3174,7 +3174,7 @@ saberMoveName_t PM_AttackForEnemyPos(const qboolean allow_fb, const qboolean all
 		return LS_NONE;
 	}
 
-	vec3_t enemy_org, enemy_dir, face_fwd, face_right, face_up;
+	vec3_t enemy_org = {}, enemy_dir = {}, face_fwd = {}, face_right = {}, face_up = {};
 	const vec3_t facing_angles = { 0, pm->ps->viewangles[YAW], 0 };
 	AngleVectors(facing_angles, face_fwd, face_right, face_up);
 	//FIXME: predict enemy position?
@@ -3182,7 +3182,7 @@ saberMoveName_t PM_AttackForEnemyPos(const qboolean allow_fb, const qboolean all
 	{
 		//VectorCopy( pm->gent->enemy->currentOrigin, enemy_org );
 		//HMM... using this will adjust for bbox size, so let's do that...
-		vec3_t size;
+		vec3_t size = {};
 		VectorSubtract(pm->gent->enemy->absmax, pm->gent->enemy->absmin, size);
 		VectorMA(pm->gent->enemy->absmin, 0.5, size, enemy_org);
 
@@ -3193,7 +3193,7 @@ saberMoveName_t PM_AttackForEnemyPos(const qboolean allow_fb, const qboolean all
 		if (pm->gent->enemy->bmodel && VectorCompare(vec3_origin, pm->gent->enemy->currentOrigin))
 		{
 			//a brush model without an origin brush
-			vec3_t size;
+			vec3_t size = {};
 			VectorSubtract(pm->gent->enemy->absmax, pm->gent->enemy->absmin, size);
 			VectorMA(pm->gent->enemy->absmin, 0.5, size, enemy_org);
 		}
@@ -3407,7 +3407,7 @@ qboolean PM_InSecondaryStyle()
 
 saberMoveName_t PM_SaberLungeAttackMove(const qboolean fallback_to_normal_lunge)
 {
-	vec3_t fwdAngles, jumpFwd;
+	vec3_t fwdAngles = {}, jumpFwd = {};
 
 	if (in_camera)
 	{
@@ -3715,7 +3715,7 @@ saberMoveName_t PM_SaberJumpForwardAttackMove()
 		}
 		return LS_JUMPATTACK_DUAL;
 	}
-	vec3_t fwdAngles, jump_fwd;
+	vec3_t fwdAngles = {}, jump_fwd = {};
 
 	VectorCopy(pm->ps->viewangles, fwdAngles);
 	fwdAngles[PITCH] = fwdAngles[ROLL] = 0;
@@ -3749,7 +3749,7 @@ saberMoveName_t PM_SaberJumpForwardAttackMove()
 
 saberMoveName_t PM_NPC_Force_Leap_Attack()
 {
-	vec3_t fwdAngles, jump_fwd;
+	vec3_t fwdAngles = {}, jump_fwd = {};
 
 	// see if we have an overridden (or cancelled) kata move
 	if (pm->ps->saber[0].jumpAtkFwdMove != LS_INVALID)
@@ -4093,7 +4093,7 @@ saberMoveName_t PM_SaberFlipOverAttackMove()
 		return LS_NONE;
 	}
 
-	vec3_t fwdAngles, jumpFwd;
+	vec3_t fwdAngles = {}, jumpFwd = {};
 
 	VectorCopy(pm->ps->viewangles, fwdAngles);
 	fwdAngles[PITCH] = fwdAngles[ROLL] = 0;
@@ -4632,7 +4632,7 @@ saberMoveName_t PM_CheckPullAttack()
 		qboolean doMove = g_saberNewControlScheme->integer ? qtrue : qfalse;
 		//in new control scheme, can always do this, even if there's no-one to do it to
 
-		saberMoveName_t pullAttackMove;
+		saberMoveName_t pullAttackMove = LS_NONE;
 		if (pm->ps->saberAnimLevel == SS_FAST)
 		{
 			pullAttackMove = LS_PULL_ATTACK_STAB;
@@ -4750,8 +4750,8 @@ extern qboolean npc_is_sith_lord(const gentity_t* self);
 qboolean PM_Can_Do_Kill_Lunge(void)
 {
 	trace_t tr;
-	vec3_t flatAng;
-	vec3_t fwd, back{};
+	vec3_t flatAng = {};
+	vec3_t fwd = {}, back{};
 	const vec3_t trmins = { -15.0f, -15.0f, -8.0f };
 	const vec3_t trmaxs = { 15.0f,  15.0f,  8.0f };
 
@@ -4822,8 +4822,8 @@ qboolean PM_Can_Do_Kill_Lunge(void)
 qboolean PM_Can_Do_Kill_Lunge_back(void)
 {
 	trace_t tr;
-	vec3_t flatAng;
-	vec3_t fwd, back{};
+	vec3_t flatAng = {};
+	vec3_t fwd = {}, back{};
 	const vec3_t trmins = { -15.0f, -15.0f, -8.0f };
 	const vec3_t trmaxs = { 15.0f,  15.0f,  8.0f };
 
@@ -4972,7 +4972,7 @@ saberMoveName_t PM_SaberAttackForMovement(const int forwardmove, const int right
 				G_TryingCartwheel(pm->gent, &pm->cmd))) //focus-holding player
 		{
 			//cartwheel right
-			vec3_t right;
+			vec3_t right = {};
 			const vec3_t fwdAngles = { 0, pm->ps->viewangles[YAW], 0 };
 			if (pm->gent)
 			{
@@ -5042,7 +5042,7 @@ saberMoveName_t PM_SaberAttackForMovement(const int forwardmove, const int right
 			//focus-holding player
 		{
 			//cartwheel left
-			vec3_t right;
+			vec3_t right = {};
 			const vec3_t fwdAngles = { 0, pm->ps->viewangles[YAW], 0 };
 			if (pm->gent)
 			{
@@ -5235,7 +5235,7 @@ saberMoveName_t PM_SaberAttackForMovement(const int forwardmove, const int right
 						if (pm->gent && pm->gent->enemy)
 						{
 							//FIXME: or just trace for a valid enemy standing behind me?  And no enemy in front?
-							vec3_t enemy_dir, face_fwd;
+							vec3_t enemy_dir = {}, face_fwd = {};
 							const vec3_t facing_angles = { 0, pm->ps->viewangles[YAW], 0 };
 							AngleVectors(facing_angles, face_fwd, nullptr, nullptr);
 							VectorSubtract(pm->gent->enemy->currentOrigin, pm->ps->origin, enemy_dir);
@@ -6013,7 +6013,7 @@ void PM_SaberStartTransAnim(const int saberAnimLevel, const int anim, float* ani
 	{
 		*animSpeed *= SABERBLASTER_IMPALE_STAB_SPEED;
 	}
-	char buf[128];
+	char buf[128] = {};
 
 	// Read global saber animation speed multiplier
 	gi.Cvar_VariableStringBuffer("g_saberAnimSpeed", buf, sizeof buf);
@@ -6905,10 +6905,10 @@ static bool TorsoAgainstWindTest(gentity_t* ent)
 	{
 		if (Q_stricmp(level.mapname, "t2_wedge") != 0)
 		{
-			vec3_t wind_dir;
+			vec3_t wind_dir = {};
 			if (gi.WE_GetWindVector(wind_dir, ent->currentOrigin))
 			{
-				vec3_t fwd;
+				vec3_t fwd = {};
 				VectorScale(wind_dir, -1.0f, wind_dir);
 				AngleVectors(pm->gent->currentAngles, fwd, nullptr, nullptr);
 

@@ -43,7 +43,7 @@ static void WP_DisruptorMainFire(gentity_t* ent)
 {
 	int damage = weaponData[WP_DISRUPTOR].damage;
 	qboolean render_impact = qtrue;
-	vec3_t start, end, spot;
+	vec3_t start = {}, end = {}, spot = {};
 	trace_t tr;
 	gentity_t* traceEnt = nullptr;
 	constexpr float shot_range = 8192;
@@ -169,8 +169,8 @@ void WP_DisruptorAltFire(gentity_t* ent)
 {
 	int damage = weaponData[WP_DISRUPTOR].altDamage, traces = DISRUPTOR_ALT_TRACES;
 	qboolean render_impact = qtrue;
-	vec3_t start;
-	vec3_t muzzle2, spot, dir;
+	vec3_t start = {};
+	vec3_t muzzle2 = {}, spot = {}, dir = {};
 	trace_t tr;
 	gentity_t* tent = nullptr;
 	qboolean hit_dodged = qfalse, fullCharge = qfalse;
@@ -234,7 +234,7 @@ void WP_DisruptorAltFire(gentity_t* ent)
 	for (int i = 0; i < traces; i++)
 	{
 		constexpr float shot_range = 8192;
-		vec3_t end;
+		vec3_t end = {};
 		VectorMA(start, shot_range, forward_vec, end);
 
 		//NOTE: if you want to be able to hit guys in emplaced guns, use "G2_COLLIDE, 10" instead of "G2_RETURNONHIT, 0"

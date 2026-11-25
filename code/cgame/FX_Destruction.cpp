@@ -35,7 +35,7 @@ FX_DestructionProjectileThink
 
 void FX_DestructionProjectileThink(centity_t* cent)
 {
-	vec3_t forward;
+	vec3_t forward = {};
 
 	if (VectorNormalize2(cent->currentState.pos.trDelta, forward) == 0.0f)
 	{
@@ -86,7 +86,7 @@ FX_BlastProjectileThink
 */
 void FX_BlastProjectileThink(centity_t* cent)
 {
-	vec3_t forward;
+	vec3_t forward = {};
 
 	if (VectorNormalize2(cent->currentState.pos.trDelta, forward) == 0.0f)
 	{
@@ -125,7 +125,7 @@ FX_BlastProjectileThink
 */
 void FX_StrikeProjectileThink(centity_t* cent)
 {
-	vec3_t forward;
+	vec3_t forward = {};
 
 	if (VectorNormalize2(cent->currentState.pos.trDelta, forward) == 0.0f)
 	{

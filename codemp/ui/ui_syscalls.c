@@ -36,7 +36,7 @@ Q_EXPORT void dllEntry(intptr_t(QDECL* syscallptr)(intptr_t arg, ...)) {
 }
 
 static int PASSFLOAT(float x) {
-	byteAlias_t fi;
+	byteAlias_t fi = { 0 };
 	fi.f = x;
 	return fi.i;
 }
@@ -60,7 +60,7 @@ void trap_Cvar_Set(const char* var_name, const char* value) {
 	Q_syscall(UI_CVAR_SET, var_name, value);
 }
 float trap_Cvar_VariableValue(const char* var_name) {
-	byteAlias_t fi;
+	byteAlias_t fi = { 0 };
 	fi.i = Q_syscall(UI_CVAR_VARIABLEVALUE, var_name);
 	return fi.f;
 }
@@ -142,7 +142,7 @@ unsigned int trap_AnyLanguage_ReadCharFromString(const char* psText, int* piAdva
 	return Q_syscall(UI_ANYLANGUAGE_READCHARFROMSTRING, psText, piAdvanceCount, pbIsTrailingPunctuation);
 }
 qhandle_t trap_R_RegisterShaderNoMip(const char* name) {
-	char buf[1024];
+	char buf[1024] = { 0 };
 
 	if (name[0] == '*') {
 		trap_Cvar_VariableStringBuffer(name + 1, buf, sizeof buf);
@@ -472,7 +472,7 @@ void UISyscall_RemoveCommand(const char* cmd_name)
 }
 
 NORETURN void QDECL UI_Error(int level, const char* error, ...) {
-	va_list argptr;
+	va_list argptr = { 0 };
 	char text[4096] = { 0 };
 
 	va_start(argptr, error);
@@ -483,7 +483,7 @@ NORETURN void QDECL UI_Error(int level, const char* error, ...) {
 }
 
 void QDECL UI_Printf(const char* msg, ...) {
-	va_list argptr;
+	va_list argptr = { 0 };
 	char text[4096] = { 0 };
 	int ret = 0;
 

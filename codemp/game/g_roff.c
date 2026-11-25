@@ -95,7 +95,7 @@ static void G_RoffNotetrackCallback(const gentity_t* cent, const char* notetrack
 
 	if (strcmp(type, "effect") == 0)
 	{
-		vec3_t parsedOffset;
+		vec3_t parsedOffset = { 0 };
 		char teststr[256] = { 0 };
 		char t[64] = { 0 };
 		int posoffsetGathered = 0;
@@ -179,11 +179,11 @@ static void G_RoffNotetrackCallback(const gentity_t* cent, const char* notetrack
 
 		if (objectID)
 		{
-			vec3_t up;
-			vec3_t right;
-			vec3_t forward;
-			vec3_t useOrigin;
-			vec3_t useAngles;
+			vec3_t up = { 0 };
+			vec3_t right = { 0 };
+			vec3_t forward = { 0 };
+			vec3_t useOrigin = { 0 };
+			vec3_t useAngles = { 0 };
 			if (addlArgs)
 			{
 				vec3_t parsedAngles = { 0 };
@@ -402,7 +402,7 @@ static qboolean G_InitRoff(char* file, unsigned char* data)
 
 int G_LoadRoffs(const char* fileName)
 {
-	char file[MAX_QPATH];
+	char file[MAX_QPATH] = { 0 };
 
 	// FIX: move huge buffer off the stack
 	static char data[ROFF_INFO_SIZENEW];
@@ -480,7 +480,7 @@ int G_LoadRoffs(const char* fileName)
 void G_Roffs(gentity_t* ent)
 {
 	// updates roff scripting for this entity.
-	vec3_t org, ang;
+	vec3_t org = { 0 }, ang = { 0 };
 
 	if (!ent->next_roff_time)
 	{

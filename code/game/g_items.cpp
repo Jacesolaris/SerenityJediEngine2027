@@ -313,7 +313,7 @@ gentity_t* G_DropSaberItem(const char* saberType, const saber_colors_t saberColo
 			//FIXME: transfer per-blade color somehow?
 			if (saberColor >= SABER_RGB)
 			{
-				char rgb_color[8];
+				char rgb_color[8] = {};
 				Com_sprintf(rgb_color, 8, "x%02x%02x%02x", saberColor & 0xff, saberColor >> 8 & 0xff,
 					saberColor >> 16 & 0xff);
 				// Copy it: the entity keeps this string after this function returns.
@@ -421,7 +421,7 @@ static qboolean Pickup_Saber(gentity_t* self, qboolean hadSaber, gentity_t* pick
 				if (self->client->ps.dualSabers)
 				{
 					//I already have 2 sabers
-					vec3_t dir2Saber, rightDir;
+					vec3_t dir2Saber = {}, rightDir = {};
 					//to determine which one to replace, see which side of me it's on
 					VectorSubtract(pickUpSaber->currentOrigin, self->currentOrigin, dir2Saber);
 					dir2Saber[2] = 0;
@@ -1150,8 +1150,8 @@ Spawns an item and tosses it forward
 gentity_t* Drop_Item(gentity_t* ent, gitem_t* item, const float angle, const qboolean copytarget)
 {
 	gentity_t* dropped = nullptr;
-	vec3_t velocity;
-	vec3_t angles;
+	vec3_t velocity = {};
+	vec3_t angles = {};
 
 	VectorCopy(ent->s.apos.trBase, angles);
 	angles[YAW] += angle;
@@ -1240,7 +1240,7 @@ void FinishSpawningItem(gentity_t* ent)
 	if (com_outcast && com_outcast->integer == 1)
 	{
 		trace_t tr;
-		vec3_t dest;
+		vec3_t dest = {};
 
 		// ------------------------------------------------
 		// Debug cvars
@@ -1373,7 +1373,7 @@ void FinishSpawningItem(gentity_t* ent)
 					{ 1, 0 },{ -1, 0 },{ 0, 1 },{ 0, -1 },
 					{ 0.7071f, 0.7071f },{ 0.7071f, -0.7071f },{ -0.7071f, 0.7071f },{ -0.7071f, -0.7071f }
 				};
-				vec3_t nudged;
+				vec3_t nudged = {};
 				qboolean found = qfalse;
 
 				for (int up = 1; up <= 24 && !found; up++)
@@ -1530,7 +1530,7 @@ void FinishSpawningItem(gentity_t* ent)
 			item->giTag == WP_SABER &&
 			ent->NPC_type && ent->NPC_type[0])
 		{
-			saberInfo_t saberInfo;
+			saberInfo_t saberInfo = {};
 
 			const bool isPlayer = !Q_stricmp(ent->NPC_type, "player");
 			const bool validPlayerSaber =
@@ -1541,7 +1541,7 @@ void FinishSpawningItem(gentity_t* ent)
 			if (isPlayer && validPlayerSaber)
 			{
 				WP_SaberParseParms(g_saber->string, &saberInfo);
-				char customSkin[MAX_QPATH];
+				char customSkin[MAX_QPATH] = {};
 				if (G_CustomSaberSkin(saberInfo.name, saberInfo.model, 0, customSkin, sizeof customSkin))
 				{// the saber builder: the player's built hilt
 					if (saberInfo.skin && gi.bIsFromZone(saberInfo.skin, TAG_G_ALLOC))
@@ -1603,7 +1603,7 @@ void FinishSpawningItem(gentity_t* ent)
 		}
 		else
 		{
-			vec3_t dest;
+			vec3_t dest = {};
 			VectorSet(dest, ent->s.origin[0], ent->s.origin[1], MIN_WORLD_COORD);
 
 			gi.trace(
@@ -1840,7 +1840,7 @@ G_BounceItem
 */
 static void G_BounceItem(gentity_t* ent, trace_t* trace)
 {
-	vec3_t velocity;
+	vec3_t velocity = {};
 	qboolean droppedSaber = qtrue;
 
 	if (ent->item
@@ -1884,7 +1884,7 @@ static void G_BounceItem(gentity_t* ent, trace_t* trace)
 				&& ent->NPC_type[0])
 			{
 				//we have a valid saber for this
-				saberInfo_t saber;
+				saberInfo_t saber = {};
 				if (WP_SaberParseParms(ent->NPC_type, &saber))
 				{
 					if (saber.saberFlags & SFL_BOLT_TO_WRIST)
@@ -1939,7 +1939,7 @@ extern cvar_t* g_remove_unused_weapons;
 
 void G_RunItem(gentity_t* ent)
 {
-	vec3_t origin;
+	vec3_t origin = {};
 	trace_t tr;
 	int mask = 0;
 
@@ -2652,7 +2652,7 @@ static void barrier_push_ent(gentity_t* ent, gentity_t* pushed, vec3_t smack_dir
 constexpr auto DROIDEKA_SHIELD_SIZE = 75;
 static void barrier_shield_push_radius_ents(gentity_t* ent)
 {
-	gentity_t* radius_ents[128];
+	gentity_t* radius_ents[128] = {};
 	constexpr float radius = DROIDEKA_SHIELD_SIZE;
 	vec3_t mins{}, maxs{};
 
@@ -2665,7 +2665,7 @@ static void barrier_shield_push_radius_ents(gentity_t* ent)
 	const int num_ents = gi.EntitiesInBox(mins, maxs, radius_ents, 128);
 	for (int ent_index = 0; ent_index < num_ents; ent_index++)
 	{
-		vec3_t smack_dir;
+		vec3_t smack_dir = {};
 		// Only Clients
 		//--------------
 		if (!radius_ents[ent_index] || !radius_ents[ent_index]->client)

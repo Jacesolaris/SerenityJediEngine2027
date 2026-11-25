@@ -411,7 +411,7 @@ Take x,y positions as if 640 x 480 and scales them to the proper resolution
 void CG_DrawNumField(int x, const int y, int width, int value, const int charWidth, const int charHeight,
 	const int style, const qboolean zeroFill)
 {
-	char num[16];
+	char num[16] = {};
 	int frame = 0;
 	int xWidth = 0;
 

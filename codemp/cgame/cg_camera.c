@@ -34,7 +34,7 @@ camera_t client_camera = { 0 };
 void CGCam_FollowDisable(void);
 void CGCam_TrackDisable(void);
 void CGCam_DistanceDisable(void);
-extern int CG_CalcFOVFromX(float fov_x);
+extern qboolean CG_CalcFOVFromX(float fov_x);
 
 /*
 -------------------------
@@ -723,7 +723,7 @@ void CGCam_Distance(const float distance, const float initLerp)
 
 static void CGCam_FollowUpdate(void)
 {
-	vec3_t center, dir, cameraAngles, vec, focus[MAX_CAMERA_GROUP_SUBJECTS] = { 0 }; //No more than 16 subjects in a cameraGroup
+	vec3_t center = { 0 }, dir = { 0 }, cameraAngles = { 0 }, vec = { 0 }, focus[MAX_CAMERA_GROUP_SUBJECTS] = { 0 }; //No more than 16 subjects in a cameraGroup
 	int num_subjects = 0, i = 0;
 
 	if (client_camera.cameraGroup[0] == -1)
@@ -754,7 +754,7 @@ static void CGCam_FollowUpdate(void)
 			const int newBolt = trap->G2API_AddBolt(&fromCent->ghoul2, 0, client_camera.cameraGroupTag);
 			if (newBolt != -1)
 			{
-				mdxaBone_t boltMatrix;
+				mdxaBone_t boltMatrix = { 0 };
 
 				trap->G2API_GetBoltMatrix(&fromCent->ghoul2, 0, newBolt, &boltMatrix, fromCent->turAngles,
 					fromCent->lerpOrigin, cg.time, cgs.game_models, fromCent->modelScale);
@@ -925,7 +925,7 @@ static void CGCam_FollowUpdate(void)
 	// from where the camera is now (2026-11-16): cg.refdef.vieworg is only set from client_camera.origin after this
 	// (CGCam_Update), so a camera that was not moving aimed from (0,0,0) and never faced the actors
 	{
-		vec3_t cam_org;
+		vec3_t cam_org = { 0 };
 		if (client_camera.info_state & CAMERA_MOVING)
 		{
 			VectorCopy(cg.refdef.vieworg, cam_org); // (set by the move above)
@@ -990,7 +990,7 @@ static void CGCam_TrackEntUpdate(void)
 	if (cam_trackIndex >= 0 && cam_trackIndex < cam_trackCount)
 	{
 		//We're already heading to a path_corner
-		vec3_t vec;
+		vec3_t vec = { 0 };
 		VectorSubtract(cam_trackOrg[cam_trackIndex], client_camera.origin, vec);
 		if (VectorLengthSquared(vec) < 256) //16 squared
 		{
@@ -1045,7 +1045,7 @@ static void CGCam_TrackEntUpdate(void)
 
 static void CGCam_TrackUpdate(void)
 {
-	vec3_t goalVec, curVec, trackPos;
+	vec3_t goalVec = { 0 }, curVec = { 0 }, trackPos = { 0 };
 
 	if (client_camera.nextTrackEntUpdateTime <= cg.time)
 	{
@@ -1065,7 +1065,7 @@ static void CGCam_TrackUpdate(void)
 
 	if (client_camera.distance && client_camera.info_state & CAMERA_FOLLOWING)
 	{
-		vec3_t vec;
+		vec3_t vec = { 0 };
 		if (!client_camera.distanceInitLerp)
 		{
 			VectorSubtract(client_camera.origin, client_camera.subjectPos, vec);
@@ -1613,7 +1613,7 @@ static void CGCam_NotetrackProcessFov(const char* addlArg)
 	}
 	if (isdigit(addlArg[a]))
 	{
-		char t[64];
+		char t[64] = { 0 };
 		// "fov <new fov>"
 		int d = 0;
 		const int tsize = 64;
@@ -1648,7 +1648,7 @@ static void CGCam_NotetrackProcessFovZoom(const char* addlArg)
 {
 	int a = 0;
 	float begin_fov = 0.0f;
-	char t[64];
+	char t[64] = { 0 };
 	int d = 0;
 	const int tsize = 64;
 
@@ -1748,7 +1748,7 @@ static void CGCam_NotetrackProcessFovZoom(const char* addlArg)
 
 static void CGCam_NotetrackProcessFovAccel(const char* addlArg)
 {
-	char t[64];
+	char t[64] = { 0 };
 	int a = 0;
 	float beginFOV = 0.0f;
 	int d = 0;
@@ -2017,10 +2017,10 @@ typedef struct
 static int CGCam_LoadRoff(const char* roffName)
 {
 	static char data[CAM_ROFF_FILE_SIZE];
-	char file[MAX_QPATH];
+	char file[MAX_QPATH] = { 0 };
 	fileHandle_t f = 0;
-	camRoff_t* roff;
-	int i;
+	camRoff_t* roff = NULL;
+	int i = 0;
 
 	Com_sprintf(file, sizeof file, "%s/%s.rof", Q3_SCRIPT_DIR, roffName);
 
@@ -2200,7 +2200,7 @@ static void CGCam_Roff(void)
 
 		const camRoff_t* roff = &cam_roffs[cam_roffNum];
 		const int frame = client_camera.roff_frame;
-		vec3_t org, ang;
+		vec3_t org = { 0 }, ang = { 0 };
 
 		if (frame >= roff->frames)
 		{
@@ -2439,7 +2439,7 @@ qboolean CG_InServerCamera(void)
 // the letterbox bars over a cutscene, sliding in (as SP; cg_drawwidescreenmodemp 1 = none)
 void CG_DrawServerCameraBars(void)
 {
-	float f, h;
+	float f = 0, h = 0;
 	vec4_t black = { 0.0f, 0.0f, 0.0f, 1.0f };
 
 	if (cg_drawwidescreenmodemp.integer)
@@ -2467,7 +2467,7 @@ qboolean CG_ServerCameraBlocksCommand(const char* cmd)
 {
 	static const char* blocked[] = { "md_wheel_open", "forcenext", "forceprev", "invnext", "invprev", "weapnext",
 		"weapprev", "weapon", "weaponclean" };
-	size_t i;
+	size_t i = 0;
 
 	if (!CG_InServerCamera())
 	{

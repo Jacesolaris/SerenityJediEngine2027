@@ -58,7 +58,7 @@
 #define SORT(a,b)       \
 			 if(a>b)    \
 			 {          \
-			   float tmp; \
+			   float tmp = 0.0f; \
 			   tmp=a;     \
 			   a=b;     \
 			   b=tmp;     \
@@ -124,7 +124,7 @@
 
 #define EDGE_AGAINST_TRI_EDGES(V0,V1,U0,U1,U2) \
 {                                              \
-  float Ax,Ay,Bx,By,Cx,Cy,e,d,f;               \
+  float Ax = 0.0f, Ay = 0.0f, Bx = 0.0f, By = 0.0f, Cx = 0.0f, Cy = 0.0f, e = 0.0f, d = 0.0f, f = 0.0f; \
   Ax=V1[i0]-V0[i0];                            \
   Ay=V1[i1]-V0[i1];                            \
   /* test edge U0,U1 against V0,V1 */          \
@@ -137,7 +137,7 @@
 
 #define POINT_IN_TRI(V0,U0,U1,U2)           \
 {                                           \
-  float a,b,c,d0,d1,d2;                     \
+  float a = 0.0f, b = 0.0f, c = 0.0f, d0 = 0.0f, d1 = 0.0f, d2 = 0.0f; \
   /* is T1 completly inside T2? */          \
   /* check if V0 is inside tri(U0,U1,U2) */ \
   a=U1[i1]-U0[i1];                          \
@@ -163,7 +163,7 @@
 qboolean coplanar_tri_tri(vec3_t N, vec3_t V0, vec3_t V1, vec3_t V2,
 	vec3_t U0, vec3_t U1, vec3_t U2)
 {
-	vec3_t A;
+	vec3_t A = { 0 };
 	short i0 = 0, i1 = 0;
 	/* first project onto an axis-aligned plane, that maximizes the area */
 	/* of the triangles, compute indices: i0,i1. */
@@ -212,12 +212,12 @@ qboolean coplanar_tri_tri(vec3_t N, vec3_t V0, vec3_t V1, vec3_t V2,
 qboolean tri_tri_intersect(vec3_t V0, vec3_t V1, vec3_t V2,
 	vec3_t U0, vec3_t U1, vec3_t U2)
 {
-	vec3_t E1, E2;
-	vec3_t N1, N2;
+	vec3_t E1 = { 0 }, E2 = { 0 };
+	vec3_t N1 = { 0 }, N2 = { 0 };
 	float d2 = 0.0f;
 	float dv0 = 0.0f, dv1 = 0.0f, dv2 = 0.0f;
-	vec3_t D;
-	float isect1[2], isect2[2];
+	vec3_t D = { 0 };
+	float isect1[2] = { 0 }, isect2[2] = { 0 };
 	float du0du1 = 0.0f, du0du2 = 0.0f, dv0dv1 = 0.0f, dv0dv2 = 0.0f;
 	short index = 0;
 	float vp0 = 0.0f, vp1 = 0.0f, vp2 = 0.0f;

@@ -125,11 +125,11 @@ const char* CG_PlaceString(int rank)
 	char* s = NULL, * t = NULL;
 	// number extenstions, eg 1st, 2nd, 3rd, 4th etc.
 	// note that the rules are different for french, but by changing the required strip strings they seem to work
-	char s_st[10];
-	char s_nd[10];
-	char s_rd[10];
-	char s_th[10];
-	char s_tied_for[64]; // german is much longer, super safe...
+	char s_st[10] = { 0 };
+	char s_nd[10] = { 0 };
+	char s_rd[10] = { 0 };
+	char s_th[10] = { 0 };
+	char s_tied_for[64] = { 0 }; // german is much longer, super safe...
 
 	trap->SE_GetStringTextString("MP_INGAME_NUMBER_ST", s_st, sizeof s_st);
 	trap->SE_GetStringTextString("MP_INGAME_NUMBER_ND", s_nd, sizeof s_nd);
@@ -276,12 +276,12 @@ static void CG_Obituary(entityState_t* ent)
 	char* message = NULL;
 	const char* target_info = NULL;
 	const char* attacker_info = NULL;
-	char target_name[32];
-	char attacker_name[32];
+	char target_name[32] = { 0 };
+	char attacker_name[32] = { 0 };
 	char target_veh_name[32] = { 0 };
 	char attacker_veh_name[32] = { 0 };
 	char attacker_veh_weap_name[32] = { 0 };
-	gender_t gender;
+	gender_t gender = GENDER_MALE;
 	clientInfo_t* ci = NULL;
 	qboolean veh_message = qfalse;
 
@@ -507,8 +507,8 @@ static void CG_Obituary(entityState_t* ent)
 		}
 
 		{
-			char obbuf[1024];
-			char san[1024];
+			char obbuf[1024] = { 0 };
+			char san[1024] = { 0 };
 			Com_sprintf(obbuf, sizeof obbuf, "%s %s", target_name, message);
 			CG_SanitizeStringForPrint(obbuf, san, sizeof san);
 			if (!CG_CheckAndStoreObit(san))
@@ -534,8 +534,8 @@ clientkilled:
 				!cg.snap->ps.isJediMaster &&
 				CG_ThereIsAMaster())
 			{
-				char part1[512];
-				char part2[512];
+				char part1[512] = { 0 };
+				char part2[512] = { 0 };
 				trap->SE_GetStringTextString("MP_INGAME_KILLED_MESSAGE", part1, sizeof part1);
 				trap->SE_GetStringTextString("MP_INGAME_JMKILLED_NOTJM", part2, sizeof part2);
 				s = va("%s %s\n%s\n", part1, target_name, part2);
@@ -546,7 +546,7 @@ clientkilled:
 				!cg.snap->ps.isJediMaster)
 			{
 				//no JM, saber must be out
-				char part1[512];
+				char part1[512] = { 0 };
 				trap->SE_GetStringTextString("MP_INGAME_KILLED_MESSAGE", part1, sizeof part1);
 				s = va("%s %s\n", part1, target_name);
 			}
@@ -556,8 +556,8 @@ clientkilled:
 			}
 			else
 			{
-				char s_place_with[256];
-				char s_killed_str[256];
+				char s_place_with[256] = { 0 };
+				char s_killed_str[256] = { 0 };
 				trap->SE_GetStringTextString("MP_INGAME_PLACE_WITH", s_place_with, sizeof s_place_with);
 				trap->SE_GetStringTextString("MP_INGAME_KILLED_MESSAGE", s_killed_str, sizeof s_killed_str);
 
@@ -569,12 +569,12 @@ clientkilled:
 		}
 		else
 		{
-			char s_killed_str[256];
+			char s_killed_str[256] = { 0 };
 			trap->SE_GetStringTextString("MP_INGAME_KILLED_MESSAGE", s_killed_str, sizeof s_killed_str);
 			s = va("%s %s", s_killed_str, target_name);
 		}
 		{
-			char san[1024];
+			char san[1024] = { 0 };
 			CG_SanitizeStringForPrint(s, san, sizeof san);
 			if (!CG_CheckAndStoreObit(san))
 			{
@@ -789,8 +789,8 @@ clientkilled:
 			}
 
 			{
-				char obbuf[1024];
-				char san[1024];
+				char obbuf[1024] = { 0 };
+				char san[1024] = { 0 };
 				Com_sprintf(obbuf, sizeof obbuf, "%s %s %s", target_name, message, attacker_name);
 				CG_SanitizeStringForPrint(obbuf, san, sizeof san);
 				if (!CG_CheckAndStoreObit(san)) trap->Print("%s\n", san);
@@ -809,8 +809,8 @@ clientkilled:
 			else
 			{
 				{
-					char obbuf[1024];
-					char san[1024];
+					char obbuf[1024] = { 0 };
+					char san[1024] = { 0 };
 					Com_sprintf(obbuf, sizeof obbuf, "%s %s %s", target_name, message, attacker_name);
 					CG_SanitizeStringForPrint(obbuf, san, sizeof san);
 					if (!CG_CheckAndStoreObit(san)) trap->Print("%s\n", san);
@@ -845,8 +845,8 @@ clientkilled:
 
 	// we don't know what it was
 	{
-		char obbuf[1024];
-		char san[1024];
+		char obbuf[1024] = { 0 };
+		char san[1024] = { 0 };
 		const char* gen = (char*)CG_GetStringEdString("MP_INGAME", "DIED_GENERIC");
 		Com_sprintf(obbuf, sizeof obbuf, "%s %s", target_name, gen);
 		CG_SanitizeStringForPrint(obbuf, san, sizeof san);
@@ -1255,7 +1255,7 @@ static const char* CG_TeamName(const int team)
 
 static void CG_PrintCTFMessage(clientInfo_t* ci, const char* team_name, const int ctf_message)
 {
-	char printMsg[1024];
+	char printMsg[1024] = { 0 };
 	char* ref_name = NULL;
 
 	switch (ctf_message)
@@ -1483,7 +1483,7 @@ static void CG_G2MarkEvent(entityState_t* es)
 	//whereas es->origin2 is the predicted position of the
 	//projectile. (based on the trajectory upon impact) -rww
 	centity_t* p_owner = &cg_entities[es->otherEntityNum];
-	vec3_t start_point;
+	vec3_t start_point = { 0 };
 	float size = 0.0f;
 	qhandle_t shader = 0;
 
@@ -1500,7 +1500,7 @@ static void CG_G2MarkEvent(entityState_t* es)
 	//way outside of model space.
 	if (es->eventParm)
 	{
-		trace_t tr;
+		trace_t tr = { 0 };
 		int ignore = ENTITYNUM_NONE;
 
 		CG_G2Trace(&tr, es->origin, NULL, NULL, es->origin2, ignore, MASK_PLAYERSOLID);
@@ -1605,8 +1605,8 @@ static void CG_G2MarkEvent(entityState_t* es)
 
 void CG_CalcVehMuzzle(Vehicle_t* p_veh, centity_t* ent, const int muzzle_num)
 {
-	mdxaBone_t boltMatrix;
-	vec3_t veh_angles;
+	mdxaBone_t boltMatrix = { 0 };
+	vec3_t veh_angles = { 0 };
 
 	assert(p_veh);
 
@@ -1817,7 +1817,7 @@ static void CG_SaberBlasterEvent(const int owner_num, const int parm)
 		const sfxHandle_t sfx = charged ? weap->altFlashSound[0] : weap->flashSound[0];
 		const fxHandle_t fx = charged ? weap->altMuzzleEffect : weap->muzzleEffect;
 		const clientInfo_t* ci = NULL;
-		vec3_t fwd, right, flash_origin;
+		vec3_t fwd = { 0 }, right = { 0 }, flash_origin = { 0 };
 
 		if (sfx)
 		{
@@ -1839,7 +1839,7 @@ static void CG_SaberBlasterEvent(const int owner_num, const int parm)
 		if (owner->saberBlasterPistol && owner->ghoul2 && trap->G2API_HasGhoul2ModelOnIndex(&owner->ghoul2, 2))
 		{
 			// the pistol's own muzzle (item 404, DH: the flash came from the hand)
-			mdxaBone_t matrix;
+			mdxaBone_t matrix = { 0 };
 			trap->G2API_GetBoltMatrix(owner->ghoul2, 2, 0, &matrix, owner->turAngles, owner->lerpOrigin,
 				cg.time, cgs.game_models, owner->modelScale);
 			BG_GiveMeVectorFromMatrix(&matrix, ORIGIN, flash_origin);
@@ -1849,7 +1849,7 @@ static void CG_SaberBlasterEvent(const int owner_num, const int parm)
 		}
 		else if (ci && owner->ghoul2 && ci->bolt_lhand)
 		{
-			mdxaBone_t matrix;
+			mdxaBone_t matrix = { 0 };
 			trap->G2API_GetBoltMatrix(owner->ghoul2, 0, ci->bolt_lhand, &matrix, owner->turAngles, owner->lerpOrigin,
 				cg.time, cgs.game_models, owner->modelScale);
 			BG_GiveMeVectorFromMatrix(&matrix, ORIGIN, flash_origin);
@@ -1900,7 +1900,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 {
 	entityState_t* es = NULL;
 	int event = 0;
-	vec3_t dir;
+	vec3_t dir = { 0 };
 	const char* s = NULL;
 	int clientNum = 0;
 	int e_id = 0;
@@ -1990,7 +1990,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 		DEBUGNAME("EV_FOOTSTEP");
 		if (cg_footsteps.integer)
 		{
-			footstep_t sound_type;
+			footstep_t sound_type = FOOTSTEP_STONEWALK;
 			switch (es->eventParm)
 			{
 			case MATERIAL_MUD:
@@ -2151,7 +2151,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 				break;
 			}
 			//set client
-			if (cg_entities[es->number].currentState.eType == ET_NPC)
+			if (es->number >= 0 && es->number < MAX_GENTITIES && cg_entities[es->number].currentState.eType == ET_NPC)
 			{
 				client = cg_entities[es->number].npcClient;
 			}
@@ -2160,19 +2160,19 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 				client = &cgs.clientinfo[es->number];
 			}
 
-			if (cg_entities && cg_entities[es->eventParm].currentState.eType == ET_NPC)
+			if (es->eventParm >= 0 && es->eventParm < MAX_GENTITIES && cg_entities[es->eventParm].currentState.eType == ET_NPC)
 			{
 				enemy_client = cg_entities[es->eventParm].npcClient;
 			}
-			else if (es->number < MAX_CLIENTS)
+			else if (es->eventParm >= 0 && es->eventParm < MAX_CLIENTS)
 			{
 				enemy_client = &cgs.clientinfo[es->eventParm];
 			}
 			if (client && client->infoValid && enemy_client && enemy_client->infoValid)
 			{
-				vec3_t our_base, our_tip, their_base, their_tip;
-				mdxaBone_t boltMatrix;
-				vec3_t flash_point, temp;
+				vec3_t our_base = { 0 }, our_tip = { 0 }, their_base = { 0 }, their_tip = { 0 };
+				mdxaBone_t boltMatrix = { 0 };
+				vec3_t flash_point = { 0 }, temp = { 0 };
 				qboolean cull_pass = qfalse;
 				qhandle_t lock_sound = trap->S_RegisterSound(va("sound/weapons/saber/saberlock%d.mp3", index));
 
@@ -2192,8 +2192,8 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 
 				if (cg.mInRMG)
 				{
-					trace_t tr;
-					vec3_t vec_sub;
+					trace_t tr = { 0 };
+					vec3_t vec_sub = { 0 };
 					VectorSubtract(cg.refdef.vieworg, flash_point, vec_sub);
 					if (VectorLength(vec_sub) < 5000)
 					{
@@ -2210,7 +2210,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 				}
 				if (cull_pass)
 				{
-					vec3_t fx_dir;
+					vec3_t fx_dir = { 0 };
 
 					//angle setup
 					VectorCopy(vec3_origin, fx_dir);
@@ -3076,7 +3076,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 		{
 			//special case for turret firing
 			vec3_t gunpoint = { 0 }, gunangle = { 0 };
-			mdxaBone_t matrix;
+			mdxaBone_t matrix = { 0 };
 
 			weaponInfo_t* weapon_info = &cg_weapons[WP_TURRET];
 
@@ -3246,7 +3246,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 		{
 			qhandle_t swing_sound = trap->S_RegisterSound(va("sound/weapons/saber/saberhup%i.wav", Q_irand(1, 11)));
 			clientInfo_t* client = NULL;
-			if (cg_entities[es->number].currentState.eType == ET_NPC)
+			if (es->number >= 0 && es->number < MAX_GENTITIES && cg_entities[es->number].currentState.eType == ET_NPC)
 			{
 				client = cg_entities[es->number].npcClient;
 			}
@@ -3397,7 +3397,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 			// ------------------------------------------------------------
 			if (es->eventParm == 16)
 			{
-				vec3_t fx_dir;
+				vec3_t fx_dir = { 0 };
 				VectorCopy(es->angles, fx_dir);
 				if (!fx_dir[0] && !fx_dir[1] && !fx_dir[2])
 				{
@@ -3420,7 +3420,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 			}
 			else if (es->eventParm)
 			{
-				vec3_t fx_dir;
+				vec3_t fx_dir = { 0 };
 				VectorCopy(es->angles, fx_dir);
 				if (!fx_dir[0] && !fx_dir[1] && !fx_dir[2])
 				{
@@ -3468,7 +3468,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 			}
 			else
 			{
-				vec3_t fx_dir;
+				vec3_t fx_dir = { 0 };
 				VectorCopy(es->angles, fx_dir);
 				if (!fx_dir[0] && !fx_dir[1] && !fx_dir[2])
 				{
@@ -3596,8 +3596,8 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 				}
 				if (cg.mInRMG)
 				{
-					trace_t tr;
-					vec3_t vec_sub;
+					trace_t tr = { 0 };
+					vec3_t vec_sub = { 0 };
 
 					VectorSubtract(cg.refdef.vieworg, es->origin, vec_sub);
 
@@ -3618,7 +3618,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 
 				if (cull_pass)
 				{
-					vec3_t fx_dir;
+					vec3_t fx_dir = { 0 };
 
 					VectorCopy(es->angles, fx_dir);
 					if (!fx_dir[0] && !fx_dir[1] && !fx_dir[2])
@@ -3640,7 +3640,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 			else
 			{
 				//projectile block
-				vec3_t fx_dir;
+				vec3_t fx_dir = { 0 };
 				VectorCopy(es->angles, fx_dir);
 				if (!fx_dir[0] && !fx_dir[1] && !fx_dir[2])
 				{
@@ -3664,7 +3664,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 			if (es->eventParm)
 			{
 				// Hit body
-				vec3_t fx_dir;
+				vec3_t fx_dir = { 0 };
 				VectorCopy(es->angles, fx_dir);
 				if (!fx_dir[0] && !fx_dir[1] && !fx_dir[2])
 				{
@@ -3694,7 +3694,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 			else
 			{
 				// Hit bbox
-				vec3_t fx_dir;
+				vec3_t fx_dir = { 0 };
 				VectorCopy(es->angles, fx_dir);
 				if (!fx_dir[0] && !fx_dir[1] && !fx_dir[2])
 				{
@@ -3731,8 +3731,8 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 
 			if (cg.mInRMG)
 			{
-				trace_t tr;
-				vec3_t vec_sub;
+				trace_t tr = { 0 };
+				vec3_t vec_sub = { 0 };
 
 				VectorSubtract(cg.refdef.vieworg, es->origin, vec_sub);
 
@@ -3763,8 +3763,8 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 	case EV_SABER_SLAM:
 		DEBUGNAME("EV_SABER_SLAM");
 		{
-			vec3_t org;
-			vec3_t normal;
+			vec3_t org = { 0 };
+			vec3_t normal = { 0 };
 
 			// networked origin and normal
 			VectorCopy(es->origin, org);
@@ -3816,10 +3816,10 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 	case EV_BECOME_JEDIMASTER:
 		DEBUGNAME("EV_SABER_UNHOLSTER");
 		{
-			trace_t tr;
+			trace_t tr = { 0 };
 			vec3_t playerMins = { -15, -15, DEFAULT_MINS_2 + 8 };
 			vec3_t playerMaxs = { 15, 15, DEFAULT_MAXS_2 };
-			vec3_t ang, pos, dpos;
+			vec3_t ang = { 0 }, pos = { 0 }, dpos = { 0 };
 
 			VectorClear(ang);
 			ang[ROLL] = 1;
@@ -4234,10 +4234,10 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 	case EV_PLAYER_TELEPORT_IN:
 		DEBUGNAME("EV_PLAYER_TELEPORT_IN");
 		{
-			trace_t tr;
+			trace_t tr = { 0 };
 			vec3_t playerMins = { -15, -15, DEFAULT_MINS_2 + 8 };
 			vec3_t playerMaxs = { 15, 15, DEFAULT_MAXS_2 };
-			vec3_t ang, pos, dpos;
+			vec3_t ang = { 0 }, pos = { 0 }, dpos = { 0 };
 
 			int doit = 1; //consider NonX (lmo)
 
@@ -4281,10 +4281,10 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 	case EV_PLAYER_TELEPORT_OUT:
 		DEBUGNAME("EV_PLAYER_TELEPORT_OUT");
 		{
-			trace_t tr;
+			trace_t tr = { 0 };
 			vec3_t playerMins = { -15, -15, DEFAULT_MINS_2 + 8 };
 			vec3_t playerMaxs = { 15, 15, DEFAULT_MAXS_2 };
-			vec3_t ang, pos, dpos;
+			vec3_t ang = { 0 }, pos = { 0 }, dpos = { 0 };
 
 			int doit = 1; //consider NonX (lmo)
 
@@ -4440,7 +4440,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 		{
 			float dist = 0.0f;
 			float shot_dist = VectorNormalize(es->angles);
-			vec3_t spot;
+			vec3_t spot = { 0 };
 
 			for (dist = 0.0f; dist < shot_dist; dist += 64.0f)
 			{
@@ -4705,7 +4705,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 
 				if (e_id != -1)
 				{
-					vec3_t fx_dir;
+					vec3_t fx_dir = { 0 };
 
 					VectorCopy(es->angles, fx_dir);
 
@@ -4768,7 +4768,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 
 				if (boltIdx >= 0)
 				{
-					mdxaBone_t boltMatrix;
+					mdxaBone_t boltMatrix = { 0 };
 
 					// Try model 0 first. If the bolt isn't found there, try model indices 1..3 as a best-effort fallback.
 					// G2API_GetBoltMatrix_NoRecNoRot returns a qboolean indicating success for a given model/bolt.
@@ -4813,7 +4813,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 	case EV_PLAY_PORTAL_EFFECT_ID:
 		DEBUGNAME("EV_PLAY_EFFECT_ID");
 		{
-			vec3_t fx_dir;
+			vec3_t fx_dir = { 0 };
 			qboolean portal_effect = qfalse;
 			int efx_index = 0;
 
@@ -5087,7 +5087,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 
 				if (r)
 				{
-					char sound_name[MAX_QPATH];
+					char sound_name[MAX_QPATH] = { 0 };
 					char* name_slash = NULL;
 					char* fileName = NULL;
 

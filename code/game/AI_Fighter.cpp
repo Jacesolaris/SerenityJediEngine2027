@@ -283,7 +283,7 @@ static void Walk_Load()
 	while (line && *line && walk_num_points < WALK_MAX_POINTS)
 	{
 		char kind = 0;
-		vec3_t point;
+		vec3_t point = {};
 		if (sscanf(line, " %c %f %f %f", &kind, &point[0], &point[1], &point[2]) == 4 && (kind == 's' || kind == 'w'))
 		{
 			VectorCopy(point, walk_points[walk_num_points]);
@@ -363,8 +363,8 @@ static void Walk_NextGoal(const vec3_t pos, const vec3_t ship_pos, vec3_t goal)
 	{
 		return; // as near the ship as that point: straight on to it
 	}
-	float way[WALK_MAX_POINTS];
-	qboolean done[WALK_MAX_POINTS];
+	float way[WALK_MAX_POINTS] = {};
+	qboolean done[WALK_MAX_POINTS] = {};
 	for (int i = 0; i < walk_num_points; i++)
 	{
 		way[i] = 1.0e30f;
@@ -456,7 +456,7 @@ static qboolean Fighter_Walk()
 		return qfalse;
 	}
 
-	vec3_t goal, dir;
+	vec3_t goal = {}, dir = {};
 	Walk_NextGoal(NPC->currentOrigin, ship->currentOrigin, goal);
 	if (g_developer && g_developer->integer > 1 && fighter_walk_report[NPC->s.number] < level.time)
 	{
@@ -764,7 +764,7 @@ static gentity_t* Fighter_FindTarget(const gentity_t* ship, const team_t my_team
 		{
 			continue;
 		}
-		vec3_t dir;
+		vec3_t dir = {};
 		VectorSubtract(ent->currentOrigin, ship->currentOrigin, dir);
 		const float dist = VectorNormalize(dir);
 		if (dist > max_dist)
@@ -796,7 +796,7 @@ static gentity_t* Fighter_FindTarget(const gentity_t* ship, const team_t my_team
 // turns the pilot's view (which the ship follows) toward dir, at most max_step degrees
 static void Fighter_TurnTowards(const vec3_t dir, const float max_step)
 {
-	vec3_t want;
+	vec3_t want = {};
 	vectoangles(dir, want);
 	want[PITCH] = AngleNormalize180(want[PITCH]);
 
@@ -915,8 +915,8 @@ static void Route_BuildLinks()
 
 	for (int i = 0; i < route_num_points; i++)
 	{
-		int nearest[ROUTE_MAX_LINKS];
-		float nearest_dist[ROUTE_MAX_LINKS];
+		int nearest[ROUTE_MAX_LINKS] = {};
+		float nearest_dist[ROUTE_MAX_LINKS] = {};
 		int count = 0;
 
 		for (int j = 0; j < route_num_points; j++)
@@ -979,7 +979,7 @@ static void Route_Load(const qboolean report)
 	const char* line = buffer;
 	while (line && *line && route_num_points < ROUTE_MAX_POINTS)
 	{
-		vec3_t point;
+		vec3_t point = {};
 		if (line[0] != '/' && sscanf(line, "%f %f %f", &point[0], &point[1], &point[2]) == 3)
 		{
 			VectorCopy(point, route_points[route_num_points]);
@@ -1061,7 +1061,7 @@ qboolean G_FighterRoute_ClientCommand(const gentity_t* ent, const char* cmd)
 	{
 		return qfalse;
 	}
-	vec3_t pos;
+	vec3_t pos = {};
 	Route_PlayerPos(ent, pos);
 
 	if (!Q_stricmp(cmd, "ship_wp_add"))
@@ -1149,7 +1149,7 @@ qboolean G_FighterRoute_ClientCommand(const gentity_t* ent, const char* cmd)
 			}
 		}
 		// the parts of the route (one is right: every point can be reached from every other)
-		int group[ROUTE_MAX_POINTS];
+		int group[ROUTE_MAX_POINTS] = {};
 		int groups = 0;
 		for (int i = 0; i < route_num_points; i++)
 		{
@@ -1161,7 +1161,7 @@ qboolean G_FighterRoute_ClientCommand(const gentity_t* ent, const char* cmd)
 			{
 				continue;
 			}
-			int stack[ROUTE_MAX_POINTS];
+			int stack[ROUTE_MAX_POINTS] = {};
 			int top = 0;
 			stack[top++] = i;
 			group[i] = groups;
@@ -1237,7 +1237,7 @@ void G_FighterRoute_Frame()
 	route_show_time = level.time + redraw;
 	Route_BuildLinks();
 
-	vec3_t pos;
+	vec3_t pos = {};
 	Route_PlayerPos(player, pos);
 	const int nearest = Route_Nearest(pos, qfalse);
 
@@ -1247,7 +1247,7 @@ void G_FighterRoute_Frame()
 		{
 			continue;
 		}
-		vec3_t bottom, top;
+		vec3_t bottom = {}, top = {};
 		VectorCopy(route_points[i], bottom);
 		VectorCopy(route_points[i], top);
 		bottom[2] -= 200.0f;
@@ -1287,13 +1287,13 @@ static qboolean Fighter_RouteGoal(const vec3_t my_pos, const vec3_t fwd)
 	}
 	else
 	{
-		vec3_t to_point;
+		vec3_t to_point = {};
 		VectorSubtract(route_points[cur], my_pos, to_point);
 		const float dist = VectorNormalize(to_point);
 		if (dist < ROUTE_REACHED || (dist < ROUTE_REACHED * 2.5f && DotProduct(to_point, fwd) < 0.0f))
 		{
 			// there (or flown past it): on to a linked one, liking the ones straight on, not back unless it must
-			vec3_t heading;
+			vec3_t heading = {};
 			if (route_prev[n] >= 0 && route_prev[n] < route_num_points)
 			{
 				VectorSubtract(route_points[cur], route_points[route_prev[n]], heading);
@@ -1311,7 +1311,7 @@ static qboolean Fighter_RouteGoal(const vec3_t my_pos, const vec3_t fwd)
 				{
 					continue;
 				}
-				vec3_t dir;
+				vec3_t dir = {};
 				VectorSubtract(route_points[j], route_points[cur], dir);
 				VectorNormalize(dir);
 				float score = DotProduct(dir, heading) + Q_flrand(0.0f, 1.2f);
@@ -1352,7 +1352,7 @@ static qboolean Fighter_TakingOff(const gentity_t* ship, const Vehicle_t* p_veh)
 		return qfalse;
 	}
 	trace_t tr;
-	vec3_t up;
+	vec3_t up = {};
 	VectorCopy(ship->currentOrigin, up);
 	up[2] += ship->maxs[2] + 48.0f;
 	gi.trace(&tr, ship->currentOrigin, nullptr, nullptr, up, ship->s.number, MASK_SOLID, static_cast<EG2_Collision>(0),
@@ -1389,16 +1389,16 @@ static qboolean Fighter_HangarExit(const gentity_t* ship, const Vehicle_t* p_veh
 		}
 		return qfalse;
 	}
-	vec3_t out_dir;
+	vec3_t out_dir = {};
 	const float yaw = DEG2RAD(fighter_exit_yaw[n]);
 	VectorSet(out_dir, cos(yaw), sin(yaw), 0.0f);
 
 	trace_t tr;
-	vec3_t end;
+	vec3_t end = {};
 	VectorCopy(my_pos, end);
 	end[2] += 1500.0f;
 	gi.trace(&tr, my_pos, nullptr, nullptr, end, ship->s.number, MASK_SOLID, static_cast<EG2_Collision>(0), 0);
-	vec3_t want;
+	vec3_t want = {};
 	VectorCopy(out_dir, want);
 	float step = max_step;
 	int cruise = 0; // the speed it leaves at: slow enough to climb out of the trench before its far wall
@@ -1500,7 +1500,7 @@ qboolean NPC_FighterAI()
 	const float aim_error = 3.0f - 0.8f * static_cast<float>(skill); // degrees
 	const team_t my_team = NPC->client->playerTeam;
 
-	vec3_t fwd, my_pos;
+	vec3_t fwd = {}, my_pos = {};
 	AngleVectors(p_veh->m_vOrientation, fwd, nullptr, nullptr);
 	VectorCopy(ship->currentOrigin, my_pos);
 	const float speed = VectorLength(ship->client->ps.velocity);
@@ -1520,7 +1520,7 @@ qboolean NPC_FighterAI()
 		}
 		const bool snap = level.time - fighter_jump_wait[NPC->s.number] > 5000;
 		const float step = 90.0f * FIGHTER_THINK_SECONDS;
-		vec3_t view;
+		vec3_t view = {};
 		for (int axis = PITCH; axis <= ROLL; axis++)
 		{
 			const float want = ship->client->ps.hyperSpaceAngles[axis];
@@ -1611,10 +1611,10 @@ qboolean NPC_FighterAI()
 	}
 	gentity_t* enemy = NPC->enemy;
 
-	vec3_t want_dir;
+	vec3_t want_dir = {};
 	VectorCopy(fwd, want_dir);
 	qboolean may_fire = qfalse;
-	vec3_t aim_point;
+	vec3_t aim_point = {};
 	float enemy_dist = 0.0f;
 
 	if (!TIMER_Done(NPC, "fighterEvade"))
@@ -1635,7 +1635,7 @@ qboolean NPC_FighterAI()
 		VectorSubtract(aim_point, my_pos, want_dir);
 
 		// a little off, more so for a poorer pilot
-		vec3_t want_angles;
+		vec3_t want_angles = {};
 		vectoangles(want_dir, want_angles);
 		want_angles[PITCH] += Q_flrand(-aim_error, aim_error);
 		want_angles[YAW] += Q_flrand(-aim_error, aim_error);
@@ -1643,7 +1643,7 @@ qboolean NPC_FighterAI()
 		AngleVectors(want_angles, want_dir, nullptr, nullptr);
 		VectorScale(want_dir, len, want_dir);
 
-		vec3_t to_enemy;
+		vec3_t to_enemy = {};
 		VectorSubtract(enemy->currentOrigin, my_pos, to_enemy);
 		VectorNormalize(to_enemy);
 		const float facing = DotProduct(fwd, to_enemy);
@@ -1651,7 +1651,7 @@ qboolean NPC_FighterAI()
 		if (enemy_dist < FIGHTER_BREAK_DIST && facing > 0.0f)
 		{
 			// about to fly into it: break away, up or down and to a side
-			vec3_t right, up;
+			vec3_t right = {}, up = {};
 			AngleVectors(p_veh->m_vOrientation, nullptr, right, up);
 			VectorMA(my_pos, 2500.0f, fwd, NPC->pos3);
 			VectorMA(NPC->pos3, Q_irand(0, 1) ? 2000.0f : -2000.0f, right, NPC->pos3);
@@ -1660,7 +1660,7 @@ qboolean NPC_FighterAI()
 		}
 
 		// throttle: catch up, don't overshoot
-		vec3_t rel_vel;
+		vec3_t rel_vel = {};
 		VectorSubtract(ship->client->ps.velocity, enemy->client->ps.velocity, rel_vel);
 		const float closing = DotProduct(rel_vel, to_enemy);
 		if (enemy_dist < 1500.0f && closing > 400.0f && facing > 0.7f)
@@ -1686,7 +1686,7 @@ qboolean NPC_FighterAI()
 		if (my_team == TEAM_PLAYER && player_ship && Fighter_IsFighter(player_ship))
 		{
 			// a wingman flies with the player: behind him and to a side (one side each by number)
-			vec3_t p_fwd, p_right;
+			vec3_t p_fwd = {}, p_right = {};
 			AngleVectors(player_ship->m_pVehicle->m_vOrientation, p_fwd, p_right, nullptr);
 			const float side = NPC->s.number % 2 ? 500.0f : -500.0f;
 			VectorMA(player_ship->currentOrigin, -400.0f - 150.0f * static_cast<float>(NPC->s.number % 3), p_fwd,
@@ -1704,7 +1704,7 @@ qboolean NPC_FighterAI()
 				// a point around home it can fly straight to (not inside the Star Destroyer or an asteroid)
 				for (int tries = 0; tries < 6; tries++)
 				{
-					vec3_t point;
+					vec3_t point = {};
 					for (int axis = 0; axis < 3; axis++)
 					{
 						point[axis] = NPC->pos4[axis] + Q_flrand(-5000.0f, 5000.0f);
@@ -1734,7 +1734,7 @@ qboolean NPC_FighterAI()
 		const vec3_t look_mins = { -half, -half, -half };
 		const vec3_t look_maxs = { half, half, half };
 		const float look = Com_Clamp(1200.0f, 9000.0f, speed * 2.0f);
-		vec3_t end;
+		vec3_t end = {};
 		trace_t tr;
 		VectorMA(my_pos, look, fwd, end);
 		gi.trace(&tr, my_pos, look_mins, look_maxs, end, ship->s.number, MASK_SOLID | CONTENTS_BODY,
@@ -1742,7 +1742,7 @@ qboolean NPC_FighterAI()
 		if (!tr.startsolid && tr.fraction < 1.0f && (!enemy || tr.entityNum != enemy->s.number))
 		{
 			const float dist_ahead = tr.fraction * look;
-			vec3_t away;
+			vec3_t away = {};
 			VectorScale(fwd, 0.2f, away);
 			VectorMA(away, 1.0f, tr.plane.normal, away);
 			VectorCopy(away, want_dir);
@@ -1764,13 +1764,13 @@ qboolean NPC_FighterAI()
 	// shoot when lined up with the aim point
 	if (may_fire && enemy && enemy_dist < FIGHTER_FIRE_RANGE)
 	{
-		vec3_t aim_dir;
+		vec3_t aim_dir = {};
 		VectorSubtract(aim_point, my_pos, aim_dir);
 		VectorNormalize(aim_dir);
 		const float cos_cone = cos(DEG2RAD(FIGHTER_FIRE_CONE));
 		if (DotProduct(fwd, aim_dir) > cos_cone)
 		{
-			vec3_t start;
+			vec3_t start = {};
 			VectorMA(my_pos, 150.0f, fwd, start);
 			if (!Fighter_FriendInLine(ship, start, enemy->currentOrigin, my_team))
 			{

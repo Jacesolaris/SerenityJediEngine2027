@@ -1249,7 +1249,7 @@ void Q3_TaskIDClear(int* taskID)
 
 void G_DebugPrint(int level, const char* format, ...)
 {
-	va_list		argptr;
+	va_list		argptr = { 0 };
 	char		text[1024] = { 0 };
 
 	if (developer.integer != 2)
@@ -1455,8 +1455,8 @@ static int G_SoundFileMs(const char* name)
 {
 	static const char* exts[2] = { ".mp3", ".wav" };
 	static unsigned char buf[8192];
-	char base[MAX_QPATH];
-	int i;
+	char base[MAX_QPATH] = { 0 };
+	int i = 0;
 
 	Q_strncpyz(base, name, sizeof base);
 	COM_StripExtension(base, base, sizeof base);
@@ -1464,7 +1464,7 @@ static int G_SoundFileMs(const char* name)
 	{
 		fileHandle_t f = 0;
 		const int len = trap->FS_Open(va("%s%s", base, exts[i]), &f, FS_READ);
-		int n, ms;
+		int n = 0, ms = 0;
 
 		if (!f)
 		{
@@ -1493,7 +1493,7 @@ static int G_SoundFileMs(const char* name)
 
 static int Icarus_SoundTime(char soundName[MAX_QPATH])
 {
-	char temp[MAX_QPATH];
+	char temp[MAX_QPATH] = { 0 };
 	char* sound = Q_strrchr(soundName, '/');
 	int time = G_SoundFileMs(soundName); // the sound's own length, as SP (2026-11-18)
 
@@ -1521,7 +1521,7 @@ static int Icarus_SoundTime(char soundName[MAX_QPATH])
 int Q3_PlaySound(const int taskID, const int entID, const char* name, const char* channel)
 {
 	gentity_t* ent = &g_entities[entID];
-	char finalName[MAX_QPATH];
+	char finalName[MAX_QPATH] = { 0 };
 	soundChannel_t voice_chan = CHAN_VOICE; // set a default so the compiler doesn't bitch
 	qboolean type_voice = qfalse;
 
@@ -1561,7 +1561,7 @@ int Q3_PlaySound(const int taskID, const int entID, const char* name, const char
 
 	if (type_voice)
 	{
-		char buf[128];
+		char buf[128] = { 0 };
 
 		trap->Cvar_VariableStringBuffer("timescale", buf, sizeof buf);
 
@@ -3504,7 +3504,7 @@ void Q3_Lerp2Origin(const int taskID, const int entID, vec3_t origin, const floa
 static void Q3_SetOriginOffset(const int entID, const int axis, const float offset)
 {
 	const gentity_t* ent = &g_entities[entID];
-	vec3_t origin;
+	vec3_t origin = { 0 };
 
 	if (!ent)
 	{
@@ -3664,7 +3664,7 @@ Sets the navigational goal of an entity
 static qboolean Q3_SetNavGoal(const int entID, const char* name)
 {
 	gentity_t* ent = &g_entities[entID];
-	vec3_t goalPos;
+	vec3_t goalPos = { 0 };
 
 	if (!ent->health)
 	{
@@ -4623,7 +4623,7 @@ static void Q3_SetViewTarget(const int entID, const char* name)
 {
 	const gentity_t* self = &g_entities[entID];
 	const gentity_t* viewtarget = G_Find(NULL, FOFS(targetname), (char*)name);
-	vec3_t viewspot, selfspot, viewvec, viewangles;
+	vec3_t viewspot = { 0 }, selfspot = { 0 }, viewvec = { 0 }, viewangles = { 0 };
 
 	if (!self)
 	{
@@ -7168,7 +7168,7 @@ s.bolt2 is the model's index (+ HANDMODEL_LEFT for the left hand), and the clien
 static void Q3_SetHandModel(const int entID, const char* model, const qboolean left)
 {
 	gentity_t* ent = &g_entities[entID];
-	int index;
+	int index = 0;
 
 	if (!ent->inuse || !ent->client || !ent->NPC)
 	{
@@ -7273,7 +7273,7 @@ static void Q3_LookTarget(const int entID, char* targetName)
 			{
 				if (strcmp(targetName, "player") == 0)
 				{
-					vec3_t viewspot;
+					vec3_t viewspot = { 0 };
 					//players probably haven't spawned in yet.  just use the spawnpoin
 					targ = SelectSPSpawnPoint(viewspot, viewspot);
 				}
@@ -7956,9 +7956,9 @@ static void Q3_SetSaberActive(const int entID, const qboolean active)
 // the second blade of a staff or the second saber is the "1".
 static void Q3_SetSaberBladeActive(const int entID, const int saberNum, const int bladeNum, const qboolean active)
 {
-	gentity_t* ent;
-	gclient_t* cl;
-	qboolean second;
+	gentity_t* ent = NULL;
+	gclient_t* cl = NULL;
+	qboolean second = qfalse;
 
 	if (entID < 0 || entID >= MAX_GENTITIES)
 	{
@@ -8303,7 +8303,7 @@ static missionObjective_t* G_MissionObjective(const char* name, const qboolean a
 // the table belongs to this map start; a restart / continue reads it back from the save
 static void G_MissionObjectivesInit(void)
 {
-	char mapname[MAX_QPATH], restoreMap[MAX_QPATH];
+	char mapname[MAX_QPATH] = { 0 }, restoreMap[MAX_QPATH] = { 0 };
 	static char buf[16384];
 
 	if (missionObjectivesLevel == level.startTime)
@@ -8505,7 +8505,7 @@ qboolean Q3_Set(const int taskID, const int entID, const char* type_name, const 
 	vec3_t vector2_data = { 0 };
 	vec4_t color = { 0 }, color2 = { 0 };
 	float float2_data = 0.0f;
-	char char_data[1000];
+	char char_data[1000] = { 0 };
 
 	//Set this for callbacks
 	const int toSet = GetIDForString(setTable, type_name);
@@ -10014,8 +10014,8 @@ static void G_MissionScriptKey(const char* script, char* key, const int keySize)
 void G_MissionCutsceneMessage(const int entID)
 {
 	static char buf[MISSION_CUTSCENES_MAXSIZE];
-	char names[NUM_BSETS + 1][MAX_QPATH];
-	char mapname[MAX_QPATH];
+	char names[NUM_BSETS + 1][MAX_QPATH] = { 0 };
+	char mapname[MAX_QPATH] = { 0 };
 	int numNames = 0;
 	fileHandle_t f = 0;
 
@@ -10061,7 +10061,7 @@ void G_MissionCutsceneMessage(const int entID)
 	const char* p = buf;
 	while (1)
 	{
-		char map[MAX_QPATH], script[MAX_QPATH];
+		char map[MAX_QPATH] = { 0 }, script[MAX_QPATH] = { 0 };
 		const char* token = COM_ParseExt(&p, qtrue);
 		if (!token[0])
 		{
@@ -10113,7 +10113,7 @@ static void G_MissionIntroLevelStart(void); // (below: the map's intro, g_missio
 // at the map start (g_spawn.c): a replay keeps g_missionCutsceneSeen, any other map start forgets it
 void G_MissionCutsceneLevelStart(void)
 {
-	char mapname[MAX_QPATH], seen[MAX_CVAR_VALUE_STRING];
+	char mapname[MAX_QPATH] = { 0 }, seen[MAX_CVAR_VALUE_STRING] = { 0 };
 
 	mission_first_level = -1;
 	mission_replay_skip[0] = 0;
@@ -10135,7 +10135,7 @@ void G_MissionCutsceneLevelStart(void)
 // a cutscene camera came on (Q3_Set ENABLE, before its skip runs): the map's first one is noted
 void G_MissionCutsceneNoteFirst(const int entID)
 {
-	char mapname[MAX_QPATH], seen[MAX_CVAR_VALUE_STRING], key[MAX_QPATH];
+	char mapname[MAX_QPATH] = { 0 }, seen[MAX_CVAR_VALUE_STRING] = { 0 }, key[MAX_QPATH] = { 0 };
 
 	if (!G_IsMission() || mission_first_level == level.startTime || entID < 0 || entID >= MAX_GENTITIES)
 	{
@@ -10199,7 +10199,7 @@ static qboolean G_MissionSkipIntro(void)
 static void G_MissionCutsceneTellScript(const char* key)
 {
 	static char buf[MISSION_CUTSCENES_MAXSIZE];
-	char mapname[MAX_QPATH];
+	char mapname[MAX_QPATH] = { 0 };
 	fileHandle_t f = 0;
 
 	const int len = trap->FS_Open(MISSION_CUTSCENES_FILE, &f, FS_READ);
@@ -10220,7 +10220,7 @@ static void G_MissionCutsceneTellScript(const char* key)
 	const char* p = buf;
 	while (1)
 	{
-		char map[MAX_QPATH], script[MAX_QPATH];
+		char map[MAX_QPATH] = { 0 }, script[MAX_QPATH] = { 0 };
 		const char* token = COM_ParseExt(&p, qtrue);
 		if (!token[0])
 		{
@@ -10242,7 +10242,7 @@ static void G_MissionCutsceneTellScript(const char* key)
 static void G_MissionIntroLevelStart(void)
 {
 	static char buf[MISSION_INTROS_MAXSIZE];
-	char mapname[MAX_QPATH];
+	char mapname[MAX_QPATH] = { 0 };
 	fileHandle_t f = 0;
 
 	mission_intro_count = 0;
@@ -10274,7 +10274,7 @@ static void G_MissionIntroLevelStart(void)
 	const char* p = buf;
 	while (mission_intro_count < MISSION_INTRO_MAX)
 	{
-		char map[MAX_QPATH], script[MAX_QPATH], skip[MAX_QPATH], line[MAX_QPATH];
+		char map[MAX_QPATH] = { 0 }, script[MAX_QPATH] = { 0 }, skip[MAX_QPATH] = { 0 }, line[MAX_QPATH] = { 0 };
 		const char* token = COM_ParseExt(&p, qtrue);
 		if (!token[0])
 		{
@@ -10298,7 +10298,7 @@ static void G_MissionIntroLevelStart(void)
 // g_target.c / NPC_utils.c (G_MissionReplayBlocksScript), before a script runs: qtrue if it is one of this map's intros
 static qboolean G_MissionIntroBlocksScript(const char* script)
 {
-	char key[MAX_QPATH];
+	char key[MAX_QPATH] = { 0 };
 
 	if (!G_MissionSkipIntro() || !mission_intro_count || !script || !script[0])
 	{
@@ -10328,7 +10328,7 @@ static qboolean G_MissionIntroBlocksScript(const char* script)
 // file does not name, the first camera within MISSION_INTRO_WINDOW of the first player
 void G_MissionIntroCamera(const int entID)
 {
-	char key[MAX_QPATH];
+	char key[MAX_QPATH] = { 0 };
 
 	if (!G_MissionSkipIntro() || mission_intro_cameraChecked || mission_first_level == level.startTime
 		|| entID < 0 || entID >= MAX_GENTITIES)
@@ -10408,7 +10408,7 @@ static void G_MissionIntroThink(void)
 // g_target.c / NPC_utils.c, before a script runs: qtrue if it is the first cutscene of a replayed map (then not run)
 qboolean G_MissionReplayBlocksScript(const char* script)
 {
-	char seen[MAX_CVAR_VALUE_STRING], key[MAX_QPATH];
+	char seen[MAX_CVAR_VALUE_STRING] = { 0 }, key[MAX_QPATH] = { 0 };
 
 	if (G_MissionIntroBlocksScript(script))
 	{
@@ -10439,7 +10439,7 @@ qboolean G_MissionReplayBlocksScript(const char* script)
 // from G_MissionGatherThink: the skip script of a cutscene that does not run again, then the lead back on his checkpoint
 static void G_MissionReplayThink(void)
 {
-	gentity_t* lead;
+	gentity_t* lead = NULL;
 
 	G_MissionIntroThink(); // (the map's intro: g_missionSkipIntro)
 
@@ -10448,7 +10448,7 @@ static void G_MissionReplayThink(void)
 		gentity_t* player = G_MissionCutscenePlayer();
 		if (player)
 		{
-			char checkpointMap[MAX_QPATH], mapname[MAX_QPATH];
+			char checkpointMap[MAX_QPATH] = { 0 }, mapname[MAX_QPATH] = { 0 };
 			trap->Cvar_VariableStringBuffer("g_missionCheckpointMap", checkpointMap, sizeof checkpointMap);
 			trap->Cvar_VariableStringBuffer("mapname", mapname, sizeof mapname);
 			lead = G_MissionLead();
@@ -10612,7 +10612,7 @@ void G_MissionPlayerMoved(const gentity_t* ent)
 static qboolean G_MissionPlaceBeside(const gentity_t* lead, gentity_t* ent, const int slot)
 {
 	static const float radii[] = { 64.0f, 96.0f, 128.0f, 176.0f };
-	vec3_t eye;
+	vec3_t eye = { 0 };
 	VectorCopy(lead->client->ps.origin, eye);
 	eye[2] += lead->client->ps.viewheight;
 
@@ -10621,8 +10621,8 @@ static qboolean G_MissionPlaceBeside(const gentity_t* lead, gentity_t* ent, cons
 		for (int k = 0; k < 8; k++)
 		{
 			const float yaw = DEG2RAD(k * 45.0f + slot * 20.0f);
-			vec3_t spot, down;
-			trace_t tr;
+			vec3_t spot = { 0 }, down = { 0 };
+			trace_t tr = { 0 };
 			VectorCopy(lead->client->ps.origin, spot);
 			spot[0] += cos(yaw) * radii[r];
 			spot[1] += sin(yaw) * radii[r];
@@ -10773,7 +10773,7 @@ void ICam_Fade(vec4_t source, vec4_t dest, const float duration)
 
 void ICam_Follow(const char* cameraGroup, const float speed, const float initLerp)
 {
-	int CGroup[16]; //MAX_CAMERA_GROUP_SUBJECTS
+	int CGroup[16] = { 0 }; //MAX_CAMERA_GROUP_SUBJECTS
 	int num_subjects = 0;
 	gentity_t* from = NULL;
 
@@ -10857,10 +10857,10 @@ void ICam_Roll(const float roll, const float duration)
 // points go to the clients (a path_corner's origin, radius and speed; the point the last one leads back to, if any)
 void ICam_Track(const char* trackName, const float speed, const float initLerp)
 {
-	gentity_t* chain[ICAM_TRACK_POINTS];
-	vec3_t org[ICAM_TRACK_POINTS];
-	float radius[ICAM_TRACK_POINTS], pSpeed[ICAM_TRACK_POINTS];
-	char msg[2048];
+	gentity_t* chain[ICAM_TRACK_POINTS] = { 0 };
+	vec3_t org[ICAM_TRACK_POINTS] = { 0 };
+	float radius[ICAM_TRACK_POINTS] = { 0 }, pSpeed[ICAM_TRACK_POINTS] = { 0 };
+	char msg[2048] = { 0 };
 	int count = 0, loop = -1;
 
 	if (!trackName || !trackName[0] || !Q_stricmp(trackName, "none") || !Q_stricmp(trackName, "NULL"))
@@ -10943,9 +10943,9 @@ void ICam_Path(const char* roff)
 //input is assumed to be placed at the very beginning of the $tag(
 static void ProcessTag(const int entID, char* startpoint)
 {
-	vec3_t data;
+	vec3_t data = { 0 };
 	char* s = startpoint;
-	char endtext[MAX_QPATH];
+	char endtext[MAX_QPATH] = { 0 };
 	int type = TYPE_ORIGIN;
 
 	//find the end of the tag thingy
@@ -11116,7 +11116,7 @@ char* G_GetLocationForEnt(const gentity_t* self)
 	// FIX: move large array off the stack
 	static int touch[MAX_GENTITIES];
 
-	vec3_t mins, maxs;
+	vec3_t mins = { 0 }, maxs = { 0 };
 
 	// Validate entity
 	if (self == NULL)
@@ -11208,7 +11208,7 @@ void Q3_SetForcePower(const int entID, const int forcePower, const qboolean powe
 // ------------------------------------------------------------
 void ToggleNPCWinterGear(gentity_t* ent)
 {
-	char model[MAX_QPATH];
+	char model[MAX_QPATH] = { 0 };
 
 	// Validate entity and model index
 	if (ent == NULL)

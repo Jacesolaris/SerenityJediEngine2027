@@ -186,8 +186,8 @@ void TurretClientRun(centity_t* ent)
 	}
 	if (ent->currentState.fireflag && ent->bolt4 != ent->currentState.fireflag)
 	{
-		vec3_t muzzle_org, muzzle_dir;
-		mdxaBone_t boltMatrix;
+		vec3_t muzzle_org = { 0 }, muzzle_dir = { 0 };
+		mdxaBone_t boltMatrix = { 0 };
 
 		trap->G2API_GetBoltMatrix(ent->ghoul2, 0, ent->torsoBolt, &boltMatrix, /*ent->lerpAngles*/vec3_origin,
 			ent->lerpOrigin, cg.time, cgs.game_models, ent->modelScale);
@@ -210,8 +210,8 @@ void TurretClientRun(centity_t* ent)
 
 		if (enemy)
 		{
-			vec3_t en_ang;
-			vec3_t en_pos;
+			vec3_t en_ang = { 0 };
+			vec3_t en_pos = { 0 };
 
 			VectorCopy(enemy->currentState.pos.trBase, en_pos);
 
@@ -226,7 +226,7 @@ void TurretClientRun(centity_t* ent)
 	}
 	else
 	{
-		vec3_t idleAng;
+		vec3_t idleAng = { 0 };
 
 		if (ent->turAngles[YAW] > 360)
 		{

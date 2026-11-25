@@ -164,9 +164,9 @@ void CG_ImpactMark(const qhandle_t mark_shader, const vec3_t origin, const vec3_
 	vec3_t original_points[4]{};
 	byte colors[4]{};
 	int i = 0, j = 0;
-	markFragment_t markFragments[MAX_MARK_FRAGMENTS], * mf = nullptr;
+	markFragment_t markFragments[MAX_MARK_FRAGMENTS] = {}, * mf = nullptr;
 	vec3_t markPoints[MAX_MARK_POINTS]{};
-	vec3_t projection;
+	vec3_t projection = {};
 
 	if (!cg_addMarks.integer)
 	{
@@ -219,7 +219,7 @@ void CG_ImpactMark(const qhandle_t mark_shader, const vec3_t origin, const vec3_
 		}
 		for (j = 0, v = verts; j < mf->numPoints; j++, v++)
 		{
-			vec3_t delta;
+			vec3_t delta = {};
 
 			VectorCopy(markPoints[mf->firstPoint + j], v->xyz);
 

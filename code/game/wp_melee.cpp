@@ -34,7 +34,7 @@ void WP_Melee(gentity_t* ent)
 //---------------------------------------------------------
 {
 	trace_t tr;
-	vec3_t mins, maxs, end;
+	vec3_t mins = {}, maxs = {}, end = {};
 	int damage = ent->s.number ? g_spskill->integer * 2 + 1 : 3;
 	const float range = ent->s.number ? 64 : 32;
 	const qboolean is_boba_player = !ent->s.number && ent->client->NPC_class == CLASS_BOBAFETT && ent->client->ps.

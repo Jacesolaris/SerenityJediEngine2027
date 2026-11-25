@@ -6028,7 +6028,7 @@ extern qboolean BG_GLAIsHumanoid(const char* glaName);
 
 int BG_ParseAnimationFileForGLA(const char* glaName)
 {
-	char cfgName[MAX_QPATH];
+	char cfgName[MAX_QPATH] = { 0 };
 
 	if (!glaName || !glaName[0])
 	{
@@ -6577,7 +6577,7 @@ void PM_SaberStartTransAnim(const int clientNum, const int saberAnimLevel, const
 	{
 		*animSpeed *= SABERBLASTER_IMPALE_STAB_SPEED;
 	}
-	char buf[128];
+	char buf[128] = { 0 };
 
 	// Read global saber animation speed multiplier
 	trap->Cvar_VariableStringBuffer("g_saberAnimSpeed", buf, sizeof buf);

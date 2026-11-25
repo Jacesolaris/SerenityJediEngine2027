@@ -194,7 +194,7 @@ static void ShieldPain(gentity_t* self, gentity_t* attacker, int damage)
 // Try to turn the shield back on after a delay.
 static void ShieldGoSolid(gentity_t* self)
 {
-	trace_t tr;
+	trace_t tr = { 0 };
 
 	// see if we're valid
 	self->health--;
@@ -288,7 +288,7 @@ extern void G_Knockdown(gentity_t* self, gentity_t* attacker, const vec3_t push_
 // Somebody (a player) has touched the shield.  See if it is a "friend".
 static void ShieldTouch(gentity_t* self, gentity_t* other, trace_t* trace)
 {
-	vec3_t tempDir, stunDir;
+	vec3_t tempDir = { 0 }, stunDir = { 0 };
 
 	if (level.gametype >= GT_TEAM)
 	{
@@ -352,9 +352,9 @@ static void ShieldTouch(gentity_t* self, gentity_t* other, trace_t* trace)
 // After a short delay, create the shield by expanding in all directions.
 static void CreateShield(gentity_t* ent)
 {
-	trace_t tr;
-	vec3_t mins, maxs, end, posTraceEnd, negTraceEnd, start;
-	qboolean xaxis;
+	trace_t tr = { 0 };
+	vec3_t mins = { 0 }, maxs = { 0 }, end = { 0 }, posTraceEnd = { 0 }, negTraceEnd = { 0 }, start = { 0 };
+	qboolean xaxis = qfalse;
 
 	// trace upward to find height of shield
 	VectorCopy(ent->r.currentOrigin, end);
@@ -479,8 +479,8 @@ static void CreateShield(gentity_t* ent)
 static qboolean PlaceShield(gentity_t* playerent)
 {
 	static const gitem_t* shieldItem = NULL;
-	trace_t tr;
-	vec3_t fwd, dest;
+	trace_t tr = { 0 };
+	vec3_t fwd = { 0 }, dest = { 0 };
 	const vec3_t maxs = { 4, 4, 4 };
 	const vec3_t mins = { -4, -4, 0 };
 	static qboolean registered = qfalse;
@@ -503,7 +503,7 @@ static qboolean PlaceShield(gentity_t* playerent)
 	trap->Trace(&tr, playerent->client->ps.origin, mins, maxs, dest, playerent->s.number, MASK_SHOT, qfalse, 0, 0);
 	if (tr.fraction > 0.9)
 	{
-		vec3_t pos;
+		vec3_t pos = { 0 };
 		//room in front
 		VectorCopy(tr.endpos, pos);
 		// drop to floor
@@ -628,7 +628,7 @@ extern qboolean PM_InKnockDown(const playerState_t* ps);
 static void pas_fire(gentity_t* ent)
 //----------------------------------------------------------------
 {
-	vec3_t fwd, myOrg, enOrg;
+	vec3_t fwd = { 0 }, myOrg = { 0 }, enOrg = { 0 };
 
 	VectorCopy(ent->r.currentOrigin, myOrg);
 	myOrg[2] += 24;
@@ -667,12 +667,12 @@ static qboolean pas_find_enemies(gentity_t* self)
 {
 	qboolean found = qfalse;
 	float bestDist = TURRET_RADIUS * TURRET_RADIUS;
-	vec3_t org2;
+	vec3_t org2 = { 0 };
 
 	// FIX: move large array off the stack
 	static gentity_t* entity_list[MAX_GENTITIES];
 
-	trace_t tr;
+	trace_t tr = { 0 };
 
 	if (self->aimDebounceTime > level.time)
 	{
@@ -689,7 +689,7 @@ static qboolean pas_find_enemies(gentity_t* self)
 
 	for (int i = 0; i < count; i++)
 	{
-		vec3_t org;
+		vec3_t org = { 0 };
 		gentity_t* target = entity_list[i];
 
 		if (!target->client)
@@ -751,7 +751,7 @@ static qboolean pas_find_enemies(gentity_t* self)
 		if (!tr.allsolid && !tr.startsolid &&
 			(tr.fraction == 1.0f || tr.entityNum == target->s.number))
 		{
-			vec3_t enemyDir;
+			vec3_t enemyDir = { 0 };
 			VectorSubtract(target->r.currentOrigin, self->r.currentOrigin, enemyDir);
 			const float enemyDist = VectorLengthSquared(enemyDir);
 
@@ -777,7 +777,7 @@ static qboolean pas_find_enemies(gentity_t* self)
 static void pas_adjust_enemy(gentity_t* ent)
 //---------------------------------
 {
-	trace_t tr;
+	trace_t tr = { 0 };
 	qboolean keep = qtrue;
 
 	if (ent->enemy->health <= 0)
@@ -786,7 +786,7 @@ static void pas_adjust_enemy(gentity_t* ent)
 	}
 	else
 	{
-		vec3_t org, org2;
+		vec3_t org = { 0 }, org2 = { 0 };
 
 		VectorCopy(ent->s.pos.trBase, org2);
 
@@ -847,8 +847,8 @@ void pas_think(gentity_t* ent)
 	// NOTE: MAX_GENTITIES is large; using static storage avoids huge stack usage.
 	static int iEntityList[MAX_GENTITIES];
 
-	vec3_t frontAngles;
-	vec3_t backAngles;
+	vec3_t frontAngles = { 0 };
+	vec3_t backAngles = { 0 };
 	vec3_t testMins = { 0, 0, 0 };
 	vec3_t testMaxs = { 0, 0, 0 };
 
@@ -1004,9 +1004,9 @@ void pas_think(gentity_t* ent)
 
 	if (ent->enemy)
 	{
-		vec3_t desiredAngles;
-		vec3_t org;
-		vec3_t enemyDir;
+		vec3_t desiredAngles = { 0 };
+		vec3_t org = { 0 };
+		vec3_t enemyDir = { 0 };
 
 		// Aim at enemy
 		if (ent->enemy->client)
@@ -1217,8 +1217,8 @@ static qboolean MapSentry_CanTarget(const gentity_t* self, const gentity_t* targ
 
 static qboolean MapSentry_CanSee(const gentity_t* self, const gentity_t* target)
 {
-	vec3_t eye, org;
-	trace_t tr;
+	vec3_t eye = { 0 }, org = { 0 };
+	trace_t tr = { 0 };
 
 	VectorCopy(self->r.currentOrigin, eye);
 	eye[2] += 20;
@@ -1232,7 +1232,7 @@ static void MapSentry_FindEnemy(gentity_t* self)
 	static gentity_t* entity_list[MAX_GENTITIES];
 	float best_dist = self->radius * self->radius;
 	gentity_t* best = NULL;
-	vec3_t eye;
+	vec3_t eye = { 0 };
 
 	if (self->aimDebounceTime > level.time && self->painDebounceTime < level.time)
 	{
@@ -1248,7 +1248,7 @@ static void MapSentry_FindEnemy(gentity_t* self)
 	for (int i = 0; i < count; i++)
 	{
 		gentity_t* target = entity_list[i];
-		vec3_t dir;
+		vec3_t dir = { 0 };
 
 		if (!MapSentry_CanTarget(self, target) || !trap->InPVS(eye, target->r.currentOrigin)
 			|| !MapSentry_CanSee(self, target))
@@ -1281,7 +1281,7 @@ static void MapSentry_FindEnemy(gentity_t* self)
 
 static void MapSentry_Fire(gentity_t* self)
 {
-	vec3_t muzzle, org, fwd;
+	vec3_t muzzle = { 0 }, org = { 0 }, fwd = { 0 };
 
 	VectorCopy(self->r.currentOrigin, muzzle);
 	muzzle[2] += 20;
@@ -1518,9 +1518,9 @@ void SP_PAS(gentity_t* base)
 void ItemUse_Sentry(gentity_t* ent)
 //------------------------------------------------------------------------
 {
-	vec3_t fwd, fwdorg = { 0 };
+	vec3_t fwd = { 0 }, fwdorg = { 0 };
 	vec3_t yawonly = { 0 };
-	vec3_t mins, maxs;
+	vec3_t mins = { 0 }, maxs = { 0 };
 
 	if (!ent || !ent->client)
 	{
@@ -1602,9 +1602,9 @@ void ItemUse_Sentry(gentity_t* ent)
 void ItemUse_Sentry2(gentity_t* ent)
 //------------------------------------------------------------------------
 {
-	vec3_t fwd, fwdorg = { 0 };
+	vec3_t fwd = { 0 }, fwdorg = { 0 };
 	vec3_t yawonly = { 0 };
-	vec3_t mins, maxs;
+	vec3_t mins = { 0 }, maxs = { 0 };
 
 	if (!ent || !ent->client)
 	{
@@ -1681,7 +1681,7 @@ void ItemUse_Sentry2(gentity_t* ent)
 
 extern gentity_t* NPC_SpawnType(const gentity_t* ent, const char* npc_type, const char* targetname, qboolean isVehicle);
 extern void NPC_SetMoveGoal(const gentity_t* ent, vec3_t point, int radius, qboolean isNavGoal, int combatPoint, gentity_t* targetEnt);
-gentity_t* ViewTarget(gentity_t* ent, int length, vec3_t* target, cplane_t* plane);
+gentity_t* ViewTarget(const gentity_t* ent, int length, vec3_t* target, cplane_t* plane);
 
 void ItemUse_Seeker(gentity_t* ent)
 {
@@ -1900,14 +1900,14 @@ void Flamethrower_Fire(gentity_t* self)
 	static gentity_t* s_entityList[MAX_GENTITIES];
 	static trace_t    s_tr;
 
-	vec3_t forward;
-	vec3_t center;
+	vec3_t forward = { 0 };
+	vec3_t center = { 0 };
 	vec3_t mins = { 0 };
 	vec3_t maxs = { 0 };
 	vec3_t v = { 0 };
-	vec3_t size;
-	vec3_t ent_org;
-	vec3_t dir;
+	vec3_t size = { 0 };
+	vec3_t ent_org = { 0 };
+	vec3_t dir = { 0 };
 
 	float radius = 0.0f;
 	int   num_listed_entities = 0;
@@ -2095,7 +2095,7 @@ void Flamethrower_Fire(gentity_t* self)
 	}
 }
 
-extern qboolean G_ControlledByPlayer(gentity_t* self);
+extern qboolean G_ControlledByPlayer(const gentity_t* self);
 void ItemUse_FlameThrower(const gentity_t* ent)
 {
 	if (ent->client->ps.jetpackFuel < 15)
@@ -2381,7 +2381,7 @@ void ItemUse_UseDisp(gentity_t* ent, int type)
 
 	if (item)
 	{
-		vec3_t fwd, pos;
+		vec3_t fwd = { 0 }, pos = { 0 };
 
 		gentity_t* eItem = G_Spawn();
 		eItem->r.ownerNum = ent->s.number;
@@ -2446,7 +2446,7 @@ extern void BG_CycleInven(playerState_t* ps, int direction); //bg_misc.c
 
 static void EWebDie(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, int damage, int mod)
 {
-	vec3_t fx_dir;
+	vec3_t fx_dir = { 0 };
 
 	g_radius_damage(self->r.currentOrigin, self, EWEB_DEATH_DMG, EWEB_DEATH_RADIUS, self, self, MOD_SUICIDE);
 
@@ -2622,8 +2622,8 @@ static void EWeb_SetBoneAnim(gentity_t* eweb, const int startFrame, const int en
 
 static void EWebFire(gentity_t* owner, gentity_t* eweb)
 {
-	mdxaBone_t boltMatrix;
-	vec3_t p, d, bPoint;
+	mdxaBone_t boltMatrix = { 0 };
+	vec3_t p = { 0 }, d = { 0 }, bPoint = { 0 };
 
 	if (eweb->genericValue10 == -1)
 	{
@@ -2666,9 +2666,9 @@ static void EWebFire(gentity_t* owner, gentity_t* eweb)
 //lock the owner into place relative to the cannon pos
 static void EWebPositionUser(gentity_t* owner, gentity_t* eweb)
 {
-	mdxaBone_t boltMatrix;
-	vec3_t p, d;
-	trace_t tr;
+	mdxaBone_t boltMatrix = { 0 };
+	vec3_t p = { 0 }, d = { 0 };
+	trace_t tr = { 0 };
 
 	trap->G2API_GetBoltMatrix(eweb->ghoul2, 0, eweb->genericValue9, &boltMatrix, eweb->s.apos.trBase,
 		eweb->r.currentOrigin, level.time, NULL, eweb->modelScale);
@@ -2686,7 +2686,7 @@ static void EWebPositionUser(gentity_t* owner, gentity_t* eweb)
 	if (!tr.startsolid && !tr.allsolid && tr.fraction == 1.0f)
 	{
 		//all clear, we can move there
-		vec3_t pDown;
+		vec3_t pDown = { 0 };
 
 		VectorCopy(p, pDown);
 		pDown[2] -= 7.0f;
@@ -2698,7 +2698,7 @@ static void EWebPositionUser(gentity_t* owner, gentity_t* eweb)
 			if (VectorLength(d) > 1.0f)
 			{
 				//we moved, do some animating
-				vec3_t dAng;
+				vec3_t dAng = { 0 };
 				int aFlags = SETANIM_FLAG_HOLD;
 
 				vectoangles(d, dAng);
@@ -2743,7 +2743,7 @@ static void EWebPositionUser(gentity_t* owner, gentity_t* eweb)
 //keep the bone angles updated based on the owner's look dir
 static void EWebUpdateBoneAngles(gentity_t* owner, gentity_t* eweb)
 {
-	vec3_t yAng;
+	vec3_t yAng = { 0 };
 	const float turnCap = 4.0f; //max degrees we can turn per update
 
 	VectorClear(yAng);
@@ -2872,9 +2872,9 @@ static gentity_t* EWeb_Create(gentity_t* spawner)
 {
 	const char* modelName = "models/map_objects/hoth/eweb_model.glm";
 	const int failSound = G_SoundIndex("sound/interface/shieldcon_empty");
-	trace_t tr;
-	vec3_t fAng, fwd, pos, downPos, s;
-	vec3_t mins, maxs;
+	trace_t tr = { 0 };
+	vec3_t fAng = { 0 }, fwd = { 0 }, pos = { 0 }, downPos = { 0 }, s = { 0 };
+	vec3_t mins = { 0 }, maxs = { 0 };
 
 	VectorSet(mins, -32, -32, -24);
 	VectorSet(maxs, 32, 32, 24);
@@ -3079,9 +3079,9 @@ static int Pickup_Powerup(const gentity_t* ent, const gentity_t* other)
 	// give any nearby players a "denied" anti-reward
 	for (int i = 0; i < level.maxclients; i++)
 	{
-		vec3_t delta;
-		vec3_t forward;
-		trace_t tr;
+		vec3_t delta = { 0 };
+		vec3_t forward = { 0 };
+		trace_t tr = { 0 };
 
 		gclient_t* client = &level.clients[i];
 		if (client == other->client)
@@ -4040,8 +4040,8 @@ Spawns an item and tosses it forward
 */
 gentity_t* Drop_Item(gentity_t* ent, gitem_t* item, const float angle)
 {
-	vec3_t velocity;
-	vec3_t angles;
+	vec3_t velocity = { 0 };
+	vec3_t angles = { 0 };
 
 	VectorCopy(ent->s.apos.trBase, angles);
 	angles[YAW] += angle;
@@ -4078,7 +4078,7 @@ free fall from their spawn points
 */
 void FinishSpawningItem(gentity_t* ent)
 {
-	trace_t tr;
+	trace_t tr = { 0 };
 
 	if (level.gametype == GT_SIEGE)
 	{
@@ -4216,7 +4216,7 @@ void FinishSpawningItem(gentity_t* ent)
 	}
 	else
 	{
-		vec3_t dest;
+		vec3_t dest = { 0 };
 		// drop to floor
 
 		//if it is directly even with the floor it will return startsolid, so raise up by 0.1
@@ -4391,7 +4391,7 @@ G_ItemDisabled
 */
 static int G_ItemDisabled(const gitem_t* item)
 {
-	char name[128];
+	char name[128] = { 0 };
 
 	Com_sprintf(name, sizeof name, "disable_%s", item->classname);
 	return trap->Cvar_VariableIntegerValue(name);
@@ -4550,7 +4550,7 @@ G_BounceItem
 */
 static void G_BounceItem(gentity_t* ent, trace_t* trace)
 {
-	vec3_t velocity;
+	vec3_t velocity = { 0 };
 
 	// reflect the velocity on the trace plane
 	const int hitTime = level.previousTime + (level.time - level.previousTime) * trace->fraction;
@@ -4605,7 +4605,7 @@ G_RunItem
 
 static void G_RemoveWeaponEffect(gentity_t* ent)
 {
-	vec3_t effectPos, defaultDir;
+	vec3_t effectPos = { 0 }, defaultDir = { 0 };
 
 	VectorSet(defaultDir, 0, 0, 1);
 
@@ -4624,8 +4624,8 @@ static void G_RemoveWeaponEffect(gentity_t* ent)
 
 void G_RunItem(gentity_t* ent)
 {
-	vec3_t origin;
-	trace_t tr;
+	vec3_t origin = { 0 };
+	trace_t tr = { 0 };
 	int mask = 0;
 
 	// if groundentity has been set to ENTITYNUM_NONE, it may have been pushed off an edge

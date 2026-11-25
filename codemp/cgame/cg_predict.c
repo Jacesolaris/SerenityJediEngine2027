@@ -149,7 +149,7 @@ void CG_BuildSolidList(void)
 
 	for (i = 0; i < cg_numpermanents; i++)
 	{
-		vec3_t difference;
+		vec3_t difference = { 0 };
 		cent = cg_permanents[i];
 		VectorSubtract(cent->lerpOrigin, snap->ps.origin, difference);
 		if (cent->currentState.eType == ET_TERRAIN ||
@@ -255,10 +255,10 @@ static void CG_ClipMoveToEntities(const vec3_t start, const vec3_t mins, const v
 	int skip_number, int mask, trace_t* tr, qboolean g2_check)
 {
 	int i = 0, x = 0, zd = 0, zu = 0;
-	trace_t trace, old_trace = { 0 };
+	trace_t trace = { 0 }, old_trace = { 0 };
 	entityState_t* ent = NULL;
 	clipHandle_t cmodel = 0;
-	vec3_t bmins, bmaxs;
+	vec3_t bmins = { 0 }, bmaxs = { 0 };
 	centity_t* cent = NULL;
 	centity_t* ignored = NULL;
 
@@ -270,7 +270,7 @@ static void CG_ClipMoveToEntities(const vec3_t start, const vec3_t mins, const v
 	// the box the whole move sweeps through (plus a unit): an entity box outside it can't be hit or started
 	// in, so its trace is skipped - same result, much cheaper with many NPCs (effects trace every frame).
 	// cg_traceCull 0 = test every entity as before.
-	vec3_t sweepMins, sweepMaxs;
+	vec3_t sweepMins = { 0 }, sweepMaxs = { 0 };
 	for (int k = 0; k < 3; k++)
 	{
 		sweepMins[k] = (start[k] < end[k] ? start[k] : end[k]) + (mins ? mins[k] : 0.0f) - 1.0f;
@@ -280,8 +280,8 @@ static void CG_ClipMoveToEntities(const vec3_t start, const vec3_t mins, const v
 
 	for (i = 0; i < cg_numSolidEntities; i++)
 	{
-		vec3_t angles;
-		vec3_t origin;
+		vec3_t angles = { 0 };
+		vec3_t origin = { 0 };
 		cent = cg_solidEntities[i];
 		ent = &cent->currentState;
 
@@ -427,8 +427,8 @@ static void CG_ClipMoveToEntities(const vec3_t start, const vec3_t mins, const v
 void CG_TraceItem(trace_t* result, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end,
 	const int skip_number)
 {
-	trace_t tr;
-	vec3_t local_mins, local_maxs;
+	trace_t tr = { 0 };
+	vec3_t local_mins = { 0 }, local_maxs = { 0 };
 
 	VectorSet(local_mins, -8, -8, -0);
 	VectorSet(local_maxs, 8, 8, 16);
@@ -441,7 +441,7 @@ void CG_TraceItem(trace_t* result, const vec3_t start, const vec3_t mins, const 
 		const centity_t* cent = cg_triggerEntities[i];
 		const entityState_t* ent = &cent->currentState;
 		const gitem_t* item = &bg_itemlist[ent->modelIndex];
-		vec3_t item_mins, item_maxs;
+		vec3_t item_mins = { 0 }, item_maxs = { 0 };
 
 		if (ent->number == skip_number)
 		{
@@ -481,7 +481,7 @@ CG_Trace
 void CG_Trace(trace_t* result, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end,
 	const int skip_number, const int mask)
 {
-	trace_t t;
+	trace_t t = { 0 };
 
 	trap->CM_Trace(&t, start, end, mins, maxs, 0, mask, 0);
 	t.entityNum = t.fraction != 1.0 ? ENTITYNUM_WORLD : ENTITYNUM_NONE;
@@ -499,7 +499,7 @@ CG_G2Trace
 void CG_G2Trace(trace_t* result, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end,
 	const int skip_number, const int mask)
 {
-	trace_t t;
+	trace_t t = { 0 };
 
 	trap->CM_Trace(&t, start, end, mins, maxs, 0, mask, 0);
 	t.entityNum = t.fraction != 1.0 ? ENTITYNUM_WORLD : ENTITYNUM_NONE;
@@ -566,7 +566,7 @@ static void CG_InterpolatePlayerState(const qboolean grab_angles)
 	// if we are still allowing local input, short circuit the view angles
 	if (grab_angles)
 	{
-		usercmd_t cmd;
+		usercmd_t cmd = { 0 };
 
 		const int cmd_num = trap->GetCurrentCmdNumber();
 		trap->GetUserCmd(cmd_num, &cmd);
@@ -618,7 +618,7 @@ static void CG_InterpolateVehiclePlayerState(const qboolean grab_angles)
 	// if we are still allowing local input, short circuit the view angles
 	if (grab_angles)
 	{
-		usercmd_t cmd;
+		usercmd_t cmd = { 0 };
 
 		const int cmd_num = trap->GetCurrentCmdNumber();
 		trap->GetUserCmd(cmd_num, &cmd);
@@ -800,7 +800,7 @@ Predict push triggers and items
 */
 static void CG_TouchTriggerPrediction(void)
 {
-	trace_t trace;
+	trace_t trace = { 0 };
 
 	// dead clients don't activate triggers
 	if (cg.predictedPlayerState.stats[STAT_HEALTH] <= 0)
@@ -959,10 +959,10 @@ extern qboolean CG_InServerCamera(void);
 void CG_PredictPlayerState(void)
 {
 	int i = 0;
-	playerState_t old_player_state;
+	playerState_t old_player_state = { 0 };
 	playerState_t old_vehicle_state = { 0 };
-	usercmd_t oldest_cmd;
-	usercmd_t latest_cmd;
+	usercmd_t oldest_cmd = { 0 };
+	usercmd_t latest_cmd = { 0 };
 
 	cg.hyperspace = qfalse; // will be set if touching a trigger_teleport
 
@@ -1191,8 +1191,8 @@ void CG_PredictPlayerState(void)
 			}
 			else
 			{
-				vec3_t delta;
-				vec3_t adjusted;
+				vec3_t delta = { 0 };
+				vec3_t adjusted = { 0 };
 				CG_AdjustPositionForMover(cg.predictedVehicleState.origin,
 					cg.predictedVehicleState.groundEntityNum, cg.physicsTime, cg.oldTime,
 					adjusted);
@@ -1267,8 +1267,8 @@ void CG_PredictPlayerState(void)
 			}
 			else
 			{
-				vec3_t delta;
-				vec3_t adjusted;
+				vec3_t delta = { 0 };
+				vec3_t adjusted = { 0 };
 				CG_AdjustPositionForMover(cg.predictedPlayerState.origin,
 					cg.predictedPlayerState.groundEntityNum, cg.physicsTime, cg.oldTime,
 					adjusted);
@@ -1332,7 +1332,7 @@ void CG_PredictPlayerState(void)
 
 			if (block_opp)
 			{
-				vec3_t lock_dir, lock_ang;
+				vec3_t lock_dir = { 0 }, lock_ang = { 0 };
 
 				VectorSubtract(block_opp->lerpOrigin, cg.snap->ps.origin, lock_dir);
 				vectoangles(lock_dir, lock_ang);
@@ -1457,7 +1457,7 @@ void CG_PredictPlayerState(void)
 				if (cg_showVehBounds.integer)
 				{
 					vec3_t NPCDEBUG_RED = { 1.0, 0.0, 0.0 };
-					vec3_t absmin, absmax;
+					vec3_t absmin = { 0 }, absmax = { 0 };
 					VectorAdd(cg_vehPmove.ps->origin, cg_vehPmove.mins, absmin);
 					VectorAdd(cg_vehPmove.ps->origin, cg_vehPmove.maxs, absmax);
 					CG_Cube(absmin, absmax, NPCDEBUG_RED, 0.25);

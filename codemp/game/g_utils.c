@@ -82,7 +82,7 @@ const char* BuildShaderStateConfig(void)
 	memset(buff, 0, MAX_STRING_CHARS);
 	for (int i = 0; i < remapCount; i++)
 	{
-		char out[MAX_QPATH * 2 + 5];
+		char out[MAX_QPATH * 2 + 5] = { 0 };
 		Com_sprintf(out, MAX_QPATH * 2 + 5, "%s=%s:%5.2f@", remappedShaders[i].oldShader, remappedShaders[i].newShader,
 			remappedShaders[i].timeOffset);
 		Q_strcat(buff, sizeof buff, out);
@@ -116,7 +116,7 @@ int G_FindConfigstringIndex(const char* name, const int start, const int max, co
 
 	for (i = 1; i < max; i++)
 	{
-		char s[MAX_STRING_CHARS];
+		char s[MAX_STRING_CHARS] = { 0 };
 		trap->GetConfigstring(start + i, s, sizeof s);
 		if (!s[0])
 		{
@@ -247,7 +247,7 @@ static int numOwnSkeletonCache = 0;
 // SKELF_* of the model's own skeleton (0 = none / unusable). Which of these a class needs: BG_ClassSkeletonOk.
 int G_ModelSkeletonFlags(const char* model)
 {
-	char folder[MAX_QPATH];
+	char folder[MAX_QPATH] = { 0 };
 
 	if (!model || !model[0])
 	{
@@ -297,7 +297,7 @@ qboolean G_ModelHasOwnSkeleton(const char* model)
 //see if we can or should allow this guy to use a custom skeleton -rww
 qboolean G_PlayerHasCustomSkeleton(gentity_t* ent)
 {
-	char userinfo[MAX_INFO_STRING];
+	char userinfo[MAX_INFO_STRING] = { 0 };
 
 	if (!ent || !ent->client || ent->s.number >= MAX_CLIENTS)
 	{
@@ -529,7 +529,7 @@ void G_Throw(gentity_t* targ, const vec3_t new_dir, const float push)
 	//====================================================
 	// 3. Compute knockback velocity
 	//====================================================
-	vec3_t kvel;
+	vec3_t kvel = { 0 };
 	const float scale = g_knockback.value * push / mass;
 
 	if (g_gravity.value > 0.0f)
@@ -621,7 +621,7 @@ void G_Kick_Throw(gentity_t* targ, const vec3_t new_dir, const float push)
 	//====================================================
 	// 3. Compute knockback velocity
 	//====================================================
-	vec3_t kvel;
+	vec3_t kvel = { 0 };
 	const float scale = g_knockback.value * push / mass;
 
 	if (g_gravity.value > 0.0f)
@@ -1400,7 +1400,7 @@ int gG2KillNum = 0;
 
 void G_SendG2KillQueue(void)
 {
-	char g2KillString[1024];
+	char g2KillString[1024] = { 0 };
 	int i = 0;
 
 	if (!gG2KillNum)
@@ -1591,7 +1591,7 @@ must be taken if the origin is right on a surface (snap towards start vector fir
 */
 gentity_t* G_TempEntity(vec3_t origin, const int event)
 {
-	vec3_t snapped;
+	vec3_t snapped = { 0 };
 
 	gentity_t* e = G_Spawn();
 	if (!e)
@@ -1624,7 +1624,7 @@ Special event entity that keeps sound trackers in mind
 */
 static gentity_t* G_SoundTempEntity(vec3_t origin, const int event, int channel)
 {
-	vec3_t snapped;
+	vec3_t snapped = { 0 };
 
 	gentity_t* e = G_Spawn();
 
@@ -1701,7 +1701,7 @@ of ent.  Ent should be unlinked before calling this!
 void g_kill_box(gentity_t* ent)
 {
 	static int touch[MAX_GENTITIES];  // safe and recommended
-	vec3_t mins, maxs;
+	vec3_t mins = { 0 }, maxs = { 0 };
 
 	VectorAdd(ent->client->ps.origin, ent->r.mins, mins);
 	VectorAdd(ent->client->ps.origin, ent->r.maxs, maxs);
@@ -2218,7 +2218,7 @@ static void G_GonkGiveBacta(gentity_t* gonk, const gentity_t* user)
 		return;
 	}
 	gitem_t* item = BG_FindItemForHoldable(HI_MEDPAC);
-	vec3_t dir, org, vel;
+	vec3_t dir = { 0 }, org = { 0 }, vel = { 0 };
 
 	if (!item)
 	{
@@ -2243,9 +2243,9 @@ extern qboolean G_Shop_TryTalk(gentity_t* player, const gentity_t* npc);
 
 void TryUse(gentity_t* ent)
 {
-	trace_t trace;
-	vec3_t src, dest, vf;
-	vec3_t viewspot;
+	trace_t trace = { 0 };
+	vec3_t src = { 0 }, dest = { 0 }, vf = { 0 };
+	vec3_t viewspot = { 0 };
 
 	if (G_SiegeMissionRules() && // SJE (2026-10-16): also siege missions in Team FFA
 		!gSiegeRoundBegun)
@@ -2510,9 +2510,9 @@ tryJetPack:
 	if (ent->client->ps.stats[STAT_HOLDABLE_ITEMS] & 1 << HI_AMMODISP)
 	{
 		//if you used nothing, then try spewing out some ammo
-		trace_t trToss;
-		vec3_t fAng;
-		vec3_t fwd;
+		trace_t trToss = { 0 };
+		vec3_t fAng = { 0 };
+		vec3_t fwd = { 0 };
 
 		VectorSet(fAng, 0.0f, ent->client->ps.viewangles[YAW], 0.0f);
 		AngleVectors(fAng, fwd, 0, 0);
@@ -2547,8 +2547,8 @@ qboolean G_PointInBounds(vec3_t point, vec3_t mins, vec3_t maxs)
 
 qboolean G_BoxInBounds(vec3_t point, vec3_t mins, vec3_t maxs, vec3_t boundsMins, vec3_t boundsMaxs)
 {
-	vec3_t boxMins;
-	vec3_t boxMaxs;
+	vec3_t boxMins = { 0 };
+	vec3_t boxMaxs = { 0 };
 
 	VectorAdd(point, mins, boxMins);
 	VectorAdd(point, maxs, boxMaxs);
@@ -2637,8 +2637,8 @@ qboolean G_CheckInSolid(gentity_t* self, const qboolean fix)
 		return qtrue;
 	}
 
-	trace_t tr;
-	vec3_t end, mins;
+	trace_t tr = { 0 };
+	vec3_t end = { 0 }, mins = { 0 };
 
 	VectorCopy(self->r.currentOrigin, end);
 	end[2] += self->r.mins[2];
@@ -2665,7 +2665,7 @@ qboolean G_CheckInSolid(gentity_t* self, const qboolean fix)
 	// NUDGE ATTEMPT 1: Move to trace end (your original)
 	//===========================================
 	{
-		vec3_t neworg;
+		vec3_t neworg = { 0 };
 		VectorCopy(tr.endpos, neworg);
 		neworg[2] -= self->r.mins[2];
 
@@ -2693,7 +2693,7 @@ qboolean G_CheckInSolid(gentity_t* self, const qboolean fix)
 
 	for (int i = 0; i < 6; i++)
 	{
-		vec3_t trypos;
+		vec3_t trypos = { 0 };
 		VectorAdd(self->r.currentOrigin, nudges[i], trypos);
 
 		G_SetOrigin(self, trypos);
@@ -2743,7 +2743,7 @@ DebugLine
 */
 static int DebugLine(vec3_t start, vec3_t end, const int color)
 {
-	vec3_t points[4] = { 0 }, dir, cross;
+	vec3_t points[4] = { 0 }, dir = { 0 }, cross = { 0 };
 	const vec3_t up = { 0, 0, 1 };
 
 	VectorCopy(start, points[0]);
@@ -2819,8 +2819,8 @@ void G_SpeechEvent(gentity_t* self, const int event)
 
 qboolean G_ExpandPointToBBox(vec3_t point, const vec3_t mins, const vec3_t maxs, const int ignore, const int clipmask)
 {
-	trace_t tr;
-	vec3_t start, end;
+	trace_t tr = { 0 };
+	vec3_t start = { 0 }, end = { 0 };
 
 	VectorCopy(point, start);
 
@@ -2928,8 +2928,8 @@ void TextWrapCenterPrint(char orgtext[CENTERPRINT_MAXSTRING], char output[CENTER
 
 gentity_t* ViewTarget(const gentity_t* ent, const int length, vec3_t* target, cplane_t* plane)
 {
-	trace_t tr;
-	vec3_t traceVec;
+	trace_t tr = { 0 };
+	vec3_t traceVec = { 0 };
 
 	AngleVectors(ent->client->ps.viewangles, traceVec, 0, 0);
 	traceVec[0] = ent->client->renderInfo.eyePoint[0] + traceVec[0] * length;

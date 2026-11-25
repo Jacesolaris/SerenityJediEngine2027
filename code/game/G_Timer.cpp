@@ -225,7 +225,7 @@ void TIMER_Load()
 		for (int i = 0; i < numTimers; i++)
 		{
 			int time = 0;
-			char tempBuffer[1024]; // Still ugly. Setting ourselves up for 007 AUF all over again. =)
+			char tempBuffer[1024] = {}; // Still ugly. Setting ourselves up for 007 AUF all over again. =)
 
 			assert(sizeof g_timers[0]->time == sizeof time); //make sure we're reading the same size as we wrote
 

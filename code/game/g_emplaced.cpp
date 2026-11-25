@@ -37,8 +37,8 @@ extern void CG_ChangeWeapon(int num);
 //lock the owner into place relative to the cannon pos
 static void EWebPositionUser(gentity_t* owner, gentity_t* eweb)
 {
-	mdxaBone_t boltMatrix;
-	vec3_t p, p2, d;
+	mdxaBone_t boltMatrix = {};
+	vec3_t p = {}, p2 = {}, d = {};
 	trace_t tr;
 	qboolean trace_over = qtrue;
 
@@ -118,14 +118,14 @@ static void EWebPositionUser(gentity_t* owner, gentity_t* eweb)
 		if (!tr.startsolid && !tr.allsolid) //&& tr.fraction == 1.0f)
 		{
 			//all clear, we can move there
-			vec3_t moveDir;
+			vec3_t moveDir = {};
 			VectorCopy(tr.endpos, p);
 			VectorSubtract(p, eweb->pos4, moveDir);
 			const float move_dist = VectorNormalize(moveDir);
 			if (move_dist > 4.0f)
 			{
 				//moved past the threshold from last position
-				vec3_t oRight;
+				vec3_t oRight = {};
 				int strafeAnim = 0;
 
 				VectorCopy(p, eweb->pos4); //update the position
@@ -209,7 +209,7 @@ void eweb_pain(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, const
 //----------------------------------------------------------
 void eweb_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, int damage, int mod, int dflags, int hit_loc)
 {
-	vec3_t org;
+	vec3_t org = {};
 
 	// turn off any firing animations it may have been doing
 	self->s.frame = self->startFrame = self->endFrame = 0;
@@ -225,7 +225,7 @@ void eweb_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, int da
 	{
 		if (self->activator->NPC)
 		{
-			vec3_t right;
+			vec3_t right = {};
 
 			// radius damage seems to throw them, but add an extra bit to throw them away from the weapon
 			AngleVectors(self->currentAngles, nullptr, right, nullptr);
@@ -336,13 +336,13 @@ qboolean eweb_can_be_used(const gentity_t* self, const gentity_t* other, const g
 		return qfalse;
 	}
 
-	vec3_t facing_angles;
+	vec3_t facing_angles = {};
 
 	VectorAdd(self->s.angles, self->pos1, facing_angles);
 	if (activator && activator->s.number < MAX_CLIENTS)
 	{
-		vec3_t fwd2;
-		vec3_t fwd1;
+		vec3_t fwd2 = {};
+		vec3_t fwd1 = {};
 		//player must be facing general direction of the turret head
 		// Let's get some direction vectors for the users
 		AngleVectors(activator->client->ps.viewangles, fwd1, nullptr, nullptr);
@@ -592,8 +592,8 @@ void emplaced_gun_use(gentity_t* self, const gentity_t* other, gentity_t* activa
 	// Designers can choose to require facing the gun direction
 	if (self->spawnflags & EMPLACED_FACING)
 	{
-		vec3_t fwd2;
-		vec3_t fwd1;
+		vec3_t fwd2 = {};
+		vec3_t fwd1 = {};
 
 		// User facing direction
 		AngleVectors(activator->client->ps.viewangles, fwd1, NULL, NULL);
@@ -728,7 +728,7 @@ void emplaced_blow(gentity_t* ent)
 void emplaced_gun_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, int damage, int mod, int dflags,
 	int hit_loc)
 {
-	vec3_t org;
+	vec3_t org = {};
 
 	// turn off any firing animations it may have been doing
 	self->s.frame = self->startFrame = self->endFrame = 0;
@@ -752,7 +752,7 @@ void emplaced_gun_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker
 	{
 		if (self->activator->NPC)
 		{
-			vec3_t right;
+			vec3_t right = {};
 
 			// radius damage seems to throw them, but add an extra bit to throw them away from the weapon
 			AngleVectors(self->currentAngles, nullptr, right, nullptr);
@@ -912,7 +912,7 @@ void G_UpdateEmplacedWeaponData(gentity_t* ent)
 			ent->waypoint = chair->waypoint;
 
 			//update the actual origin of the sitter
-			mdxaBone_t boltMatrix;
+			mdxaBone_t boltMatrix = {};
 			const vec3_t chair_ang = { 0, ent->client->ps.viewangles[YAW], 0 };
 
 			// Getting the seat bolt here
@@ -962,7 +962,7 @@ void ExitEmplacedWeapon(gentity_t* ent)
 			else if (ent->owner->e_UseFunc == useF_eweb_use) // crappy way to check this, but...
 			{
 				// give 'em a push away from us
-				vec3_t back_dir, start, end;
+				vec3_t back_dir = {}, start = {}, end = {};
 				trace_t trace;
 				gentity_t* eweb = ent->owner;
 				qboolean safe_exit = qfalse;
@@ -1015,7 +1015,7 @@ void ExitEmplacedWeapon(gentity_t* ent)
 		else
 		{
 			// dead, so give 'em a push out of the chair
-			vec3_t dir;
+			vec3_t dir = {};
 			AngleVectors(ent->owner->s.angles, NULL, dir, NULL);
 
 			if ((rand() & 1) != 0)

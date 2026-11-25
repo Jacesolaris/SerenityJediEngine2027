@@ -239,6 +239,8 @@ struct mcParams_t {
 	float	airPhys = 0.0f;	// SJE r_meshClothAirPhys: the air acts on each point by its own speed through it and by how the
 						//   cloth lies to it (drag across the cloth by the square of the speed, next to none along it); the travel wind,
 						//   the linear drag, the sink and landing rules, the lift limit and 'damp' fall away. 0 = off (those rules)
+	float	freeCape = 0.0f;	// SJE r_meshClothFree: over 0 = a cloth line's 'free F' counts (with r_meshClothAirPhys): that cloth has no
+						//   lift limit, a storm's gusts and eddies reach it, air along it drags it, wind from behind counts in full
 	float	airFree = 1.0f;	// SJE r_meshClothAirFree: moving air (travel, a fall, wind) frees the cloth - its bend links and 'damp'
 						//   give, the eddies are sized by the real air speed, a fall's air counts apart from the wind's, the lift
 						//   limit opens from a slower fall, loose cloth sinks no faster than the air lets it. 0 = as before

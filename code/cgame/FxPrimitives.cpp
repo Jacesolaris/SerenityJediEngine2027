@@ -101,7 +101,7 @@ void CParticle::Die()
 {
 	if (mFlags & FX_DEATH_RUNS_FX && !(mFlags & FX_KILL_ON_IMPACT))
 	{
-		vec3_t norm;
+		vec3_t norm = {};
 
 		// Man, this just seems so, like, uncool and stuff...
 		VectorSet(norm, Q_flrand(-1.0f, 1.0f), Q_flrand(-1.0f, 1.0f), Q_flrand(-1.0f, 1.0f));
@@ -114,7 +114,7 @@ void CParticle::Die()
 //----------------------------
 bool CParticle::Cull() const
 {
-	vec3_t dir;
+	vec3_t dir = {};
 
 	// Get the direction to the view
 	VectorSubtract(mOrigin1, cg.refdef.vieworg, dir);
@@ -172,8 +172,8 @@ bool CParticle::Update()
 			return false;
 		}
 
-		vec3_t org;
-		vec3_t ax[3];
+		vec3_t org = {};
+		vec3_t ax[3] = {};
 
 		// Get our current position and direction
 		if (mModelNum >= 0 && mBoltNum >= 0) //bolt style
@@ -193,7 +193,7 @@ bool CParticle::Update()
 		else
 		{
 			//fixme change this to bolt style...
-			vec3_t dir, ang;
+			vec3_t dir = {}, ang = {};
 
 			GetOrigin(mClientID, org);
 			GetDir(mClientID, dir);
@@ -201,7 +201,7 @@ bool CParticle::Update()
 			vectoangles(dir, ang);
 			AngleVectors(ang, ax[0], ax[1], ax[2]);
 		}
-		vec3_t realVel, realAccel;
+		vec3_t realVel = {}, realAccel = {};
 
 		VectorMA(org, mOrgOffset[0], ax[0], org);
 		VectorMA(org, mOrgOffset[1], ax[1], org);
@@ -445,7 +445,7 @@ void CParticle::UpdateRGB()
 {
 	// completely biased towards start if it doesn't get overridden
 	float perc1 = 1.0f, perc2 = 1.0f;
-	vec3_t res;
+	vec3_t res = {};
 
 	if (mFlags & FX_RGB_LINEAR)
 	{
@@ -626,7 +626,7 @@ void CParticle::UpdateAlpha()
 //----------------------------
 bool COrientedParticle::Cull() const
 {
-	vec3_t dir;
+	vec3_t dir = {};
 
 	// Get the direction to the view
 	VectorSubtract(mOrigin1, cg.refdef.vieworg, dir);
@@ -685,8 +685,8 @@ bool COrientedParticle::Update()
 			return false;
 		}
 
-		vec3_t org;
-		vec3_t ax[3];
+		vec3_t org = {};
+		vec3_t ax[3] = {};
 
 		// Get our current position and direction
 		if (mModelNum >= 0 && mBoltNum >= 0) //bolt style
@@ -706,7 +706,7 @@ bool COrientedParticle::Update()
 		else
 		{
 			//fixme change this to bolt style...
-			vec3_t dir, ang;
+			vec3_t dir = {}, ang = {};
 
 			GetOrigin(mClientID, org);
 			GetDir(mClientID, dir);
@@ -714,7 +714,7 @@ bool COrientedParticle::Update()
 			vectoangles(dir, ang);
 			AngleVectors(ang, ax[0], ax[1], ax[2]);
 		}
-		vec3_t realVel, realAccel;
+		vec3_t realVel = {}, realAccel = {};
 
 		VectorMA(org, mOrgOffset[0], ax[0], org);
 		VectorMA(org, mOrgOffset[1], ax[1], org);
@@ -739,7 +739,7 @@ bool COrientedParticle::Update()
 
 		//use the normalOffset and add that to the actual normal of the bolt
 		//NOTE: not tested!!!
-		vec3_t boltAngles, offsetAngles, transformedAngles;
+		vec3_t boltAngles = {}, offsetAngles = {}, transformedAngles = {};
 		vectoangles(ax[0], boltAngles);
 		vectoangles(mNormalOffset, offsetAngles);
 		VectorAdd(boltAngles, offsetAngles, transformedAngles);
@@ -834,7 +834,7 @@ bool CLine::Update()
 		trace_t trace;
 		if (mFlags & FX_APPLY_PHYSICS)
 		{
-			vec3_t end;
+			vec3_t end = {};
 			VectorMA(mOrigin1, 2048, ax[0], end);
 
 			theFxHelper.Trace(&trace, mOrigin1, nullptr, nullptr, end, mClientID, MASK_SHOT);
@@ -976,7 +976,7 @@ bool CElectricity::Update()
 //----------------------------
 bool CTail::Cull() const
 {
-	vec3_t dir;
+	vec3_t dir = {};
 
 	// Get the direction to the view
 	VectorSubtract(mOrigin1, cg.refdef.vieworg, dir);
@@ -1029,8 +1029,8 @@ bool CTail::Update()
 			return false;
 		}
 
-		vec3_t org;
-		vec3_t ax[3];
+		vec3_t org = {};
+		vec3_t ax[3] = {};
 		if (mModelNum >= 0 && mBoltNum >= 0) //bolt style
 		{
 			const centity_t& cent = cg_entities[mClientID];
@@ -1047,17 +1047,17 @@ bool CTail::Update()
 		}
 		else
 		{
-			vec3_t dir;
+			vec3_t dir = {};
 			// Get our current position and direction
 			GetOrigin(mClientID, org);
 			GetDir(mClientID, dir);
-			vec3_t ang;
+			vec3_t ang = {};
 
 			vectoangles(dir, ang);
 			AngleVectors(ang, ax[0], ax[1], ax[2]);
 		}
 
-		vec3_t realVel, realAccel;
+		vec3_t realVel = {}, realAccel = {};
 
 		VectorMA(org, mOrgOffset[0], ax[0], org);
 		VectorMA(org, mOrgOffset[1], ax[1], org);
@@ -1182,7 +1182,7 @@ void CTail::UpdateLength()
 //----------------------------
 void CTail::CalcNewEndpoint()
 {
-	vec3_t temp;
+	vec3_t temp = {};
 
 	// FIXME:  Hmmm, this looks dumb when physics are on and a bounce happens
 	VectorSubtract(mOldOrigin, mOrigin1, temp);
@@ -1396,7 +1396,7 @@ void CEmitter::Draw()
 
 		for (int t = mOldTime; t <= theFxHelper.mTime; t += TRAIL_RATE)
 		{
-			vec3_t v;
+			vec3_t v = {};
 			dif += TRAIL_RATE;
 
 			// ?Not sure if it's better to update this before or after updating the origin
@@ -1651,7 +1651,7 @@ void CLight::UpdateRGB()
 {
 	// completely biased towards start if it doesn't get overridden
 	float perc1 = 1.0f, perc2 = 1.0f;
-	vec3_t res;
+	vec3_t res = {};
 
 	if (mFlags & FX_RGB_LINEAR)
 	{
@@ -1861,7 +1861,7 @@ bool CTrail::Update()
 //--------------------------
 bool CPoly::Cull() const
 {
-	vec3_t dir;
+	vec3_t dir = {};
 
 	// Get the direction to the view
 	VectorSubtract(mOrigin1, cg.refdef.vieworg, dir);
@@ -2103,7 +2103,7 @@ bool CBezier::Update()
 //----------------------------
 void CBezier::DrawSegment(vec3_t start, vec3_t end, const float texcoord1, const float texcoord2)
 {
-	vec3_t lineDir, cross, viewDir;
+	vec3_t lineDir = {}, cross = {}, viewDir = {};
 	static vec3_t lastEnd[2];
 	polyVert_t verts[4]{};
 
@@ -2182,7 +2182,7 @@ constexpr float BEZIER_RESOLUTION = 16.0f;
 //----------------------------
 void CBezier::Draw()
 {
-	vec3_t pos{}, old_pos;
+	vec3_t pos{}, old_pos = {};
 	constexpr float incr = 1.0f / BEZIER_RESOLUTION;
 
 	VectorCopy(mOrigin1, old_pos);
@@ -2254,7 +2254,7 @@ bool CFlash::Update()
 //----------------------------
 void CFlash::Init()
 {
-	vec3_t dif;
+	vec3_t dif = {};
 
 	VectorSubtract(mOrigin1, cg.refdef.vieworg, dif);
 	const float dis = VectorNormalize(dif);

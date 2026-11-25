@@ -161,8 +161,8 @@ static qboolean BG_ParseVehWeaponParm(vehWeaponInfo_t* vehWeapon, const char* pa
 	vec3_t vec = { 0 };
 	byte* b = (byte*)vehWeapon;
 	int i_fields_read = 0;
-	vehicleType_t vehType;
-	char value[1024];
+	vehicleType_t vehType = VH_NONE;
+	char value[1024] = { 0 };
 
 	Q_strncpyz(value, pValue, sizeof value);
 
@@ -335,7 +335,7 @@ static int VEH_LoadVehWeapon(const char* vehWeaponName)
 	// parse the vehWeapon info block
 	while (1)
 	{
-		char parmName[128];
+		char parmName[128] = { 0 };
 		SkipRestOfLine(&p);
 		token = COM_ParseExt(&p, qtrue);
 		if (!token[0])
@@ -740,8 +740,8 @@ static qboolean BG_ParseVehicleParm(vehicleInfo_t* vehicle, const char* parmName
 	vec3_t vec = { 0 };
 	byte* b = (byte*)vehicle;
 	int i_fields_read = 0;
-	vehicleType_t vehType;
-	char value[1024];
+	vehicleType_t vehType = VH_NONE;
+	char value[1024] = { 0 };
 
 	Q_strncpyz(value, pValue, sizeof value);
 
@@ -1261,7 +1261,7 @@ static int VEH_VehicleIndexForName(const char* vehicleName)
 static void BG_VehWeaponLoadParms(void)
 {
 	int vehExtFNLen = 0;
-	char vehWeaponExtensionListBuf[2048]; //	The list of file names read in
+	char vehWeaponExtensionListBuf[2048] = { 0 }; //	The list of file names read in
 	fileHandle_t f = 0;
 
 	int len = 0;
@@ -1325,7 +1325,7 @@ void BG_VehicleLoadParms(void)
 {
 	//HMM... only do this if there's a vehicle on the level?
 	int vehExtFNLen = 0;
-	char vehExtensionListBuf[2048]; //	The list of file names read in
+	char vehExtensionListBuf[2048] = { 0 }; //	The list of file names read in
 	fileHandle_t f = 0;
 
 	int len = 0;
@@ -1561,8 +1561,8 @@ void AttachRidersGeneric(const Vehicle_t* p_veh)
 	// If we have a pilot, attach him to the driver tag.
 	if (p_veh->m_pPilot)
 	{
-		mdxaBone_t boltMatrix;
-		vec3_t yawOnlyAngles;
+		mdxaBone_t boltMatrix = { 0 };
+		vec3_t yawOnlyAngles = { 0 };
 		bgEntity_t* parent = p_veh->m_pParentEntity;
 		const bgEntity_t* pilot = p_veh->m_pPilot;
 		const int crotchBolt = trap->G2API_AddBolt(parent->ghoul2, 0, "*driver");

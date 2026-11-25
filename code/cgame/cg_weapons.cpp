@@ -54,9 +54,9 @@ CG_GrappleTrail
 */
 void CG_GrappleTrail(centity_t* ent, const weaponInfo_t* wi)
 {
-	vec3_t origin;
-	vec3_t forward, up;
-	refEntity_t beam;
+	vec3_t origin = {};
+	vec3_t forward = {}, up = {};
+	refEntity_t beam = {};
 
 	const entityState_t* es = &ent->currentState;
 
@@ -89,9 +89,9 @@ void CG_GrappleTrail(centity_t* ent, const weaponInfo_t* wi)
 
 static void CG_StunTrail(centity_t* ent, const weaponInfo_t* wi)
 {
-	vec3_t origin;
-	vec3_t forward, up;
-	refEntity_t beam;
+	vec3_t origin = {};
+	vec3_t forward = {}, up = {};
+	refEntity_t beam = {};
 
 	const entityState_t* es = &ent->currentState;
 
@@ -134,7 +134,7 @@ angle)
 */
 static void CG_LightningBolt(const centity_t* cent)
 {
-	refEntity_t beam;
+	refEntity_t beam = {};
 
 	//Must be a duration weapon that continuously generates an effect.
 	if (cent->currentState.weapon == WP_DEMP2 && cent->currentState.eFlags & EF_ALT_FIRING)
@@ -186,8 +186,8 @@ The server says this item is used on this level
 void CG_RegisterWeapon(const int weapon_num)
 {
 	gitem_t* item = nullptr, * ammo = nullptr;
-	char path[MAX_QPATH];
-	vec3_t mins, maxs;
+	char path[MAX_QPATH] = {};
+	vec3_t mins = {}, maxs = {};
 	int i = 0;
 
 	weaponInfo_t* weaponInfo = &cg_weapons[weapon_num];
@@ -227,7 +227,7 @@ void CG_RegisterWeapon(const int weapon_num)
 	weaponInfo->weaponModel = cgi_R_RegisterModel(weaponData[weapon_num].weaponMdl);
 	{
 		//in case the weaponmodel isn't _w, precache the _w.glm
-		char weaponModel[64];
+		char weaponModel[64] = {};
 
 		Q_strncpyz(weaponModel, weaponData[weapon_num].weaponMdl, sizeof weaponModel);
 		if (char* spot = strstr(weaponModel, ".md3"))
@@ -1408,7 +1408,7 @@ static void CG_CalculateWeaponPosition(vec3_t origin, vec3_t angles)
 		static vec3_t previousAngles = { 0, 0, 0 };
 		static int previousTime = 0;
 
-		vec3_t deltaAngles;
+		vec3_t deltaAngles = {};
 		AnglesSubtract(angles, previousAngles, deltaAngles);
 		VectorScale(deltaAngles, 1.0f, deltaAngles);
 
@@ -1531,10 +1531,10 @@ void CG_AddViewWeaponWithCounter(refEntity_t* gun, const playerState_t* ps);
 
 void CG_AddViewWeapon(playerState_t* ps)
 {
-	refEntity_t barrel;
-	refEntity_t hand;
-	refEntity_t flash;
-	vec3_t angles;
+	refEntity_t barrel = {};
+	refEntity_t hand = {};
+	refEntity_t flash = {};
+	vec3_t angles = {};
 	const weaponInfo_t* weapon = nullptr;
 	weaponData_t* w_data = nullptr;
 	centity_t* cent = nullptr;
@@ -1543,7 +1543,7 @@ void CG_AddViewWeapon(playerState_t* ps)
 
 	if (cg.renderingThirdPerson && !cg_trueguns.integer && !cg.zoomMode && (ps->eFlags & EF2_DUAL_WEAPONS || ps->weapon == WP_DROIDEKA))
 	{
-		vec3_t origin;
+		vec3_t origin = {};
 		cent = &cg_entities[ps->clientNum];
 		// special hack for lightning guns...
 		VectorCopy(cg.refdef.vieworg, origin);
@@ -1618,7 +1618,7 @@ void CG_AddViewWeapon(playerState_t* ps)
 	if (cent->gent && cent->gent->client && cent->gent->client->ps.forcePowersActive & 1 << FP_LIGHTNING_STRIKE && CG_ContinuousFxReady(cent->currentState.number, CFX_VIEW_LIGHTNING_STRIKE))
 	{
 		//doing the electrocuting
-		vec3_t temp;
+		vec3_t temp = {};
 
 		VectorCopy(cent->gent->client->renderInfo.handLPoint, temp);
 		VectorMA(temp, -5, cg.refdef.viewaxis[0], temp);
@@ -1637,7 +1637,7 @@ void CG_AddViewWeapon(playerState_t* ps)
 	if (cent->gent && cent->gent->client && cent->gent->client->ps.forcePowersActive & 1 << FP_LIGHTNING && CG_ContinuousFxReady(cent->currentState.number, CFX_VIEW_LIGHTNING))
 	{
 		//doing the electrocuting
-		vec3_t temp;
+		vec3_t temp = {};
 
 		VectorCopy(cent->gent->client->renderInfo.handLPoint, temp);
 		VectorMA(temp, -5, cg.refdef.viewaxis[0], temp);
@@ -1747,7 +1747,7 @@ void CG_AddViewWeapon(playerState_t* ps)
 	if (cent->gent && cent->gent->client && cent->gent->client->ps.forcePowersActive & 1 << FP_DRAIN && CG_ContinuousFxReady(cent->currentState.number, CFX_VIEW_DRAIN))
 	{
 		//doing the draining
-		vec3_t temp;
+		vec3_t temp = {};
 
 		VectorCopy(cent->gent->client->renderInfo.handLPoint, temp);
 		VectorMA(temp, -5, cg.refdef.viewaxis[0], temp);
@@ -1766,7 +1766,7 @@ void CG_AddViewWeapon(playerState_t* ps)
 	// allow the gun to be completely removed
 	if (!cg_drawGun.integer || cg.zoomMode)
 	{
-		vec3_t origin;
+		vec3_t origin = {};
 
 		// special hack for lightning guns...
 		VectorCopy(cg.refdef.vieworg, origin);
@@ -1837,14 +1837,14 @@ void CG_AddViewWeapon(playerState_t* ps)
 
 	// an SJE gun's own first-person model (2026-11-16, from Jedi Knight Galaxies): same md3 layout as the stock guns,
 	// so it only swaps the models; it sits where its file says (gunposition) unless cg_gunX/Y/Z are set
-	weaponInfo_t variant_view;
+	weaponInfo_t variant_view = {};
 	int num_barrels = w_data->numBarrels;
 	vec3_t gun_offset = { cg_gun_x.value, cg_gun_y.value, cg_gun_z.value };
 	{
 		qhandle_t v_gun = 0, v_hands = 0;
 		const qhandle_t* v_barrels = nullptr;
 		int v_num_barrels = 0;
-		vec3_t v_pos;
+		vec3_t v_pos = {};
 
 		if (CG_WeaponVariantView(ps, &v_gun, &v_hands, &v_barrels, &v_num_barrels, v_pos))
 		{
@@ -1971,8 +1971,8 @@ void CG_AddViewWeapon(playerState_t* ps)
 		{
 			for (int bladeNum = 0; bladeNum < cent->gent->client->ps.saber[saberNum].numBlades; bladeNum++)
 			{
-				vec3_t axis_[3];
-				vec3_t org_;
+				vec3_t axis_[3] = {};
+				vec3_t org_ = {};
 				CG_GetTagWorldPosition(&gun, "tag_flash", org_, axis_);
 
 				//loop this and do for both blades
@@ -2170,10 +2170,10 @@ void CG_AddViewWeapon(playerState_t* ps)
 
 void CG_AddViewWeaponDuals(playerState_t* ps)
 {
-	refEntity_t barrel;
-	refEntity_t hand;
-	refEntity_t flash;
-	vec3_t angles;
+	refEntity_t barrel = {};
+	refEntity_t hand = {};
+	refEntity_t flash = {};
+	vec3_t angles = {};
 	const weaponInfo_t* weapon = nullptr;
 	weaponData_t* wData = nullptr;
 	centity_t* cent = nullptr;
@@ -2211,7 +2211,7 @@ void CG_AddViewWeaponDuals(playerState_t* ps)
 	if (cent->gent && cent->gent->client && cent->gent->client->ps.forcePowersActive & 1 << FP_LIGHTNING && CG_ContinuousFxReady(cent->currentState.number, CFX_VIEW_LIGHTNING))
 	{
 		//doing the electrocuting
-		vec3_t temp;
+		vec3_t temp = {};
 
 		VectorCopy(cent->gent->client->renderInfo.handLPoint, temp);
 		VectorMA(temp, -5, cg.refdef.viewaxis[0], temp);
@@ -2321,7 +2321,7 @@ void CG_AddViewWeaponDuals(playerState_t* ps)
 	if (cent->gent && cent->gent->client && cent->gent->client->ps.forcePowersActive & 1 << FP_DRAIN && CG_ContinuousFxReady(cent->currentState.number, CFX_VIEW_DRAIN))
 	{
 		//doing the draining
-		vec3_t temp;
+		vec3_t temp = {};
 
 		VectorCopy(cent->gent->client->renderInfo.handLPoint, temp);
 		VectorMA(temp, -5, cg.refdef.viewaxis[0], temp);
@@ -2340,7 +2340,7 @@ void CG_AddViewWeaponDuals(playerState_t* ps)
 	// allow the gun to be completely removed
 	if (!cg_drawGun.integer || cg.zoomMode)
 	{
-		vec3_t origin;
+		vec3_t origin = {};
 
 		// special hack for lightning guns...
 		VectorCopy(cg.refdef.vieworg, origin);
@@ -2510,8 +2510,8 @@ void CG_AddViewWeaponDuals(playerState_t* ps)
 		{
 			for (int bladeNum = 0; bladeNum < cent->gent->client->ps.saber[saberNum].numBlades; bladeNum++)
 			{
-				vec3_t axis_[3];
-				vec3_t org_;
+				vec3_t axis_[3] = {};
+				vec3_t org_ = {};
 				//FIXME: need to get from tag_flash2 for saberstaff's second blade?
 				CG_GetTagWorldPosition(&gun, "tag_flash", org_, axis_);
 				//loop this and do for both blades
@@ -2794,7 +2794,7 @@ void CG_DrawDataPadWeaponSelect()
 	int i = 0;
 	int sideLeftIconCnt = 0, sideRightIconCnt = 0;
 	int iconCnt = 0;
-	vec4_t calc_color;
+	vec4_t calc_color = {};
 	char text[1024] = { 0 };
 	constexpr vec4_t textColor = { .875f, .718f, .121f, 1.0f };
 
@@ -3164,7 +3164,7 @@ void CG_DrawWeaponSelect()
 	int x2 = 0, y2 = 0, w2 = 0, h2 = 0;
 	int sideLeftIconCnt = 0, sideRightIconCnt = 0;
 	int sideMax = 0, iconCnt = 0;
-	vec4_t calc_color;
+	vec4_t calc_color = {};
 	constexpr vec4_t textColor = { .875f, .718f, .121f, 1.0f };
 	constexpr int yOffset = 0;
 
@@ -3445,7 +3445,7 @@ void CG_DrawWeaponSelect()
 		}
 		else
 		{
-			char text[1024];
+			char text[1024] = {};
 			const weaponVariant_t* wv = BG_GetWeaponVariant(CG_PlayerWeaponLook(cg.weaponSelect), cg.weaponSelect);
 
 			if (wv && wv->displayName[0])
@@ -4423,7 +4423,7 @@ void CG_ClearWeaponVariantMedia()
 // the view model files: <name>.md3, <name>_hand.md3 (the tags), <name>_barrel.md3 .. _barrel4.md3 (arms, moving parts)
 static void CG_RegisterWeaponVariantView(cgWeaponVariantSP_t* cwv, const weaponVariant_t* wv)
 {
-	char stem[MAX_QPATH];
+	char stem[MAX_QPATH] = {};
 
 	if (!wv->viewModel[0])
 	{
@@ -4466,7 +4466,7 @@ static void CG_AddViewWeaponCounter(refEntity_t* gun, const cgWeaponVariantSP_t*
 {
 	// a gun with fewer digits shows its top number while the pool holds more (SJE guns draw from the ammo pool)
 	const int top = cwv->numViewDigits >= 3 ? 999 : cwv->numViewDigits == 2 ? 99 : 9;
-	int frames[3], d, n = ammo < 0 ? 0 : ammo > top ? top : ammo;
+	int frames[3] = {}, d = 0, n = ammo < 0 ? 0 : ammo > top ? top : ammo;
 
 	frames[0] = n % 10;
 	frames[1] = n >= 10 ? n / 10 % 10 : 10;
@@ -4647,7 +4647,7 @@ qboolean CG_WeaponVariantMissile(centity_t* cent)
 	const weaponVariant_t* wv = nullptr;
 	const cgWeaponVariantSP_t* cwv = CG_WeaponVariantMedia(s1->weaponVariant, s1->weapon, &wv);
 	const int f = cent->gent && cent->gent->alt_fire ? 1 : 0;
-	vec3_t forward;
+	vec3_t forward = {};
 
 	if (!cwv || (!cwv->shotFx[f] && !cwv->shotModel[f]))
 	{
@@ -4663,14 +4663,14 @@ qboolean CG_WeaponVariantMissile(centity_t* cent)
 	}
 	if (cwv->shotSound[f])
 	{
-		vec3_t velocity;
+		vec3_t velocity = {};
 		EvaluateTrajectoryDelta(&s1->pos, cg.time, velocity);
 		cgi_S_AddLoopingSound(s1->number, cent->lerpOrigin, velocity, cwv->shotSound[f]);
 	}
 	if (cwv->shotModel[f])
 	{
-		refEntity_t ent;
-		vec3_t angles;
+		refEntity_t ent = {};
+		vec3_t angles = {};
 
 		memset(&ent, 0, sizeof ent);
 		VectorCopy(cent->lerpOrigin, ent.origin);

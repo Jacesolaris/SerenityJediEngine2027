@@ -37,7 +37,7 @@ Q_EXPORT void dllEntry(intptr_t(QDECL* syscallptr)(intptr_t arg, ...))
 
 static int PASSFLOAT(const float x)
 {
-	byteAlias_t fi;
+	byteAlias_t fi = { 0 };
 	fi.f = x;
 	return fi.i;
 }
@@ -741,7 +741,7 @@ void trap_AAS_PresenceTypeBoundingBox(const int presencetype, vec3_t mins, vec3_
 
 float trap_AAS_Time(void)
 {
-	byteAlias_t fi;
+	byteAlias_t fi = { 0 };
 	fi.i = Q_syscall(BOTLIB_AAS_TIME);
 	return fi.f;
 }
@@ -990,14 +990,14 @@ void trap_BotFreeCharacter(const int character)
 
 float trap_Characteristic_Float(const int character, const int index)
 {
-	byteAlias_t fi;
+	byteAlias_t fi = { 0 };
 	fi.i = Q_syscall(BOTLIB_AI_CHARACTERISTIC_FLOAT, character, index);
 	return fi.f;
 }
 
 float trap_Characteristic_BFloat(const int character, const int index, const float min, const float max)
 {
-	byteAlias_t fi;
+	byteAlias_t fi = { 0 };
 	fi.i = Q_syscall(BOTLIB_AI_CHARACTERISTIC_BFLOAT, character, index, PASSFLOAT(min), PASSFLOAT(max));
 	return fi.f;
 }
@@ -1215,7 +1215,7 @@ int trap_BotGetMapLocationGoal(char* name, void* goal)
 
 static float trap_BotAvoidGoalTime(const int goalstate, const int number)
 {
-	byteAlias_t fi;
+	byteAlias_t fi = { 0 };
 	fi.i = Q_syscall(BOTLIB_AI_AVOID_GOAL_TIME, goalstate, number);
 	return fi.f;
 }
@@ -1715,8 +1715,8 @@ static void SVSyscall_Trace(trace_t* results, const vec3_t start, const vec3_t m
 
 static void QDECL G_Error(int errorLevel, const char* error, ...)
 {
-	va_list argptr;
-	char text[1024];
+	va_list argptr = { 0 };
+	char text[1024] = { 0 };
 
 	va_start(argptr, error);
 	Q_vsnprintf(text, sizeof text, error, argptr);
@@ -1727,7 +1727,7 @@ static void QDECL G_Error(int errorLevel, const char* error, ...)
 
 void QDECL G_Printf(const char* msg, ...)
 {
-	va_list argptr;
+	va_list argptr = { 0 };
 	char text[4096] = { 0 };
 
 	va_start(argptr, msg);

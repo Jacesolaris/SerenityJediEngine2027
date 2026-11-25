@@ -4298,6 +4298,7 @@ static void MC_AirAround(const trRefEntity_t* ent, const void* key, const int ti
 	static cvar_t* tcm = nullptr;
 	static cvar_t* whl = nullptr;
 	static cvar_t* aph = nullptr;
+	static cvar_t* frc = nullptr;
 	static cvar_t* af = nullptr;
 	static cvar_t* ts = nullptr;
 	if (!tu)
@@ -4309,6 +4310,9 @@ static void MC_AirAround(const trRefEntity_t* ent, const void* key, const int ti
 		af = ri.Cvar_Get("r_meshClothAirFree", "1", CVAR_ARCHIVE_ND);
 		// SJE r_meshClothAirPhys (1 = on, 0 = the older air rules): the air's push by each point's own speed through it (tr_meshcloth.cpp)
 		aph = ri.Cvar_Get("r_meshClothAirPhys", "1", CVAR_ARCHIVE_ND);
+		// SJE r_meshClothFree: a cloth line's 'free F' counts - a free cape (tr_meshcloth.cpp, MC_CAPE_UMAX). 0 = ignored (as before),
+		// 1 = free, 2 = calmer, 3 = heavier, 4 = free and it stands out in a fast turn (the default), 5 = the same, stronger
+		frc = ri.Cvar_Get("r_meshClothFree", "4", CVAR_ARCHIVE_ND);
 		// SJE r_meshClothWhirl (1 = on, 0 = off): in a turn that goes on round and round the cape is not flung out level (tr_meshcloth.cpp)
 		// (2 = only the frame 'damp' works in goes round with him; the cloth feels all of the whirl)
 		whl = ri.Cvar_Get("r_meshClothWhirl", "1", CVAR_ARCHIVE_ND);
@@ -4329,6 +4333,7 @@ static void MC_AirAround(const trRefEntity_t* ent, const void* key, const int ti
 	prm.turnCalm = tcm ? tcm->value : 0.0f;
 	prm.whirl = whl ? whl->value : 0.0f;
 	prm.airPhys = aph ? aph->value : 0.0f;
+	prm.freeCape = frc ? frc->value : 0.0f;
 	if (prm.airPhys > 0.0f) {
 		// SJE r_meshClothAirPhys: the cloth falls as everything in the game does - the air model is made for that (how fast
 		// a sheet sinks is root(gravity x weight / drag)). r_meshClothGravity (700) belongs to the older air rules.

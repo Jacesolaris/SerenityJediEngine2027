@@ -38,7 +38,7 @@ FX_BryarProjectileThink
 */
 void FX_BryarProjectileThink(centity_t* cent, const struct weaponInfo_s* weapon)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	if (VectorNormalize2(cent->currentState.pos.trDelta, forward) == 0.0f)
 	{
@@ -51,7 +51,7 @@ void FX_BryarProjectileThink(centity_t* cent, const struct weaponInfo_s* weapon)
 
 void FX_SbdProjectileThink(centity_t* cent, const struct weaponInfo_s* weapon)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	if (VectorNormalize2(cent->currentState.pos.trDelta, forward) == 0.0f)
 	{
@@ -105,7 +105,7 @@ FX_BryarAltProjectileThink
 */
 void FX_BryarAltProjectileThink(centity_t* cent, const struct weaponInfo_s* weapon)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	if (VectorNormalize2(cent->currentState.pos.trDelta, forward) == 0.0f)
 	{
@@ -195,7 +195,7 @@ FX_TurretProjectileThink
 */
 void FX_TurretProjectileThink(centity_t* cent, const struct weaponInfo_s* weapon)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	if (VectorNormalize2(cent->currentState.pos.trDelta, forward) == 0.0f)
 	{
@@ -296,7 +296,7 @@ FX_ConcussionProjectileThink
 */
 void FX_ConcussionProjectileThink(centity_t* cent, const struct weaponInfo_s* weapon)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	if (VectorNormalize2(cent->currentState.pos.trDelta, forward) == 0.0f)
 	{
@@ -340,7 +340,7 @@ FX_DestructionProjectileThink
 
 void FX_DestructionProjectileThink(centity_t* cent)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	if (VectorNormalize2(cent->currentState.pos.trDelta, forward) == 0.0f)
 	{

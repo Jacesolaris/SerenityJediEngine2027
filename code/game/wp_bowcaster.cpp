@@ -46,7 +46,7 @@ static void WP_BowcasterMainFire(gentity_t* ent)
 	}
 
 	int damage = weaponData[WP_BOWCASTER].damage;
-	vec3_t angs, start;
+	vec3_t angs = {}, start = {};
 
 	// Starting point of the shot
 	VectorCopy(muzzle, start);
@@ -92,7 +92,7 @@ static void WP_BowcasterMainFire(gentity_t* ent)
 	// Fire multiple bolts based on charge level
 	for (int i = 0; i < count; i++)
 	{
-		vec3_t dir;
+		vec3_t dir = {};
 
 		// Random velocity variation
 		const float vel =
@@ -180,7 +180,7 @@ static void WP_BowcasterMainFire(gentity_t* ent)
 static void WP_BowcasterAltFire(gentity_t* ent)
 //---------------------------------------------------------
 {
-	vec3_t start;
+	vec3_t start = {};
 	int damage = weaponData[WP_BOWCASTER].altDamage;
 
 	VectorCopy(muzzle, start);

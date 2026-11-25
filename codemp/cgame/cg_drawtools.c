@@ -231,7 +231,7 @@ void CG_DrawStringExt(const int x, const int y, const char* string, const float*
 	if (trap->R_Language_IsAsian())
 	{
 		// hack-a-doodle-do (post-release quick fix code)...
-		vec4_t color;
+		vec4_t color = { 0 };
 		memcpy(color, setColor, sizeof color); // de-const it
 
 		CG_Text_Paint(
@@ -247,7 +247,7 @@ void CG_DrawStringExt(const int x, const int y, const char* string, const float*
 	}
 	else
 	{
-		vec4_t color;
+		vec4_t color = { 0 };
 		const char* s = NULL;
 		int xx = 0;
 
@@ -306,7 +306,7 @@ void CG_DrawStringExt(const int x, const int y, const char* string, const float*
 
 void CG_DrawBigString(const int x, const int y, const char* s, const float alpha)
 {
-	float color[4];
+	float color[4] = { 0 };
 
 	color[0] = color[1] = color[2] = 1.0;
 	color[3] = alpha;
@@ -320,7 +320,7 @@ void CG_DrawBigStringColor(const int x, const int y, const char* s, vec4_t color
 
 void CG_DrawSmallString(const int x, const int y, const char* s, const float alpha)
 {
-	float color[4];
+	float color[4] = { 0 };
 
 	color[0] = color[1] = color[2] = 1.0;
 	color[3] = alpha;
@@ -531,7 +531,7 @@ Take x,y positions as if 640 x 480 and scales them to the proper resolution
 void CG_DrawNumField(int x, const int y, int width, int value, const int charWidth, const int charHeight,
 	const int style, const qboolean zeroFill)
 {
-	char num[16];
+	char num[16] = { 0 };
 	int frame = 0;
 	int xWidth = 0;
 

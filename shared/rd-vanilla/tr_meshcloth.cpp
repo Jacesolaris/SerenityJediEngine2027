@@ -113,6 +113,7 @@ namespace {
 		float			dampH = 0.0f, dampV = 0.0f;	// 'damp H V': share of the cloth's speed (in a frame travelling with the character over the ground) taken per 16 ms, sideways / up-down
 		float			ring = 0.0f;		// 'ring D': second tether level - every point further down is tied rigidly to the nearest point D units (along the cloth) below the attached edge
 		float			armGap = 0.0f;	// SJE 'armgap G': arms keep G units more off this cloth, push it out in bigger steps, every substep (a cloak over the arms)
+		float			freeC = 0.0f;	// SJE 'free F': over 0 = a free cape (r_meshClothFree; see MC_CAPE_UMAX)
 		float			bell = 0.0f;		// 'bell B': 0..1 the free cloth's animated spot is its bind shape carried by the hip bone alone (a rigid bell), blended in by B x freedom
 		float			spring = 0.0f, springFade = 0.0f;	// 'spring S A': pull per 16 ms toward the animated spot, S x exp(-A x metres along the cloth from the attached edge)
 		bool			wrap = false;		// 'wrap': cloth on a grid ('proxy N') is drawn from the grid's triangles (each drawn vertex bound to the nearest few)
@@ -356,6 +357,7 @@ namespace {
 		std::vector<float>	expoP;					// SJE r_meshClothAirFree: per point, how far the air's eddies reach it (see MC_TURB_WALL)
 		std::vector<float>	freeP;					// ... per point: how free in this step (0 where the air presses it onto its wearer)
 		float				tailSide = 0.0f;		// SJE r_meshClothTailSide: the lee side of the last side wind (-1 .. +1; 0 = none yet)
+		float				capeArm = 0.0f;			// SJE r_meshClothFree: this step's arm gap for a group with free cloth (MC_CAPE_ARM; 0 = the lines')
 		float				tailUse = 0.0f;			// ... the side the cape is pushed to now (-1 / +1; 0 = none)
 		float				tailFirst = 0.0f;		// ... the side it tried first
 		int					tailTry = 0;			// ... 0 = on its first side, 1 = on the other, 2 = settled
@@ -1336,6 +1338,28 @@ namespace {
 		}
 	}
 
+	// SJE r_meshClothFree: which points are free cloth (their line has 'free F'; not cloth worn round the body or a layer
+	// under it). Returns whether any is.
+	static bool FreeCapePoints(const mcGroup_t* g, const mcParams_t* prm, std::vector<unsigned char>* out) {
+		if (out) out->clear();
+		if (!prm || !(prm->freeCape > 0.0f) || !(prm->airPhys > 0.0f) || (int)g->partSurf.size() != g->numParticles) return false;
+		bool any = false;
+		for (const mcDef_t* d : g->defs) if (d && d->freeC > 0.0f) { any = true; break; }
+		if (!any) return false;
+		const bool worn = (int)g->wrap.size() == g->numParticles && (int)g->under.size() == g->numParticles;
+		any = false;
+		if (out) out->assign((size_t)g->numParticles, 0);
+		for (int p = 0; p < g->numParticles; p++) {
+			const int si = g->partSurf[p];
+			if (si < 0 || si >= (int)g->defs.size() || !g->defs[si] || !(g->defs[si]->freeC > 0.0f)) continue;
+			if (worn && (g->wrap[p] || g->under[p])) continue;
+			any = true;
+			if (!out) return true;
+			(*out)[p] = 1;
+		}
+		return any;
+	}
+
 	// Solver settings for one substep, from mcParams_t
 	struct mcSolve_t {
 		float	bendScale = 1.0f;	// exponent for the old projection's bend (1 / substeps)
@@ -1358,6 +1382,9 @@ namespace {
 		const float* bendK = nullptr;	// SJE: per link, old projection's bend fraction per substep (nullptr = work it out)
 		const float* linkAlpha = nullptr;	// SJE r_meshClothAirFree: per link, this step's XPBD compliance (nullptr = the group's)
 		bool liftGrad = false;	// SJE r_meshClothAirFree: a point over the lift limit takes the nearest way back under it (not straight down)
+		bool liftOpenAll = false;	// SJE r_meshClothAirPhys: the lift limit is open in every step (as liftAir 1), for cloth that hangs from the shoulders
+		const unsigned char* liftLow = nullptr;	// ... per point: 1 = it hangs from below the trunk (a hip skirt; MC_AIRPHYS_HIP): the limit stays closed
+		const unsigned char* liftFree = nullptr;	// SJE r_meshClothFree: per point, 1 = no lift limit
 		const float* freeP = nullptr;	// SJE r_meshClothAirFree: per point, how free in this step (nullptr = none is)
 		float	freeTether = 0.0f;		// ... 'tether' x (1 + this x freeP) for loose cloth
 		const unsigned char* wornWrap = nullptr, * wornUnder = nullptr;	// ... which points are worn cloth (g->wrap / g->under)
@@ -1699,7 +1726,7 @@ namespace {
 			// up over the shoulders
 			// (per surface 'lift', or r_meshClothLift for all; below 0 = no limit)
 			const float liftL = sv.liftLimit > -1.5f ? sv.liftLimit : g->lift[p];
-			if (an >= 0 && liftL >= 0.0f && !MCDBG_OFF("NOHEIGHT")) {
+			if (an >= 0 && liftL >= 0.0f && !(sv.liftFree && sv.liftFree[p]) && !MCDBG_OFF("NOHEIGHT")) {	// SJE r_meshClothFree: none for a free cape
 				// SJE: ... and the limit slopes down from the attached edge (r_meshClothLiftSlope): a point may rise to
 				// that part of its cloth length under the edge, not level with it. Level, a cape thrown up in a jump
 				// or a fall lay as a flat sheet at shoulder height, spread out sideways like wings; sloped it streams
@@ -1714,13 +1741,14 @@ namespace {
 				// Only behind the edge the point hangs from (fully MC_LIFT_BEHIND behind it, not at all in front): a cape never
 				// tips forward over its wearer's head. Worn cloth (robes, layers under them) keeps the limit. Closed (runs,
 				// turns, spawns): as before.
-				if (sv.liftAir > 0.0f && !(sv.liftWrap && (sv.liftWrap[p] || sv.liftUnder[p]))) {
+				const float liftA = sv.liftOpenAll ? 1.0f : sv.liftAir;	// SJE r_meshClothAirPhys: open in every step
+				if (liftA > 0.0f && !(sv.liftWrap && (sv.liftWrap[p] || sv.liftUnder[p])) && !(sv.liftLow && sv.liftLow[p])) {
 					vec3_t ra;
 					mcSub(pp, &in->p[an * 3], ra);
 					const float behind = -mcDot(ra, sv.liftFwd), bw = MC_LIFT_BEHIND * in->linkScale;
-					if (behind > 0.0f) lim += sv.liftAir * (behind < bw ? behind / bw : 1.0f) * (sv.liftSlope + MC_LIFT_OPEN) * g->lraLen[p] * in->linkScale;
+					if (behind > 0.0f) lim += liftA * (behind < bw ? behind / bw : 1.0f) * (sv.liftSlope + MC_LIFT_OPEN) * g->lraLen[p] * in->linkScale;
 					if (sv.liftGrad && behind < bw && bw > 1e-3f) {
-						rampK = sv.liftAir * (sv.liftSlope + MC_LIFT_OPEN) * g->lraLen[p] * in->linkScale / bw;
+						rampK = liftA * (sv.liftSlope + MC_LIFT_OPEN) * g->lraLen[p] * in->linkScale / bw;
 						rampB = behind;
 						rampW = bw;
 					}
@@ -2203,9 +2231,73 @@ namespace {
 	// as the tail-side rule was made for: with the saber lit the cape was beside him 73 / 85 / 74 / 20 % of the time).
 	// (450, not 600: with the lift the push on a wing that streams past its wearer at a small angle is about what the rules
 	// give at 3200 units/s; at 600 a lit saber's run backwards on t1_rail had the cape beside him 85 % of the time, at 450
-	// 98 % - the rules 99 %. A fall reaches 450 only from great heights.)
-	const float MC_AIRPHYS_UMAX = 450.0f;
+	// 98 % - the rules 99 %. And 350, not 450: Kylo's cloak in a storm lay in his body twice as often as with the rules,
+	// with 350 less often than with them, and his arm goes through it as often as with them; Vader's cape with a lit
+	// saber is beside him as often and no more in his body. A fall reaches 350 after 0.44 s - a held jump's end.)
+	const float MC_AIRPHYS_UMAX = 350.0f;
 	const float MC_AIRPHYS_DAMP = 0.0f;		// how much of 'damp' stays
+	// The lift limit (how high over its attached edge a point may rise) is OPEN in every step, as r_meshClothLiftAir opens
+	// it at most: cloth may rise by its own length over the edge it hangs from, behind that edge (MC_LIFT_BEHIND) - never
+	// forward over its wearer. Not for worn cloth (as there), and not for cloth that hangs from the hips: its attached
+	// edge lies more than MC_AIRPHYS_HIP units under the top of the body's shapes (x the figure's size), the trunk is
+	// above that edge and it cannot flip up over it. (A cape's edge at the shoulders lies 5 - 10 under the top of the
+	// head, a hip skirt's 26 - 30.)
+	const float MC_AIRPHYS_HIP = 18.0f;
+	// SJE r_meshClothFree: cloth whose line has 'free F' - a cape that is an object of its own.
+	// The air against it is capped as a FIELD, not point by point: the steady air against the wearer (the wind without its
+	// gusts, less his own travel) counts up to MC_CAPE_UMAX units/s, and everything that varies - gusts, ripples, eddies -
+	// is scaled with it. Cut point by point (MC_AIRPHYS_UMAX), any air faster than the cap pushed with one constant force:
+	// in a storm nothing varied and the cape stood in one place. A point's own speed against that air counts up to
+	// MC_CAPE_PEAK x the cap (a gust's peak, a whipped hem).
+	const float MC_CAPE_UMAX = 450.0f;
+	const float MC_CAPE_PEAK = 1.5f;
+	// Air that goes ALONG a sheet: a sheet that flutters in it (a flag) is dragged by a tenth to a fifth of what air square
+	// to it does - not by the 2 % of smooth skin friction (MC_AIRPHYS_SKIN). With that a cape edge-on to a storm hung in its
+	// animated bell and did not move (t1_rail, turning on the spot: 70 degrees of the turn).
+	const float MC_CAPE_SKIN = 0.1f;
+	const float MC_CAPE_TAIL = 1.0f;		// wind from behind: this share of its forward part (MC_WIND_TAIL: 0.4)
+	// Air from the SIDE gets under a cape's open side edge and lifts it off its wearer (the pocket, MC_AIRPHYS_POCKET, has
+	// that for air from the hem's side only). Without it wind from the side and a little behind pressed the cape flat on
+	// its wearer's back - no rule took it off (the tail-side rule begins further round) and it hung there as in still air.
+	const float MC_CAPE_PSIDE = 1.0f;
+	// The tail-side rule's push for a group with free cloth (MC_TAIL_PUSH: 1.2). With the wind in full from behind the
+	// cape is pressed on its wearer harder than that push was made for: standing with a lit saber and the storm in his
+	// back the cape stayed low beside him (hem 37 units under the shoulders, 18 % of it on the body); with 1.5: 29 / 11 %,
+	// cloth in the body as often. (1.8: 25, and it moves less; 2.6: stiff, links stretch.)
+	const float MC_CAPE_TAILPUSH = 1.5f;
+	const float MC_CAPE_GAIN = 1.0f;		// x the air's push (x MC_AIRPHYS_GAIN)
+	const float MC_CAPE_DAMP = 0.0f;		// how much of 'damp' stays (as MC_AIRPHYS_DAMP)
+	// The turn-calm rule (MC_TURN_W0) is OFF for a group with free cloth: a saber swing turns the shoulders as fast as the
+	// turns it was made for, and it held the cape in its bell through every swing - with it off the cape flares and flips
+	// in a swing (hem 23 units from its animated place instead of 13, at 52 from his axis instead of 42).
+	const int MC_CAPE_RULES = 1;			// bit 1: no turn-calm rule, bit 2: no circling rule
+	const float MC_CAPE_TWIST = 0.0f;		// degrees/s of the attached edge's turn beyond which the cloth is carried along rigidly (0 = r_meshClothTwistFree)
+	// r_meshClothFree 4. Simulated in the world alone, the hem of a cape stays behind when its wearer turns fast and is
+	// then dragged round by the cloth above it, whose pull points inwards: the cape winds round him at the radius it
+	// hangs at and swings out only when the turn is over. Here the turn's centrifugal pull acts on the free cloth
+	// (MC_CAPE_FLING x turn rate squared x the distance from the axis): it stands out sideways while he turns. For a
+	// turn, not for circling (it goes as the circling rule comes in). MC_CAPE_TURN: the share of the turn the free
+	// cloth is carried along by - without it the lower cape lags so far behind the upper that the wing is pinched
+	// where it leaves his back. (Half turn at 600 degrees/s: the hem's centre 38 units from the axis while he turns
+	// instead of 26; quick sweeps in a run: the hem trails as far as before.)
+	const float MC_CAPE_TURN = 0.3f;
+	const float MC_CAPE_FLING = 0.12f;
+	const float MC_CAPE_TURN5 = 0.5f, MC_CAPE_FLING5 = 0.15f;	// r_meshClothFree 5: the same, stronger
+	// ... for a FAST turn only: from MC_CAPE_TURN_W0 degrees/s of the eased turn rate, in full from MC_CAPE_TURN_W1 (a
+	// saber swing turns the shoulders at 120 - 300, a stance that flickers leaves an eased rate under 100).
+	const float MC_CAPE_TURN_W0 = 200.0f, MC_CAPE_TURN_W1 = 400.0f;
+	const float MC_CAPE_BILLOW = 1.0f;		// x the billow push of a run (r_meshClothBillow)
+	// (half: the pull to the animated bell held the cape to one shape - after a jump the hem now flips up over the
+	// shoulders, in a run it rides 8 units higher, a swing takes it further)
+	const float MC_CAPE_SPRING = 0.5f;		// x the line's 'spring'
+	const float MC_CAPE_ARM = 0.0f;			// units the arms keep more off it (as a line's 'armgap'; the larger counts)
+	// ... and a swung ARM drags the air beside it along, as a lit blade does (MC_BLADE_AIR_R): free cloth near it gives way
+	// before the arm touches it and goes after it. The arm's speed against its wearer's travel, across the arm, from
+	// MC_CAPE_ARMAIR_SWING units/s on: MC_CAPE_ARMAIR of it at the arm, fading out over MC_CAPE_ARMAIR_R units.
+	const float MC_CAPE_ARMAIR = 0.8f;
+	const float MC_CAPE_ARMAIR_R = 10.0f;
+	const float MC_CAPE_ARMAIR_SWING = 40.0f;
+	const float MC_CAPE_ARMAIR_MAX = 300.0f;	// units/s of air at most
 	const float MC_FREE_LAND = 70.0f;	// units/s at weight 1 (a heavy cape of weight 1.5: 86)
 	const float MC_FREE_LAND_K = 0.6f;	// part of the excess taken away per substep, in full
 	const float MC_FREE_LAND_FADE = 1.0f;
@@ -3114,7 +3206,8 @@ namespace {
 
 	static void FaceCollide(const mcGroup_t* g, mcInstance_t* in, const mcCapsule_t* caps, int ncaps, int overArms, int rest, int ease, int lie, int armOn) {
 		// SJE 'armgap' (r_meshClothArmGap): a cloak over the arms is kept further off them and pushed out harder
-		const float armG = armOn && g->armGap > 0.0f ? g->armGap * in->linkScale : 0.0f;
+		const float armGl = in->capeArm > g->armGap ? in->capeArm : g->armGap;	// SJE r_meshClothFree (MC_CAPE_ARM)
+		const float armG = armOn && armGl > 0.0f ? armGl * in->linkScale : 0.0f;
 		if (in->facePairs.empty()) return;
 		const int nt = (int)(g->tris.size() / 3);
 		std::vector<float>& sph = in->triSphere;
@@ -3967,6 +4060,49 @@ namespace {
 		for (int w = 0; w < nw; w++) PlaneCollide(g, in, prm, prm->wallPt[w], prm->wallN[w]);
 	}
 
+	// SJE r_meshClothFree 4 (see MC_CAPE_FLING): the pull of a fast turn on a free cape, and the share of the turn it
+	// is carried along by. c1 = the attached edge's centre, up = the upright axis. A function of its own that is never
+	// inlined: the code of SpinLimit round the call stays what it was.
+#if defined(_MSC_VER)
+	__declspec(noinline)
+#else
+	__attribute__((noinline))
+#endif
+	static void FreeCapeTurn(const mcGroup_t* g, mcInstance_t* in, const mcParams_t* prm, const float* c1, const float* up, int dtMs) {
+		float ft = 0.0f, ff = 0.0f;
+		if (prm && (int)(prm->freeCape + 0.5f) == 4) { ft = MC_CAPE_TURN; ff = MC_CAPE_FLING; }
+		else if (prm && (int)(prm->freeCape + 0.5f) >= 5) { ft = MC_CAPE_TURN5; ff = MC_CAPE_FLING5; }
+		thread_local static std::vector<unsigned char> fp;
+		if ((ft > 0.0f || ff > 0.0f) && FreeCapePoints(g, prm, &fp)) {
+			// the turn of this step by the eased rate (60 ms, with its direction): a tremble to and fro is no turn
+			const float wStep = in->whirlRate * (3.14159265f / 180.0f) * (dtMs * 0.001f);
+			// ... and only a FAST turn counts (MC_CAPE_TURN_W0 .. W1 degrees/s): below that it is setting 1
+			const float fast = Clamp01((fabsf(in->whirlRate) - MC_CAPE_TURN_W0) / (MC_CAPE_TURN_W1 - MC_CAPE_TURN_W0));
+			const float ca = wStep * Clamp01(ft) * fast;
+			const float cs = cosf(ca), sn = sinf(ca);
+			// the pull is for a turn, not for circling: it goes as the circling rule comes in
+			const float tn = fabsf(in->whirlTurn);
+			const float fade = tn <= MC_WHIRL_TURN0 ? 1.0f : (tn >= MC_WHIRL_TURN1 ? 0.0f : (MC_WHIRL_TURN1 - tn) / (MC_WHIRL_TURN1 - MC_WHIRL_TURN0));
+			const float fl = ff * fade * fast * wStep * wStep;	// (turn rate x step)^2: the pull's way in this step, per unit from the axis
+			for (int p = 0; p < g->numParticles; p++) {
+				if (!fp[p] || g->freedom[p] <= 0.0f) continue;
+				const float w = Clamp01(g->freedom[p]);
+				float* pts[2] = { &in->p[p * 3], &in->prev[p * 3] };
+				for (int qi = 0; qi < 2; qi++) {
+					float* q = pts[qi];
+					vec3_t r, par, perp, side;
+					mcSub(q, c1, r);
+					mcScale(up, mcDot(r, up), par);
+					mcSub(r, par, perp);
+					mcCross(up, perp, side);
+					// (only the new position goes outwards: a push that stays as speed, not a shift)
+					const float out = qi == 0 ? 1.0f + fl * w : 1.0f;
+					for (int k = 0; k < 3; k++) q[k] = c1[k] + par[k] + (perp[k] * cs + side[k] * sn) * out;
+				}
+			}
+		}
+	}
+
 	void SpinLimit(const mcGroup_t* g, mcInstance_t* in, const std::vector<float>& target, int timeMs, float defSpin, const mcParams_t* prm) {
 		const size_t n3 = (size_t)g->numParticles * 3;
 		const int dtMs = timeMs - in->pinTime;
@@ -4087,7 +4223,12 @@ namespace {
 		// a turn faster than MC_TWIST_FREE deg/s (the player's body snapping round with the camera,
 		// an instant re-face in an animation) carries the cloth by the excess
 		{
-			const float freeT = (prm && prm->twistFree > 0.0f ? prm->twistFree : MC_TWIST_FREE) * (3.14159265f / 180.0f) * (dtMs * 0.001f);
+			float twF = prm && prm->twistFree > 0.0f ? prm->twistFree : MC_TWIST_FREE;
+			{	// SJE r_meshClothFree (see MC_CAPE_TWIST)
+				float ft = MC_CAPE_TWIST;
+				if (ft > 0.0f && ft < twF && FreeCapePoints(g, prm, nullptr)) twF = ft;
+			}
+			const float freeT = twF * (3.14159265f / 180.0f) * (dtMs * 0.001f);
 			if (fabsf(angle) <= freeT) in->twistRun = 0.0f;
 			else {
 				in->twistRun = in->twistRun != 0.0f && (in->twistRun > 0.0f) == (angle > 0.0f) ? in->twistRun + angle : angle;
@@ -4126,6 +4267,7 @@ namespace {
 				angle -= ex;
 			}
 		}
+		FreeCapeTurn(g, in, prm, c1, up, dtMs);	// SJE r_meshClothFree 4
 		// angular inertia scale: the attached edge's turn this frame (whatever turned it: the body
 		// turning, the legs re-facing or the torso aiming, it is read from the posed attachment
 		// itself) carries the free cloth along by 'turn', position and velocity alike; the cloth
@@ -4244,9 +4386,56 @@ namespace {
 		solve.xpbd = prm->xpbd;
 		solve.xpbdIters = prm->xpbdIters;
 		solve.liftLimit = prm->liftLimit < -1.5f ? -2.0f : prm->liftLimit;
-		if (prm->airPhys > 0.0f) {	// SJE r_meshClothAirPhys: no lift limit (the body's shapes hold the cloth)
+		if (prm->airPhys > 0.0f) {
+			// SJE r_meshClothAirPhys: the lift limit is open in every step (see MC_AIRPHYS_HIP) - a cape's end may flip up and
+			// over behind its wearer, never forward over him; worn cloth and cloth that hangs from the hips keep it closed.
 			bool keep = false;
-			if (!keep) solve.liftLimit = -1.0f;
+			if (!keep) {
+				solve.liftOpenAll = true;
+				if ((int)g->wrap.size() == g->numParticles && (int)g->under.size() == g->numParticles) { solve.liftWrap = g->wrap.data(); solve.liftUnder = g->under.data(); }
+				// cloth that hangs from the hips: by where its attached edge lies under the top of the body's shapes (not arms
+				// or held things: a raised saber is no head)
+				thread_local static std::vector<unsigned char> lowP;
+				float top = -1.0e9f;
+				for (int c = 0; c < ncaps; c++) {
+					if (caps[c].hard == 1 || caps[c].hard == 4) continue;
+					const float ha = mcDot(caps[c].a, in->up), hb = mcDot(caps[c].b, in->up);
+					const float hc = (ha > hb ? ha : hb) + caps[c].r;
+					if (hc > top) top = hc;
+				}
+				if (top > -1.0e8f && (int)g->lraAnchor.size() == g->numParticles && in->p.size() == (size_t)g->numParticles * 3) {
+					float hip = MC_AIRPHYS_HIP;
+					hip *= in->linkScale > 1e-3f ? in->linkScale : 1.0f;
+					lowP.assign(g->numParticles, 0);
+					for (int p = 0; p < g->numParticles; p++) {
+						const int an = g->lraAnchor[p];
+						if (an >= 0 && top - mcDot(&in->p[an * 3], in->up) > hip) lowP[p] = 1;
+					}
+					solve.liftLow = lowP.data();
+				}
+			}
+		}
+		// SJE r_meshClothFree: this group's free cloth (see MC_CAPE_UMAX)
+		thread_local static std::vector<unsigned char> fcP, fcLift;
+		const bool anyFc = FreeCapePoints(g, prm, &fcP);
+		float fcUmax = MC_CAPE_UMAX, fcPeak = MC_CAPE_PEAK, fcSkin = MC_CAPE_SKIN, fcTail = MC_CAPE_TAIL, fcGain = MC_CAPE_GAIN, fcDamp = MC_CAPE_DAMP;
+		float fcBillow = MC_CAPE_BILLOW, fcSpring = MC_CAPE_SPRING, fcArm = MC_CAPE_ARM, fcArmAir = MC_CAPE_ARMAIR, fcPSide = MC_CAPE_PSIDE;
+		int fcRules = MC_CAPE_RULES;
+		bool fcLiftOff = true;
+		// r_meshClothFree 2: the calm one - the turn-calm rule and the whole 'spring' stay (the wind's part and no lift limit
+		// only). 3: the heavy one - the air moves it less (MC_CAPE_GAIN 0.4, half the billow push; a storm pushes as before,
+		// the cap higher for that), so it hangs lower in a run and swings by its wearer's moves.
+		if (anyFc) {
+			const int fcSet = (int)(prm->freeCape + 0.5f);
+			if (fcSet == 2) { fcRules = 0; fcSpring = 1.0f; }
+			else if (fcSet == 3) { fcGain = 0.4f; fcBillow = 0.5f; fcUmax = 700.0f; }
+			// (4, 5: the cape stands out in a turn - MC_CAPE_FLING in SpinLimit; the rest as setting 1)
+		}
+		in->capeArm = anyFc ? fcArm : 0.0f;
+		if (anyFc && fcLiftOff) {
+			fcLift.assign(fcP.begin(), fcP.end());
+			if (solve.liftLow) for (int p = 0; p < g->numParticles; p++) if (solve.liftLow[p]) fcLift[p] = 0;	// (cloth that hangs from the hips keeps its limit)
+			solve.liftFree = fcLift.data();
 		}
 		solve.liftSlope = prm->liftSlope > 0.0f ? (prm->liftSlope < 1.0f ? prm->liftSlope : 1.0f) : 0.0f;
 		solve.floorOk = prm->floor ? 1 : 0;
@@ -4382,6 +4571,7 @@ namespace {
 			float turnD = 1.0f;
 			{
 				float want = prm->turnCalm > 0.0f ? Clamp01(prm->turnCalm) * Clamp01((in->turnRate - MC_TURN_W0) / (MC_TURN_W1 - MC_TURN_W0)) : 0.0f;
+				if (anyFc && (fcRules & 1)) want = 0.0f;	// SJE r_meshClothFree
 				want = want * want * (3.0f - 2.0f * want);
 				in->turnCalm += (want - in->turnCalm) * (1.0f - expf(-MC_DT / (want > in->turnCalm ? 0.05f : MC_TURN_BACK)));
 				turnD = 1.0f + in->turnCalm * (MC_TURN_DAMP - 1.0f);
@@ -4402,14 +4592,14 @@ namespace {
 				// ... but not while the turn-calm rule is on: that rule IS 'damp' (x 3 sideways) in turns no body can make, and
 				// without it quick sweeps of the mouse whipped the cape again (wide sweeps: hem swing 122 -> 181 degrees, flung 27
 				// units over the origin) and the circling rule had no frame to turn.
-				float pd = MC_AIRPHYS_DAMP;
+				float pd = anyFc ? fcDamp : MC_AIRPHYS_DAMP;	// SJE r_meshClothFree
 				dampW *= pd > in->turnCalm ? pd : in->turnCalm;
 			}
 			kDampH.resize(g->numParticles); kDampV.resize(g->numParticles); kSpring.resize(g->numParticles);
 			for (int p = 0; p < g->numParticles; p++) {
 				{ float dh = g->dampH[p] * dampW * turnD; if (dh > 0.95f) dh = 0.95f; kDampH[p] = g->dampH[p] > 0.0f ? 1.0f - powf(1.0f - dh, isub) : 0.0f; }	// SJE r_meshClothTurnCalm: x turnD
 				kDampV[p] = g->dampV[p] > 0.0f ? 1.0f - powf(1.0f - g->dampV[p] * dampW, isub) : 0.0f;
-				const float ks = g->springK[p] * (1.0f - in->springRun) * (1.0f - in->turnCalm);	// SJE r_meshClothTurnCalm
+				const float ks = g->springK[p] * (1.0f - in->springRun) * (1.0f - in->turnCalm) * (anyFc && fcP[p] ? fcSpring : 1.0f);	// SJE r_meshClothTurnCalm; r_meshClothFree: x MC_CAPE_SPRING
 				kSpring[p] = ks > 0.0f ? 1.0f - powf(1.0f - ks, isub) : 0.0f;
 			}
 			in->anchor.resize(tgtTo.size());
@@ -4499,6 +4689,7 @@ namespace {
 			in->tailRefMode = 0;
 			if (prm->tailSide > 0.0f && prm->dragQuad > 0.0f) {
 				float tPush = MC_TAIL_PUSH, tTry = MC_TAIL_TRY, tTry2 = MC_TAIL_TRY2, tLift = 0.0f;
+				if (anyFc) tPush = MC_CAPE_TAILPUSH;	// SJE r_meshClothFree
 				int tBlade = 7;	// a lit blade's side: 1 = not tried (see MC_TAIL_BLADE_LEN), 2 = given up at once (MC_TAIL_BLADE_GIVE), 4 = ... and not remembered as the lee side
 				vec3_t wd = { 0, 0, 0 }, fw, sd = { 0, 0, 0 };
 				float kk = 0.0f;
@@ -4836,6 +5027,9 @@ namespace {
 		std::vector<float>& n = in->scratchN;
 		// wind with slow gusts: two incommensurate sines, so it never repeats visibly
 		vec3_t windNow;
+		vec3_t windFc = { 0.0f, 0.0f, 0.0f };	// SJE r_meshClothFree: this step's wind for free cloth (from behind: MC_CAPE_TAIL of it)
+		bool fcWind = false;
+		float fcK = 1.0f;	// ... and the scale of the air field for it (see MC_CAPE_UMAX)
 		{
 			const float t = prm->timeSec;
 			const float gs = 1.0f + prm->gust * (0.6f * sinf(t * 1.3f) + 0.4f * sinf(t * 3.7f + 1.1f));
@@ -4853,7 +5047,20 @@ namespace {
 				mcMA(in->fwd, -mcDot(in->fwd, in->up), in->up, fwd);
 				const float fl = mcLen(fwd);
 				const float wf = fl > 1e-3f ? mcDot(windNow, fwd) / fl : 0.0f;
+				// SJE r_meshClothFree: free cloth takes MC_CAPE_TAIL of it (in full: the tail-side rule takes a free cape off to
+				// one side); the rest of the group - a hip skirt under the cape - keeps its share
+				if (anyFc) { mcCopy(windNow, windFc); fcWind = true; if (wf > 0.0f) mcMA(windFc, -(1.0f - fcTail) * wf / fl, fwd, windFc); }
 				if (wf > 0.0f) mcMA(windNow, -(1.0f - tail) * wf / fl, fwd, windNow);
+			}
+			if (anyFc && !fcWind) mcCopy(windNow, windFc);
+			if (anyFc && fcPeak > 0.0f) {
+				// the steady air against the wearer: this step's wind without its gust, less his own travel
+				vec3_t st;
+				mcScale(windFc, gs > 0.05f ? 1.0f / gs : 1.0f, st);
+				if (gs > 0.05f && mcDot(prm->zoneWind, prm->zoneWind) > 0.0f) mcMA(st, 1.0f - 1.0f / gs, prm->zoneWind, st);	// (the pushers' air is not gusted)
+				mcSub(st, in->originVel, st);
+				const float ul = mcLen(st);
+				if (ul > fcUmax && fcUmax > 0.0f) fcK = fcUmax / ul;
 			}
 		}
 		// SJE r_meshClothLiftAir: how far the lift limit opens in this step (SolveConstraints): air from below - the
@@ -4890,6 +5097,11 @@ namespace {
 				if (fl > 1e-3f) mcScale(solve.liftFwd, 1.0f / fl, solve.liftFwd); else solve.liftAir = 0.0f;
 				if ((int)g->wrap.size() == g->numParticles && (int)g->under.size() == g->numParticles) { solve.liftWrap = g->wrap.data(); solve.liftUnder = g->under.data(); }
 			}
+		}
+		if (solve.liftOpenAll && !(solve.liftAir > 0.0f)) {	// SJE r_meshClothAirPhys: (with liftAir > 0 it is set above)
+			mcMA(in->fwd, -mcDot(in->fwd, in->up), in->up, solve.liftFwd);
+			const float fl = mcLen(solve.liftFwd);
+			if (fl > 1e-3f) mcScale(solve.liftFwd, 1.0f / fl, solve.liftFwd); else solve.liftOpenAll = false;
 		}
 		// flutter (r_meshClothFlutter): the wind's strength also varies across the cloth, in ripples that travel
 		// along it (a phase from each particle's position and the time), so wind flaps a cape instead of
@@ -5151,6 +5363,50 @@ namespace {
 				if (l > MC_BLADE_AIR_MAX) mcScale(a, MC_BLADE_AIR_MAX / l, a);
 			}
 		}
+		// SJE r_meshClothFree: the air a swung arm drags along (see MC_CAPE_ARMAIR), into the blades' air
+		if (anyFc && fcArmAir > 0.0f && capsFrom) {
+			bool armAny = false;
+			for (int c = 0; c < ncaps; c++) {
+				if (caps[c].hard != 1) continue;
+				vec3_t va, vb, ax;
+				for (int k = 0; k < 3; k++) {
+					va[k] = (caps[c].a[k] - capsFrom[c].a[k]) * (1.0f / MC_DT) - in->originVel[k];
+					vb[k] = (caps[c].b[k] - capsFrom[c].b[k]) * (1.0f / MC_DT) - in->originVel[k];
+				}
+				mcSub(caps[c].b, caps[c].a, ax);
+				const float len = mcNorm(ax);
+				if (len < 0.5f) continue;
+				mcMA(va, -mcDot(va, ax), ax, va);
+				mcMA(vb, -mcDot(vb, ax), ax, vb);
+				if (mcLen(va) < MC_CAPE_ARMAIR_SWING && mcLen(vb) < MC_CAPE_ARMAIR_SWING) continue;
+				const float reach = len + caps[c].r + MC_CAPE_ARMAIR_R;
+				for (int p = 0; p < g->numParticles; p++) {
+					if (!fcP[p] || g->freedom[p] <= 0.0f) continue;
+					const float* pp = &in->p[p * 3];
+					vec3_t ap, cl, dd;
+					mcSub(pp, caps[c].a, ap);
+					if (mcDot(ap, ap) > reach * reach) continue;
+					float s = mcDot(ap, ax) / len;
+					s = s < 0.0f ? 0.0f : (s > 1.0f ? 1.0f : s);
+					mcMA(caps[c].a, s * len, ax, cl);
+					mcSub(pp, cl, dd);
+					float d = mcLen(dd) - caps[c].r;
+					if (d >= MC_CAPE_ARMAIR_R) continue;
+					if (d < 0.0f) d = 0.0f;
+					if (!anyAirB) { airB.assign((size_t)g->numParticles * 3, 0.0f); anyAirB = true; }
+					const float fo = 1.0f - d * (1.0f / MC_CAPE_ARMAIR_R), k = fcArmAir * fo * fo;
+					float* a = &airB[(size_t)p * 3];
+					for (int q = 0; q < 3; q++) a[q] += k * (va[q] + s * (vb[q] - va[q]));
+					armAny = true;
+				}
+			}
+			if (armAny) for (int p = 0; p < g->numParticles; p++) {
+				float* a = &airB[(size_t)p * 3];
+				const float l = mcLen(a);
+				const float mx = MC_BLADE_AIR_MAX > MC_CAPE_ARMAIR_MAX ? MC_BLADE_AIR_MAX : MC_CAPE_ARMAIR_MAX;
+				if (l > mx) mcScale(a, mx / l, a);
+			}
+		}
 		// SJE: r_meshClothBillow: the level travel through the air (per substep, squared with the strength) and
 		// its direction
 		float billowQ = 0.0f;
@@ -5215,7 +5471,7 @@ namespace {
 			float amax = MC_WHIRL_MAX, wt0 = MC_WHIRL_TURN0, wt1 = MC_WHIRL_TURN1, wp0 = MC_WHIRL_PATH0, wp1 = MC_WHIRL_PATH1;
 			if (prm->whirl >= 2.0f) amax = 1.0e9f;	// (2: the frame of 'damp' alone - the cloth feels all of the whirl, as cloth would)
 			float want = 0.0f;
-			if (prm->whirl > 0.0f) {
+			if (prm->whirl > 0.0f && !(anyFc && (fcRules & 2))) {	// SJE r_meshClothFree
 				if (wt1 > wt0) want = Clamp01((fabsf(in->whirlTurn) - wt0) / (wt1 - wt0));
 				if (wp1 > wp0) { const float wp = Clamp01((fabsf(in->whirlPath) - wp0) / (wp1 - wp0)); if (wp > want) want = wp; }
 				want = Clamp01(prm->whirl) * want * want * (3.0f - 2.0f * want);
@@ -5372,6 +5628,17 @@ namespace {
 					mcMA(v, (flutter ? -h * windF[p] : -h) * ws, windNow, rel);		// v is per substep, wind is per second
 					if (anyAirT) mcMA(rel, -h * ws, &airT[(size_t)p * 3], rel);	// SJE r_meshClothTurbulence: the eddies are air too
 					if (anyAirB) mcMA(rel, -h * ws, &airB[(size_t)p * 3], rel);	// SJE r_meshClothBladeAir
+					const bool fcPt = anyFc && physAir && fcP[p] != 0;	// SJE r_meshClothFree
+					if (fcPt) {
+						// the air field scaled as a whole: the point's speed against the wearer, less the scaled air against him
+						// (its wind with gust and ripple, eddies); a blade's air is no wind and stays as it is
+						vec3_t aw = { 0.0f, 0.0f, 0.0f };
+						mcMA(aw, (flutter ? h * windF[p] : h) * ws, windFc, aw);
+						if (anyAirT) mcMA(aw, h * ws, &airT[(size_t)p * 3], aw);
+						mcMA(v, -(1.0f - fcK) * h, in->originVel, rel);
+						mcMA(rel, -fcK, aw, rel);
+						if (anyAirB) mcMA(rel, -h * ws, &airB[(size_t)p * 3], rel);
+					}
 					const float* nn = &n[p * 3];
 					const float vn = mcDot(rel, nn);
 					float kn = prm->drag * h * invW;
@@ -5386,12 +5653,12 @@ namespace {
 						const float tkp = g->tether[p] * (1.0f / MC_AIR_TETHER);
 						float akp = tkp >= 1.0f ? 1.0f : tkp * tkp * tkp;
 						if (wornCap && (g->wrap[p] || g->under[p]) && akp > prm->wornAir) akp = prm->wornAir;
-						const float lt = mcLen(relT), lr = mcLen(rel), um = physUmax * h;
+						const float lt = mcLen(relT), lr = mcLen(rel), um = (fcPt && fcPeak > 0.0f ? fcUmax * fcPeak : physUmax) * h;	// SJE r_meshClothFree
 						const float uk = lr > um && um > 0.0f ? um / lr : 1.0f;	// (beyond MC_AIRPHYS_UMAX the push grows no further)
-						const float cq = prm->dragQuad * physGain * invW * akp * uk * uk;
+						const float cq = prm->dragQuad * physGain * (fcPt ? fcGain : 1.0f) * invW * akp * uk * uk;
 						const float an = cq * (fabsf(vn) + physLiftK * lt);
 						mcMA(v, -vn * an / (1.0f + an), nn, v);
-						const float at = cq * physSkin * lt;
+						const float at = cq * (fcPt ? fcSkin : physSkin) * lt;	// SJE r_meshClothFree: a fluttering sheet's drag
 						if (lt > 0.0f) mcMA(v, -at / (1.0f + at), relT, v);
 						// the pocket (see MC_AIRPHYS_POCKET): not for cloth worn round the body
 						if (physPocket > 0.0f && (int)g->lraAnchor.size() == g->numParticles && g->lraAnchor[p] >= 0 && g->lraAnchor[p] != p
@@ -5402,11 +5669,26 @@ namespace {
 								// (the WEARER's speed against the air, not the point's own: the pocket is cape and wearer together. With the
 								// point's own speed every swing downwards pumped the cape outwards - in a plain run the hem stood 12 units
 								// over the origin, standing after it 22.)
-								const float uin = h * (mcDot(windNow, sa) - mcDot(in->originVel, sa));	// along the cloth towards the attached edge (per substep)
+								float uin = h * (mcDot(fcPt ? windFc : windNow, sa) - mcDot(in->originVel, sa));	// along the cloth towards the attached edge (per substep)
+								if (fcPt && fcPeak > 0.0f) { uin *= fcK; if (uin > um) uin = um; }	// SJE r_meshClothFree: of the scaled field
 								if (uin > 0.0f) {
 									mcSub(pp, in->lastOrigin, ro);
 									mcMA(ro, -mcDot(ro, in->up), in->up, ro);
 									if (mcNorm(ro) > 1e-3f) mcMA(v, cq * physPocket * uin * uin * mcDot(nn, ro), nn, v);
+								}
+								if (fcPt && fcPSide > 0.0f) {
+									// SJE r_meshClothFree: a cape is open at its SIDES too. Air that comes along it from the side gets under its
+									// edge and lifts it off its wearer, as the fall's air does from the hem (MC_CAPE_PSIDE): the part of the air
+									// against the wearer that goes along the cloth, across the way to the attached edge.
+									vec3_t as, rs;
+									for (int q = 0; q < 3; q++) as[q] = h * fcK * (windFc[q] - in->originVel[q]);
+									mcMA(as, -mcDot(as, nn), nn, as);
+									mcMA(as, -mcDot(as, sa), sa, as);
+									float us = mcLen(as);
+									if (us > um) us = um;
+									mcSub(pp, in->lastOrigin, rs);
+									mcMA(rs, -mcDot(rs, in->up), in->up, rs);
+									if (us > 0.0f && mcNorm(rs) > 1e-3f) mcMA(v, cq * fcPSide * us * us * mcDot(nn, rs), nn, v);
 								}
 							}
 						}
@@ -5473,7 +5755,7 @@ namespace {
 								const float out = mcDot(nn, ro) / rl;
 								float ak = tk >= 1.0f ? 1.0f : tk * tk * tk;
 								if (wornCap && (g->wrap[p] || g->under[p]) && ak > prm->wornAir) ak = prm->wornAir;	// SJE r_meshClothWornAir
-								mcMA(v, billowQ * prof * lee * out * fabsf(out) * invW * ak, nn, v);
+								mcMA(v, billowQ * (fcPt ? fcBillow : 1.0f) * prof * lee * out * fabsf(out) * invW * ak, nn, v);	// SJE r_meshClothFree: x MC_CAPE_BILLOW
 							}
 						}
 					}
@@ -6715,6 +6997,7 @@ int MC_LoadConfig(const char* text) {
 			else if (!Q_stricmp(tok, "bell")) d.bell = Clamp01((float)atof(COM_ParseExt(&p, qfalse)));
 			else if (!Q_stricmp(tok, "armgap")) { d.armGap = (float)atof(COM_ParseExt(&p, qfalse)); if (d.armGap < 0.0f) d.armGap = 0.0f; if (d.armGap > 4.0f) d.armGap = 4.0f; }	// SJE
 			else if (!Q_stricmp(tok, "wrap")) d.wrap = true;
+			else if (!Q_stricmp(tok, "free")) d.freeC = Clamp01((float)atof(COM_ParseExt(&p, qfalse)));	// SJE r_meshClothFree
 			else if (!Q_stricmp(tok, "spring")) {
 				d.spring = (float)atof(COM_ParseExt(&p, qfalse)); d.springFade = (float)atof(COM_ParseExt(&p, qfalse));
 				d.spring = d.spring < 0.0f ? 0.0f : (d.spring > 0.9f ? 0.9f : d.spring);

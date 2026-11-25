@@ -75,6 +75,8 @@ XCVAR_DEF(g_AIsurrender, "0", NULL, CVAR_CHEAT, qfalse) // non-jawa / ugnaught N
 XCVAR_DEF(g_allowNPC, "1", NULL, CVAR_ARCHIVE, qtrue)
 XCVAR_DEF(g_missionCutscenes, "0", NULL, CVAR_ARCHIVE, qfalse) // Missions (2026-11-16): 1 = every player watches the cutscenes (the MP camera), 0 = they play out unseen
 XCVAR_DEF(g_missionSkipIntro, "1", NULL, CVAR_ARCHIVE, qfalse) // Missions: each map's intro is skipped from the start (ext_data/mission_intros.dat; 0 = it plays out unseen)
+XCVAR_DEF(g_missionMaxPlayers, "4", NULL, CVAR_ARCHIVE | CVAR_SERVERINFO, qtrue) // Missions (2026-11-25): players in a mission at most (1-4); more wait in a queue as spectators
+XCVAR_DEF(g_missionBots, "0", NULL, CVAR_ARCHIVE, qtrue) // Missions (2026-11-25): 1 = bots may fill the squad (a waiting human takes a bot's place), 0 = no bots in missions
 XCVAR_DEF(g_allowTeamVote, "1", NULL, CVAR_ARCHIVE, qfalse)
 XCVAR_DEF(g_allowVote, "1", NULL, CVAR_ARCHIVE, qfalse)
 XCVAR_DEF(g_antiFakePlayer, "1", NULL, CVAR_ARCHIVE, qfalse)

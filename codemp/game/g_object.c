@@ -35,7 +35,7 @@ G_BounceObject
 */
 void G_BounceObject(gentity_t* ent, const trace_t* trace)
 {
-	vec3_t velocity;
+	vec3_t velocity = { 0 };
 
 	// reflect the velocity on the trace plane
 	const int hitTime = level.previousTime + (level.time - level.previousTime) * trace->fraction;
@@ -93,8 +93,8 @@ extern void pitch_roll_for_slope(gentity_t* forwhom, vec3_t pass_slope);
 
 void G_RunObject(gentity_t* ent)
 {
-	vec3_t origin, oldOrg;
-	trace_t tr;
+	vec3_t origin = { 0 }, oldOrg = { 0 };
+	trace_t tr = { 0 };
 
 	//FIXME: floaters need to stop floating up after a while, even if gravity stays negative?
 	if (ent->s.pos.trType == TR_STATIONARY) //g_gravity.value <= 0 &&

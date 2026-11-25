@@ -38,7 +38,7 @@ Q_EXPORT void dllEntry(intptr_t(QDECL* syscallptr)(intptr_t arg, ...))
 
 static int PASSFLOAT(const float x)
 {
-	byteAlias_t fi;
+	byteAlias_t fi = { 0 };
 	fi.f = x;
 	return fi.i;
 }
@@ -1267,7 +1267,7 @@ void CGSyscall_G2API_CollisionDetect(CollisionRecord_t* collRecMap, void* ghoul2
 
 NORETURN void QDECL CG_Error(int level, const char* error, ...)
 {
-	va_list argptr;
+	va_list argptr = { 0 };
 	char text[1024] = { 0 };
 
 	va_start(argptr, error);
@@ -1279,7 +1279,7 @@ NORETURN void QDECL CG_Error(int level, const char* error, ...)
 
 void QDECL CG_Printf(const char* msg, ...)
 {
-	va_list argptr;
+	va_list argptr = { 0 };
 	char text[4096] = { 0 };
 	int ret = 0;
 

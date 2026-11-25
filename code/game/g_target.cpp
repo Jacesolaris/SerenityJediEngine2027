@@ -260,7 +260,7 @@ void SP_target_speaker(gentity_t* ent)
 
 	if (!ent->sounds)
 	{
-		char buffer[MAX_QPATH];
+		char buffer[MAX_QPATH] = {};
 		if (!G_SpawnString("noise", "*NOSOUND*", &s))
 		{
 			G_Error("target_speaker without a noise key at %s", vtos(ent->s.origin));
@@ -314,13 +314,13 @@ When triggered, fires a laser.  You can either set a target or a direction.
 */
 void target_laser_think(gentity_t* ent)
 {
-	vec3_t end;
+	vec3_t end = {};
 	trace_t tr;
 
 	// if pointed at another entity, set movedir to point at it
 	if (ent->enemy)
 	{
-		vec3_t point;
+		vec3_t point = {};
 		VectorMA(ent->enemy->s.origin, 0.5, ent->enemy->mins, point);
 		VectorMA(point, 0.5, ent->enemy->maxs, point);
 		VectorSubtract(point, ent->s.origin, ent->movedir);
@@ -1089,7 +1089,7 @@ void target_level_change_use(gentity_t* self, gentity_t* other, gentity_t* activ
 			&& (level.mapname[1] == '1' || level.mapname[1] == '2' || level.mapname[1] == '3')
 			)
 		{
-			char s[2048];
+			char s[2048] = {};
 			gi.Cvar_VariableStringBuffer("tiers_complete", s, sizeof s); //get the current list
 			if (*s)
 			{
@@ -1267,7 +1267,7 @@ void SP_target_play_music(gentity_t* self)
 	if (com_buildScript->integer)
 	{
 		//copy this puppy over
-		char buffer[MAX_QPATH];
+		char buffer[MAX_QPATH] = {};
 		fileHandle_t hFile = 0;
 
 		Q_strncpyz(buffer, s, sizeof buffer);

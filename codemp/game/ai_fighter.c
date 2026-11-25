@@ -115,7 +115,7 @@ static qboolean Walk_Clear(const vec3_t a, const vec3_t b)
 {
 	const vec3_t mins = { -12.0f, -12.0f, 0.0f };
 	const vec3_t maxs = { 12.0f, 12.0f, 16.0f };
-	trace_t tr;
+	trace_t tr = { 0 };
 	trap->Trace(&tr, a, mins, maxs, b, ENTITYNUM_NONE, MASK_SOLID, qfalse, 0, 0);
 	return !tr.startsolid && !tr.allsolid && tr.fraction >= 1.0f ? qtrue : qfalse;
 }
@@ -146,7 +146,7 @@ static void Walk_Load(void)
 	walk_links_dirty = qtrue;
 	memset(fighter_walk_since, 0, sizeof fighter_walk_since);
 
-	char map_name[MAX_QPATH];
+	char map_name[MAX_QPATH] = { 0 };
 	trap->Cvar_VariableStringBuffer("mapname", map_name, sizeof map_name);
 	const char* file_name = va("shiproutes/%s.walk", map_name);
 	fileHandle_t f = 0;
@@ -168,7 +168,7 @@ static void Walk_Load(void)
 	while (line && *line && walk_num_points < WALK_MAX_POINTS)
 	{
 		char kind = 0;
-		vec3_t point;
+		vec3_t point = { 0 };
 		if (sscanf(line, " %c %f %f %f", &kind, &point[0], &point[1], &point[2]) == 4 && (kind == 's' || kind == 'w'))
 		{
 			VectorCopy(point, walk_points[walk_num_points]);
@@ -224,8 +224,8 @@ static int Walk_NearestStart(const vec3_t pos)
 // it, or with no way) the ship itself
 static void Walk_NextGoal(const vec3_t pos, const vec3_t ship_pos, vec3_t goal)
 {
-	float way[WALK_MAX_POINTS];
-	qboolean done[WALK_MAX_POINTS];
+	float way[WALK_MAX_POINTS] = { 0 };
+	qboolean done[WALK_MAX_POINTS] = { 0 };
 
 	VectorCopy(ship_pos, goal);
 	goal[2] = pos[2];
@@ -440,7 +440,7 @@ static void Fighter_MakePilot(gentity_t* ship, const int side)
 	spawner->s.teamowner = side;
 	// at the hangar's pilot start nearest the ship when the map has a walk file (he walks to it), else inside it
 	const int start = Walk_NearestStart(ship->r.currentOrigin);
-	vec3_t pos;
+	vec3_t pos = { 0 };
 	VectorCopy(start >= 0 ? walk_points[start] : ship->r.currentOrigin, pos);
 	spawner->spawnflags = start >= 0 ? 0 : 64 | 128; // inside the ship: NOTSOLID | STARTINSOLID
 	G_SetOrigin(spawner, pos);
@@ -527,7 +527,7 @@ extern void G_VehicleSpawn(gentity_t* self);
 static qboolean Fighter_AutoSpawnMap(void)
 {
 	static const char* maps[] = { "deathstar_trench_v1", "deathstar_trench_v2" };
-	char map_name[MAX_QPATH];
+	char map_name[MAX_QPATH] = { 0 };
 	trap->Cvar_VariableStringBuffer("mapname", map_name, sizeof map_name);
 	for (int i = 0; i < (int)ARRAY_LEN(maps); i++)
 	{
@@ -777,7 +777,7 @@ static qboolean Fighter_Walk(gentity_t* npc)
 	fighter_reserved[ship_num] = level.time + 3000; // nobody else takes it while he walks
 	fighter_reserver[ship_num] = 0;
 
-	vec3_t goal, dir;
+	vec3_t goal = { 0 }, dir = { 0 };
 	Walk_NextGoal(npc->r.currentOrigin, ship->r.currentOrigin, goal);
 	if (Fighter_Developer() > 1 && fighter_walk_report[npc->s.number] < level.time)
 	{
@@ -930,7 +930,7 @@ static gentity_t* Fighter_FindTarget(const gentity_t* ship, const int my_side, c
 		{
 			continue;
 		}
-		vec3_t dir;
+		vec3_t dir = { 0 };
 		VectorSubtract(ent->r.currentOrigin, ship->r.currentOrigin, dir);
 		const float dist = VectorNormalize(dir);
 		if (dist > max_dist)
@@ -963,7 +963,7 @@ static gentity_t* Fighter_FindTarget(const gentity_t* ship, const int my_side, c
 // turns the pilot's view (which the ship follows) toward dir, at most max_step degrees
 static void Fighter_TurnTowards(const vec3_t dir, const float max_step)
 {
-	vec3_t want;
+	vec3_t want = { 0 };
 	vectoangles(dir, want);
 	want[PITCH] = AngleNormalize180(want[PITCH]);
 
@@ -1090,7 +1090,7 @@ static qboolean Fighter_EdgeAhead(const vec3_t my_pos, const vec3_t ahead, vec3_
 // is there a ship of its own side between it and its target (don't shoot through friends)
 static qboolean Fighter_FriendInLine(const gentity_t* ship, const vec3_t start, const vec3_t end, const int my_side)
 {
-	trace_t tr;
+	trace_t tr = { 0 };
 	trap->Trace(&tr, start, NULL, NULL, end, ship->s.number, MASK_SHOT, qfalse, 0, 0);
 	if (tr.entityNum >= ENTITYNUM_WORLD)
 	{
@@ -1153,7 +1153,7 @@ static void Route_ResetShips(void)
 
 static const char* Route_FileName(void)
 {
-	char map_name[MAX_QPATH];
+	char map_name[MAX_QPATH] = { 0 };
 	trap->Cvar_VariableStringBuffer("mapname", map_name, sizeof map_name);
 	return va("shiproutes/%s.route", map_name);
 }
@@ -1174,7 +1174,7 @@ static qboolean Route_Clear(const vec3_t a, const vec3_t b)
 {
 	const vec3_t mins = { -ROUTE_LINK_HULL, -ROUTE_LINK_HULL, -ROUTE_LINK_HULL };
 	const vec3_t maxs = { ROUTE_LINK_HULL, ROUTE_LINK_HULL, ROUTE_LINK_HULL };
-	trace_t tr;
+	trace_t tr = { 0 };
 	trap->Trace(&tr, a, mins, maxs, b, ENTITYNUM_NONE, MASK_SOLID, qfalse, 0, 0);
 	return !tr.startsolid && !tr.allsolid && tr.fraction >= 1.0f;
 }
@@ -1191,8 +1191,8 @@ static void Route_BuildLinks(void)
 
 	for (int i = 0; i < route_num_points; i++)
 	{
-		int nearest[ROUTE_MAX_LINKS];
-		float nearest_dist[ROUTE_MAX_LINKS];
+		int nearest[ROUTE_MAX_LINKS] = { 0 };
+		float nearest_dist[ROUTE_MAX_LINKS] = { 0 };
 		int count = 0;
 
 		for (int j = 0; j < route_num_points; j++)
@@ -1263,7 +1263,7 @@ static void Route_Load(const int report_to)
 	const char* line = buffer;
 	while (line && *line && route_num_points < ROUTE_MAX_POINTS)
 	{
-		vec3_t point;
+		vec3_t point = { 0 };
 		if (line[0] != '/' && sscanf(line, "%f %f %f", &point[0], &point[1], &point[2]) == 3)
 		{
 			VectorCopy(point, route_points[route_num_points]);
@@ -1293,7 +1293,7 @@ static void Route_Save(const int client_num)
 		Route_Print(client_num, va(S_COLOR_RED "Could not write %s\n", Route_FileName()));
 		return;
 	}
-	char map_name[MAX_QPATH];
+	char map_name[MAX_QPATH] = { 0 };
 	trap->Cvar_VariableStringBuffer("mapname", map_name, sizeof map_name);
 	const char* header = va("// ship route for %s: x y z of each point (ship_wp_add, ship_wp_save)\n", map_name);
 	trap->FS_Write(header, strlen(header), f);
@@ -1362,7 +1362,7 @@ static void Route_Info(const int client_num)
 		}
 	}
 	// the parts of the route (one is right: every point can be reached from every other)
-	int group[ROUTE_MAX_POINTS];
+	int group[ROUTE_MAX_POINTS] = { 0 };
 	int groups = 0;
 	for (int i = 0; i < route_num_points; i++)
 	{
@@ -1374,7 +1374,7 @@ static void Route_Info(const int client_num)
 		{
 			continue;
 		}
-		int stack[ROUTE_MAX_POINTS];
+		int stack[ROUTE_MAX_POINTS] = { 0 };
 		int top = 0;
 		stack[top++] = i;
 		group[i] = groups;
@@ -1433,7 +1433,7 @@ qboolean G_FighterRoute_ClientCommand(gentity_t* ent, const char* cmd)
 		Route_Print(client_num, "Ship routes are edited with bot_wp_edit 1 (or cheats on)\n");
 		return qtrue;
 	}
-	vec3_t pos;
+	vec3_t pos = { 0 };
 	Route_PlayerPos(ent, pos);
 
 	if (!Q_stricmp(cmd, "ship_wp_add"))
@@ -1553,7 +1553,7 @@ void G_FighterRoute_Frame(void)
 	route_show_time = level.time + redraw;
 	Route_BuildLinks();
 
-	vec3_t pos;
+	vec3_t pos = { 0 };
 	Route_PlayerPos(viewer, pos);
 	int lines = 0;
 	for (int i = 0; i < route_num_points && lines < ROUTE_SHOW_MAX_LINES; i++)
@@ -1562,7 +1562,7 @@ void G_FighterRoute_Frame(void)
 		{
 			continue;
 		}
-		vec3_t bottom, top;
+		vec3_t bottom = { 0 }, top = { 0 };
 		VectorCopy(route_points[i], bottom);
 		VectorCopy(route_points[i], top);
 		bottom[2] -= 400.0f;
@@ -1604,13 +1604,13 @@ static qboolean Fighter_RouteGoal(const vec3_t my_pos, const vec3_t fwd)
 	}
 	else
 	{
-		vec3_t to_point;
+		vec3_t to_point = { 0 };
 		VectorSubtract(route_points[cur], my_pos, to_point);
 		const float dist = VectorNormalize(to_point);
 		if (dist < ROUTE_REACHED || dist < ROUTE_REACHED * 2.5f && DotProduct(to_point, fwd) < 0.0f)
 		{
 			// there (or flown past it): on to a linked one, liking the ones straight on, not back unless it must
-			vec3_t heading;
+			vec3_t heading = { 0 };
 			if (route_prev[n] >= 0 && route_prev[n] < route_num_points)
 			{
 				VectorSubtract(route_points[cur], route_points[route_prev[n]], heading);
@@ -1628,7 +1628,7 @@ static qboolean Fighter_RouteGoal(const vec3_t my_pos, const vec3_t fwd)
 				{
 					continue;
 				}
-				vec3_t dir;
+				vec3_t dir = { 0 };
 				VectorSubtract(route_points[j], route_points[cur], dir);
 				VectorNormalize(dir);
 				float score = DotProduct(dir, heading) + Q_flrand(0.0f, 1.2f);
@@ -1678,8 +1678,8 @@ static qboolean Fighter_TakingOff(const gentity_t* ship, const Vehicle_t* p_veh)
 	{
 		return qfalse;
 	}
-	trace_t tr;
-	vec3_t up;
+	trace_t tr = { 0 };
+	vec3_t up = { 0 };
 	VectorCopy(ship->r.currentOrigin, up);
 	up[2] += ship->r.maxs[2] + 48.0f;
 	trap->Trace(&tr, ship->r.currentOrigin, NULL, NULL, up, ship->s.number, MASK_SOLID, qfalse, 0, 0);
@@ -1716,17 +1716,17 @@ static qboolean Fighter_HangarExit(gentity_t* npc, const gentity_t* ship, const 
 		}
 		return qfalse;
 	}
-	vec3_t out_dir;
+	vec3_t out_dir = { 0 };
 	AngleVectors(fighter_launch_angles[n], out_dir, NULL, NULL);
 	out_dir[2] = 0.0f;
 	VectorNormalize(out_dir);
 
-	trace_t tr;
-	vec3_t end;
+	trace_t tr = { 0 };
+	vec3_t end = { 0 };
 	VectorCopy(my_pos, end);
 	end[2] += 1500.0f;
 	trap->Trace(&tr, my_pos, NULL, NULL, end, ship->s.number, MASK_SOLID, qfalse, 0, 0);
-	vec3_t want;
+	vec3_t want = { 0 };
 	VectorCopy(out_dir, want);
 	float step = max_step;
 	int cruise = 0; // the speed it leaves at: slow enough to climb out of the trench before its far wall
@@ -1837,7 +1837,7 @@ static qboolean Fighter_Fly(gentity_t* npc, Vehicle_t* p_veh)
 		? npc->client->sess.sessionTeam
 		: ship->s.teamowner;
 
-	vec3_t fwd, my_pos;
+	vec3_t fwd = { 0 }, my_pos = { 0 };
 	AngleVectors(p_veh->m_vOrientation, fwd, NULL, NULL);
 	VectorCopy(ship->r.currentOrigin, my_pos);
 	const float speed = VectorLength(ship->client->ps.velocity);
@@ -1856,7 +1856,7 @@ static qboolean Fighter_Fly(gentity_t* npc, Vehicle_t* p_veh)
 		}
 		const qboolean snap = level.time - fighter_jump_wait[npc->s.number] > 5000;
 		const float step = 90.0f * FIGHTER_THINK_SECONDS;
-		vec3_t view;
+		vec3_t view = { 0 };
 		for (int axis = PITCH; axis <= ROLL; axis++)
 		{
 			const float want = ship->client->ps.hyperSpaceAngles[axis];
@@ -1911,7 +1911,7 @@ static qboolean Fighter_Fly(gentity_t* npc, Vehicle_t* p_veh)
 				NPCS.ucmd.upmove = 127; // lifting off the hangar floor (in the air upmove is turbo)
 			}
 		}
-		vec3_t out_dir;
+		vec3_t out_dir = { 0 };
 		AngleVectors(fighter_launch_angles[npc->s.number], out_dir, NULL, NULL);
 		Fighter_TurnTowards(out_dir, max_step);
 		VectorCopy(my_pos, npc->pos4); // home is where it is out of the hangar, not in it
@@ -1931,7 +1931,7 @@ static qboolean Fighter_Fly(gentity_t* npc, Vehicle_t* p_veh)
 		const gentity_t* dst = &g_entities[ship->client->ps.vehTurnaroundIndex];
 		if (dst->inuse)
 		{
-			vec3_t back;
+			vec3_t back = { 0 };
 			VectorSubtract(dst->s.origin, my_pos, back);
 			if (VectorNormalize(back) > 0.0f)
 			{
@@ -1960,10 +1960,10 @@ static qboolean Fighter_Fly(gentity_t* npc, Vehicle_t* p_veh)
 	}
 	gentity_t* enemy = npc->enemy;
 
-	vec3_t want_dir;
+	vec3_t want_dir = { 0 };
 	VectorCopy(fwd, want_dir);
 	qboolean may_fire = qfalse;
-	vec3_t aim_point;
+	vec3_t aim_point = { 0 };
 	float enemy_dist = 0.0f;
 
 	if (!TIMER_Done(npc, "fighterEvade"))
@@ -1984,7 +1984,7 @@ static qboolean Fighter_Fly(gentity_t* npc, Vehicle_t* p_veh)
 		VectorSubtract(aim_point, my_pos, want_dir);
 
 		// a little off, more so for a poorer pilot
-		vec3_t want_angles;
+		vec3_t want_angles = { 0 };
 		vectoangles(want_dir, want_angles);
 		want_angles[PITCH] += Q_flrand(-aim_error, aim_error);
 		want_angles[YAW] += Q_flrand(-aim_error, aim_error);
@@ -1992,7 +1992,7 @@ static qboolean Fighter_Fly(gentity_t* npc, Vehicle_t* p_veh)
 		AngleVectors(want_angles, want_dir, NULL, NULL);
 		VectorScale(want_dir, len, want_dir);
 
-		vec3_t to_enemy;
+		vec3_t to_enemy = { 0 };
 		VectorSubtract(enemy->r.currentOrigin, my_pos, to_enemy);
 		VectorNormalize(to_enemy);
 		const float facing = DotProduct(fwd, to_enemy);
@@ -2000,7 +2000,7 @@ static qboolean Fighter_Fly(gentity_t* npc, Vehicle_t* p_veh)
 		if (enemy_dist < FIGHTER_BREAK_DIST && facing > 0.0f)
 		{
 			// about to fly into it: break away, up or down and to a side
-			vec3_t right, up;
+			vec3_t right = { 0 }, up = { 0 };
 			AngleVectors(p_veh->m_vOrientation, NULL, right, up);
 			VectorMA(my_pos, 2500.0f, fwd, npc->pos3);
 			VectorMA(npc->pos3, Q_irand(0, 1) ? 2000.0f : -2000.0f, right, npc->pos3);
@@ -2009,7 +2009,7 @@ static qboolean Fighter_Fly(gentity_t* npc, Vehicle_t* p_veh)
 		}
 
 		// throttle: catch up, don't overshoot
-		vec3_t rel_vel;
+		vec3_t rel_vel = { 0 };
 		VectorSubtract(ship->client->ps.velocity, enemy->client->ps.velocity, rel_vel);
 		const float closing = DotProduct(rel_vel, to_enemy);
 		NPCS.ucmd.forwardmove = enemy_dist < 1500.0f && closing > 400.0f && facing > 0.7f ? -127 : 127;
@@ -2026,7 +2026,7 @@ static qboolean Fighter_Fly(gentity_t* npc, Vehicle_t* p_veh)
 		if (leader)
 		{
 			// a wingman flies with a player of its side: behind him and to a side (one side each by number)
-			vec3_t l_fwd, l_right;
+			vec3_t l_fwd = { 0 }, l_right = { 0 };
 			AngleVectors(leader->m_pVehicle->m_vOrientation, l_fwd, l_right, NULL);
 			const float side = npc->s.number % 2 ? 500.0f : -500.0f;
 			VectorMA(leader->r.currentOrigin, -400.0f - 150.0f * (float)(npc->s.number % 3), l_fwd, npc->pos3);
@@ -2043,12 +2043,12 @@ static qboolean Fighter_Fly(gentity_t* npc, Vehicle_t* p_veh)
 				// a point around home it can fly straight to (not inside the Star Destroyer or an asteroid)
 				for (int tries = 0; tries < 6; tries++)
 				{
-					vec3_t point;
+					vec3_t point = { 0 };
 					for (int axis = 0; axis < 3; axis++)
 					{
 						point[axis] = npc->pos4[axis] + Q_flrand(-5000.0f, 5000.0f);
 					}
-					trace_t tr;
+					trace_t tr = { 0 };
 					trap->Trace(&tr, my_pos, ship->r.mins, ship->r.maxs, point, ship->s.number, MASK_SOLID, qfalse, 0, 0);
 					if (!tr.startsolid && !tr.allsolid && tr.fraction >= 1.0f)
 					{
@@ -2072,16 +2072,16 @@ static qboolean Fighter_Fly(gentity_t* npc, Vehicle_t* p_veh)
 		const vec3_t look_mins = { -half, -half, -half };
 		const vec3_t look_maxs = { half, half, half };
 		const float look = Com_Clamp(1200.0f, 9000.0f, speed * 2.0f);
-		vec3_t end;
-		trace_t tr;
+		vec3_t end = { 0 };
+		trace_t tr = { 0 };
 		VectorMA(my_pos, look, fwd, end);
 		trap->Trace(&tr, my_pos, look_mins, look_maxs, end, ship->s.number, MASK_SOLID | CONTENTS_BODY, qfalse, 0,
 			0); // other ships too
-		vec3_t back;
+		vec3_t back = { 0 };
 		if (!tr.startsolid && tr.fraction < 1.0f && (!enemy || tr.entityNum != enemy->s.number))
 		{
 			const float dist_ahead = tr.fraction * look;
-			vec3_t away;
+			vec3_t away = { 0 };
 			VectorScale(fwd, 0.2f, away);
 			VectorMA(away, 1.0f, tr.plane.normal, away);
 			VectorCopy(away, want_dir);
@@ -2110,13 +2110,13 @@ static qboolean Fighter_Fly(gentity_t* npc, Vehicle_t* p_veh)
 	// shoot when lined up with the aim point
 	if (may_fire && enemy && enemy_dist < FIGHTER_FIRE_RANGE)
 	{
-		vec3_t aim_dir;
+		vec3_t aim_dir = { 0 };
 		VectorSubtract(aim_point, my_pos, aim_dir);
 		VectorNormalize(aim_dir);
 		const float cos_cone = cos(DEG2RAD(FIGHTER_FIRE_CONE));
 		if (DotProduct(fwd, aim_dir) > cos_cone)
 		{
-			vec3_t start;
+			vec3_t start = { 0 };
 			VectorMA(my_pos, 150.0f, fwd, start);
 			if (!Fighter_FriendInLine(ship, start, enemy->r.currentOrigin, my_side))
 			{

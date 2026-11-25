@@ -77,7 +77,7 @@ void CG_BuildSolidList()
 
 	for (i = 0; i < cg_numpermanents; i++)
 	{
-		vec3_t difference;
+		vec3_t difference = {};
 		cent = cg_permanents[i];
 		VectorSubtract(cent->lerpOrigin, cg.snap->ps.origin, difference);
 		if (cent->currentState.eType == ET_TERRAIN ||
@@ -113,7 +113,7 @@ static void CG_ClipMoveToEntities(const vec3_t start, const vec3_t mins, const v
 	// the box the whole move sweeps through (plus a unit): an entity box outside it can't be hit or started
 	// in, so its box trace is skipped - same result, much cheaper with many NPCs (effects trace every frame).
 	// cg_traceCull 0 = test every entity as before.
-	vec3_t sweepMins, sweepMaxs;
+	vec3_t sweepMins = {}, sweepMaxs = {};
 	for (int k = 0; k < 3; k++)
 	{
 		sweepMins[k] = (start[k] < end[k] ? start[k] : end[k]) + (mins ? mins[k] : 0.0f) - 1.0f;
@@ -123,8 +123,8 @@ static void CG_ClipMoveToEntities(const vec3_t start, const vec3_t mins, const v
 
 	for (int i = 0; i < cg_numSolidEntities; i++)
 	{
-		vec3_t angles;
-		vec3_t origin;
+		vec3_t angles = {};
+		vec3_t origin = {};
 		const centity_t* cent = cg_solidEntities[i];
 		const entityState_t* ent = &cent->currentState;
 
@@ -405,7 +405,7 @@ cg.snap->player_state and cg.nextFrame->player_state
 static void CG_InterpolatePlayerState(const qboolean grab_angles)
 {
 	int i = 0;
-	vec3_t old_org;
+	vec3_t old_org = {};
 
 	playerState_t* out = &cg.predictedPlayerState;
 	const snapshot_t* prev = cg.snap;
@@ -417,7 +417,7 @@ static void CG_InterpolatePlayerState(const qboolean grab_angles)
 	// if we are still allowing local input, short circuit the view angles
 	if (grab_angles)
 	{
-		usercmd_t cmd;
+		usercmd_t cmd = {};
 
 		const int cmd_num = cgi_GetCurrentCmdNumber();
 		cgi_GetUserCmd(cmd_num, &cmd);
@@ -491,7 +491,7 @@ static void CG_InterpolatePlayerState(const qboolean grab_angles)
 		//		if (cg.frametime<150)
 		//		{
 		assert(pent);
-		vec3_t p1, p2, vel{};
+		vec3_t p1 = {}, p2 = {}, vel{};
 		float lerpTime = 0.0f;
 
 		EvaluateTrajectory(&pent->currentState.pos, cg.snap->serverTime, p1);

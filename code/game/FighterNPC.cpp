@@ -117,7 +117,7 @@ static bool BG_FighterUpdate(Vehicle_t* p_veh, vec3_t tr_mins, vec3_t tr_maxs,
 	void (*trace_func)(trace_t* results, const vec3_t start, const vec3_t lmins, const vec3_t lmaxs,
 		const vec3_t end, int passEntityNum, int content_mask))
 {
-	vec3_t bottom;
+	vec3_t bottom = {};
 	playerState_t* parent_ps = nullptr;
 #ifdef QAGAME //don't do this on client
 	// Make sure the riders are not visible.
@@ -465,7 +465,7 @@ static void ProcessMoveCommands(Vehicle_t* p_veh)
 	//Client sets ucmds and such for speed alterations
 	float speed_inc = 0.0f, speed_idle_dec = 0.0f, speed_idle = 0.0f, speed_idle_accel = 0.0f, speed_min = 0.0f, speed_max = 0.0f;
 	bgEntity_t* parent = p_veh->m_pParentEntity;
-	qboolean is_landing_or_launching;
+	qboolean is_landing_or_launching = qfalse;
 #ifndef _JK2MP//SP
 	const int curTime = level.time;
 #elif defined QAGAME//MP GAME
@@ -893,7 +893,7 @@ static void ProcessMoveCommands(Vehicle_t* p_veh)
 		&& p_veh->m_ucmd.rightmove)
 	{
 		//strafe
-		vec3_t v_angles, v_right;
+		vec3_t v_angles = {}, v_right = {};
 		float strafe_speed = p_veh->m_pVehicleInfo->strafePerc * speed_max * 5.0f;
 		VectorCopy(p_veh->m_vOrientation, v_angles);
 		v_angles[PITCH] = v_angles[ROLL] = 0;
@@ -1345,8 +1345,8 @@ static void ProcessOrientCommands(Vehicle_t* p_veh)
 	constexpr float ground_fraction = 0.1f;
 #endif
 	float cur_roll = 0.0f;
-	qboolean is_dead;
-	qboolean is_landing_or_landed;
+	qboolean is_dead = qfalse;
+	qboolean is_landing_or_landed = qfalse;
 	const qboolean arcade = FighterArcade(p_veh); // (2026-10-13)
 #ifndef _JK2MP//SP
 	const int curTime = level.time;

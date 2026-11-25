@@ -134,10 +134,10 @@ void Pilot_Update()
 			//fabsf(p_veh->m_pParentEntity->currentAngles[2])<15.0f &&
 			VectorLength(p_veh->m_pParentEntity->client->ps.velocity) > 500.0f)
 		{
-			vec3_t projectedPosition;
-			vec3_t projectedDirection;
-			vec3_t projectedRight;
-			vec3_t anglesNoRoll;
+			vec3_t projectedPosition = { 0 };
+			vec3_t projectedDirection = { 0 };
+			vec3_t projectedRight = { 0 };
+			vec3_t anglesNoRoll = { 0 };
 
 			VectorCopy(p_veh->m_pParentEntity->currentAngles, anglesNoRoll);
 			anglesNoRoll[2] = 0;
@@ -799,11 +799,11 @@ void Pilot_Update(void)
 			(p_veh->m_pVehicleInfo->soundFlyBy || p_veh->m_pVehicleInfo->soundFlyBy2) &&
 			VectorLength(vehEnt->client->ps.velocity) > 500.0f)
 		{
-			vec3_t projectedPosition;
-			vec3_t projectedDirection;
-			vec3_t projectedRight;
-			vec3_t anglesNoRoll;
-			trace_t tr;
+			vec3_t projectedPosition = { 0 };
+			vec3_t projectedDirection = { 0 };
+			vec3_t projectedRight = { 0 };
+			vec3_t anglesNoRoll = { 0 };
+			trace_t tr = { 0 };
 
 			VectorCopy(vehEnt->r.currentAngles, anglesNoRoll);
 			anglesNoRoll[2] = 0;
@@ -1008,7 +1008,7 @@ static void Pilot_Update_Enemy(void)
 		TIMER_Set(npc, "NextPilotCheckEnemyTime", Q_irand(1000, 2000));
 		if (npc->enemy && Distance(npc->r.currentOrigin, npc->enemy->r.currentOrigin) > 1000.0f)
 		{
-			trace_t tr;
+			trace_t tr = { 0 };
 			mPilotViewTraceCount++;
 			trap->Trace(&tr, npc->r.currentOrigin, NULL, NULL, npc->enemy->r.currentOrigin, npc->s.number, MASK_SHOT,
 				qfalse, 0, 0);
@@ -1056,7 +1056,7 @@ static void Pilot_Goto_Vehicle(void)
 		else if (!NAV_GoToPos(npc, veh->r.currentOrigin, 80.0f))
 		{
 			// MP: no way along waypoints (or none on the map): straight there when nothing is in the way
-			trace_t tr;
+			trace_t tr = { 0 };
 			trap->Trace(&tr, npc->r.currentOrigin, npc->r.mins, npc->r.maxs, veh->r.currentOrigin, npc->s.number,
 				MASK_NPCSOLID & ~CONTENTS_BODY, qfalse, 0, 0);
 			if (!tr.startsolid && !tr.allsolid && (tr.fraction == 1.0f || tr.entityNum == veh->s.number))
@@ -1106,7 +1106,7 @@ static void Pilot_Steer_Vehicle(void)
 
 	// SETUP
 	//=======
-	vec3_t ActorPos, ActorAngles;
+	vec3_t ActorPos = { 0 }, ActorAngles = { 0 };
 	VectorCopy(npc->r.currentOrigin, ActorPos);
 	VectorCopy(npc->r.currentAngles, ActorAngles);
 	ActorAngles[2] = 0.0f;
@@ -1133,10 +1133,10 @@ static void Pilot_Steer_Vehicle(void)
 		return;
 	}
 
-	vec3_t ActorDirection;
+	vec3_t ActorDirection = { 0 };
 	AngleVectors(ActorAngles, ActorDirection, NULL, NULL);
 
-	vec3_t ActorFuturePos;
+	vec3_t ActorFuturePos = { 0 };
 	VectorMA(ActorPos, FUTURE_PRED_DIST, ActorDirection, ActorFuturePos);
 
 	qboolean ActorDoTurbo = qfalse;
@@ -1145,7 +1145,7 @@ static void Pilot_Steer_Vehicle(void)
 
 	// Setup Enemy Data
 	//------------------
-	vec3_t EnemyPos, EnemyAngles;
+	vec3_t EnemyPos = { 0 }, EnemyAngles = { 0 };
 	VectorCopy(npc->enemy->r.currentOrigin, EnemyPos);
 	VectorCopy(npc->enemy->r.currentAngles, EnemyAngles);
 	EnemyAngles[2] = 0.0f;
@@ -1170,26 +1170,26 @@ static void Pilot_Steer_Vehicle(void)
 	const qboolean ActorFlank = pilotFlankTime[npc->s.number] > level.time && EnemyVeh && EnemySpeed > 10.0f
 		? qtrue : qfalse;
 
-	vec3_t EnemyDirection, EnemyRight;
+	vec3_t EnemyDirection = { 0 }, EnemyRight = { 0 };
 	AngleVectors(EnemyAngles, EnemyDirection, EnemyRight, NULL);
 
-	vec3_t EnemyFuturePos;
+	vec3_t EnemyFuturePos = { 0 };
 	VectorMA(EnemyPos, FUTURE_PRED_DIST, EnemyDirection, EnemyFuturePos);
 
 	const int EnemySide = Pilot_LRTest(ActorPos, EnemyPos, EnemyFuturePos);
 
-	vec3_t EnemyFlankPos;
+	vec3_t EnemyFlankPos = { 0 };
 	VectorMA(EnemyFuturePos, EnemySide == PILOT_SIDE_RIGHT ? FUTURE_SIDE_DIST : -FUTURE_SIDE_DIST, EnemyRight,
 		EnemyFlankPos);
 
 	// Setup Move And Aim Directions
 	//-------------------------------
-	vec3_t MoveDirection;
+	vec3_t MoveDirection = { 0 };
 	VectorSubtract(ActorFlank ? EnemyFlankPos : EnemyFuturePos, ActorPos, MoveDirection);
 	const float MoveDistance = VectorNormalize(MoveDirection);
 	const float MoveAccuracy = DotProduct(MoveDirection, ActorDirection);
 
-	vec3_t AimDirection;
+	vec3_t AimDirection = { 0 };
 	VectorSubtract(EnemyPos, ActorPos, AimDirection);
 	const float AimDistance = VectorNormalize(AimDirection);
 	const float AimAccuracy = DotProduct(AimDirection, ActorDirection);
@@ -1310,7 +1310,7 @@ static void Pilot_Steer_Vehicle(void)
 	// Aim At Target
 	if (ActorAimAtTarget)
 	{
-		vec3_t moveAngles;
+		vec3_t moveAngles = { 0 };
 		vectoangles(MoveDirection, moveAngles);
 		info->desiredPitch = AngleNormalize360(moveAngles[PITCH]);
 		info->desiredYaw = AngleNormalize360(moveAngles[YAW]);

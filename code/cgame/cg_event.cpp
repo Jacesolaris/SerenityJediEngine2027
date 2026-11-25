@@ -449,7 +449,7 @@ void CG_ClothMapBlast(const vec3_t origin, const float damage, const float radiu
 
 static void CG_ClothBlast(const int weapon, const qboolean altFire, const vec3_t origin)
 {
-	float radius, strength;
+	float radius = 0, strength = 0;
 	if (!CG_ClothBlastSize(weapon, altFire, &radius, &strength) || cg_clothExplosion.value <= 0.0f)
 	{
 		return;
@@ -461,7 +461,7 @@ static void CG_ClothBlast(const int weapon, const qboolean altFire, const vec3_t
 void CG_EntityEvent(centity_t* cent, vec3_t position)
 {
 	const char* s = nullptr;
-	vec3_t dir;
+	vec3_t dir = {};
 
 	entityState_t* es = &cent->currentState;
 	const int event = es->event & ~EV_EVENT_BITS;
@@ -990,7 +990,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 	case EV_DISINTEGRATION:
 	{
 		DEBUGNAME("EV_DISINTEGRATION");
-		qboolean make_not_solid;
+		qboolean make_not_solid = qfalse;
 		const int disint_pw = es->eventParm;
 		int disint_effect = 0;
 		int disint_length = 0;
@@ -1190,7 +1190,7 @@ void CG_EntityEvent(centity_t* cent, vec3_t position)
 	case EV_PLAY_EFFECT:
 		DEBUGNAME("EV_PLAY_EFFECT");
 		{
-			vec3_t axis[3];
+			vec3_t axis[3] = {};
 			const bool portal_ent = !!es->isPortalEnt;
 			//the fx runner spawning this effect is within a skyportal, so only render this effect within that portal.
 

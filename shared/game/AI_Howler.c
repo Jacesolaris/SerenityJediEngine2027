@@ -173,7 +173,7 @@ static void Howler_Patrol(void)
 
 	if (near_player)
 	{
-		vec3_t dif;
+		vec3_t dif = { 0 };
 		VectorSubtract(near_player->SHR_currentOrigin, NPCS.NPC->SHR_currentOrigin, dif);
 
 		if (VectorLengthSquared(dif) < 256 * 256)
@@ -210,8 +210,8 @@ static qboolean Howler_Move(void)
 //---------------------------------------------------------
 static void Howler_TryDamage(const int damage, const qboolean tongue, const qboolean knockdown)
 {
-	vec3_t start, end, dir;
-	trace_t tr;
+	vec3_t start = { 0 }, end = { 0 }, dir = { 0 };
+	trace_t tr = { qfalse };
 
 	if (tongue)
 	{
@@ -285,12 +285,12 @@ Howler sonic howl attack:
 */
 static void Howler_Howl(void)
 {
-	gentity_t* radius_ents[128];
+	gentity_t* radius_ents[128] = { NULL };
 	const float radius = (NPCS.NPC->spawnflags & 1) ? 256.0f : 128.0f;
 	const float half_rad = radius * 0.5f;
 	const float half_rad_squared = half_rad * half_rad;
 	const float radius_squared = radius * radius;
-	vec3_t bolt_org;
+	vec3_t bolt_org = { 0 };
 
 	// Sound event for AI awareness
 	AddSoundEvent(NPCS.NPC, NPCS.NPC->SHR_currentOrigin, 512, AEL_DANGER, qfalse, qtrue);
@@ -298,7 +298,7 @@ static void Howler_Howl(void)
 #ifdef SP_GAME
 	const int num_ents = NPC_GetEntsNearBolt(radius_ents, radius, NPCS.NPC->handLBolt, bolt_org);
 #else
-	int radius_nums[128];
+	int radius_nums[128] = { 0 };
 	const int num_ents = NPC_GetEntsNearBolt(radius_nums, radius, SHR_BoltField(NPCS.NPC, genericBolt1), bolt_org);
 	for (int n = 0; n < num_ents; n++)
 	{
@@ -488,7 +488,7 @@ static void Howler_Attack(const float enemy_dist, const qboolean howl)
 		{
 			//lunge attack
 			//jump foward
-			vec3_t fwd;
+			vec3_t fwd = { 0 };
 			const vec3_t yawAng = { 0, NPCS.NPC->client->ps.viewangles[YAW], 0 };
 			AngleVectors(yawAng, fwd, NULL, NULL);
 			VectorScale(fwd, enemy_dist * 3.0f, NPCS.NPC->client->ps.velocity);
@@ -555,7 +555,7 @@ static void Howler_Attack(const float enemy_dist, const qboolean howl)
 					NPCS.NPC->SHR_currentOrigin, 4750, qtrue);
 #else
 				{
-					vec3_t bolt_org, fwd;
+					vec3_t bolt_org = { 0 }, fwd = { 0 };
 					SHR_GetBoltPosition(NPCS.NPC, SHR_BoltField(NPCS.NPC, genericBolt1), bolt_org);
 					AngleVectors(NPCS.NPC->client->ps.viewangles, fwd, NULL, NULL);
 					G_PlayEffectID(G_EffectIndex("howler/sonic"), bolt_org, fwd);
@@ -593,7 +593,7 @@ static void Howler_Combat(void)
 	}
 	else
 	{
-		qboolean advance;
+		qboolean advance = qfalse;
 		//not in air, see if we should attack or advance
 		// If we cannot see our target or we have somewhere to go, then do that
 		if (!SHR_ClearLOSEnt(NPCS.NPC->enemy)) //|| UpdateGoal( ))
@@ -810,7 +810,7 @@ void NPC_BSHowler_Default(void)
 			if (Distance(NPCS.NPC->enemy->SHR_currentOrigin, NPCS.NPC->SHR_currentOrigin) < HOWLER_RETREAT_DIST)
 			{
 				//enemy is close
-				vec3_t moveDir;
+				vec3_t moveDir = { 0 };
 				AngleVectors(NPCS.NPC->SHR_currentAngles, moveDir, NULL, NULL);
 				VectorScale(moveDir, -1, moveDir);
 				if (!NAV_DirSafe(NPCS.NPC, moveDir, 8))

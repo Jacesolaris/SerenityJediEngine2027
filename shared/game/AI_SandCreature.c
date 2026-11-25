@@ -96,7 +96,7 @@ void NPC_SandCreature_Pain(gentity_t* self, gentity_t* attacker, int damage)
 {
 	if (TIMER_Done(self, "pain"))
 	{
-		vec3_t shakePos;
+		vec3_t shakePos = { 0 };
 		NPC_SetAnim(self, SETANIM_LEGS, Q_irand(BOTH_ATTACK1, BOTH_ATTACK2),
 			SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART);
 		G_AddEvent(self, EV_PAIN, Q_irand(0, 100));
@@ -145,7 +145,7 @@ static void SandCreature_MoveEffect(void)
 	{
 		//Breach!
 		//FIXME: only do this while moving forward?
-		trace_t trace;
+		trace_t trace = { qfalse };
 		//make him solid here so he can be hit/gets blocked on stuff. Check clear first.
 		SHR_Trace(&trace, NPCS.NPC->SHR_currentOrigin, NPCS.NPC->SHR_mins, NPCS.NPC->SHR_maxs, NPCS.NPC->SHR_currentOrigin, NPCS.NPC->s.number, MASK_NPCSOLID);
 		if (!trace.allsolid && !trace.startsolid)
@@ -178,8 +178,8 @@ static void SandCreature_MoveEffect(void)
 static void SandCreature_MoveEffect(void)
 {
 	vec3_t up = { 0, 0, 1 };
-	vec3_t shakePos;
-	vec3_t org;
+	vec3_t shakePos = { 0 };
+	vec3_t org = { 0 };
 	org[0] = NPCS.NPC->r.currentOrigin[0];
 	org[1] = NPCS.NPC->r.currentOrigin[1];
 	org[2] = NPCS.NPC->r.absmin[2] + 2;
@@ -211,7 +211,7 @@ static void SandCreature_MoveEffect(void)
 	{
 		//Breach!
 		//FIXME: only do this while moving forward?
-		trace_t trace;
+		trace_t trace = { 0 };
 		//make him solid here so he can be hit/gets blocked on stuff. Check clear first.
 		trap->Trace(&trace, NPCS.NPC->r.currentOrigin, NPCS.NPC->r.mins, NPCS.NPC->r.maxs, NPCS.NPC->r.currentOrigin,
 			NPCS.NPC->s.number, MASK_NPCSOLID, qfalse, 0, 0);
@@ -241,7 +241,7 @@ static void SandCreature_MoveEffect(void)
 #ifdef SP_GAME
 static qboolean SandCreature_CheckAhead(vec3_t end)
 {
-	trace_t trace;
+	trace_t trace = { qfalse };
 	int clipmask = NPCS.NPC->clipmask | CONTENTS_BOTCLIP;
 
 	//make sure our goal isn't underground (else the trace will fail)
@@ -283,11 +283,11 @@ static qboolean SandCreature_CheckAhead(vec3_t end)
 #else // MP keeps its own version of this function
 static qboolean SandCreature_CheckAhead(vec3_t end)
 {
-	trace_t trace;
+	trace_t trace = { 0 };
 	int clipmask = NPCS.NPC->clipmask | CONTENTS_BOTCLIP;
 
 	//make sure our goal isn't underground (else the trace will fail)
-	vec3_t bottom;
+	vec3_t bottom = { 0 };
 	bottom[0] = end[0];
 	bottom[1] = end[1];
 	bottom[2] = end[2] + NPCS.NPC->r.mins[2];
@@ -331,9 +331,9 @@ static qboolean SandCreature_CheckAhead(vec3_t end)
 
 static qboolean SandCreature_Move(void)
 {
-	qboolean moved;
+	qboolean moved = qfalse;
 	//FIXME should ignore doors..?
-	vec3_t dest;
+	vec3_t dest = { 0 };
 	VectorCopy(NPCS.NPCInfo->goalEntity->SHR_currentOrigin, dest);
 	//Sand Creatures look silly using waypoints when they can go straight to the goal
 	if (SandCreature_CheckAhead(dest))
@@ -368,7 +368,7 @@ static qboolean SandCreature_Move(void)
 	}
 	if (moved && NPCS.NPC->radius)
 	{
-		vec3_t newPos;
+		vec3_t newPos = { 0 };
 		const float curTurfRange = DistanceHorizontal(NPCS.NPC->SHR_currentOrigin, NPCS.NPC->s.origin);
 		VectorMA(NPCS.NPC->SHR_currentOrigin, NPCS.NPC->client->ps.speed / 100.0f, NPCS.NPC->client->ps.moveDir, newPos);
 		const float newTurfRange = DistanceHorizontal(newPos, NPCS.NPC->s.origin);
@@ -420,7 +420,7 @@ static void SandCreature_Attack(const qboolean miss)
 		//FIXME: if, during the attack anim, I do end up catching him close to my mouth, then snatch him anyway...
 		if (NPCS.NPC->enemy && NPCS.NPC->enemy->client)
 		{
-			vec3_t dir2Enemy;
+			vec3_t dir2Enemy = { 0 };
 			VectorSubtract(NPCS.NPC->enemy->SHR_currentOrigin, NPCS.NPC->SHR_currentOrigin, dir2Enemy);
 			if (dir2Enemy[2] < 30)
 			{
@@ -449,7 +449,7 @@ static void SandCreature_Attack(const qboolean miss)
 							if (NPCS.NPC->enemy->s.number < MAX_CLIENTS)
 							{
 								//make the player look up at me
-								vec3_t vAng;
+								vec3_t vAng = { 0 };
 								vectoangles(dir2Enemy, vAng);
 								VectorSet(vAng, AngleNormalize180(vAng[PITCH]) * -1,
 									NPCS.NPC->enemy->client->ps.viewangles[YAW], 0);
@@ -503,7 +503,7 @@ static void SandCreature_Attack(const qboolean miss)
 #else // MP keeps its own version of this function
 static void SandCreature_Attack(const qboolean miss)
 {
-	vec3_t shakePos;
+	vec3_t shakePos = { 0 };
 
 	if (!NPCS.NPC->enemy->client)
 	{
@@ -536,7 +536,7 @@ static void SandCreature_Attack(const qboolean miss)
 		//purposely missed him, chance of knocking him down
 		if (NPCS.NPC->enemy && NPCS.NPC->enemy->client)
 		{
-			vec3_t dir2Enemy;
+			vec3_t dir2Enemy = { 0 };
 			VectorSubtract(NPCS.NPC->enemy->r.currentOrigin, NPCS.NPC->r.currentOrigin, dir2Enemy);
 			if (dir2Enemy[2] < 30)
 			{
@@ -565,7 +565,7 @@ static void SandCreature_Attack(const qboolean miss)
 							if (NPCS.NPC->enemy->s.number < MAX_CLIENTS)
 							{
 								//make the player look up at me
-								vec3_t vAng;
+								vec3_t vAng = { 0 };
 								vectoangles(dir2Enemy, vAng);
 								VectorSet(vAng, AngleNormalize180(vAng[PITCH]) * -1,
 									NPCS.NPC->enemy->client->ps.viewangles[YAW], 0);
@@ -653,7 +653,7 @@ static void SandCreature_SeekEnt(gentity_t* bestEnt, const float score)
 #ifdef SP_GAME
 static void SandCreature_CheckMovingEnts(void)
 {
-	gentity_t* radius_ents[128];
+	gentity_t* radius_ents[128] = { NULL };
 	const float radius = NPCS.NPCInfo->stats.earshot;
 	int i = 0;
 	vec3_t mins{}, maxs{};
@@ -670,6 +670,8 @@ static void SandCreature_CheckMovingEnts(void)
 
 	for (i = 0; i < num_ents; i++)
 	{
+		if (!radius_ents[i])
+			continue;
 		if (!radius_ents[i]->inuse)
 		{
 			continue;
@@ -759,13 +761,13 @@ static void SandCreature_CheckMovingEnts(void)
 #else // MP keeps its own version of this function
 static void SandCreature_CheckMovingEnts(void)
 {
-	gentity_t* radius_ents[128];
+	gentity_t* radius_ents[128] = { 0 };
 	const float radius = NPCS.NPCInfo->stats.earshot;
 	int i = 0;
-	vec3_t mins, maxs;
+	vec3_t mins = { 0 }, maxs = { 0 };
 	int bestEnt = -1;
 	float bestScore = 0;
-	int iradius_ents[128];
+	int iradius_ents[128] = { 0 };
 
 	for (i = 0; i < 3; i++)
 	{
@@ -907,7 +909,7 @@ static float SandCreature_DistSqToGoal(const qboolean goalIsEnemy)
 	}
 	else
 	{
-		vec3_t gOrg;
+		vec3_t gOrg = { 0 };
 		VectorCopy(NPCS.NPCInfo->goalEntity->SHR_currentOrigin, gOrg);
 		gOrg[2] -= NPCS.NPC->SHR_mins[2] - NPCS.NPCInfo->goalEntity->SHR_mins[2];
 		//moves the gOrg up/down to make it's origin seem at the proper height as if it had my mins
@@ -1238,7 +1240,7 @@ static void SandCreature_Sleep(void)
 #ifdef SP_GAME
 static void SandCreature_PushEnts(void)
 {
-	gentity_t* radius_ents[128];
+	gentity_t* radius_ents[128] = { NULL };
 	const float radius = 70;
 	vec3_t mins{}, maxs{};
 
@@ -1251,7 +1253,9 @@ static void SandCreature_PushEnts(void)
 	const int num_ents = gi.EntitiesInBox(mins, maxs, radius_ents, 128);
 	for (int ent_index = 0; ent_index < num_ents; ent_index++)
 	{
-		vec3_t smack_dir;
+		if (!radius_ents[ent_index])
+			continue;
+		vec3_t smack_dir = { 0 };
 		// Only Clients
 		//--------------
 		if (!radius_ents[ent_index] || !radius_ents[ent_index]->client || radius_ents[ent_index] == NPCS.NPC)
@@ -1272,10 +1276,10 @@ static void SandCreature_PushEnts(void)
 #else // MP keeps its own version of this function
 static void SandCreature_PushEnts()
 {
-	gentity_t* radius_ents[128];
+	gentity_t* radius_ents[128] = { 0 };
 	const float radius = 70;
-	vec3_t mins, maxs;
-	int iradius_ents[128];
+	vec3_t mins = { 0 }, maxs = { 0 };
+	int iradius_ents[128] = { 0 };
 
 	for (int i = 0; i < 3; i++)
 	{
@@ -1286,7 +1290,7 @@ static void SandCreature_PushEnts()
 	const int num_ents = trap->EntitiesInBox(mins, maxs, iradius_ents, 128);
 	for (int ent_index = 0; ent_index < num_ents; ent_index++)
 	{
-		vec3_t smack_dir;
+		vec3_t smack_dir = { 0 };
 		radius_ents[ent_index] = &g_entities[iradius_ents[ent_index]];
 
 		// Only Clients
@@ -1350,7 +1354,7 @@ void NPC_BSSandCreature_Default(void)
 	{
 		//FIXME: get start and end frame numbers for this effect for each of these anims
 		const vec3_t up = { 0, 0, 1 };
-		vec3_t org;
+		vec3_t org = { 0 };
 		VectorCopy(NPCS.NPC->SHR_currentOrigin, org);
 		org[2] -= 40;
 		if (NPCS.NPC->client->ps.SHR_legsAnimTimer > 3700)

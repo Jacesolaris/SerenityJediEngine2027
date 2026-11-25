@@ -33,7 +33,7 @@ FX_DEMP2_ProjectileThink
 
 void FX_DEMP2_ProjectileThink(centity_t* cent, const struct weaponInfo_s* weapon)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	if (VectorNormalize2(cent->currentState.pos.trDelta, forward) == 0.0f)
 	{

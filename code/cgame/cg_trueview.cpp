@@ -235,7 +235,7 @@ void CG_AdjustEyePos(const char* modelName)
 
 	if (true_view_valid)
 	{
-		char eyepos[MAX_QPATH];
+		char eyepos[MAX_QPATH] = {};
 		if (BG_SiegeGetPairedValue(true_view_info, const_cast<char*>(modelName), eyepos))
 		{
 			CG_Printf("True View Eye Adjust Loaded for %s.\n", modelName);
@@ -279,7 +279,7 @@ void CG_TrueViewCheckModel(const char* model_name)
 void CG_TrueViewSave_f()
 {
 	static char new_info[MAX_TRUEVIEW_INFO_SIZE];
-	char value[32];
+	char value[32] = {};
 	int n = 0;
 	qboolean done = qfalse;
 	fileHandle_t f = 0;
@@ -305,7 +305,7 @@ void CG_TrueViewSave_f()
 	{
 		const char* eol = strchr(p, '\n');
 		const int line_len = eol ? (int)(eol - p) + 1 : (int)strlen(p);
-		char key[MAX_QPATH];
+		char key[MAX_QPATH] = {};
 		int k = 0;
 		const char* q = p;
 

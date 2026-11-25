@@ -110,7 +110,7 @@ static void CG_MeditateCameraOrbit(float* yaw, float* pitch)
 	const qboolean meditating = (qboolean)(following || cg.renderingThirdPerson
 		&& cg.predictedPlayerState.stats[STAT_HEALTH] > 0
 		&& (anim == BOTH_MEDITATE || anim == BOTH_MEDITATE1 || anim == BOTH_MEDITATE_SABER));
-	usercmd_t cmd;
+	usercmd_t cmd = { 0 };
 
 	trap->GetUserCmd(trap->GetCurrentCmdNumber(), &cmd);
 
@@ -764,7 +764,7 @@ static void CG_CalcIdealThirdPersonViewLocation(void)
 
 static void CG_ResetThirdPersonViewDamp(void)
 {
-	trace_t trace;
+	trace_t trace = { 0 };
 
 	// Cap the pitch within reasonable limits
 	if (cameraFocusAngles[PITCH] > 89.0)
@@ -810,7 +810,7 @@ static void CG_ResetThirdPersonViewDamp(void)
 // This is called every frame.
 static void CG_UpdateThirdPersonTargetDamp(void)
 {
-	trace_t trace;
+	trace_t trace = { 0 };
 
 	// Set the cameraIdealTarget
 	// Automatically get the ideal target, to avoid jittering.
@@ -831,7 +831,7 @@ static void CG_UpdateThirdPersonTargetDamp(void)
 	else if (cg_thirdPersonTargetDamp.value >= 0.0)
 	{
 		float ratio = 0.0f;
-		vec3_t targetdiff;
+		vec3_t targetdiff = { 0 };
 		// Calculate the difference from the current position to the new one.
 		VectorSubtract(cameraIdealTarget, cameraCurTarget, targetdiff);
 
@@ -876,7 +876,7 @@ static void CG_UpdateThirdPersonTargetDamp(void)
 extern void CG_CalcEntityLerpPositions(centity_t* cent); //cg_ents.c
 static void CG_UpdateThirdPersonCameraDamp(void)
 {
-	trace_t trace;
+	trace_t trace = { 0 };
 	float thirdPersonCameraDamp = cg_thirdPersonCameraDamp.value;
 
 	// Set the cameraIdealLoc
@@ -951,7 +951,7 @@ static void CG_UpdateThirdPersonCameraDamp(void)
 	else if (dampfactor >= 0.0)
 	{
 		float ratio = 0.0f;
-		vec3_t locdiff;
+		vec3_t locdiff = { 0 };
 		// Calculate the difference from the current position to the new one.
 		VectorSubtract(cameraIdealLoc, cameraCurLoc, locdiff);
 
@@ -993,7 +993,7 @@ static void CG_UpdateThirdPersonCameraDamp(void)
 				mover->currentState.pos.trType != TR_LINEAR)
 			{
 				const int curTr = mover->currentState.pos.trType;
-				vec3_t curTrB;
+				vec3_t curTrB = { 0 };
 
 				VectorCopy(mover->currentState.pos.trBase, curTrB);
 
@@ -1041,7 +1041,7 @@ extern qboolean BG_UnrestrainedPitchRoll(const playerState_t* ps, Vehicle_t* p_v
 
 static void CG_OffsetThirdPersonView(void)
 {
-	vec3_t diff;
+	vec3_t diff = { 0 };
 
 	float thirdPersonHorzOffset = cg_thirdPersonHorzOffset.value;
 	float thirdPersonAlpha = cg_thirdPersonAlpha.value;
@@ -1226,8 +1226,8 @@ static void CG_OffsetThirdPersonView(void)
 		AnglesToAxis(cg.refdef.viewangles, cg.refdef.viewaxis);
 		{
 			// the side shift came after the wall traces: trace it too, so the camera stops at a wall instead of in it
-			vec3_t shifted;
-			trace_t trace;
+			vec3_t shifted = { 0 };
+			trace_t trace = { 0 };
 			VectorMA(cameraCurLoc, thirdPersonHorzOffset, cg.refdef.viewaxis[1], shifted);
 			CG_Trace(&trace, cameraCurLoc, cameramins, cameramaxs, shifted, cg.predictedPlayerState.clientNum, MASK_CAMERACLIP);
 			VectorCopy(trace.fraction < 1.0f ? trace.endpos : shifted, cameraCurLoc);
@@ -1262,7 +1262,7 @@ static void CG_OffsetFirstPersonView(void)
 	float delta = 0.0f;
 	float speed = 0.0f;
 	float f = 0.0f;
-	vec3_t predictedVelocity;
+	vec3_t predictedVelocity = { 0 };
 	int timeDelta = 0;
 
 	if (cg.snap->ps.pm_type == PM_INTERMISSION)
@@ -1422,14 +1422,14 @@ static void CG_OffsetFirstPersonView(void)
 
 static void CG_OffsetFighterView(void)
 {
-	vec3_t vehFwd, vehRight, vehUp, backDir;
-	vec3_t camOrg, camBackOrg;
+	vec3_t vehFwd = { 0 }, vehRight = { 0 }, vehUp = { 0 }, backDir = { 0 };
+	vec3_t camOrg = { 0 }, camBackOrg = { 0 };
 	float horzOffset = cg_thirdPersonHorzOffset.value;
 	float vertOffset = cg_thirdPersonVertOffset.value;
 	float pitchOffset = cg_thirdPersonPitchOffset.value;
 	const float yawOffset = cg_thirdPersonAngle.value;
 	float range = cg_thirdPersonRange.value;
-	trace_t trace;
+	trace_t trace = { 0 };
 	const centity_t* veh = &cg_entities[cg.predictedPlayerState.m_iVehicleNum];
 
 	AngleVectors(cg.refdef.viewangles, vehFwd, vehRight, vehUp);
@@ -1495,7 +1495,7 @@ Calcs Y FOV from given X FOV
 */
 qboolean CG_CalcFOVFromX(float fov_x)
 {
-	qboolean inwater;
+	qboolean inwater = qfalse;
 
 	if (cg_fovAspectAdjust.integer)
 	{
@@ -1871,7 +1871,7 @@ CG_DamageBlendBlob
 */
 static void CG_DamageBlendBlob(void)
 {
-	refEntity_t ent;
+	refEntity_t ent = { 0 };
 
 	if (!cg.damageValue)
 	{
@@ -1933,11 +1933,11 @@ static qboolean CG_ThirdPersonActionCam(void)
 {
 	const centity_t* cent = &cg_entities[cg.snap->ps.clientNum];
 	const clientInfo_t* ci = &cgs.clientinfo[cg.snap->ps.clientNum];
-	trace_t tr;
-	vec3_t positionDir;
-	vec3_t desiredAngles;
-	vec3_t desiredPos;
-	vec3_t v;
+	trace_t tr = { 0 };
+	vec3_t positionDir = { 0 };
+	vec3_t desiredAngles = { 0 };
+	vec3_t desiredPos = { 0 };
+	vec3_t v = { 0 };
 	const float smoothFactor = 0.1f * timescale.value;
 
 	if (!cent->ghoul2)
@@ -2082,7 +2082,7 @@ static void CG_WalkerViewOrigin(const int walker_num, const vec3_t walker_org, c
 	static int last_time = 0;
 	static vec3_t smoothed = { 0.0f, 0.0f, 0.0f }; // the pilot from the walker's origin: forward, right, up
 	static float smoothed_height = 0.0f; // of the walker
-	vec3_t yaw_angles, fwd, right, delta, local, change;
+	vec3_t yaw_angles = { 0 }, fwd = { 0 }, right = { 0 }, delta = { 0 }, local = { 0 }, change = { 0 };
 	const int elapsed = cg.time - last_time;
 
 	VectorSubtract(pilot_org, walker_org, delta);
@@ -2555,7 +2555,7 @@ static void CG_DrawSkyBoxPortal(const char* cstr)
 	if (cg_skyOri)
 	{
 		//ok, we want to orient the sky refdef vieworg based on the normal vieworg's relation to the ori pos
-		vec3_t dif;
+		vec3_t dif = { 0 };
 
 		VectorSubtract(backuprefdef.vieworg, cg_skyOriPos, dif);
 		VectorScale(dif, cg_skyOriScale, dif);
@@ -2666,7 +2666,7 @@ static void CG_SE_UpdateMusic(void)
 	{
 		if (cgScreenEffects.music_volume_multiplier != 1.0f || cgScreenEffects.music_volume_set)
 		{
-			char musMultStr[512];
+			char musMultStr[512] = { 0 };
 
 			cgScreenEffects.music_volume_multiplier += 0.1f;
 			if (cgScreenEffects.music_volume_multiplier > 1.0f)
@@ -2693,7 +2693,7 @@ static void CG_SE_UpdateMusic(void)
 	if (!cgScreenEffects.music_volume_set)
 	{
 		//if the volume_time is >= cg.time, we should have a volume multiplier set
-		char musMultStr[512];
+		char musMultStr[512] = { 0 };
 
 		Com_sprintf(musMultStr, sizeof musMultStr, "%f", cgScreenEffects.music_volume_multiplier);
 		trap->Cvar_Set("s_musicMult", musMultStr);
@@ -2717,7 +2717,7 @@ void CG_DoCameraShake(vec3_t origin, const float intensity, const int radius, co
 {
 	//FIXME: When exactly is the vieworg calculated in relation to the rest of the frame?s
 
-	vec3_t dir;
+	vec3_t dir = { 0 };
 
 	VectorSubtract(cg.refdef.vieworg, origin, dir);
 	const float dist = VectorNormalize(dir);
@@ -2795,8 +2795,8 @@ void CG_EmplacedView(vec3_t angles)
 //specially add cent's for automap
 static void CG_AddRefentForAutoMap(const centity_t* cent)
 {
-	refEntity_t ent;
-	vec3_t flat;
+	refEntity_t ent = { 0 };
+	vec3_t flat = { 0 };
 
 	if (cent->currentState.eFlags & EF_NODRAW)
 	{
@@ -2868,9 +2868,9 @@ int cg_autoMapInputTime = 0;
 
 static void CG_DrawAutoMap(void)
 {
-	refdef_t refdef;
-	trace_t tr;
-	vec3_t fwd;
+	refdef_t refdef = { 0 };
+	trace_t tr = { 0 };
+	vec3_t fwd = { 0 };
 	int vWidth = 0, vHeight = 0;
 
 	if (!r_autoMap.integer)
@@ -2998,8 +2998,8 @@ static void CG_DrawAutoMap(void)
 	}
 	else
 	{
-		vec3_t playerMaxs;
-		vec3_t playerMins;
+		vec3_t playerMaxs = { 0 };
+		vec3_t playerMins = { 0 };
 		//Trace down and set the ground elevation as the main automap elevation point
 		VectorSet(playerMins, -15, -15, DEFAULT_MINS_2);
 		VectorSet(playerMaxs, 15, 15, DEFAULT_MAXS_2);
@@ -3245,7 +3245,7 @@ void CG_DrawActiveFrame(const int serverTime, const stereoFrame_t stereoView, co
 	qboolean bUseFighterPitch = qfalse;
 	qboolean	isFighter = qfalse;
 #endif
-	qboolean inwater;
+	qboolean inwater = qfalse;
 	float mYawOverride = 0.0f;
 	float mPitchOverride = 0.0f;
 
@@ -3443,7 +3443,7 @@ void CG_DrawActiveFrame(const int serverTime, const stereoFrame_t stereoView, co
 
 	if (InCinematic)
 	{
-		usercmd_t cmd;
+		usercmd_t cmd = { 0 };
 
 		const int cmdNum = trap->GetCurrentCmdNumber();
 		trap->GetUserCmd(cmdNum, &cmd);
@@ -3616,7 +3616,7 @@ void CG_DrawActiveFrame(const int serverTime, const stereoFrame_t stereoView, co
 
 	if (gCGHasFallVector)
 	{
-		vec3_t lookAng;
+		vec3_t lookAng = { 0 };
 
 		VectorSubtract(cg.snap->ps.origin, cg.refdef.vieworg, lookAng);
 		VectorNormalize(lookAng);
@@ -3681,7 +3681,7 @@ void CG_DrawActiveFrame(const int serverTime, const stereoFrame_t stereoView, co
 
 void CheckCameraLocation(vec3_t oldeye_origin)
 {
-	trace_t trace;
+	trace_t trace = { 0 };
 
 	CG_Trace(&trace, oldeye_origin, cameramins, cameramaxs, cg.refdef.vieworg, cg.snap->ps.clientNum, MASK_CAMERACLIP);
 	if (trace.fraction <= 1.0)

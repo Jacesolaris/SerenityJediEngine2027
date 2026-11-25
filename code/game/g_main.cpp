@@ -337,11 +337,11 @@ static void G_DynamicMusicUpdate()
 {
 	static gentity_t* entity_list[MAX_GENTITIES];
 	vec3_t mins{}, maxs{};
-	vec3_t center;
+	vec3_t center = {};
 	int danger = 0;
 	int battle = 0;
 	int entTeam = 0;
-	qboolean clearLOS;
+	qboolean clearLOS = qfalse;
 
 	//player-based
 	if (!player)
@@ -1263,8 +1263,8 @@ extern "C" Q_EXPORT game_export_t* QDECL GetGameAPI(const game_import_t* import)
 
 void QDECL G_Error(const char* fmt, ...)
 {
-	va_list argptr;
-	char text[1024];
+	va_list argptr = {};
+	char text[1024] = {};
 
 	va_start(argptr, fmt);
 	Q_vsnprintf(text, sizeof text, fmt, argptr);
@@ -1281,8 +1281,8 @@ Com_Error
 
 void Com_Error(const int level, const char* error, ...)
 {
-	va_list argptr;
-	char text[1024];
+	va_list argptr = {};
+	char text[1024] = {};
 
 	va_start(argptr, error);
 	Q_vsnprintf(text, sizeof text, error, argptr);
@@ -1299,8 +1299,8 @@ Com_Printf
 
 void Com_Printf(const char* msg, ...)
 {
-	va_list argptr;
-	char text[1024];
+	va_list argptr = {};
+	char text[1024] = {};
 
 	va_start(argptr, msg);
 	Q_vsnprintf(text, sizeof text, msg, argptr);
@@ -1588,7 +1588,7 @@ public:
 
 	void EffectorCollision(const SRagDollEffectorCollision& data) override
 	{
-		vec3_t effectorPosDif;
+		vec3_t effectorPosDif = {};
 
 		if (data.useTracePlane)
 		{
@@ -1662,7 +1662,7 @@ extern qboolean G_ReleaseEntity(const gentity_t* grabber);
 
 static void G_BodyDragUpdate(const gentity_t* ent, const gentity_t* dragger)
 {
-	vec3_t handVec;
+	vec3_t handVec = {};
 
 	assert(ent && ent->inuse && ent->client && ent->ghoul2.size() &&
 		dragger && dragger->inuse && dragger->client && dragger->ghoul2.size());
@@ -1692,8 +1692,8 @@ static void G_BodyDragUpdate(const gentity_t* ent, const gentity_t* dragger)
 //pose if the pelvis is flipped opposite of the base pose or something -rww
 static int G_RagAnimForPositioning(gentity_t* ent)
 {
-	vec3_t dir;
-	mdxaBone_t matrix;
+	vec3_t dir = {};
+	mdxaBone_t matrix = {};
 	assert(ent->client);
 	const vec3_t G2Angles = { 0, ent->client->ps.viewangles[YAW], 0 };
 
@@ -1812,8 +1812,8 @@ static void G_RagGripHang(gentity_t* ent, vec3_t ragAngles)
 
 	if (!cl->ragGripHang)
 	{
-		mdxaBone_t bolt_matrix;
-		vec3_t head;
+		mdxaBone_t bolt_matrix = {};
+		vec3_t head = {};
 		const int bolt = gi.G2API_AddBolt(&ent->ghoul2[ent->playerModel], "ceyebrow");
 
 		if (bolt < 0)
@@ -1827,7 +1827,7 @@ static void G_RagGripHang(gentity_t* ent, vec3_t ragAngles)
 		cl->ragGripHang = qtrue;
 	}
 
-	vec3_t goal;
+	vec3_t goal = {};
 	VectorAdd(cl->ps.origin, cl->ragGripHead, goal);
 	gi.G2API_RagEffectorGoal(ent->ghoul2, "ceyebrow", goal);
 	gi.G2API_RagForceSolve(ent->ghoul2, qtrue);
@@ -1837,8 +1837,8 @@ extern qboolean WP_SaberBodyNoCut(const gentity_t* body);
 
 qboolean G_RagDoll(gentity_t* ent, vec3_t forcedAngles)
 {
-	vec3_t    G2Angles;
-	vec3_t    usedOrg;
+	vec3_t    G2Angles = {};
+	vec3_t    usedOrg = {};
 	qboolean  inSomething = qfalse;
 
 	// ------------------------------------------------------------
@@ -1927,7 +1927,7 @@ qboolean G_RagDoll(gentity_t* ent, vec3_t forcedAngles)
 		else if (ent->client->ps.groundEntityNum == ENTITYNUM_NONE)
 		{
 			// In air: check velocity magnitude
-			vec3_t cVel;
+			vec3_t cVel = {};
 			VectorCopy(ent->client->ps.velocity, cVel);
 
 			if (VectorNormalize(cVel) > 400.0f)
@@ -1956,9 +1956,9 @@ qboolean G_RagDoll(gentity_t* ent, vec3_t forcedAngles)
 			int        i = 0;
 			int        boltChecks[5] = { 0 };
 			vec3_t     boltPoints[5] = { 0 };
-			vec3_t     tAng;
+			vec3_t     tAng = {};
 			trace_t    tr;
-			mdxaBone_t bolt_matrix;
+			mdxaBone_t bolt_matrix = {};
 
 			VectorSet(tAng, 0.0f, ent->client->ps.viewangles[YAW], 0.0f);
 
@@ -1982,8 +1982,8 @@ qboolean G_RagDoll(gentity_t* ent, vec3_t forcedAngles)
 
 			while (i < 5)
 			{
-				vec3_t trStart;
-				vec3_t trEnd;
+				vec3_t trStart = {};
+				vec3_t trEnd = {};
 
 				if (i < 2)
 				{
@@ -2047,7 +2047,7 @@ qboolean G_RagDoll(gentity_t* ent, vec3_t forcedAngles)
 			ent->client->isRagging = qfalse;   // clear rag state
 			return qfalse;                     // skip ragdoll entirely
 		}
-		CRagDollParams          tParms;
+		CRagDollParams          tParms = {};
 		CGameRagDollUpdateParams tuParms;
 		const int               ragAnim = G_RagAnimForPositioning(ent);
 
@@ -2159,12 +2159,12 @@ qboolean G_RagDoll(gentity_t* ent, vec3_t forcedAngles)
 
 			if (grabEnt->client != NULL && grabEnt->ghoul2.size() != 0)
 			{
-				vec3_t bOrg;
-				vec3_t thisHand;
-				vec3_t hands;
-				vec3_t pcjMin, pcjMax;
-				vec3_t pDif;
-				vec3_t thorPoint;
+				vec3_t bOrg = {};
+				vec3_t thisHand = {};
+				vec3_t hands = {};
+				vec3_t pcjMin = {}, pcjMax = {};
+				vec3_t pDif = {};
+				vec3_t thorPoint = {};
 
 				VectorCopy(grabEnt->client->renderInfo.handRPoint, bOrg);
 				VectorCopy(ent->client->renderInfo.handRPoint, thisHand);
@@ -2215,7 +2215,7 @@ qboolean G_RagDoll(gentity_t* ent, vec3_t forcedAngles)
 
 					if (difLen > 0.0f)
 					{
-						vec3_t dVel;
+						vec3_t dVel = {};
 						int    i = 0;
 
 						if (difLen < 12.0f)
@@ -2226,7 +2226,7 @@ qboolean G_RagDoll(gentity_t* ent, vec3_t forcedAngles)
 
 						while (g_effectorStringTable[i])
 						{
-							vec3_t r_vel;
+							vec3_t r_vel = {};
 
 							VectorCopy(pDif, dVel);
 							dVel[2] = 0.0f;
@@ -2255,8 +2255,8 @@ qboolean G_RagDoll(gentity_t* ent, vec3_t forcedAngles)
 			// ----------------------------------------------------
 			// Reset overridden bones back to normal rag state
 			// ----------------------------------------------------
-			vec3_t pcjMin, pcjMax;
-			vec3_t dVel;
+			vec3_t pcjMin = {}, pcjMax = {};
+			vec3_t dVel = {};
 
 			gi.G2API_RagEffectorGoal(ent->ghoul2, "rhand", NULL);
 			gi.G2API_RagEffectorGoal(ent->ghoul2, "rradius", NULL);
@@ -2342,7 +2342,7 @@ static int s_corpseTouchTime[MAX_GENTITIES];
 static void G_CorpseTouchPush(gentity_t* corpse)
 {
 	static gentity_t* touch[MAX_GENTITIES]; // static: too big for the stack
-	vec3_t mins, maxs;
+	vec3_t mins = {}, maxs = {};
 
 	if (!corpse->client || corpse->health > 0 || s_corpseTouchTime[corpse->s.number] > level.time
 		|| corpse->client->NPC_class == CLASS_VEHICLE || G_RagDollDisallowedClass(corpse->client->NPC_class))
@@ -2355,7 +2355,7 @@ static void G_CorpseTouchPush(gentity_t* corpse)
 	for (int i = 0; i < num; i++)
 	{
 		const gentity_t* other = touch[i];
-		vec3_t move;
+		vec3_t move = {};
 
 		if (!other || other == corpse || !other->client || other->health <= 0)
 		{
@@ -2572,7 +2572,7 @@ void G_RunFrame(const int levelTime)
 			if (ent->client->isHacking)
 			{ //hacking checks
 				gentity_t* hacked = &g_entities[ent->client->isHacking];
-				vec3_t angDif;
+				vec3_t angDif = {};
 
 				VectorSubtract(ent->client->ps.viewangles, ent->client->hackingAngles, angDif);
 

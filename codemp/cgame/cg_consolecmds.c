@@ -37,7 +37,7 @@ CG_TargetCommand_f
 */
 void CG_TargetCommand_f(void)
 {
-	char test[4];
+	char test[4] = { 0 };
 
 	const int targetNum = CG_CrosshairPlayer();
 	if (targetNum == -1)
@@ -176,8 +176,8 @@ void CG_ClientList_f(void)
 
 static void CG_TellTarget_f(void)
 {
-	char command[MAX_SAY_TEXT + 10];
-	char message[MAX_SAY_TEXT];
+	char command[MAX_SAY_TEXT + 10] = { 0 };
+	char message[MAX_SAY_TEXT] = { 0 };
 
 	const int clientNum = CG_CrosshairPlayer();
 	if (clientNum == -1)
@@ -192,8 +192,8 @@ static void CG_TellTarget_f(void)
 
 static void CG_TellAttacker_f(void)
 {
-	char command[MAX_SAY_TEXT + 10];
-	char message[MAX_SAY_TEXT];
+	char command[MAX_SAY_TEXT + 10] = { 0 };
+	char message[MAX_SAY_TEXT] = { 0 };
 
 	const int clientNum = CG_LastAttacker();
 	if (clientNum == -1)
@@ -214,7 +214,7 @@ CG_StartOrbit_f
 
 static void CG_StartOrbit_f(void)
 {
-	char var[MAX_TOKEN_CHARS];
+	char var[MAX_TOKEN_CHARS] = { 0 };
 
 	trap->Cvar_VariableStringBuffer("developer", var, sizeof var);
 	if (!atoi(var))
@@ -317,7 +317,7 @@ console never reached the game.)
 */
 static void CG_Weather_f(void)
 {
-	char args[MAX_STRING_CHARS];
+	char args[MAX_STRING_CHARS] = { 0 };
 
 	trap->Cmd_Args(args, sizeof args);
 

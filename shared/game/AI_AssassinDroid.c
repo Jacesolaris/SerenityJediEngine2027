@@ -151,7 +151,7 @@ static void deka_bubble_shield_push_ent(gentity_t* pushed, vec3_t smack_dir)
 #ifdef SP_GAME
 static void BubbleShield_PushRadiusEnts(void)
 {
-	gentity_t* radius_ents[128];
+	gentity_t* radius_ents[128] = { NULL };
 	const float radius = ASSASSIN_SHIELD_SIZE;
 	vec3_t mins{}, maxs{};
 
@@ -164,7 +164,7 @@ static void BubbleShield_PushRadiusEnts(void)
 	const int num_ents = gi.EntitiesInBox(mins, maxs, radius_ents, 128);
 	for (int ent_index = 0; ent_index < num_ents; ent_index++)
 	{
-		vec3_t smack_dir;
+		vec3_t smack_dir = { 0 };
 		// Only Clients
 		//--------------
 		if (!radius_ents[ent_index] || !radius_ents[ent_index]->client)
@@ -248,7 +248,7 @@ static void BubbleShield_PushRadiusEnts(void)
 		}
 
 		// Compute direction from NPC to entity
-		vec3_t smack_dir;
+		vec3_t smack_dir = { 0 };
 		VectorSubtract(radius_ent->r.currentOrigin, NPCS.NPC->r.currentOrigin, smack_dir);
 
 		const float smackDist = VectorNormalize(smack_dir);
@@ -265,7 +265,7 @@ static void BubbleShield_PushRadiusEnts(void)
 #ifdef SP_GAME // SP only: the MP game has no version of this
 static void deka_bubble_shield_push_radius_ents(void)
 {
-	gentity_t* radius_ents[128];
+	gentity_t* radius_ents[128] = { NULL };
 	const float radius = ASSASSIN_SHIELD_SIZE;
 	vec3_t mins{}, maxs{};
 
@@ -278,7 +278,7 @@ static void deka_bubble_shield_push_radius_ents(void)
 	const int num_ents = gi.EntitiesInBox(mins, maxs, radius_ents, 128);
 	for (int ent_index = 0; ent_index < num_ents; ent_index++)
 	{
-		vec3_t smack_dir;
+		vec3_t smack_dir = { 0 };
 		// Only Clients
 		//--------------
 		if (!radius_ents[ent_index] || !radius_ents[ent_index]->client)
@@ -363,7 +363,7 @@ void bubble_shield_update(void)
 			//-------------------------------------------
 			if (NPCS.NPC->enemy && NPCS.NPCInfo->touchedByPlayer == NPCS.NPC->enemy)
 			{
-				vec3_t dir;
+				vec3_t dir = { 0 };
 				VectorSubtract(NPCS.NPC->enemy->SHR_currentOrigin, NPCS.NPC->SHR_currentOrigin, dir);
 				VectorNormalize(dir);
 				BubbleShield_PushEnt(NPCS.NPC->enemy, dir);
@@ -427,7 +427,7 @@ void bubble_shield_update(void)
 			//-------------------------------------------
 			if (NPCS.NPC->enemy && NPCS.NPCInfo->touchedByPlayer == NPCS.NPC->enemy)
 			{
-				vec3_t dir;
+				vec3_t dir = { 0 };
 				VectorSubtract(NPCS.NPC->enemy->r.currentOrigin, NPCS.NPC->r.currentOrigin, dir);
 				VectorNormalize(dir);
 				BubbleShield_PushEnt(NPCS.NPC->enemy, dir);
@@ -504,7 +504,7 @@ void deka_bubble_shield_update(void)
 			//-------------------------------------------
 			if (NPCS.NPC->enemy && NPCS.NPCInfo->touchedByPlayer == NPCS.NPC->enemy)
 			{
-				vec3_t dir;
+				vec3_t dir = { 0 };
 				VectorSubtract(NPCS.NPC->enemy->SHR_currentOrigin, NPCS.NPC->SHR_currentOrigin, dir);
 				VectorNormalize(dir);
 				deka_bubble_shield_push_ent(NPCS.NPC->enemy, dir);

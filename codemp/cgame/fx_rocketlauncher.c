@@ -32,7 +32,7 @@ FX_RocketProjectileThink
 
 void FX_RocketProjectileThink(centity_t* cent, const struct weaponInfo_s* weapon)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	if (VectorNormalize2(cent->currentState.pos.trDelta, forward) == 0.0f)
 	{
@@ -72,7 +72,7 @@ FX_RocketAltProjectileThink
 
 void FX_RocketAltProjectileThink(centity_t* cent, const struct weaponInfo_s* weapon)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	if (VectorNormalize2(cent->currentState.pos.trDelta, forward) == 0.0f)
 	{

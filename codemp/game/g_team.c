@@ -340,7 +340,7 @@ void Team_FragBonuses(const gentity_t* targ, const gentity_t* attacker)
 	int flag_pw = 0, enemy_flag_pw = 0;
 	const gentity_t* carrier = NULL;
 	char* c = NULL;
-	vec3_t v1, v2;
+	vec3_t v1 = { 0 }, v2 = { 0 };
 
 	// no bonus for fragging yourself or team mates
 	if (!targ->client || !attacker->client || targ == attacker || OnSameTeam(targ, attacker))
@@ -735,7 +735,7 @@ static int Team_TouchOurFlag(gentity_t* ent, const gentity_t* other, const int t
 	int enemyTeam = 0;
 	gclient_t* cl = other->client;
 	int enemy_flag = 0;
-	vec3_t mins, maxs;
+	vec3_t mins = { 0 }, maxs = { 0 };
 
 	// static: too big for the stack, and BG_Alloc is never freed: asked for on every call, this ran the pool dry
 	static int touch[MAX_GENTITIES];
@@ -893,7 +893,7 @@ static int Team_TouchOurFlag(gentity_t* ent, const gentity_t* other, const int t
 int Team_TouchEnemyFlag(gentity_t* ent, const gentity_t* other, const int team)
 {
 	gclient_t* cl = other->client;
-	vec3_t mins, maxs;
+	vec3_t mins = { 0 }, maxs = { 0 };
 	int ourFlag = 0;
 
 	// static: too big for the stack, and BG_Alloc is never freed: asked for on every call, this ran the pool dry
@@ -1013,7 +1013,7 @@ Report a location for the player. Uses placed nearby target_location entities
 */
 locationData_t* Team_GetLocation(const gentity_t* ent)
 {
-	vec3_t origin;
+	vec3_t origin = { 0 };
 
 	locationData_t* best = NULL;
 	float bestlen = 3 * 8192.0 * 8192.0;
@@ -1226,7 +1226,7 @@ static int BOT_FreeSpawnWP(const int* list, const int count)
 	for (int k = 0; k < count; k++)
 	{
 		const int idx = list[(start + k) % count];
-		vec3_t mins, maxs;
+		vec3_t mins = { 0 }, maxs = { 0 };
 		qboolean busy = qfalse;
 
 		VectorSet(mins, gWPArray[idx]->origin[0] - 16, gWPArray[idx]->origin[1] - 16, gWPArray[idx]->origin[2] - 24);
@@ -1249,7 +1249,7 @@ static int BOT_FreeSpawnWP(const int* list, const int count)
 void BOT_WaypointSpawnAngles(const int team, const vec3_t origin, vec3_t angles)
 {
 	const int enemyFlag = team == TEAM_RED ? WPFLAG_SPAWN_TEAM_BLUE : team == TEAM_BLUE ? WPFLAG_SPAWN_TEAM_RED : 0;
-	vec3_t centre, dir;
+	vec3_t centre = { 0 }, dir = { 0 };
 
 	VectorClear(angles);
 	for (int pass = enemyFlag ? 0 : 1; pass < 2; pass++)
@@ -1511,7 +1511,7 @@ extern qboolean CheckforGoodSpawnPoint(vec3_t location, qboolean playersolidchec
 //checks to see if a certain location would telefrag.
 static qboolean PointWouldTelefrag(vec3_t point)
 {
-	vec3_t mins, maxs;
+	vec3_t mins = { 0 }, maxs = { 0 };
 
 	// static: too big for the stack, and BG_Alloc is never freed: asked for on every call, this ran the pool dry
 	static int touch[MAX_GENTITIES];
@@ -1540,7 +1540,7 @@ static qboolean PointWouldTelefrag(vec3_t point)
 //open positions.
 qboolean SPSpawnpointCheck(vec3_t spawnloc)
 {
-	vec3_t originalLoc;
+	vec3_t originalLoc = { 0 };
 
 	//check first position
 	if (CheckforGoodSpawnPoint(spawnloc, qtrue) && !PointWouldTelefrag(spawnloc))
@@ -1608,7 +1608,7 @@ gentity_t* SelectSPSpawnPoint(vec3_t origin, vec3_t angles)
 {
 	gentity_t* spot = NULL;
 	gentity_t* bestspot = NULL;
-	vec3_t bestspawnloc;
+	vec3_t bestspawnloc = { 0 };
 	int bestSeq = 99;
 
 	// ---------------------------------------------------------
@@ -1616,7 +1616,7 @@ gentity_t* SelectSPSpawnPoint(vec3_t origin, vec3_t angles)
 	// ---------------------------------------------------------
 	while ((spot = G_Find(spot, FOFS(classname), "info_player_deathmatch")) != NULL)
 	{
-		vec3_t spawnloc;
+		vec3_t spawnloc = { 0 };
 		VectorCopy(spot->s.origin, spawnloc);
 
 		// Skip telefrag‑unsafe spawnpoints
@@ -1800,7 +1800,7 @@ void TeamplayInfoMessage(const gentity_t* ent)
 			continue;
 		}
 
-		char entry[1024];
+		char entry[1024] = { 0 };
 		int h = 0, a = 0;
 
 		// -----------------------------------------------------

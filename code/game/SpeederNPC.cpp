@@ -124,7 +124,7 @@ bool VEH_StartStrafeRam(Vehicle_t* p_veh, const bool Right)
 		{
 			// Compute Pos3
 			//--------------
-			vec3_t right;
+			vec3_t right = {};
 			AngleVectors(p_veh->m_vOrientation, nullptr, right, nullptr);
 			VectorMA(p_veh->m_pParentEntity->client->ps.velocity, Right ? speed : -speed, right,
 				p_veh->m_pParentEntity->pos3);
@@ -195,13 +195,13 @@ static bool update(Vehicle_t* p_veh, const usercmd_t* p_ucmd)
 
 	if (p_veh->m_ulFlags & VEH_FLYING)
 	{
-		vec3_t vVehAngles;
+		vec3_t vVehAngles = {};
 		VectorSet(vVehAngles, 0, p_veh->m_vOrientation[YAW], 0);
 		AngleVectors(vVehAngles, parent->client->ps.moveDir, nullptr, nullptr);
 	}
 	else
 	{
-		vec3_t vVehAngles;
+		vec3_t vVehAngles = {};
 		VectorSet(vVehAngles, p_veh->m_vOrientation[PITCH], p_veh->m_vOrientation[YAW], 0);
 		AngleVectors(vVehAngles, parent->client->ps.moveDir, nullptr, nullptr);
 	}
@@ -799,7 +799,7 @@ static void AnimateRiders(Vehicle_t* p_veh)
 
 			// Compute THe Throw Direction As Backwards From The Vehicle's Velocity
 			//----------------------------------------------------------------------
-			vec3_t throwDir;
+			vec3_t throwDir = {};
 			VectorScale(p_veh->m_pParentEntity->client->ps.velocity, -1.0f, throwDir);
 			VectorNormalize(throwDir);
 			throwDir[2] += 0.3f; // up a little
@@ -961,9 +961,9 @@ static void AnimateRiders(Vehicle_t* p_veh)
 #ifndef _JK2MP
 				if (p_veh->m_pPilot->enemy)
 				{
-					vec3_t toEnemy;
+					vec3_t toEnemy = {};
 					//float	toEnemyDistance;
-					vec3_t actorRight;
+					vec3_t actorRight = {};
 
 					VectorSubtract(p_veh->m_pPilot->currentOrigin, p_veh->m_pPilot->enemy->currentOrigin, toEnemy);
 					/*toEnemyDistance = */

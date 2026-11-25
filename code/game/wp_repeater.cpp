@@ -38,7 +38,7 @@ extern qboolean PM_WalkingAnim(int anim);
 static void WP_RepeaterMainFire(gentity_t* ent, vec3_t dir)
 //---------------------------------------------------------
 {
-	vec3_t start;
+	vec3_t start = {};
 	int damage = weaponData[WP_REPEATER].damage;
 
 	VectorCopy(muzzle, start);
@@ -82,7 +82,7 @@ static void WP_RepeaterMainFire(gentity_t* ent, vec3_t dir)
 static void WP_RepeaterAltFire(gentity_t* ent)
 //---------------------------------------------------------
 {
-	vec3_t start;
+	vec3_t start = {};
 	int damage = weaponData[WP_REPEATER].altDamage;
 	gentity_t* missile = nullptr;
 
@@ -154,7 +154,7 @@ void WP_FireRepeater(gentity_t* ent, const qboolean alt_fire)
 		return;
 	}
 
-	vec3_t angs;
+	vec3_t angs = {};
 	vectoangles(forward_vec, angs);
 
 	if (alt_fire == qtrue)
@@ -163,7 +163,7 @@ void WP_FireRepeater(gentity_t* ent, const qboolean alt_fire)
 		return;
 	}
 
-	vec3_t dir;
+	vec3_t dir = {};
 
 	// AIM / SPREAD LOGIC
 	if (ent->client->NPC_class == CLASS_VEHICLE)
@@ -282,7 +282,7 @@ static void WP_FireZ6RotaryCannonMissile(gentity_t* ent, vec3_t start, vec3_t di
 void WP_FireZ6RotaryCannon(gentity_t* ent)
 //---------------------------------------------------------
 {
-	vec3_t dir, angs, start;
+	vec3_t dir = {}, angs = {}, start = {};
 
 	if (!ent->client)
 	{

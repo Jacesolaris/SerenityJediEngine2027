@@ -98,8 +98,8 @@ static void Rancor_Crush(void)
 
 static void Rancor_HitBreakables(vec3_t boltOrg, const int damage, const int* entNums, const int numEnts)
 {
-	trace_t trace;
-	vec3_t from;
+	trace_t trace = { 0 };
+	vec3_t from = { 0 };
 
 	if (VectorCompare(NPCS.NPC->pos3, vec3_origin))
 	{
@@ -200,7 +200,7 @@ void NPC_MutantRancor_Precache(void)
 #ifdef SP_GAME
 static qboolean Rancor_CheckAhead(vec3_t end)
 {
-	trace_t trace;
+	trace_t trace = { qfalse };
 	int clipmask = NPCS.NPC->clipmask | CONTENTS_BOTCLIP;
 
 	//make sure our goal isn't underground (else the trace will fail)
@@ -242,8 +242,8 @@ static qboolean Rancor_CheckAhead(vec3_t end)
 #else // MP keeps its own version of this function
 static qboolean Rancor_CheckAhead(vec3_t end)
 {
-	trace_t trace;
-	vec3_t bottom;
+	trace_t trace = { 0 };
+	vec3_t bottom = { 0 };
 	int clipmask = NPCS.NPC->clipmask | CONTENTS_BOTCLIP;
 
 	//make sure our goal isn't underground (else the trace will fail)
@@ -352,7 +352,7 @@ void Rancor_Move(void)
 		if (!NPC_MoveToGoal(qtrue))
 		{
 			//can't macro-nav, just head right for him
-			vec3_t dest;
+			vec3_t dest = { 0 };
 			VectorCopy(NPCS.NPCInfo->goalEntity->SHR_currentOrigin, dest);
 			if (Rancor_CheckAhead(dest))
 			{
@@ -438,7 +438,7 @@ void Rancor_Move()
 		if (!NPC_MoveToGoal(qtrue))
 		{
 			NPCS.NPCInfo->consecutiveBlockedMoves++;
-			vec3_t dest;
+			vec3_t dest = { 0 };
 			VectorCopy(NPCS.NPCInfo->goalEntity->r.currentOrigin, dest);
 			if (Rancor_CheckAhead(dest))
 			{
@@ -705,11 +705,11 @@ void Rancor_DropVictim(gentity_t* self)
 #ifdef SP_GAME
 static void Rancor_Swing(const int boltIndex, const qboolean try_grab)
 {
-	gentity_t* radius_ents[128];
+	gentity_t* radius_ents[128] = { NULL };
 	const float radius = NPCS.NPC->spawnflags & SPF_RANCOR_MUTANT ? 200 : 88;
 	const float radius_squared = radius * radius;
-	vec3_t bolt_org;
-	vec3_t origin_up;
+	vec3_t bolt_org = { 0 };
+	vec3_t origin_up = { 0 };
 
 	VectorCopy(NPCS.NPC->SHR_currentOrigin, origin_up);
 	origin_up[2] += NPCS.NPC->SHR_maxs[2] * 0.75f;
@@ -717,7 +717,7 @@ static void Rancor_Swing(const int boltIndex, const qboolean try_grab)
 	const int num_ents = NPC_GetEntsNearBolt(radius_ents, radius, boltIndex, bolt_org);
 
 	//attacking a breakable brush
-	trace_t trace;
+	trace_t trace = { qfalse };
 
 	SHR_Trace(&trace, NPCS.NPC->pos3, vec3_origin, vec3_origin, bolt_org, NPCS.NPC->s.number, CONTENTS_SOLID | CONTENTS_BODY);
 #ifndef FINAL_BUILD
@@ -751,6 +751,8 @@ static void Rancor_Swing(const int boltIndex, const qboolean try_grab)
 
 	for (int i = 0; i < num_ents; i++)
 	{
+		if (!radius_ents[i])
+			continue;
 		if (!radius_ents[i]->inuse)
 		{
 			continue;
@@ -839,13 +841,13 @@ static void Rancor_Swing(const int boltIndex, const qboolean try_grab)
 				//smack
 				SHR_Sound(radius_ents[i], G_SoundIndex("sound/chars/rancor/swipehit.wav"));
 				//actually push the enemy
-				vec3_t push_dir;
+				vec3_t push_dir = { 0 };
 				if (NPCS.NPC->spawnflags & SPF_RANCOR_FASTKILL
 					&& radius_ents[i]->s.number >= MAX_CLIENTS)
 				{
 					G_Damage(radius_ents[i], NPCS.NPC, NPCS.NPC, vec3_origin, bolt_org, radius_ents[i]->health + 1000, DAMAGE_NO_KNOCKBACK | DAMAGE_NO_PROTECTION, MOD_MELEE);
 				}
-				vec3_t angs;
+				vec3_t angs = { 0 };
 				VectorCopy(NPCS.NPC->client->ps.viewangles, angs);
 				angs[YAW] += Q_flrand(25, 50);
 				angs[PITCH] = Q_flrand(-25, -15);
@@ -868,10 +870,10 @@ static void Rancor_Swing(const int boltIndex, const qboolean try_grab)
 #else // MP keeps its own version of this function
 static void Rancor_Swing(const int boltIndex, const qboolean try_grab)
 {
-	int radius_ent_nums[128];
+	int radius_ent_nums[128] = { 0 };
 	const float radius = NPCS.NPC->spawnflags & SPF_RANCOR_MUTANT ? 200 : 88;
 	const float radius_squared = radius * radius;
-	vec3_t bolt_org;
+	vec3_t bolt_org = { 0 };
 
 	const int num_ents = NPC_GetEntsNearBolt(radius_ent_nums, radius, boltIndex, bolt_org);
 	Rancor_HitBreakables(bolt_org, 100, NULL, 0); // (SP: a breakable brush in its way)
@@ -954,8 +956,8 @@ static void Rancor_Swing(const int boltIndex, const qboolean try_grab)
 			else
 			{
 				//smack
-				vec3_t push_dir;
-				vec3_t angs;
+				vec3_t push_dir = { 0 };
+				vec3_t angs = { 0 };
 
 				G_Sound(radius_ent, CHAN_AUTO, G_SoundIndex("sound/chars/rancor/swipehit.wav"));
 
@@ -988,18 +990,18 @@ static void Rancor_Swing(const int boltIndex, const qboolean try_grab)
 #ifdef SP_GAME
 static void Rancor_Smash(void)
 {
-	gentity_t* radius_ents[128];
+	gentity_t* radius_ents[128] = { NULL };
 	const float radius = NPCS.NPC->spawnflags & SPF_RANCOR_MUTANT ? 256 : 128;
 	const float half_rad_squared = radius / 2 * (radius / 2);
 	const float radius_squared = radius * radius;
-	vec3_t bolt_org;
+	vec3_t bolt_org = { 0 };
 
 	AddSoundEvent(NPCS.NPC, NPCS.NPC->SHR_currentOrigin, 1024, AEL_DANGER, qfalse, qtrue);
 
 	const int num_ents = NPC_GetEntsNearBolt(radius_ents, radius, NPCS.NPC->handLBolt, bolt_org);
 
 	//attacking a breakable brush
-	trace_t trace;
+	trace_t trace = { qfalse };
 
 	SHR_Trace(&trace, bolt_org, vec3_origin, vec3_origin, NPCS.NPC->pos3, NPCS.NPC->s.number, CONTENTS_SOLID | CONTENTS_BODY);
 #ifndef FINAL_BUILD
@@ -1034,6 +1036,8 @@ static void Rancor_Smash(void)
 
 	for (int i = 0; i < num_ents; i++)
 	{
+		if (!radius_ents[i])
+			continue;
 		if (!radius_ents[i]->inuse)
 		{
 			continue;
@@ -1118,11 +1122,11 @@ static void Rancor_Smash(void)
 #else // MP keeps its own version of this function
 static void Rancor_Smash(void)
 {
-	int radius_ent_nums[128];
+	int radius_ent_nums[128] = { 0 };
 	const float radius = NPCS.NPC->spawnflags & SPF_RANCOR_MUTANT ? 256 : 128;
 	const float half_rad_squared = radius / 2 * (radius / 2);
 	const float radius_squared = radius * radius;
-	vec3_t bolt_org;
+	vec3_t bolt_org = { 0 };
 
 	AddSoundEvent(NPCS.NPC, NPCS.NPC->r.currentOrigin, 1024, AEL_DANGER, qfalse, qtrue);
 
@@ -1192,15 +1196,17 @@ static void Rancor_Smash(void)
 #ifdef SP_GAME
 static void Rancor_Bite(void)
 {
-	gentity_t* radius_ents[128];
+	gentity_t* radius_ents[128] = { NULL };
 	const float radius = 100;
 	const float radius_squared = radius * radius;
-	vec3_t bolt_org;
+	vec3_t bolt_org = { 0 };
 
 	const int num_ents = NPC_GetEntsNearBolt(radius_ents, radius, NPCS.NPC->gutBolt, bolt_org);
 
 	for (int i = 0; i < num_ents; i++)
 	{
+		if (!radius_ents[i])
+			continue;
 		if (!radius_ents[i]->inuse)
 		{
 			continue;
@@ -1280,10 +1286,10 @@ static void Rancor_Bite(void)
 #else // MP keeps its own version of this function
 static void Rancor_Bite(void)
 {
-	int radius_ent_nums[128];
+	int radius_ent_nums[128] = { 0 };
 	const float radius = 100;
 	const float radius_squared = radius * radius;
-	vec3_t bolt_org;
+	vec3_t bolt_org = { 0 };
 
 	const int num_ents = NPC_GetEntsNearBolt(radius_ent_nums, radius, NPCS.NPC->client->renderInfo.crotchBolt, bolt_org);
 	//was gutBolt?
@@ -1419,7 +1425,7 @@ void Rancor_Attack(const float distance, const qboolean do_charge, const qboolea
 				// Breath attack
 				int breath_anim = BOTH_ATTACK4;
 				const gentity_t* check_ent = NULL;
-				vec3_t center;
+				vec3_t center = { 0 };
 
 				if (NPCS.NPC->enemy && NPCS.NPC->enemy->inuse)
 				{
@@ -1479,7 +1485,7 @@ void Rancor_Attack(const float distance, const qboolean do_charge, const qboolea
 				NPC_SetAnim(NPCS.NPC, SETANIM_BOTH, BOTH_MELEE2, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 				TIMER_Set(NPCS.NPC, "attack_dmg", 1250);
 
-				vec3_t fwd;
+				vec3_t fwd = { 0 };
 				const vec3_t yaw_ang = { 0, NPCS.NPC->client->ps.viewangles[YAW], 0 };
 				AngleVectors(yaw_ang, fwd, NULL, NULL);
 
@@ -1512,7 +1518,7 @@ void Rancor_Attack(const float distance, const qboolean do_charge, const qboolea
 		{
 			int grabAnim = BOTH_ATTACK2;
 			const gentity_t* check_ent = NULL;
-			vec3_t center;
+			vec3_t center = { 0 };
 
 			if ((aim_at_blocked_entity == qfalse || !NPCS.NPCInfo->blockedEntity)
 				&& NPCS.NPC->enemy && NPCS.NPC->enemy->inuse)
@@ -1852,7 +1858,7 @@ void Rancor_Attack(const float distance, const qboolean do_charge, const qboolea
 				// Breath attack (SP): aimed up at a high enemy (ATTACK6 / 7); the damage is Rancor_FireBreathAttack
 				int breathAnim = BOTH_ATTACK4;
 				const gentity_t* check_ent = NULL;
-				vec3_t center;
+				vec3_t center = { 0 };
 
 				if (NPCS.NPC->enemy && NPCS.NPC->enemy->inuse)
 				{
@@ -1900,7 +1906,7 @@ void Rancor_Attack(const float distance, const qboolean do_charge, const qboolea
 			else
 			{
 				//charge
-				vec3_t fwd, yaw_ang;
+				vec3_t fwd = { 0 }, yaw_ang = { 0 };
 				VectorSet(yaw_ang, 0, NPCS.NPC->client->ps.viewangles[YAW], 0);
 				AngleVectors(yaw_ang, fwd, NULL, NULL);
 				VectorScale(fwd, distance * 1.5f, NPCS.NPC->client->ps.velocity);
@@ -1929,7 +1935,7 @@ void Rancor_Attack(const float distance, const qboolean do_charge, const qboolea
 			//try to grab
 			int grabAnim = BOTH_ATTACK2;
 			const gentity_t* check_ent = NULL;
-			vec3_t center;
+			vec3_t center = { 0 };
 			if ((!aim_at_blocked_entity || !NPCS.NPCInfo->blockedEntity) && NPCS.NPC->enemy && NPCS.NPC->enemy->inuse)
 			{
 				check_ent = NPCS.NPC->enemy;
@@ -1987,7 +1993,7 @@ void Rancor_Attack(const float distance, const qboolean do_charge, const qboolea
 
 	if (TIMER_Done2(NPCS.NPC, "attack_dmg", qtrue))
 	{
-		vec3_t shake_pos;
+		vec3_t shake_pos = { 0 };
 		switch (NPCS.NPC->client->ps.legsAnim)
 		{
 		case BOTH_MELEE1:
@@ -2298,7 +2304,7 @@ static void Rancor_Combat(void)
 	if (advance)
 	{
 		//have to get closer
-		vec3_t yawOnlyAngles;
+		vec3_t yawOnlyAngles = { 0 };
 		VectorSet(yawOnlyAngles, 0, NPCS.NPC->r.currentAngles[YAW], 0);
 		if (NPCS.NPC->spawnflags & SPF_RANCOR_MUTANT && !NPCS.NPC->enemy->client)
 		{
@@ -2483,7 +2489,7 @@ static void Rancor_CheckDropVictim(void)
 	const vec3_t end = {
 		NPCS.NPC->activator->SHR_currentOrigin[0], NPCS.NPC->activator->SHR_currentOrigin[1], NPCS.NPC->activator->SHR_absmax[2] - 1
 	};
-	trace_t trace;
+	trace_t trace = { qfalse };
 	SHR_Trace(&trace, start, mins, maxs, end, NPCS.NPC->activator->s.number, NPCS.NPC->activator->clipmask);
 	if (!trace.allsolid && !trace.startsolid && trace.fraction >= 1.0f)
 	{
@@ -2494,9 +2500,9 @@ static void Rancor_CheckDropVictim(void)
 #ifdef SP_GAME
 static qboolean Rancor_AttackBBrush(void)
 {
-	trace_t trace;
-	vec3_t center;
-	vec3_t dir2_brush;
+	trace_t trace = { qfalse };
+	vec3_t center = { 0 };
+	vec3_t dir2_brush = { 0 };
 	const float check_dist = 64.0f; //32.0f;
 
 	if (VectorCompare(NPCS.NPCInfo->blockedEntity->s.origin, vec3_origin))
@@ -2527,7 +2533,7 @@ static qboolean Rancor_AttackBBrush(void)
 	}
 	else
 	{
-		vec3_t end;
+		vec3_t end = { 0 };
 		VectorMA(NPCS.NPC->SHR_currentOrigin, check_dist, dir2_brush, end);
 		SHR_Trace(&trace, NPCS.NPC->SHR_currentOrigin, NPCS.NPC->SHR_mins, NPCS.NPC->SHR_maxs, end, NPCS.NPC->s.number, NPCS.NPC->clipmask);
 		if (trace.allsolid || trace.startsolid)
@@ -2579,8 +2585,8 @@ static qboolean Rancor_AttackBBrush(void)
 #else // MP keeps its own version of this function
 static qboolean Rancor_AttackBBrush(void)
 {
-	trace_t trace;
-	vec3_t center, dir2Brush;
+	trace_t trace = { 0 };
+	vec3_t center = { 0 }, dir2Brush = { 0 };
 	gentity_t* brush = NPCS.NPCInfo->blockedEntity;
 	const float checkDist = 64.0f;
 
@@ -2609,7 +2615,7 @@ static qboolean Rancor_AttackBBrush(void)
 	}
 	else
 	{
-		vec3_t end;
+		vec3_t end = { 0 };
 		VectorMA(NPCS.NPC->r.currentOrigin, checkDist, dir2Brush, end);
 		trap->Trace(&trace, NPCS.NPC->r.currentOrigin, NPCS.NPC->r.mins, NPCS.NPC->r.maxs, end, NPCS.NPC->s.number,
 			NPCS.NPC->clipmask, qfalse, 0, 0);
@@ -2654,9 +2660,9 @@ static qboolean Rancor_AttackBBrush(void)
 static void Rancor_FireBreathAttack(void)
 {
 	const int damage = Q_irand(10, 15);
-	trace_t tr;
-	mdxaBone_t boltMatrix;
-	vec3_t start, end, dir;
+	trace_t tr = { qfalse };
+	mdxaBone_t boltMatrix = { 0 };
+	vec3_t start = { 0 }, end = { 0 }, dir = { 0 };
 	const vec3_t trace_maxs = { 4, 4, 4 };
 	const vec3_t trace_mins = { -4, -4, -4 };
 	const vec3_t ranc_angles = { 0, NPCS.NPC->client->ps.viewangles[YAW], 0 };
@@ -2688,9 +2694,9 @@ static void Rancor_FireBreathAttack(void)
 static void Rancor_FireBreathAttack(void)
 {
 	const int damage = Q_irand(10, 15);
-	trace_t tr;
-	mdxaBone_t boltMatrix;
-	vec3_t start, end, dir;
+	trace_t tr = { 0 };
+	mdxaBone_t boltMatrix = { 0 };
+	vec3_t start = { 0 }, end = { 0 }, dir = { 0 };
 	const vec3_t traceMaxs = { 4, 4, 4 };
 	const vec3_t traceMins = { -4, -4, -4 };
 	const vec3_t rancAngles = { 0, NPCS.NPC->client->ps.viewangles[YAW], 0 };

@@ -228,7 +228,7 @@ void CG_InitSiegeMode(void)
 	static char buf[1024];
 	static char b[256];
 
-	char levelname[MAX_QPATH];
+	char levelname[MAX_QPATH] = { 0 };
 	fileHandle_t f = 0;
 
 	// SJE (2026-10-16): siege missions in Team FFA (the server's g_siegeMissions) - the mission only
@@ -519,7 +519,7 @@ failure:
 
 static char QINLINE* CG_SiegeObjectiveBuffer(const int team, const int objective)
 {
-	char teamstr[1024];
+	char teamstr[1024] = { 0 };
 
 	if (team == SIEGETEAM_TEAM1)
 	{
@@ -589,7 +589,7 @@ void CG_ParseSiegeObjectiveStatus(const char* str)
 			if (s && s[0])
 			{
 				//now set the description and graphic cvars to by read by the menu
-				char buffer[8192];
+				char buffer[8192] = { 0 };
 
 				cvarName = va("team%i_objective%i_longdesc", team, objectiveNum);
 				if (BG_SiegeGetPairedValue(s, "objdesc", buffer))
@@ -664,7 +664,7 @@ void CG_ParseSiegeObjectiveStatus(const char* str)
 
 void CG_SiegeRoundOver(centity_t* ent, const int won)
 {
-	char teamstr[64];
+	char teamstr[64] = { 0 };
 	const playerState_t* ps = NULL;
 
 	if (!siege_valid)
@@ -750,7 +750,7 @@ void CG_SiegeRoundOver(centity_t* ent, const int won)
 
 static void CG_SiegeGetObjectiveDescription(const int team, const int objective, char* buffer)
 {
-	char teamstr[1024];
+	char teamstr[1024] = { 0 };
 
 	buffer[0] = 0; //set to 0 ahead of time in case we fail to find the objective group/name
 
@@ -765,7 +765,7 @@ static void CG_SiegeGetObjectiveDescription(const int team, const int objective,
 
 	if (BG_SiegeGetValueGroup(siege_info, teamstr, cgParseObjectives))
 	{
-		char objectiveStr[8192];
+		char objectiveStr[8192] = { 0 };
 		//found the team group
 		if (BG_SiegeGetValueGroup(cgParseObjectives, va("Objective%i", objective), objectiveStr))
 		{
@@ -778,7 +778,7 @@ static void CG_SiegeGetObjectiveDescription(const int team, const int objective,
 
 static int CG_SiegeGetObjectiveFinal(const int team, const int objective)
 {
-	char teamstr[1024];
+	char teamstr[1024] = { 0 };
 
 	if (team == SIEGETEAM_TEAM1)
 	{
@@ -791,11 +791,11 @@ static int CG_SiegeGetObjectiveFinal(const int team, const int objective)
 
 	if (BG_SiegeGetValueGroup(siege_info, teamstr, cgParseObjectives))
 	{
-		char objectiveStr[8192];
+		char objectiveStr[8192] = { 0 };
 		//found the team group
 		if (BG_SiegeGetValueGroup(cgParseObjectives, va("Objective%i", objective), objectiveStr))
 		{
-			char finalStr[64];
+			char finalStr[64] = { 0 };
 			//found the objective group
 			//Parse the name right into the buffer.
 			BG_SiegeGetPairedValue(objectiveStr, "final", finalStr);
@@ -807,7 +807,7 @@ static int CG_SiegeGetObjectiveFinal(const int team, const int objective)
 
 void CG_SiegeBriefingDisplay(const int team, const int dontshow)
 {
-	char teamstr[64];
+	char teamstr[64] = { 0 };
 	char properValue[1024] = { 0 };
 	int i = 1;
 	int useTeam = team;
@@ -841,7 +841,7 @@ void CG_SiegeBriefingDisplay(const int team, const int dontshow)
 
 	while (i < 16)
 	{
-		char objectiveDesc[1024];
+		char objectiveDesc[1024] = { 0 };
 		//do up to 16 objectives I suppose
 		//Get the value for this objective on this team
 		//Now set the cvar for the menu to display.
@@ -956,7 +956,7 @@ void CG_SiegeBriefingDisplay(const int team, const int dontshow)
 
 	if (BG_SiegeGetValueGroup(siege_info, teamstr, cgParseObjectives))
 	{
-		char briefing[8192];
+		char briefing[8192] = { 0 };
 		if (BG_SiegeGetPairedValue(cgParseObjectives, "briefing", briefing))
 		{
 			CG_DrawSiegeMessage(briefing, 1);
@@ -980,7 +980,7 @@ void CG_SiegeObjectiveCompleted(centity_t* ent, const int won, const int objecti
 	static char soundstr[1024];
 	static char appstring[1024];
 
-	char teamstr[64];
+	char teamstr[64] = { 0 };
 	const playerState_t* ps = NULL;
 
 	/* Validate siege data */
@@ -1238,7 +1238,7 @@ void CG_AdjustEyePos(const char* modelName)
 
 	if (true_view_valid)
 	{
-		char eyepos[MAX_QPATH];
+		char eyepos[MAX_QPATH] = { 0 };
 		if (BG_SiegeGetPairedValue(true_view_info, (char*)modelName, eyepos))
 		{
 			trap->Cvar_Set("cg_trueeyeposition", eyepos);
@@ -1281,7 +1281,7 @@ void CG_TrueViewCheckModel(const char* modelName)
 void CG_TrueViewSave_f(void)
 {
 	static char new_info[MAX_TRUEVIEW_INFO_SIZE];
-	char value[32];
+	char value[32] = { 0 };
 	int n = 0;
 	qboolean done = qfalse;
 	fileHandle_t f = 0;
@@ -1307,7 +1307,7 @@ void CG_TrueViewSave_f(void)
 	{
 		const char* eol = strchr(p, '\n');
 		const int line_len = eol ? (int)(eol - p) + 1 : (int)strlen(p);
-		char key[MAX_QPATH];
+		char key[MAX_QPATH] = { 0 };
 		int k = 0;
 		const char* q = p;
 
@@ -1367,7 +1367,7 @@ static void CG_SiegeMissionCacheObjectives(void)
 {
 	static char teamGroup[MAX_SIEGE_INFO_SIZE];
 	static char objGroup[8192];
-	char name[128];
+	char name[128] = { 0 };
 
 	for (int team = SIEGETEAM_TEAM1; team <= SIEGETEAM_TEAM2; team++)
 	{

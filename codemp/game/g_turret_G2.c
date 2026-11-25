@@ -258,7 +258,7 @@ static void TurretG2Pain(gentity_t* self, gentity_t* attacker, int damage)
 static void turretG2_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, int damage, int meansOfDeath)
 //------------------------------------------------------------------------------------------------------------
 {
-	vec3_t forward = { 0, 0, -1 }, pos;
+	vec3_t forward = { 0, 0, -1 }, pos = { 0 };
 
 	// Turn off the thinking of the base & use it's targets
 	//self->think = NULL;
@@ -369,7 +369,7 @@ extern void WP_FireTurboLaserMissile(gentity_t* ent, vec3_t start, vec3_t dir);
 static void turretG2_fire(gentity_t* ent, vec3_t start, vec3_t dir)
 //----------------------------------------------------------------
 {
-	vec3_t org, ang;
+	vec3_t org = { 0 }, ang = { 0 };
 
 	if (trap->PointContents(start, ent->s.number) & MASK_SHOT)
 	{
@@ -468,8 +468,8 @@ static void turretG2_head_think(gentity_t* self)
 		&& self->setTime < level.time
 		&& self->attackDebounceTime < level.time)
 	{
-		vec3_t fwd, org;
-		mdxaBone_t boltMatrix;
+		vec3_t fwd = { 0 }, org = { 0 };
+		mdxaBone_t boltMatrix = { 0 };
 
 		// set up our next fire time
 		self->setTime = level.time + self->wait;
@@ -510,7 +510,7 @@ static void turretG2_head_think(gentity_t* self)
 static void turretG2_aim(gentity_t* self)
 //-----------------------------------------------------
 {
-	vec3_t desiredAngles;
+	vec3_t desiredAngles = { 0 };
 	float diffYaw = 0.0f, diffPitch = 0.0f;
 	const float maxYawSpeed = self->spawnflags & SPF_TURRETG2_TURBO ? 30.0f : 14.0f;
 	const float maxPitchSpeed = self->spawnflags & SPF_TURRETG2_TURBO ? 15.0f : 3.0f;
@@ -522,10 +522,10 @@ static void turretG2_aim(gentity_t* self)
 
 	if (self->enemy)
 	{
-		vec3_t org2;
-		vec3_t org;
-		vec3_t enemyDir;
-		mdxaBone_t boltMatrix;
+		vec3_t org2 = { 0 };
+		vec3_t org = { 0 };
+		vec3_t enemyDir = { 0 };
+		mdxaBone_t boltMatrix = { 0 };
 		// ...then we'll calculate what new aim adjustments we should attempt to make this frame
 		// Aim at enemy
 		if (self->enemy->client)
@@ -548,7 +548,7 @@ static void turretG2_aim(gentity_t* self)
 		if (self->spawnflags & SPF_TURRETG2_LEAD_ENEMY)
 		{
 			//we want to lead them a bit
-			vec3_t diff, velocity;
+			vec3_t diff = { 0 }, velocity = { 0 };
 			VectorSubtract(org, self->s.origin, diff);
 			const float dist = VectorNormalize(diff);
 			if (self->enemy->client)
@@ -589,7 +589,7 @@ static void turretG2_aim(gentity_t* self)
 
 	if (diffYaw)
 	{
-		vec3_t setAngle;
+		vec3_t setAngle = { 0 };
 		// cap max speed....
 		if (fabs(diffYaw) > maxYawSpeed)
 		{
@@ -708,7 +708,7 @@ static qboolean turretG2_find_enemies(gentity_t* self)
 {
 	qboolean found = qfalse;
 	float bestDist = self->radius * self->radius;
-	vec3_t org, org2;
+	vec3_t org = { 0 }, org2 = { 0 };
 	qboolean foundClient = qfalse;
 
 	// static: too big for the stack, and BG_Alloc is never freed: asked for on every call, this ran the pool dry
@@ -830,7 +830,7 @@ static qboolean turretG2_find_enemies(gentity_t* self)
 		if (!tr->allsolid && !tr->startsolid &&
 			(tr->fraction == 1.0f || tr->entityNum == target->s.number))
 		{
-			vec3_t enemyDir;
+			vec3_t enemyDir = { 0 };
 			// Only acquire if have a clear shot, Is it in range and closer than our best?
 			VectorSubtract(target->r.currentOrigin, self->r.currentOrigin, enemyDir);
 			const float enemyDist = VectorLengthSquared(enemyDir);
@@ -961,7 +961,7 @@ static void turretG2_base_think(gentity_t* self)
 		}
 		else
 		{
-			vec3_t enemyDir;
+			vec3_t enemyDir = { 0 };
 			//FIXME: remain single-minded or look for a new enemy every now and then?
 			// enemy is alive
 			VectorSubtract(self->enemy->r.currentOrigin, self->r.currentOrigin, enemyDir);
@@ -972,10 +972,10 @@ static void turretG2_base_think(gentity_t* self)
 				// was in valid radius
 				if (trap->InPVS(self->r.currentOrigin, self->enemy->r.currentOrigin))
 				{
-					vec3_t org2;
-					vec3_t org;
+					vec3_t org2 = { 0 };
+					vec3_t org = { 0 };
 					// Every now and again, check to see if we can even trace to the enemy
-					trace_t tr;
+					trace_t tr = { 0 };
 
 					if (self->enemy->client)
 					{
@@ -1152,7 +1152,7 @@ void SP_misc_turretG2(gentity_t* base)
 //-----------------------------------------------------
 void finish_spawning_turretG2(gentity_t* base)
 {
-	vec3_t fwd;
+	vec3_t fwd = { 0 };
 	int t = 0;
 
 	if (base->spawnflags & 2)

@@ -122,7 +122,7 @@ static void misc_lightstyle_set(const gentity_t* ent)
 		//turn off
 		if (mLightOffStyle) //i have a light style i'd like to use when off
 		{
-			char lightstyle[32];
+			char lightstyle[32] = {};
 			gi.GetConfigstring(CS_LIGHT_STYLES + mLightOffStyle * 3 + 0, lightstyle, 32);
 			gi.SetConfigstring(CS_LIGHT_STYLES + mLightStyle * 3 + 0, lightstyle);
 
@@ -144,7 +144,7 @@ static void misc_lightstyle_set(const gentity_t* ent)
 		//Turn myself on now
 		if (mLightSwitchStyle) //i have a light style i'd like to use when on
 		{
-			char lightstyle[32];
+			char lightstyle[32] = {};
 			gi.GetConfigstring(CS_LIGHT_STYLES + mLightSwitchStyle * 3 + 0, lightstyle, 32);
 			gi.SetConfigstring(CS_LIGHT_STYLES + mLightStyle * 3 + 0, lightstyle);
 
@@ -250,7 +250,7 @@ void TeleportPlayer(gentity_t* player, vec3_t origin, vec3_t angles)
 void TeleportMover(gentity_t* mover, vec3_t origin, vec3_t diffAngles, const qboolean snapAngle)
 {
 	//FIXME: need an effect
-	vec3_t newAngle;
+	vec3_t newAngle = {};
 	float speed = 0.0f;
 
 	// unlink to make sure it can't possibly interfere with G_KillBox
@@ -264,7 +264,7 @@ void TeleportMover(gentity_t* mover, vec3_t origin, vec3_t diffAngles, const qbo
 	if (snapAngle)
 	{
 		//not a diffAngle, actually an absolute angle
-		vec3_t dir;
+		vec3_t dir = {};
 
 		VectorCopy(diffAngles, newAngle);
 		AngleVectors(newAngle, dir, nullptr, nullptr);
@@ -278,7 +278,7 @@ void TeleportMover(gentity_t* mover, vec3_t origin, vec3_t diffAngles, const qbo
 	}
 	else
 	{
-		vec3_t oldAngle;
+		vec3_t oldAngle = {};
 		speed = VectorNormalize(mover->s.pos.trDelta);
 
 		vectoangles(mover->s.pos.trDelta, oldAngle);
@@ -452,7 +452,7 @@ void SP_misc_model_static(gentity_t* ent)
 
 static void setCamera(gentity_t* ent)
 {
-	vec3_t dir;
+	vec3_t dir = {};
 	const gentity_t* target = nullptr;
 
 	// frame holds the rotate speed
@@ -617,7 +617,7 @@ void G_SubBSPSpawnEntitiesFromString(const char* entityString, vec3_t posOffset,
 */
 void SP_misc_bsp(gentity_t* ent)
 {
-	char temp[MAX_QPATH];
+	char temp[MAX_QPATH] = {};
 	char* out = nullptr;
 	float newAngle = 0.0f;
 	int tempint = 0;
@@ -739,7 +739,7 @@ void G_PortalifyEntities(gentity_t* ent)
 // moves the portal camera by (view - orient) * scale
 static void G_AppendSkyboxOrient(const vec3_t pos, const float scale)
 {
-	char cs[MAX_STRING_CHARS];
+	char cs[MAX_STRING_CHARS] = {};
 
 	gi.GetConfigstring(CS_SKYBOXORG, cs, sizeof cs);
 	if (!cs[0] || strstr(cs, " ori ") || scale == 0.0f)
@@ -758,7 +758,7 @@ to the regular view position.
 void SP_misc_skyportal_orient(gentity_t* ent)
 {
 	float scale = 0.0f;
-	char cs[MAX_STRING_CHARS];
+	char cs[MAX_STRING_CHARS] = {};
 
 	G_SpawnFloat("modelscale", "0", &scale);
 	gi.GetConfigstring(CS_SKYBOXORG, cs, sizeof cs);
@@ -782,7 +782,7 @@ Use a fog brush instead.
 */
 void SP_misc_skyportal(gentity_t* ent)
 {
-	vec3_t fogv; //----(SA)
+	vec3_t fogv = {}; //----(SA)
 	int fogn = 0; //----(SA)
 	int fogf = 0; //----(SA)
 	int isfog = 0; // (SA)
@@ -935,7 +935,7 @@ void camera_aim(gentity_t* self)
 		const gentity_t* targ = G_Find(nullptr, FOFS(targetname), self->target);
 		if (targ)
 		{
-			vec3_t angles, dir;
+			vec3_t angles = {}, dir = {};
 			VectorSubtract(targ->currentOrigin, self->currentOrigin, dir);
 			vectoangles(dir, angles);
 			//FIXME: if a G2 model, do a bone override..???
@@ -1728,7 +1728,7 @@ void touch_ammo_crystal_tigger(gentity_t* self, gentity_t* other, trace_t* trace
 //------------------------------------------------------------
 void spawn_ammo_crystal_trigger(gentity_t* ent)
 {
-	vec3_t mins, maxs;
+	vec3_t mins = {}, maxs = {};
 
 	// Set the base bounds
 	VectorCopy(ent->s.origin, mins);
@@ -1914,7 +1914,7 @@ void misc_trip_mine_activate(gentity_t* self, gentity_t* other, gentity_t* activ
 
 void SP_misc_trip_mine(gentity_t* self)
 {
-	vec3_t forward, end;
+	vec3_t forward = {}, end = {};
 	trace_t trace;
 
 	AngleVectors(self->s.angles, forward, nullptr, nullptr);
@@ -2018,7 +2018,7 @@ void SP_misc_maglock(gentity_t* self)
 void maglock_link(gentity_t* self)
 {
 	//find what we're supposed to be attached to
-	vec3_t forward, start, end;
+	vec3_t forward = {}, start = {}, end = {};
 	trace_t trace;
 
 	AngleVectors(self->s.angles, forward, nullptr, nullptr);
@@ -2703,7 +2703,7 @@ welder_think
 void welder_think(gentity_t* self)
 {
 	self->nextthink = level.time + 200;
-	mdxaBone_t boltMatrix;
+	mdxaBone_t boltMatrix = {};
 
 	if (self->svFlags & SVF_INACTIVE)
 	{
@@ -2716,8 +2716,8 @@ void welder_think(gentity_t* self)
 
 	if (newBolt != -1)
 	{
-		vec3_t dir;
-		vec3_t org;
+		vec3_t dir = {};
+		vec3_t org = {};
 		G_Sound(self, self->noise_index);
 		//	G_PlayEffect( "blueWeldSparks", self->playerModel, newBolt, self->s.number);
 		// The welder gets rotated around a lot, and since the origin is offset by 352 I have to make this super expensive call to position the hurt...
@@ -2916,7 +2916,7 @@ Basic exploding oxygen tank
 
 void gas_random_jet(gentity_t* self)
 {
-	vec3_t pt;
+	vec3_t pt = {};
 
 	VectorCopy(self->currentOrigin, pt);
 	pt[2] += 50;
@@ -2930,7 +2930,7 @@ void gas_random_jet(gentity_t* self)
 void GasBurst(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, const vec3_t point, int damage, int mod,
 	int hit_loc)
 {
-	vec3_t pt;
+	vec3_t pt = {};
 
 	VectorCopy(self->currentOrigin, pt);
 	pt[2] += 46;
@@ -2987,7 +2987,7 @@ void SP_misc_gas_tank(gentity_t* ent)
 void CrystalCratePain(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, const vec3_t point, int damage,
 	int mod, int hit_loc)
 {
-	vec3_t pt;
+	vec3_t pt = {};
 
 	VectorCopy(self->currentOrigin, pt);
 	pt[2] += 36;
@@ -3097,7 +3097,7 @@ void misc_atst_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, i
 	self->maxs[2] = 48;
 
 	//FIXME: match to slope
-	vec3_t effectPos;
+	vec3_t effectPos = {};
 	VectorCopy(self->currentOrigin, effectPos);
 	effectPos[2] -= 15;
 	G_PlayEffect("explosions/droidexplosion1", effectPos);
@@ -3292,7 +3292,7 @@ void SP_misc_weather_zone(gentity_t* ent)
 {
 	gi.SetBrushModel(ent, ent->model);
 
-	char temp[256];
+	char temp[256] = {};
 	sprintf(temp, "zone ( %f %f %f ) ( %f %f %f )",
 		ent->mins[0], ent->mins[1], ent->mins[2],
 		ent->maxs[0], ent->maxs[1], ent->maxs[2]);

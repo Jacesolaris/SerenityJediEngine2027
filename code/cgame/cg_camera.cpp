@@ -639,7 +639,7 @@ void CGCam_Distance(const float distance, const float initLerp)
 
 static void CGCam_FollowUpdate()
 {
-	vec3_t center, dir, cameraAngles, vec; //No more than 16 subjects in a cameraGroup
+	vec3_t center = {}, dir = {}, cameraAngles = {}, vec = {}; //No more than 16 subjects in a cameraGroup
 	int i = 0;
 
 	if (client_camera.cameraGroup[0])
@@ -669,7 +669,7 @@ static void CGCam_FollowUpdate()
 					client_camera.cameraGroupTag);
 				if (newBolt != -1)
 				{
-					mdxaBone_t boltMatrix;
+					mdxaBone_t boltMatrix = {};
 					const vec3_t fromAngles = { 0, from->client->ps.legsYaw, 0 };
 
 					gi.G2API_GetBoltMatrix(fromCent->gent->ghoul2, from->playerModel, newBolt, &boltMatrix, fromAngles,
@@ -807,7 +807,7 @@ static void CGCam_TrackEntUpdate()
 
 	if (client_camera.trackEntNum >= 0 && client_camera.trackEntNum < ENTITYNUM_WORLD)
 	{
-		vec3_t vec;
+		vec3_t vec = {};
 		//We're already heading to a path_corner
 		trackEnt = &g_entities[client_camera.trackEntNum];
 		VectorSubtract(trackEnt->currentOrigin, client_camera.origin, vec);
@@ -870,7 +870,7 @@ static void CGCam_TrackEntUpdate()
 
 static void CGCam_TrackUpdate()
 {
-	vec3_t goalVec, curVec, trackPos;
+	vec3_t goalVec = {}, curVec = {}, trackPos = {};
 	//qboolean	slowDown = qfalse;
 
 	if (client_camera.nextTrackEntUpdateTime <= cg.time)
@@ -891,7 +891,7 @@ static void CGCam_TrackUpdate()
 
 	if (client_camera.distance && client_camera.info_state & CAMERA_FOLLOWING)
 	{
-		vec3_t vec;
+		vec3_t vec = {};
 
 		if (!client_camera.distanceInitLerp)
 		{
@@ -1457,7 +1457,7 @@ static void CGCam_NotetrackProcessFov(const char* addlArg)
 	}
 	if (isdigit(addlArg[a]))
 	{
-		char t[64];
+		char t[64] = {};
 		// "fov <new fov>"
 		int d = 0;
 		constexpr int tsize = 64;
@@ -1499,7 +1499,7 @@ static void CGCam_NotetrackProcessFovZoom(const char* addlArg)
 	//
 	// "fovzoom <begin fov> <end fov> <time>"
 	//
-	char t[64];
+	char t[64] = {};
 	int d = 0;
 	constexpr int tsize = 64;
 
@@ -1601,7 +1601,7 @@ static void CGCam_NotetrackProcessFovAccel(const char* addlArg)
 	// "fovaccel <begin fov> <fov delta> <fov delta2> <time>"
 	//
 	// where 'begin fov' is initial position, 'fov delta' is velocity, and 'fov delta2' is acceleration.
-	char t[64];
+	char t[64] = {};
 	int d = 0;
 	constexpr int tsize = 64;
 
@@ -1872,7 +1872,7 @@ static void CGCam_Roff()
 
 		// The ID is one higher than the array index
 		const roff_list_t* roff = &roffs[roff_id - 1];
-		vec3_t org, ang;
+		vec3_t org = {}, ang = {};
 
 		if (roff->type == 2)
 		{

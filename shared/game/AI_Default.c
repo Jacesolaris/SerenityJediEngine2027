@@ -45,7 +45,7 @@ extern void jedi_set_enemy_info(vec3_t enemy_dest, vec3_t enemy_dir, float* enem
 #ifdef SP_GAME // SP only: the MP game has no version of this
 void npc_check_speak(gentity_t* speaker_npc)
 {
-	vec3_t enemy_dir, enemy_movedir, enemy_dest;
+	vec3_t enemy_dir = { 0 }, enemy_movedir = { 0 }, enemy_dest = { 0 };
 	float enemy_dist = 0.0f, enemy_movespeed = 0.0f;
 
 	//See where enemy will be 300 ms from now
@@ -479,7 +479,7 @@ void NPC_BSHuntAndKill(void)
 			cur_anim != BOTH_MELEE_L
 			&& cur_anim != BOTH_MELEE_R && cur_anim != BOTH_MELEEUP && cur_anim != BOTH_WOOKIE_SLAP)
 		{
-			vec3_t vec;
+			vec3_t vec = { 0 };
 			//Don't move toward enemy if we're in a full-body attack anim
 			//FIXME, use ideal_distance to determin if we need to close distance
 			VectorSubtract(NPCS.NPC->enemy->SHR_currentOrigin, NPCS.NPC->SHR_currentOrigin, vec);
@@ -606,7 +606,7 @@ void NPC_BSRunAndShoot(void)
 		if (!(NPCS.ucmd.buttons & BUTTON_ATTACK) && NPCS.ucmd.upmove >= 0 && NPCS.NPC->cantHitEnemyCounter > monitor)
 		{
 			//not crouching and not firing
-			vec3_t vec;
+			vec3_t vec = { 0 };
 
 			VectorSubtract(NPCS.NPC->enemy->SHR_currentOrigin, NPCS.NPC->SHR_currentOrigin, vec);
 			vec[2] = 0;
@@ -676,7 +676,7 @@ static void NPC_BSFace(void)
 void NPC_BSPointShoot(const qboolean shoot)
 {
 	//FIXME: doesn't check for clear shot...
-	vec3_t muzzle, dir, angles, org;
+	vec3_t muzzle = { 0 }, dir = { 0 }, angles = { 0 }, org = { 0 };
 
 	if (!NPCS.NPC->enemy || !NPCS.NPC->enemy->inuse || NPCS.NPC->enemy->NPC && NPCS.NPC->enemy->health <= 0)
 	{
@@ -939,7 +939,7 @@ void NPC_BSDefault(void)
 			}
 			else if (NPCS.NPCInfo->goalEntity)   // NULL‑check added here
 			{
-				vec3_t dir, angles;
+				vec3_t dir = { 0 }, angles = { 0 };
 
 				NPCS.NPCInfo->combatMove = qfalse;
 

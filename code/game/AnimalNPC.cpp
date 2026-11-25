@@ -740,9 +740,9 @@ static void AnimateRiders(Vehicle_t* p_veh)
 #ifndef _JK2MP
 				if (p_veh->m_pPilot->enemy)
 				{
-					vec3_t toEnemy;
+					vec3_t toEnemy = {};
 					//float	toEnemyDistance;
-					vec3_t actorRight;
+					vec3_t actorRight = {};
 
 					VectorSubtract(p_veh->m_pPilot->currentOrigin, p_veh->m_pPilot->enemy->currentOrigin, toEnemy);
 					/*toEnemyDistance = */

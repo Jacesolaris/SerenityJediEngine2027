@@ -241,7 +241,7 @@ static qboolean Pzk_CanPlay(const gentity_t* ent)
 // Turns to face the other one (yaw only), before sitting down: the meditate pose then holds the view
 static void Pzk_Face(gentity_t* ent, const gentity_t* other)
 {
-	vec3_t dir, angles;
+	vec3_t dir = {}, angles = {};
 
 	if (!other)
 	{
@@ -355,7 +355,7 @@ static void Pzk_TellScripts(const int winner)
 static void Pzk_RunEndScript()
 {
 	const int entNum = pzkEndScriptEnt;
-	char script[MAX_QPATH];
+	char script[MAX_QPATH] = {};
 
 	if (entNum < 0 || !pzkEndScript[0])
 	{
@@ -582,7 +582,7 @@ void G_Pazaak_StartScripted(const char* who)
 // A script name as listed: no "scripts/" (or "scriptsjk2/"), no extension, '/' slashes
 static void Pzk_ScriptName(const char* in, char* out, const int size)
 {
-	char tmp[MAX_QPATH];
+	char tmp[MAX_QPATH] = {};
 	Q_strncpyz(tmp, in, sizeof(tmp));
 	for (char* c = tmp; *c; c++)
 	{
@@ -645,7 +645,7 @@ static void Pzk_LoadChallenges()
 			p++;
 		}
 
-		char map[MAX_QPATH], script[MAX_QPATH], opponent[64];
+		char map[MAX_QPATH] = {}, script[MAX_QPATH] = {}, opponent[64] = {};
 		const char* l = line;
 		Q_strncpyz(map, COM_ParseExt(&l, qfalse), sizeof(map));
 		Q_strncpyz(script, COM_ParseExt(&l, qfalse), sizeof(script));
@@ -712,7 +712,7 @@ static void Pzk_RunHeldScript(const int entNum, const char* script)
 // answered with the signal; else a RunScript, run again after the answer
 static qboolean Pzk_TryChallenge(const gentity_t* ent, const char* script, const qboolean bySignal)
 {
-	char name[MAX_QPATH];
+	char name[MAX_QPATH] = {};
 
 	if (pzkScriptBypass || !ent || !script || !script[0])
 	{
@@ -761,7 +761,7 @@ static qboolean Pzk_TryChallenge(const gentity_t* ent, const char* script, const
 		{
 			return qtrue; // DH: the bar asks pazaak / buy items / leave, like talking to anyone (g_shop 0: yes / no)
 		}
-		char who[64];
+		char who[64] = {};
 		Q_strncpyz(who, npc && npc->fullName && npc->fullName[0] ? npc->fullName : "this character", sizeof(who));
 		for (char* q = who; *q; q++)
 		{
@@ -836,7 +836,7 @@ static qboolean Pzk_StartBar(gentity_t* player, gentity_t* npc, const int wager)
 // "pazaak_challenge 1/0": the answer to the question (ui_pazaak.cpp)
 static void Pzk_ChallengeAnswer(gentity_t* player, const qboolean yes)
 {
-	char script[MAX_QPATH];
+	char script[MAX_QPATH] = {};
 
 	if (pzkPendingEnt < 0)
 	{
@@ -887,7 +887,7 @@ static void Pzk_ChallengeAnswer(gentity_t* player, const qboolean yes)
 // The entity in the player's crosshair (up to PZK_LOOK_RANGE away)
 static gentity_t* Pzk_LookTarget(const gentity_t* ent)
 {
-	vec3_t start, end, fwd;
+	vec3_t start = {}, end = {}, fwd = {};
 	trace_t tr;
 
 	VectorCopy(ent->client->ps.origin, start);
@@ -1087,7 +1087,7 @@ static const char* Shop_HoldList(const gentity_t* ent)
 	list[0] = 0;
 	for (int i = 0; i < SHOP_NUM_HOLDABLES; i++)
 	{
-		char one[32];
+		char one[32] = {};
 		Com_sprintf(one, sizeof one, "%s%i:%i:%i", i ? "," : "", Shop_HoldPrice(i),
 			ent->client->ps.inventory[shopHoldables[i].inv], shopHoldables[i].max);
 		Q_strcat(list, sizeof list, one);
@@ -1233,7 +1233,7 @@ static void Shop_KeepForNextLevel(const gentity_t* ent)
 	}
 	lastSum = sum;
 
-	char s[MAX_STRING_CHARS];
+	char s[MAX_STRING_CHARS] = {};
 	Com_sprintf(s, sizeof s, "%i %i", cl->ps.persistant[PERS_CREDITS], ent->grenadeKind);
 	for (int i = 0; i < SHOP_OWNED_WORDS; i++)
 	{
@@ -1249,8 +1249,8 @@ static void Shop_KeepForNextLevel(const gentity_t* ent)
 // g_client.cpp Player_RestoreFromPrevLevel: a level change, the shop state of the last level
 void G_Shop_RestoreFromPrevLevel(gentity_t* ent)
 {
-	char s[MAX_STRING_CHARS];
-	int vals[2 + SHOP_OWNED_WORDS + SHOP_MAX_WEAPONS];
+	char s[MAX_STRING_CHARS] = {};
+	int vals[2 + SHOP_OWNED_WORDS + SHOP_MAX_WEAPONS] = {};
 	int n = 0;
 
 	if (!ent || !ent->client)
@@ -1451,8 +1451,8 @@ static void Shop_Send(const gentity_t* ent, const char* what, const char* messag
 {
 	const gclient_t* cl = ent->client;
 	unsigned int equipped[SHOP_OWNED_WORDS] = {};
-	char owned[SHOP_OWNED_WORDS * 8 + 1], equip[SHOP_OWNED_WORDS * 8 + 1];
-	char msg[128];
+	char owned[SHOP_OWNED_WORDS * 8 + 1] = {}, equip[SHOP_OWNED_WORDS * 8 + 1] = {};
+	char msg[128] = {};
 
 	// first: the caller's message is often a va() string, and the va() calls below write over it
 	Q_strncpyz(msg, message ? message : "", sizeof msg);
@@ -1749,7 +1749,7 @@ qboolean G_Shop_TryTalk(gentity_t* player, const gentity_t* npc)
 	{
 		return qfalse;
 	}
-	char who[64];
+	char who[64] = {};
 	Q_strncpyz(who, Pzk_NPCName(npc), sizeof who);
 	for (char* q = who; *q; q++)
 	{
@@ -1772,7 +1772,7 @@ static qboolean Shop_AskBarChallenge(const gentity_t* npc, const int wager)
 	{
 		return qfalse;
 	}
-	char who[64];
+	char who[64] = {};
 	Q_strncpyz(who, npc ? Pzk_NPCName(npc) : "this character", sizeof who);
 	for (char* q = who; *q; q++)
 	{

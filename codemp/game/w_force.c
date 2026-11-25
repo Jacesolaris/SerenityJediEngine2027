@@ -80,8 +80,8 @@ extern void PM_AddFatigue(playerState_t* ps, int fatigue);
 extern void Boba_FlyStart(gentity_t* self);
 extern qboolean in_camera;
 extern qboolean PM_RunningAnim(int anim);
-extern void g_reflect_missile_auto(gentity_t* ent, gentity_t* missile, vec3_t forward);
-extern void g_reflect_missile_bot(gentity_t* ent, gentity_t* missile, vec3_t forward);
+extern void g_reflect_missile_auto(const gentity_t* ent, gentity_t* missile, vec3_t forward);
+extern void g_reflect_missile_bot(const gentity_t* ent, gentity_t* missile, vec3_t forward);
 extern void G_SoundOnEnt(gentity_t* ent, soundChannel_t channel, const char* sound_path);
 extern saberInfo_t* BG_MySaber(int clientNum, int saberNum);
 extern qboolean G_ControlledByPlayer(const gentity_t* self);
@@ -399,9 +399,9 @@ void DetermineDodgeMax(const gentity_t* ent)
 void WP_InitForcePowers(gentity_t* ent)
 {
 	int i = 0, last_fp_known = -1;
-	qboolean warn_client, did_event = qfalse;
+	qboolean warn_client = qfalse, did_event = qfalse;
 
-	char userinfo[MAX_INFO_STRING], forcePowers[FORCEPOWERS_MAX_LEN + 1], readBuf[FORCEPOWERS_MAX_LEN + 1] = { 0 };
+	char userinfo[MAX_INFO_STRING] = { 0 }, forcePowers[FORCEPOWERS_MAX_LEN + 1] = { 0 }, readBuf[FORCEPOWERS_MAX_LEN + 1] = { 0 };
 
 	// if server has no max rank, default to max (50)
 	if (g_maxForceRank.integer <= 0 || g_maxForceRank.integer >= NUM_FORCE_MASTERY_LEVELS)
@@ -1934,7 +1934,7 @@ void ForceTeamHeal(const gentity_t* self)
 				self, ent, FP_TEAM_HEAL) &&
 			trap->InPVS(self->client->ps.origin, ent->client->ps.origin))
 		{
-			vec3_t a;
+			vec3_t a = { 0 };
 			VectorSubtract(self->client->ps.origin, ent->client->ps.origin, a);
 
 			if (VectorLength(a) <= radius)
@@ -2045,7 +2045,7 @@ void ForceTeamForceReplenish(const gentity_t* self)
 			ForcePowerUsableOn(self, ent, FP_TEAM_FORCE) &&
 			trap->InPVS(self->client->ps.origin, ent->client->ps.origin))
 		{
-			vec3_t a;
+			vec3_t a = { 0 };
 			VectorSubtract(self->client->ps.origin, ent->client->ps.origin, a);
 
 			if (VectorLength(a) <= radius)
@@ -2407,7 +2407,7 @@ static void WP_ForceArcRelease(const gentity_t* self)
 static void WP_ForceArcGrab(const gentity_t* self, const gentity_t* main, const forcePowers_t power)
 {
 	static int list[MAX_GENTITIES]; // static: 16KB is too much stack (C6262); the game runs on one thread
-	vec3_t mins = { 0 }, maxs = { 0 }, eye, fwd;
+	vec3_t mins = { 0 }, maxs = { 0 }, eye = { 0 }, fwd = { 0 };
 	int used = 0;
 
 	WP_ForceArcRelease(self);
@@ -2433,8 +2433,8 @@ static void WP_ForceArcGrab(const gentity_t* self, const gentity_t* main, const 
 		{
 			gentity_t* ent = &g_entities[list[e]];
 			qboolean taken = qfalse;
-			vec3_t spot, dir;
-			trace_t tr;
+			vec3_t spot = { 0 }, dir = { 0 };
+			trace_t tr = { 0 };
 
 			if (ent == main || !ent->client || !SJE_ValidEnemy(self, ent, power)
 				|| ent->client->ps.fd.forceGripCripple || ent->client->ps.fd.forceGripBeingGripped > level.time
@@ -2482,7 +2482,7 @@ static void WP_ForceArcGrab(const gentity_t* self, const gentity_t* main, const 
 		forceArcHold[self->s.number][used][2] += FORCE_ARC_LIFT;
 		{
 			// his place around the aim, from the eye
-			vec3_t to, ang;
+			vec3_t to = { 0 }, ang = { 0 };
 			VectorSubtract(forceArcHold[self->s.number][used], eye, to);
 			forceArcDist[self->s.number][used] = Com_Clamp(96.0f, MAX_GRIP_DISTANCE, VectorLength(to));
 			vectoangles(to, ang);
@@ -2525,8 +2525,8 @@ static void WP_ForceArcHold(const gentity_t* self, const forcePowers_t power)
 	for (int k = 0; k < FORCE_ARC_EXTRA; k++)
 	{
 		const int num = forceArcVictim[self->s.number][k] - 1;
-		vec3_t to;
-		trace_t tr;
+		vec3_t to = { 0 };
+		trace_t tr = { 0 };
 
 		if (num < 0)
 		{
@@ -2567,9 +2567,9 @@ static void WP_ForceArcHold(const gentity_t* self, const forcePowers_t power)
 		if (ent->client->ps.forceGripMoveInterval < level.time)
 		{
 			// to his carried spot (only every 300 ms: bandwidth, as the grip's own move)
-			vec3_t vel;
+			vec3_t vel = { 0 };
 			// carried as the main one: his place around the aim follows the player's turn and steps
-			vec3_t ang, dir, eye, goal;
+			vec3_t ang = { 0 }, dir = { 0 }, eye = { 0 }, goal = { 0 };
 			VectorCopy(self->client->ps.origin, eye);
 			eye[2] += self->client->ps.viewheight;
 			VectorCopy(self->client->ps.viewangles, ang);
@@ -2638,9 +2638,9 @@ static qboolean G_GripCorpseClassOk(const gentity_t* ent)
 
 static qboolean ForceGripCorpse(const gentity_t* self, vec3_t from, vec3_t to)
 {
-	trace_t tr;
-	gentity_t* body;
-	int i;
+	trace_t tr = { 0 };
+	gentity_t* body = NULL;
+	int i = 0;
 
 	if (self->s.number >= MAX_CLIENTS || self->r.svFlags & SVF_BOT || self->NPC)
 	{
@@ -2677,10 +2677,10 @@ static qboolean ForceGripCorpse(const gentity_t* self, vec3_t from, vec3_t to)
 // held: the body goes to a spot in front of the gripper (further with the grip level) and floats there
 static void DoGripCorpse(gentity_t* self, gentity_t* body, const forcePowers_t forcePower)
 {
-	vec3_t eye, fwd, goal, vel;
+	vec3_t eye = { 0 }, fwd = { 0 }, goal = { 0 }, vel = { 0 };
 	const int lvl = self->client->ps.fd.forcePowerLevel[FP_GRIP];
 	const float reach = lvl >= FORCE_LEVEL_3 ? 160.0f : lvl == FORCE_LEVEL_2 ? 128.0f : 96.0f;
-	float len;
+	float len = 0;
 
 	if (!G_CorpsePushable(body) || Distance(body->client->ps.origin, self->client->ps.origin) > MAX_GRIP_DISTANCE)
 	{
@@ -2707,8 +2707,8 @@ static void DoGripCorpse(gentity_t* self, gentity_t* body, const forcePowers_t f
 
 void ForceGrip(const gentity_t* self)
 {
-	trace_t tr;
-	vec3_t tfrom, tto = { 0 }, fwd;
+	trace_t tr = { 0 };
+	vec3_t tfrom = { 0 }, tto = { 0 }, fwd = { 0 };
 
 	if (self->health <= 0)
 	{
@@ -2977,8 +2977,8 @@ extern float pm_friction;
 
 static qboolean Dash_PathRefused(const gentity_t* self)
 {
-	vec3_t dir, mins, maxs, wallMins, point, down;
-	trace_t tr;
+	vec3_t dir = { 0 }, mins = { 0 }, maxs = { 0 }, wallMins = { 0 }, point = { 0 }, down = { 0 };
+	trace_t tr = { 0 };
 
 	VectorSet(dir, self->client->ps.velocity[0], self->client->ps.velocity[1], 0);
 	const float speed = VectorNormalize(dir);
@@ -3057,8 +3057,8 @@ void ForceSpeedDash(gentity_t* self)
 	qboolean on_ground = self->client->ps.groundEntityNum != ENTITYNUM_NONE ? qtrue : qfalse;
 	if (!on_ground)
 	{
-		trace_t tr;
-		vec3_t down;
+		trace_t tr = { 0 };
+		vec3_t down = { 0 };
 
 		VectorCopy(self->client->ps.origin, down);
 		down[2] -= AIR_DASH_MIN_HEIGHT;
@@ -3163,7 +3163,7 @@ void ForceSpeedDash(gentity_t* self)
 
 	if (on_ground)
 	{// animate and give the speed boost
-		vec3_t dir;
+		vec3_t dir = { 0 };
 
 		// One boost per dash, as SP. MP thinks once per user command (the client's frame rate), but level.time only
 		// moves every server frame, so CF_DASHING stays set for all the commands of that frame: x4, x16, x64...
@@ -3210,8 +3210,8 @@ void ForceSpeedHop(gentity_t* self)
 	qboolean on_ground = self->client->ps.groundEntityNum != ENTITYNUM_NONE ? qtrue : qfalse;
 	if (!on_ground)
 	{
-		trace_t tr;
-		vec3_t down;
+		trace_t tr = { 0 };
+		vec3_t down = { 0 };
 
 		VectorCopy(self->client->ps.origin, down);
 		down[2] -= AIR_DASH_MIN_HEIGHT;
@@ -3316,7 +3316,7 @@ void ForceSpeedHop(gentity_t* self)
 
 	if (on_ground)
 	{// animate and give the speed boost
-		vec3_t dir;
+		vec3_t dir = { 0 };
 
 		// One boost per dash, as SP. MP thinks once per user command (the client's frame rate), but level.time only
 		// moves every server frame, so CF_DASHING stays set for all the commands of that frame: x4, x16, x64...
@@ -3984,7 +3984,7 @@ static void force_lightning_damage(gentity_t* self, gentity_t* traceEnt, vec3_t 
 								if (traceEnt->client->ps.stats[STAT_HEALTH] < 2 &&
 									class_is_gunner(traceEnt))
 								{
-									vec3_t defaultDir;
+									vec3_t defaultDir = { 0 };
 									VectorSet(defaultDir, 0, 0, 1);
 									G_PlayEffectID(G_EffectIndex("force/Lightningkill.efx"),
 										traceEnt->r.currentOrigin, defaultDir);
@@ -4064,7 +4064,7 @@ static void force_lightning_damage(gentity_t* self, gentity_t* traceEnt, vec3_t 
 								ang[2] = flrand(0, 360);
 								if (chanceOfFizz > 0)
 								{
-									vec3_t end2;
+									vec3_t end2 = { 0 };
 									VectorMA(traceEnt->client->saber[rsaber_num].blade[rblade_num].muzzlePoint,
 										traceEnt->client->saber[rsaber_num].blade[rblade_num].lengthMax *
 										flrand(0, 1),
@@ -4126,7 +4126,7 @@ static void force_lightning_damage(gentity_t* self, gentity_t* traceEnt, vec3_t 
 							ang[2] = flrand(0, 360);
 							if (chanceOfFizz > 0)
 							{
-								vec3_t end2;
+								vec3_t end2 = { 0 };
 								VectorMA(traceEnt->client->saber[rsaber_num].blade[rblade_num].muzzlePoint,
 									traceEnt->client->saber[rsaber_num].blade[rblade_num].lengthMax * flrand(0, 1),
 									traceEnt->client->saber[rsaber_num].blade[rblade_num].muzzleDir, end2);
@@ -4202,8 +4202,8 @@ static void force_lightning_damage(gentity_t* self, gentity_t* traceEnt, vec3_t 
 
 static void force_shoot_lightning(gentity_t* self)
 {
-	trace_t tr;
-	vec3_t forward;
+	trace_t tr = { 0 };
+	vec3_t forward = { 0 };
 	gentity_t* traceEnt = NULL;
 
 	if (self->health <= 0)
@@ -4220,7 +4220,7 @@ static void force_shoot_lightning(gentity_t* self)
 
 	if (self->client->ps.fd.forcePowerLevel[FP_LIGHTNING] > FORCE_LEVEL_2)
 	{
-		vec3_t center;
+		vec3_t center = { 0 };
 		vec3_t mins = { 0 };
 		vec3_t maxs = { 0 };
 		vec3_t v = { 0 };
@@ -4248,9 +4248,9 @@ static void force_shoot_lightning(gentity_t* self)
 
 		for (int e = 0; e < num_listed_entities; e++)
 		{
-			vec3_t size;
-			vec3_t ent_org;
-			vec3_t dir;
+			vec3_t size = { 0 };
+			vec3_t ent_org = { 0 };
+			vec3_t dir = { 0 };
 			traceEnt = entity_list[e];
 
 			if (!traceEnt)
@@ -4324,7 +4324,7 @@ static void force_shoot_lightning(gentity_t* self)
 	}
 	else
 	{
-		vec3_t end;
+		vec3_t end = { 0 };
 		VectorMA(self->client->ps.origin, 2048, forward, end);
 
 		trap->Trace(&tr, self->client->ps.origin, vec3_origin, vec3_origin, end, self->s.number, MASK_SHOT, qfalse, 0,
@@ -4483,9 +4483,9 @@ static void FP_TraceSetStart(const gentity_t* ent, vec3_t start, vec3_t mins, ve
 //-----------------------------------------------------------------------------
 {
 	//make sure our start point isn't on the other side of a wall
-	trace_t tr;
-	vec3_t entMins;
-	vec3_t entMaxs;
+	trace_t tr = { 0 };
+	vec3_t entMins = { 0 };
+	vec3_t entMaxs = { 0 };
 
 	VectorAdd(ent->r.currentOrigin, ent->r.mins, entMins);
 	VectorAdd(ent->r.currentOrigin, ent->r.maxs, entMaxs);
@@ -4525,7 +4525,7 @@ static void FP_TraceSetStart(const gentity_t* ent, vec3_t start, vec3_t mins, ve
 static void WP_FireDestruction(gentity_t* ent, const int force_level)
 //---------------------------------------------------------
 {
-	vec3_t start, forward;
+	vec3_t start = { 0 }, forward = { 0 };
 	const int damage = DESTRUCTION_DAMAGE;
 	float vel = DESTRUCTION_VELOCITY;
 
@@ -4572,8 +4572,8 @@ static void WP_FireDestruction(gentity_t* ent, const int force_level)
 
 int ForceShootDrain(gentity_t* self)
 {
-	trace_t tr;
-	vec3_t forward;
+	trace_t tr = { 0 };
+	vec3_t forward = { 0 };
 	int numDrained = 0;
 
 	if (self->health <= 0)
@@ -4597,7 +4597,7 @@ int ForceShootDrain(gentity_t* self)
 		gentity_t* traceEnt = NULL;
 		if (self->client->ps.fd.forcePowerLevel[FP_DRAIN] > FORCE_LEVEL_2) // level 3 only
 		{
-			vec3_t center;
+			vec3_t center = { 0 };
 			vec3_t mins = { 0 };
 			vec3_t maxs = { 0 };
 			vec3_t v = { 0 };
@@ -4624,9 +4624,9 @@ int ForceShootDrain(gentity_t* self)
 
 			for (int e = 0; e < num_listed_entities; e++)
 			{
-				vec3_t size;
-				vec3_t ent_org;
-				vec3_t dir;
+				vec3_t size = { 0 };
+				vec3_t ent_org = { 0 };
+				vec3_t dir = { 0 };
 				float dot = 0.0f;
 				traceEnt = entity_list[e];
 
@@ -4708,7 +4708,7 @@ int ForceShootDrain(gentity_t* self)
 		}
 		else
 		{
-			vec3_t end;
+			vec3_t end = { 0 };
 			//trace-line
 			VectorMA(self->client->ps.origin, 2048, forward, end);
 
@@ -4738,8 +4738,8 @@ int ForceShootDrain(gentity_t* self)
 
 static int ForceShootDestruction(gentity_t* self)
 {
-	trace_t tr;
-	vec3_t forward;
+	trace_t tr = { 0 };
+	vec3_t forward = { 0 };
 	int numDrained = 0;
 
 	if (self->health <= 0)
@@ -4757,7 +4757,7 @@ static int ForceShootDestruction(gentity_t* self)
 
 	if (self->client->ps.fd.forcePowerLevel[FP_DRAIN] > FORCE_LEVEL_2)
 	{
-		vec3_t center;
+		vec3_t center = { 0 };
 		vec3_t mins = { 0 };
 		vec3_t maxs = { 0 };
 		vec3_t v = { 0 };
@@ -4784,9 +4784,9 @@ static int ForceShootDestruction(gentity_t* self)
 
 		for (int e = 0; e < num_listed_entities; e++)
 		{
-			vec3_t size;
-			vec3_t ent_org;
-			vec3_t dir;
+			vec3_t size = { 0 };
+			vec3_t ent_org = { 0 };
+			vec3_t dir = { 0 };
 			float dot = 0.0f;
 			const gentity_t* traceEnt = entity_list[e];
 
@@ -4947,7 +4947,7 @@ static void ForceJumpCharge(gentity_t* self, usercmd_t* ucmd)
 int WP_GetVelocityForForceJump(gentity_t* self, vec3_t jumpVel, const usercmd_t* ucmd)
 {
 	float pushFwd = 0, pushRt = 0;
-	vec3_t view, forward, right;
+	vec3_t view = { 0 }, forward = { 0 }, right = { 0 };
 	VectorCopy(self->client->ps.viewangles, view);
 	view[0] = 0;
 	AngleVectors(view, forward, right, NULL);
@@ -5048,7 +5048,7 @@ int WP_GetVelocityForForceJump(gentity_t* self, vec3_t jumpVel, const usercmd_t*
 
 void ForceJump(gentity_t* self, const usercmd_t* ucmd)
 {
-	vec3_t jumpVel;
+	vec3_t jumpVel = { 0 };
 
 	if (self->client->ps.fd.forcePowerDuration[FP_LEVITATION] > level.time)
 	{
@@ -5151,7 +5151,7 @@ static int WP_MindTrickUserTeam(const gentity_t* self)
 static qboolean ForceTelepathyCheckDirectNPCTarget(gentity_t* self, trace_t* tr, qboolean* tookPower)
 {
 	qboolean targetLive = qfalse;
-	vec3_t tfrom, tto = { 0 }, fwd;
+	vec3_t tfrom = { 0 }, tto = { 0 }, fwd = { 0 };
 	const float radius = MAX_TRICK_DISTANCE;
 
 	//Check for a direct usage on NPCs first
@@ -5214,7 +5214,7 @@ static qboolean ForceTelepathyCheckDirectNPCTarget(gentity_t* self, trace_t* tr,
 	if (targetLive && traceEnt->NPC)
 	{
 		//hit an organic non-player
-		vec3_t eyeDir;
+		vec3_t eyeDir = { 0 };
 		if (G_ActivateBehavior(traceEnt, BSET_MINDTRICK))
 		{
 			//activated a script on him
@@ -5360,9 +5360,9 @@ const int STASISJEDI_TIME = 2500;
 
 void ForceTelepathy(gentity_t* self)
 {
-	trace_t tr;
-	vec3_t tto;
-	vec3_t mins = { 0 }, maxs = { 0 }, fwdangles, forward, right, center;
+	trace_t tr = { 0 };
+	vec3_t tto = { 0 };
+	vec3_t mins = { 0 }, maxs = { 0 }, fwdangles = { 0 }, forward = { 0 }, right = { 0 }, center = { 0 };
 	float vision_arc = 0;
 	float radius = MAX_TRICK_DISTANCE;
 	qboolean took_power = qfalse;
@@ -5496,8 +5496,8 @@ void ForceTelepathy(gentity_t* self)
 
 		if (ent)
 		{
-			vec3_t a;
-			vec3_t thispush_org;
+			vec3_t a = { 0 };
+			vec3_t thispush_org = { 0 };
 			//not in the arc, don't consider it
 			if (ent->client)
 			{
@@ -5776,7 +5776,7 @@ static qboolean ShouldPlayerResistForceThrow(const gentity_t* self, const gentit
 		thrower && thrower->client)
 	{
 		//in siege, pull will affect people if they are not facing you, so they can't run away so much
-		vec3_t d;
+		vec3_t d = { 0 };
 
 		VectorSubtract(thrower->client->ps.origin, self->client->ps.origin, d);
 		vectoangles(d, d);
@@ -5970,7 +5970,7 @@ void WP_ResistForcePush(gentity_t* self, const gentity_t* pusher, const qboolean
 
 	if (!no_penalty)
 	{
-		char buf[128];
+		char buf[128] = { 0 };
 
 		trap->Cvar_VariableStringBuffer("timescale", buf, sizeof buf);
 
@@ -6137,7 +6137,7 @@ static void WP_NPCDropWeapon(gentity_t* dropper, const vec3_t pull_vec)
 {
 	const int old_weap = dropper->client->ps.weapon;
 	const int replace_weap = old_weap == WP_THERMAL ? WP_MELEE : WP_NONE;
-	vec3_t org, vel;
+	vec3_t org = { 0 }, vel = { 0 };
 
 	if (level.gametype == GT_SIEGE || old_weap <= WP_NONE || old_weap >= WP_NUM_WEAPONS)
 	{
@@ -6201,7 +6201,7 @@ static void WP_NPCForceThrowShove(gentity_t* self, gentity_t* target, const qboo
 	const qboolean repulse = self->client->ps.weapon == WP_MELEE
 		|| (self->client->ps.weapon == WP_NONE || saber_off) && self->client->ps.groundEntityNum == ENTITYNUM_NONE;
 	float knockback = pull ? 0.0f : 200.0f;
-	vec3_t push_dir, pull_vec;
+	vec3_t push_dir = { 0 }, pull_vec = { 0 };
 	qboolean strong = qfalse;
 
 	// what every push does (as MP's): it breaks his grip on me, he's credited with a fall, the body push effect
@@ -6783,7 +6783,7 @@ void ForceThrow(gentity_t* self, qboolean pull)
 
 			if (ent)
 			{
-				vec3_t a;
+				vec3_t a = { 0 };
 				if (G_CorpsePushable(ent))
 				{// a body in its ragdoll window: G_ForceThrowCorpses
 					entity_list[e] = ENTITYNUM_NONE;
@@ -6976,7 +6976,7 @@ void ForceThrow(gentity_t* self, qboolean pull)
 				{
 					//must have clear LOS
 					//try from eyes too before you give up
-					vec3_t eye_point;
+					vec3_t eye_point = { 0 };
 					VectorCopy(self->client->ps.origin, eye_point);
 					eye_point[2] += self->client->ps.viewheight;
 					trap->Trace(&tr, eye_point, vec3_origin, vec3_origin, ent_org, self->s.number, MASK_SHOT, qfalse, 0,
@@ -7187,7 +7187,7 @@ void ForceThrow(gentity_t* self, qboolean pull)
 				{
 					//must have clear LOS
 					//try from eyes too before you give up
-					vec3_t eye_point;
+					vec3_t eye_point = { 0 };
 					VectorCopy(self->client->ps.origin, eye_point);
 					eye_point[2] += self->client->ps.viewheight;
 					trap->Trace(&tr, eye_point, vec3_origin, vec3_origin, ent_org, self->s.number, MASK_SHOT, qfalse, 0,
@@ -7349,7 +7349,7 @@ void ForceThrow(gentity_t* self, qboolean pull)
 			{
 				//must have clear LOS
 				//try from eyes too before you give up
-				vec3_t eye_point;
+				vec3_t eye_point = { 0 };
 				VectorCopy(self->client->ps.origin, eye_point);
 				eye_point[2] += self->client->ps.viewheight;
 				trap->Trace(&tr, eye_point, vec3_origin, vec3_origin, ent_org, self->s.number, MASK_SHOT, qfalse, 0, 0);
@@ -7388,7 +7388,7 @@ void ForceThrow(gentity_t* self, qboolean pull)
 
 			if (push_target[x]->client)
 			{
-				vec3_t push_dir;
+				vec3_t push_dir = { 0 };
 				qboolean was_wall_grabbing = qfalse;
 				qboolean can_pull_weapon = qtrue;
 				float dir_len = 0;
@@ -7531,8 +7531,8 @@ void ForceThrow(gentity_t* self, qboolean pull)
 							if (tr.fraction != 1.0
 								&& tr.entityNum == push_target[x]->s.number)
 							{
-								vec3_t vecnorm;
-								vec3_t uorg;
+								vec3_t vecnorm = { 0 };
+								vec3_t uorg = { 0 };
 								VectorCopy(self->client->ps.origin, uorg);
 								uorg[2] += 64;
 
@@ -7980,10 +7980,10 @@ void ForceThrow(gentity_t* self, qboolean pull)
 			}
 			else if (!Q_stricmp("func_door", push_target[x]->classname) && push_target[x]->spawnflags & 2)
 			{
-				vec3_t end;
+				vec3_t end = { 0 };
 				//push/pull the door
-				vec3_t pos1, pos2;
-				vec3_t trFrom;
+				vec3_t pos1 = { 0 }, pos2 = { 0 };
+				vec3_t trFrom = { 0 };
 
 				VectorCopy(self->client->ps.origin, trFrom);
 				trFrom[2] += self->client->ps.viewheight;
@@ -8147,7 +8147,7 @@ static void SJE_EyePoint(const gentity_t* self, vec3_t eye, vec3_t fwd)
 // play an effect at org pointing along dir (G_PlayEffectID takes angles: the cgame AngleVectors them)
 static void SJE_EffectDir(const char* fx, vec3_t org, const vec3_t dir)
 {
-	vec3_t ang;
+	vec3_t ang = { 0 };
 
 	vectoangles(dir, ang);
 	G_PlayEffectID(G_EffectIndex(fx), org, ang);
@@ -8156,7 +8156,7 @@ static void SJE_EffectDir(const char* fx, vec3_t org, const vec3_t dir)
 // the caster's left hand (the force hand) on the server's skeleton, else his eye
 static void SJE_HandPoint(gentity_t* self, vec3_t out)
 {
-	vec3_t fwd;
+	vec3_t fwd = { 0 };
 
 	SJE_EyePoint(self, out, fwd);
 	if (self->ghoul2)
@@ -8272,8 +8272,8 @@ static qboolean SJE_ClearShot(const gentity_t* self, const gentity_t* ent);
 // still finds the target
 static gentity_t* SJE_SightTarget(gentity_t* self, const float range)
 {
-	trace_t tr;
-	vec3_t eye, start, fwd, end;
+	trace_t tr = { 0 };
+	vec3_t eye = { 0 }, start = { 0 }, fwd = { 0 }, end = { 0 };
 	int skip = self->s.number;
 
 	SJE_EyePoint(self, eye, fwd);
@@ -8301,7 +8301,7 @@ static gentity_t* SJE_SightTarget(gentity_t* self, const float range)
 	for (int i = 0; i < level.num_entities; i++)
 	{
 		gentity_t* ent = &g_entities[i];
-		vec3_t dir;
+		vec3_t dir = { 0 };
 
 		if (ent == self || !ent->inuse || !ent->client || ent->health <= 0
 			|| ent->client->sess.sessionTeam == TEAM_SPECTATOR)
@@ -8326,8 +8326,8 @@ static gentity_t* SJE_SightTarget(gentity_t* self, const float range)
 // clear line from the caster's eye to the entity's centre (dead bodies don't block it)
 static qboolean SJE_ClearShot(const gentity_t* self, const gentity_t* ent)
 {
-	trace_t tr;
-	vec3_t eye, fwd, center;
+	trace_t tr = { 0 };
+	vec3_t eye = { 0 }, fwd = { 0 }, center = { 0 };
 
 	SJE_EyePoint(self, eye, fwd);
 	if (eye[0] >= ent->r.absmin[0] && eye[0] <= ent->r.absmax[0] && eye[1] >= ent->r.absmin[1] && eye[1] <= ent->r.absmax[1]
@@ -8416,7 +8416,7 @@ void ForceStasis(gentity_t* self)
 	if (lvl >= FORCE_LEVEL_3)
 	{
 		static int list[MAX_GENTITIES]; // static: 16 KB (C6262)
-		vec3_t mins = { 0 }, maxs = { 0 }, eye, fwd;
+		vec3_t mins = { 0 }, maxs = { 0 }, eye = { 0 }, fwd = { 0 };
 
 		SJE_EyePoint(self, eye, fwd);
 		for (int i = 0; i < 3; i++)
@@ -8428,12 +8428,12 @@ void ForceStasis(gentity_t* self)
 		for (int e = 0; e < num; e++)
 		{
 			gentity_t* ent = &g_entities[list[e]];
-			vec3_t dir;
+			vec3_t dir = { 0 };
 
 			if (ent->inuse && ent->s.eType == ET_MISSILE && ent->s.pos.trType != TR_STATIONARY && ent->r.ownerNum != self->s.number)
 			{
 				// a missile in the cone flying at him: held in the air (as SP; g_missile.c keeps its flight for later)
-				vec3_t toMe;
+				vec3_t toMe = { 0 };
 				VectorSubtract(ent->r.currentOrigin, eye, dir);
 				VectorSubtract(self->client->ps.origin, ent->r.currentOrigin, toMe);
 				if (VectorNormalize(dir) <= radius && DotProduct(dir, fwd) >= 0.5f
@@ -8563,8 +8563,8 @@ static qboolean SJE_ProjectionSpot(const gentity_t* self, const vec3_t fwd, cons
 {
 	const vec3_t mins = { -15, -15, DEFAULT_MINS_2 };
 	const vec3_t maxs = { 15, 15, DEFAULT_MAXS_2 };
-	vec3_t start, eye, ends[5];
-	trace_t tr;
+	vec3_t start = { 0 }, eye = { 0 }, ends[5] = { 0 };
+	trace_t tr = { 0 };
 
 	VectorCopy(self->client->ps.origin, start);
 	start[2] += 8; // off the floor a bit
@@ -8580,7 +8580,7 @@ static qboolean SJE_ProjectionSpot(const gentity_t* self, const vec3_t fwd, cons
 
 	for (int i = 0; i < 5; i++)
 	{
-		vec3_t down, mid;
+		vec3_t down = { 0 }, mid = { 0 };
 
 		// a clear way there for a body
 		trap->Trace(&tr, start, mins, maxs, ends[i], self->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
@@ -8621,7 +8621,7 @@ static qboolean SJE_ProjectionSpot(const gentity_t* self, const vec3_t fwd, cons
 static void SJE_SpawnProjection(gentity_t* self)
 {
 	const int lvl = Com_Clampi(FORCE_LEVEL_1, FORCE_LEVEL_3, self->client->ps.fd.forcePowerLevel[FP_PROJECTION]);
-	vec3_t angles = { 0, 0, 0 }, fwd, right, spot;
+	vec3_t angles = { 0, 0, 0 }, fwd = { 0 }, right = { 0 }, spot = { 0 };
 
 	angles[YAW] = self->client->ps.viewangles[YAW];
 	AngleVectors(angles, fwd, right, NULL);
@@ -8783,7 +8783,7 @@ void ForceDarkStasis(gentity_t* self)
 	const float minDot = sjeDarkStasisArc[lvl];
 	const vec3_t flatAngles = { 0.0f, self->client->ps.viewangles[YAW], 0.0f };
 	static int list[MAX_GENTITIES]; // static: 16 KB (C6262)
-	vec3_t mins = { 0 }, maxs = { 0 }, eye, viewFwd, fwd;
+	vec3_t mins = { 0 }, maxs = { 0 }, eye = { 0 }, viewFwd = { 0 }, fwd = { 0 };
 
 	WP_ForcePowerStart(self, FP_DARK_STASIS, 0);
 
@@ -8829,7 +8829,7 @@ void ForceDarkStasis(gentity_t* self)
 	for (int e = 0; e < num; e++)
 	{
 		gentity_t* ent = &g_entities[list[e]];
-		vec3_t v = { 0 }, center, dir;
+		vec3_t v = { 0 }, center = { 0 }, dir = { 0 };
 
 		if (!ent->inuse || ent == self)
 		{
@@ -8882,7 +8882,7 @@ void ForceDarkStasis(gentity_t* self)
 static void SJE_FireForceProjectile(gentity_t* self, const qboolean blast)
 {
 	const int lvl = SJE_Level(self, blast ? FP_BLAST : FP_DESTRUCTION);
-	vec3_t eye, fwd;
+	vec3_t eye = { 0 }, fwd = { 0 };
 
 	SJE_EyePoint(self, eye, fwd);
 	VectorMA(eye, 16, fwd, eye);
@@ -8953,8 +8953,8 @@ void ForceLightningStrike(gentity_t* self)
 	const int lvl = SJE_Level(self, FP_LIGHTNING_STRIKE);
 	const float radius = sjeStrikeRadius[lvl];
 	static int list[MAX_GENTITIES]; // static: 16 KB (C6262)
-	vec3_t mins = { 0 }, maxs = { 0 }, eye, fwd, end, hand, bolt;
-	trace_t tr;
+	vec3_t mins = { 0 }, maxs = { 0 }, eye = { 0 }, fwd = { 0 }, end = { 0 }, hand = { 0 }, bolt = { 0 };
+	trace_t tr = { 0 };
 
 	WP_ForcePowerStart(self, FP_LIGHTNING_STRIKE, 0);
 	self->client->ps.fd.forcePowerDebounce[FP_LIGHTNING_STRIKE] = level.time + 1000;
@@ -8981,7 +8981,7 @@ void ForceLightningStrike(gentity_t* self)
 	for (int e = 0; e < num; e++)
 	{
 		gentity_t* ent = &g_entities[list[e]];
-		vec3_t dir;
+		vec3_t dir = { 0 };
 
 		if (ent == self || !ent->inuse || !ent->takedamage)
 		{
@@ -8997,7 +8997,7 @@ void ForceLightningStrike(gentity_t* self)
 			continue;
 		}
 		{
-			vec3_t back;
+			vec3_t back = { 0 };
 			VectorScale(dir, -1.0f, back);
 			SJE_EffectDir("tusken/hit", ent->r.currentOrigin, back);
 		}
@@ -9154,12 +9154,12 @@ static void SJE_DeadlySightRun(gentity_t* self)
 	}
 	self->client->deadlySightNextTick = level.time + tick[lvl];
 
-	vec3_t eye, fwd;
+	vec3_t eye = { 0 }, fwd = { 0 };
 	SJE_EyePoint(self, eye, fwd);
 	for (int i = 0; i < level.num_entities; i++)
 	{
 		gentity_t* ent = &g_entities[i];
-		vec3_t dir;
+		vec3_t dir = { 0 };
 
 		if (!SJE_ValidEnemy(self, ent, FP_DEADLYSIGHT))
 		{
@@ -9250,7 +9250,7 @@ static void SJE_GraspRun(gentity_t* self, const usercmd_t* cmd)
 {
 	const int lvl = SJE_Level(self, FP_GRASP);
 	gentity_t* target = self->client->graspEntityNum ? &g_entities[self->client->graspEntityNum - 1] : NULL;
-	vec3_t eye, fwd, to;
+	vec3_t eye = { 0 }, fwd = { 0 }, to = { 0 };
 
 	if (!target || !(cmd->buttons & BUTTON_FORCEPOWER) || self->client->ps.fd.forcePowerSelected != FP_GRASP
 		|| !SJE_ValidEnemy(self, target, FP_GRASP) || self->client->ps.fd.forcePower < 1
@@ -9302,7 +9302,7 @@ static void SJE_GraspRun(gentity_t* self, const usercmd_t* cmd)
 	target->client->ps.forceGripChangeMovetype = PM_FLOAT;
 	if (target->client->ps.forceGripMoveInterval < level.time)
 	{
-		vec3_t goal, vel;
+		vec3_t goal = { 0 }, vel = { 0 };
 
 		if (lvl == FORCE_LEVEL_2)
 		{
@@ -9472,7 +9472,7 @@ static void SJE_RepulseThrow(gentity_t* self, const int chargeTime)
 	for (int e = 0; e < num; e++)
 	{
 		gentity_t* ent = &g_entities[list[e]];
-		vec3_t dir;
+		vec3_t dir = { 0 };
 
 		if (ent == self || !ent->inuse)
 		{
@@ -9798,8 +9798,8 @@ extern void Boba_FlyStop(gentity_t* self);
 
 static void DoGripAction(gentity_t* self, const forcePowers_t forcePower)
 {
-	trace_t tr;
-	vec3_t a;
+	trace_t tr = { 0 };
+	vec3_t a = { 0 };
 
 	self->client->dangerTime = level.time;
 	self->client->ps.eFlags &= ~EF_INVULNERABLE;
@@ -9957,10 +9957,10 @@ static void DoGripAction(gentity_t* self, const forcePowers_t forcePower)
 
 		if (gripEnt->client->ps.forceGripMoveInterval < level.time)
 		{
-			vec3_t nvel;
-			vec3_t start_o;
+			vec3_t nvel = { 0 };
+			vec3_t start_o = { 0 };
 			vec3_t fwd_o = { 0 };
-			vec3_t fwd;
+			vec3_t fwd = { 0 };
 
 			VectorCopy(gripEnt->client->ps.origin, start_o);
 			AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
@@ -10168,7 +10168,7 @@ static void WP_LightningDrainMP(gentity_t* self, const forcePowers_t forcePower)
 {
 	static float drain_acc[MAX_GENTITIES];
 	const int num = self->s.number;
-	int drain;
+	int drain = 0;
 
 	if (g_lightningDrainRate.value <= 0.0f || num < 0 || num >= MAX_GENTITIES)
 	{
@@ -10727,7 +10727,7 @@ static void FindGenericEnemyIndex(const gentity_t* self)
 		if (ent && ent->client && ent->s.number != self->s.number && ent->health > 0 && !OnSameTeam(self, ent) && ent->
 			client->ps.pm_type != PM_INTERMISSION && ent->client->ps.pm_type != PM_SPECTATOR)
 		{
-			vec3_t a;
+			vec3_t a = { 0 };
 			VectorSubtract(ent->client->ps.origin, self->client->ps.origin, a);
 			const float tlen = VectorLength(a);
 
@@ -10753,9 +10753,9 @@ static void FindGenericEnemyIndex(const gentity_t* self)
 
 static void SeekerDroneUpdate(gentity_t* self)
 {
-	vec3_t org, elevated, dir = { 0 }, a = { 0 };
+	vec3_t org = { 0 }, elevated = { 0 }, dir = { 0 }, a = { 0 };
 	float angle = 0.0f;
-	trace_t tr;
+	trace_t tr = { 0 };
 
 	if (!(self->client->ps.eFlags & EF_SEEKERDRONE))
 	{
@@ -10866,7 +10866,7 @@ static void SeekerDroneUpdate(gentity_t* self)
 
 			if (tr.fraction == 1 && !tr.startsolid && !tr.allsolid)
 			{
-				vec3_t endir;
+				vec3_t endir = { 0 };
 				VectorSubtract(en->client->ps.origin, org, endir);
 				VectorNormalize(endir);
 

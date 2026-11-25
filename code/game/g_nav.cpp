@@ -119,8 +119,8 @@ waypoint_testDirection
 
 static float waypoint_testDirection(vec3_t origin, const float yaw, const float minDist)
 {
-	vec3_t trace_dir, test_pos;
-	vec3_t maxs, mins;
+	vec3_t trace_dir = {}, test_pos = {};
+	vec3_t maxs = {}, mins = {};
 	trace_t tr;
 
 	//Setup the mins and max

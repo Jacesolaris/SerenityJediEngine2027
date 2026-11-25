@@ -46,7 +46,7 @@ void WP_FireTuskenRifle(gentity_t* ent)
 		Com_Printf(S_COLOR_YELLOW "WP_FireTuskenRifle: NULL ent or ent->client\n");
 		return;
 	}
-	vec3_t start;
+	vec3_t start = {};
 	trace_t tr;
 
 	VectorCopy(muzzle, start);
@@ -57,7 +57,7 @@ void WP_FireTuskenRifle(gentity_t* ent)
 	while (traces < 10)
 	{
 		constexpr float shot_range = 8192;
-		vec3_t end;
+		vec3_t end = {};
 		VectorMA(start, shot_range, forward_vec, end);
 		//need to loop this in case we hit a Jedi who dodges the shot
 		gi.trace(&tr, start, nullptr, nullptr, end, ignore, MASK_SHOT, G2_RETURNONHIT, 0);
@@ -107,7 +107,7 @@ void WP_FireTuskenRifle(gentity_t* ent)
 	}
 	else if (NPC_IsNotHavingEnoughForceSight(ent) == qtrue)
 	{//force sight 2+ gives perfect aim
-		vec3_t angs;
+		vec3_t angs = {};
 
 		vectoangles(forward_vec, angs); const qboolean is_player_or_controlled = ((ent->s.number < MAX_CLIENTS) || (G_ControlledByPlayer(ent) == qtrue)) ? qtrue : qfalse;
 

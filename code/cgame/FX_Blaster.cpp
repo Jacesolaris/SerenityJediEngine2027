@@ -36,7 +36,7 @@ FX_BlasterProjectileThink
 
 void FX_BlasterProjectileThink(centity_t* cent, const weaponInfo_s* weapon)
 {
-	vec3_t forward;
+	vec3_t forward = {};
 
 	if (cent->currentState.eFlags & EF_USE_ANGLEDELTA)
 	{
@@ -125,7 +125,7 @@ void FX_BlasterWeaponHitPlayer(gentity_t* hit, vec3_t origin, vec3_t normal, con
 
 void FX_DroidekaProjectileThink(centity_t* cent, const weaponInfo_s* weapon)
 {
-	vec3_t forward;
+	vec3_t forward = {};
 
 	if (cent->currentState.eFlags & EF_USE_ANGLEDELTA)
 	{

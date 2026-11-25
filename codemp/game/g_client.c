@@ -415,7 +415,7 @@ void ThrowSaberToAttacker(gentity_t* self, const gentity_t* attacker)
 
 	if (!altVelocity)
 	{
-		vec3_t a;
+		vec3_t a = { 0 };
 		VectorCopy(self->s.pos.trBase, ent->s.pos.trBase);
 		VectorCopy(self->s.pos.trBase, ent->s.origin);
 		VectorCopy(self->s.pos.trBase, ent->r.currentOrigin);
@@ -626,7 +626,7 @@ SpotWouldTelefrag
 qboolean SpotWouldTelefrag(const gentity_t* spot)
 {
 	static int touch[MAX_GENTITIES];  // safe and recommended
-	vec3_t mins, maxs;
+	vec3_t mins = { 0 }, maxs = { 0 };
 
 	VectorAdd(spot->s.origin, playerMins, mins);
 	VectorAdd(spot->s.origin, playerMaxs, maxs);
@@ -655,7 +655,7 @@ qboolean SpotWouldTelefrag(const gentity_t* spot)
 qboolean SpotWouldTelefrag2(const gentity_t* mover, vec3_t dest)
 {
 	static int touch[MAX_GENTITIES];  // safe and recommended
-	vec3_t mins, maxs;
+	vec3_t mins = { 0 }, maxs = { 0 };
 
 	VectorAdd(dest, mover->r.mins, mins);
 	VectorAdd(dest, mover->r.maxs, maxs);
@@ -712,7 +712,7 @@ static gentity_t* SelectNearestDeathmatchSpawnPoint(vec3_t from)
 
 	while ((spot = G_Find(spot, FOFS(classname), "info_player_deathmatch")) != NULL)
 	{
-		vec3_t delta;
+		vec3_t delta = { 0 };
 		VectorSubtract(spot->s.origin, from, delta);
 		const float dist = VectorLength(delta);
 
@@ -727,7 +727,7 @@ static gentity_t* SelectNearestDeathmatchSpawnPoint(vec3_t from)
 		return NULL;
 
 	// Base origin
-	vec3_t baseOrigin;
+	vec3_t baseOrigin = { 0 };
 	VectorCopy(nearestSpot->s.origin, baseOrigin);
 	baseOrigin[2] += 9;
 
@@ -738,7 +738,7 @@ static gentity_t* SelectNearestDeathmatchSpawnPoint(vec3_t from)
 		level.numDeathmatchSpawns <= 1 ||   // tiny maps
 		(nearestSpot->flags & FL_NO_BOTS))  // safety
 	{
-		vec3_t offsetOrigin;
+		vec3_t offsetOrigin = { 0 };
 
 		if (SafeSpawn_FindOffset(baseOrigin, offsetOrigin))
 		{
@@ -803,14 +803,14 @@ gentity_t* SelectRandomDeathmatchSpawnPoint(qboolean isbot)
 	gentity_t* chosen = spots[selection];
 
 	// Base origin for safe-spawn check
-	vec3_t baseOrigin;
+	vec3_t baseOrigin = { 0 };
 	VectorCopy(chosen->s.origin, baseOrigin);
 	baseOrigin[2] += 9;
 
 	// 1. Check if chosen spawn is occupied
 	if (SafeSpawn_IsOccupied(baseOrigin))
 	{
-		vec3_t offsetOrigin;
+		vec3_t offsetOrigin = { 0 };
 
 		// 2. Try to find a safe offset around the chosen spawn
 		if (SafeSpawn_FindOffset(baseOrigin, offsetOrigin))
@@ -841,7 +841,7 @@ Chooses a player start, deathmatch start, etc
 
 static qboolean SafeSpawn_IsOccupied(const vec3_t origin)
 {
-	trace_t tr;
+	trace_t tr = { 0 };
 	vec3_t mins = { -15, -15, -24 };
 	vec3_t maxs = { 15,  15,  32 };
 
@@ -899,7 +899,7 @@ static gentity_t* SelectRandomFurthestSpawnPoint(
 		return NULL;
 	}
 
-	vec3_t delta;
+	vec3_t delta = { 0 };
 	float dist = 0.0f;
 	float list_dist[MAX_SPAWN_POINTS] = { 0 };
 	gentity_t* list_spot[MAX_SPAWN_POINTS] = { 0 };
@@ -1038,14 +1038,14 @@ static gentity_t* SelectRandomFurthestSpawnPoint(
 	// PICK RANDOM FROM TOP HALF
 	const int rnd = Q_flrand(0.0f, 1.0f) * (numSpots / 2.0f);
 
-	vec3_t baseOrigin;
+	vec3_t baseOrigin = { 0 };
 	VectorCopy(list_spot[rnd]->s.origin, baseOrigin);
 	baseOrigin[2] += 9;
 
 	// SAFE SPAWN LOGIC
 	if (isbot || numSpots == 1 || SafeSpawn_IsOccupied(baseOrigin))
 	{
-		vec3_t offsetOrigin;
+		vec3_t offsetOrigin = { 0 };
 
 		if (SafeSpawn_FindOffset(baseOrigin, offsetOrigin))
 		{
@@ -1102,7 +1102,7 @@ tryAgain:
 
 	while ((spot = G_Find(spot, FOFS(classname), spotName)) != NULL)
 	{
-		vec3_t delta;
+		vec3_t delta = { 0 };
 
 		if (SpotWouldTelefrag(spot))
 			continue;
@@ -1177,13 +1177,13 @@ tryAgain:
 		rnd = halfCount - 1;
 	}
 
-	vec3_t baseOrigin;
+	vec3_t baseOrigin = { 0 };
 	VectorCopy(list_spot[rnd]->s.origin, baseOrigin);
 	baseOrigin[2] += 9;
 
 	if (isbot || numSpots == 1 || SafeSpawn_IsOccupied(baseOrigin))
 	{
-		vec3_t offsetOrigin;
+		vec3_t offsetOrigin = { 0 };
 
 		if (SafeSpawn_FindOffset(baseOrigin, offsetOrigin))
 		{
@@ -1255,14 +1255,14 @@ static gentity_t* SelectInitialSpawnPoint(vec3_t origin, vec3_t angles,
 	}
 
 	// Base spawn origin
-	vec3_t baseOrigin;
+	vec3_t baseOrigin = { 0 };
 	VectorCopy(spot->s.origin, baseOrigin);
 	baseOrigin[2] += 9;
 
 	// 1. Check if initial spawn is occupied
 	if (SafeSpawn_IsOccupied(baseOrigin))
 	{
-		vec3_t offsetOrigin;
+		vec3_t offsetOrigin = { 0 };
 
 		// 2. Try to find a safe offset around the initial spawn
 		if (SafeSpawn_FindOffset(baseOrigin, offsetOrigin))
@@ -1362,8 +1362,8 @@ extern float BG_WaterDeathFrame(const playerState_t* ps, const animation_t* anim
 
 static void BodyFloat(gentity_t* body)
 {
-	vec3_t top;
-	int k;
+	vec3_t top = { 0 };
+	int k = 0;
 
 	VectorCopy(body->r.currentOrigin, top);
 	for (k = 0; k < 128 && (trap->PointContents(top, body->s.number) & CONTENTS_WATER); k++)
@@ -2287,7 +2287,7 @@ void SetupGameGhoul2Model(gentity_t* ent, char* modelname, char* skinName)
 	//rww - just load the "standard" model for the server"
 	if (!precachedKyle)
 	{
-		char afilename[MAX_QPATH];
+		char afilename[MAX_QPATH] = { 0 };
 		Com_sprintf(afilename, sizeof afilename, "models/players/"DEFAULT_MODEL"/model.glm");
 		handle = trap->G2API_InitGhoul2Model(&precachedKyle, afilename, 0, 0, -20, 0, 0);
 
@@ -2306,16 +2306,16 @@ void SetupGameGhoul2Model(gentity_t* ent, char* modelname, char* skinName)
 			G_PlayerHasCustomSkeleton(ent))
 		{
 			//rww - allow option for perplayer models on server for collision and bolt stuff.
-			char modelFullPath[MAX_QPATH];
-			char truncModelName[MAX_QPATH];
+			char modelFullPath[MAX_QPATH] = { 0 };
+			char truncModelName[MAX_QPATH] = { 0 };
 			char skin[MAX_QPATH] = { 0 };
-			char vehicleName[MAX_QPATH];
+			char vehicleName[MAX_QPATH] = { 0 };
 			int skinHandle = 0;
 
 			// If this is a vehicle, get it's model name.
 			if (ent->client->NPC_class == CLASS_VEHICLE)
 			{
-				char realModelName[MAX_QPATH];
+				char realModelName[MAX_QPATH] = { 0 };
 
 				Q_strncpyz(vehicleName, modelname, sizeof vehicleName);
 				BG_GetVehicleModelName(realModelName, modelname, sizeof realModelName);
@@ -2544,7 +2544,7 @@ void SetupGameGhoul2Model(gentity_t* ent, char* modelname, char* skinName)
 		ent->m_pVehicle)
 	{
 		//do special vehicle stuff
-		char strTemp[128];
+		char strTemp[128] = { 0 };
 
 		// Setup the default first bolt
 		int i = 0;
@@ -3180,25 +3180,25 @@ qboolean client_userinfo_changed(const int clientNum)
 	int health = 0;
 	int max_health = 100;
 	const char* value = NULL;
-	char userinfo[MAX_INFO_STRING];
+	char userinfo[MAX_INFO_STRING] = { 0 };
 	char buf[MAX_INFO_STRING] = { 0 };
-	char oldClientinfo[MAX_INFO_STRING];
-	char model[MAX_QPATH];
-	char forcePowers[FORCEPOWERS_MAX_LEN + 1];
-	char oldname[MAX_NETNAME];
-	char className[MAX_QPATH];
-	char color1[16];
-	char color2[16];
+	char oldClientinfo[MAX_INFO_STRING] = { 0 };
+	char model[MAX_QPATH] = { 0 };
+	char forcePowers[FORCEPOWERS_MAX_LEN + 1] = { 0 };
+	char oldname[MAX_NETNAME] = { 0 };
+	char className[MAX_QPATH] = { 0 };
+	char color1[16] = { 0 };
+	char color2[16] = { 0 };
 	qboolean model_changed = qfalse;
-	gender_t gender;
+	gender_t gender = GENDER_MALE;
 	// static: too big for the stack (C6262); only written and read further down, with no call in between that
 	// can come back here (player_die above might)
 	static char rgb1[MAX_INFO_STRING];
 	static char rgb2[MAX_INFO_STRING];
 	static char script1[MAX_INFO_STRING];
 	static char script2[MAX_INFO_STRING];
-	char saberSkin1[MAX_QPATH];
-	char saberSkin2[MAX_QPATH];
+	char saberSkin1[MAX_QPATH] = { 0 };
+	char saberSkin2[MAX_QPATH] = { 0 };
 
 	trap->GetUserinfo(clientNum, userinfo, sizeof userinfo);
 
@@ -3376,7 +3376,7 @@ qboolean client_userinfo_changed(const int clientNum)
 
 	if (clientNum >= 0 && clientNum < MAX_CLIENTS)
 	{
-		char sabers[MAX_QPATH * 2 + 2];
+		char sabers[MAX_QPATH * 2 + 2] = { 0 };
 
 		Com_sprintf(sabers, sizeof sabers, "%s|%s", Info_ValueForKey(userinfo, "saber1"), Info_ValueForKey(userinfo, "saber2"));
 
@@ -3932,9 +3932,9 @@ extern void Bot_GiveStartingCredits(bot_state_t* bs);
 
 void ClientBegin(const int clientNum, const qboolean allowTeamReset)
 {
-	char userinfo[MAX_INFO_STRING]; // SJE (2026-10-16): was MAX_INFO_VALUE (1024) - GetUserinfo / Info_SetValueForKey below
+	char userinfo[MAX_INFO_STRING] = { 0 }; // SJE (2026-10-16): was MAX_INFO_VALUE (1024) - GetUserinfo / Info_SetValueForKey below
 	// write up to MAX_INFO_STRING, a bot's longer userinfo overran it and overwrote ent on the stack (the Team FFA crash)
-	char motd[1024];
+	char motd[1024] = { 0 };
 
 	gentity_t* ent = g_entities + clientNum;
 
@@ -4674,12 +4674,12 @@ static void G_DropUnusableForcePowers(gentity_t* ent)
 void ClientSpawn(gentity_t* ent)
 {
 	int i = 0, index = 0, savesaber_num = ENTITYNUM_NONE, wDisable = 0, savedSiegeIndex = 0, maxHealth = 100;
-	vec3_t spawn_origin, spawn_angles;
+	vec3_t spawn_origin = { 0 }, spawn_angles = { 0 };
 	gentity_t* spawnPoint = NULL, * tent = NULL;
 	gclient_t* client = NULL;
-	clientPersistant_t saved;
-	clientSession_t savedSess;
-	forcedata_t savedForce;
+	clientPersistant_t saved = { 0 };
+	clientSession_t savedSess = { 0 };
+	forcedata_t savedForce = { 0 };
 	int savedDodgeMax = 0;
 	saberInfo_t saberSaved[MAX_SABERS] = { 0 };
 	int persistant[MAX_PERSISTANT] = { 0 };
@@ -4884,7 +4884,7 @@ void ClientSpawn(gentity_t* ent)
 	{
 		if (isBot == qtrue)
 		{
-			vec3_t wpSpawn;
+			vec3_t wpSpawn = { 0 };
 
 			if (client->sess.sessionTeam == TEAM_RED)
 			{
@@ -4946,7 +4946,7 @@ void ClientSpawn(gentity_t* ent)
 		if (!spawnPoint && ent->r.svFlags & SVF_BOT)
 		{
 			// a bot: a neutral bot spawn waypoint ('u', bot_wp_addflagged u) of the map's bot route, else the start
-			vec3_t wpSpawn;
+			vec3_t wpSpawn = { 0 };
 			if (BOT_FindFFAWaypointSpawnPoint(ent, wpSpawn) == qtrue)
 			{
 				VectorCopy(wpSpawn, spawn_origin);
@@ -4999,7 +4999,7 @@ void ClientSpawn(gentity_t* ent)
 	{
 		if (isBot == qtrue)
 		{
-			vec3_t wpSpawn;
+			vec3_t wpSpawn = { 0 };
 
 			if (client->sess.sessionTeam == TEAM_RED)
 			{
@@ -5054,7 +5054,7 @@ void ClientSpawn(gentity_t* ent)
 	// ------------------------------------------------------------
 	if (isBot == qtrue)
 	{
-		vec3_t wpSpawn;
+		vec3_t wpSpawn = { 0 };
 
 		if (BOT_FindFFAWaypointSpawnPoint(ent, wpSpawn) == qtrue)
 		{
@@ -5100,8 +5100,8 @@ spawn_done:
 		if (BG_ClassCreatureSize(client->pers.botclass, &halfWidth, &standheight, NULL) &&
 			(halfWidth > playerMaxs[0] || standheight > playerMaxs[2]))
 		{
-			vec3_t cMins, cMaxs;
-			trace_t tr;
+			vec3_t cMins = { 0 }, cMaxs = { 0 };
+			trace_t tr = { 0 };
 
 			VectorSet(cMins, -halfWidth, -halfWidth, DEFAULT_MINS_2);
 			VectorSet(cMaxs, halfWidth, halfWidth, standheight);
@@ -5109,7 +5109,7 @@ spawn_done:
 			trap->Trace(&tr, spawn_origin, cMins, cMaxs, spawn_origin, ent->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
 			if ((tr.startsolid || tr.allsolid) && spawnPoint && spawnPoint->classname)
 			{
-				gentity_t* spots[64];
+				gentity_t* spots[64] = { 0 };
 				gentity_t* other = NULL;
 				int numSpots = 0;
 
@@ -5120,7 +5120,7 @@ spawn_done:
 				const int first = numSpots > 0 ? Q_irand(0, numSpots - 1) : 0;
 				for (int s = 0; s < numSpots; s++)
 				{
-					vec3_t o;
+					vec3_t o = { 0 };
 
 					other = spots[(first + s) % numSpots];
 					VectorCopy(other->s.origin, o);
@@ -7614,6 +7614,7 @@ void ClientDisconnect(const int clientNum)
 	G_RemoveQueuedBotBegin(clientNum);
 
 	G_Pazaak_ClientDisconnect(clientNum);
+	G_MissionQueueRemove(clientNum); // Missions: no longer waiting for a place in the squad
 
 	gentity_t* ent = g_entities + clientNum;
 	if (!ent->client || ent->client->pers.connected == CON_DISCONNECTED)
@@ -7773,7 +7774,7 @@ void ClientDisconnect(const int clientNum)
 
 qboolean g_standard_humanoid(gentity_t* self)
 {
-	char GLAName[MAX_QPATH];
+	char GLAName[MAX_QPATH] = { 0 };
 
 	if (!self || !self->ghoul2)
 	{

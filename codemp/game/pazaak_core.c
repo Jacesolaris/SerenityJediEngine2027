@@ -125,8 +125,8 @@ static pzkPlayer_t* Pzk_P(pzkGame_t* g, const int pid)
 
 static void Pzk_Send(pzkGame_t* g, const int pid, const char* fmt, ...)
 {
-	char buf[1024];
-	va_list ap;
+	char buf[1024] = { 0 };
+	va_list ap = { 0 };
 	const pzkPlayer_t* p = Pzk_P(g, pid);
 
 	if (p->isAI || !p->present || !g->send)
@@ -182,8 +182,8 @@ static void Pzk_RemoveTimeout(pzkGame_t* g)
 // A shuffled 40-card deck: four of each number 1..10
 static void Pzk_GenerateDeck(pzkGame_t* g)
 {
-	int left[10];
-	int numbers[10];
+	int left[10] = { 0 };
+	int numbers[10] = { 0 };
 	int numCount = 10;
 	int i = 0;
 
@@ -210,7 +210,7 @@ static void Pzk_GenerateDeck(pzkGame_t* g)
 // 4 random cards of the side deck
 static void Pzk_GenerateHand(pzkGame_t* g, pzkPlayer_t* p)
 {
-	int cards[PZK_SIDEDECK_SIZE];
+	int cards[PZK_SIDEDECK_SIZE] = { 0 };
 	int count = PZK_SIDEDECK_SIZE;
 	int i = 0;
 
@@ -254,7 +254,7 @@ static int Pzk_IsValidDeck(const int* cards)
 // Does the side deck only use cards the player owns?
 static int Pzk_ValidateSideDeck(const int* sideDeck, const int* cards)
 {
-	int count[PZK_NUM_SIDECARDS];
+	int count[PZK_NUM_SIDECARDS] = { 0 };
 	int i = 0;
 
 	memset(count, 0, sizeof(count));
@@ -279,8 +279,8 @@ static int Pzk_ValidateSideDeck(const int* sideDeck, const int* cards)
 // Fills the empty slots of a side deck with random cards the player still has
 static int Pzk_FinishSideDeck(pzkGame_t* g, int* sideDeck, const int* cards)
 {
-	int remaining[PZK_NUM_SIDECARDS];
-	int avail[PZK_NUM_SIDECARDS * 16];
+	int remaining[PZK_NUM_SIDECARDS] = { 0 };
+	int avail[PZK_NUM_SIDECARDS * 16] = { 0 };
 	int numAvail = 0;
 	int empty = 0;
 	int i = 0, j = 0;
@@ -428,7 +428,7 @@ static void Pzk_CardSelection(pzkGame_t* g)
 	for (pid = 1; pid <= 2; pid++)
 	{
 		const pzkPlayer_t* p = Pzk_P(g, pid);
-		char buf[512];
+		char buf[512] = { 0 };
 		int len = 0, i = 0;
 
 		if (p->isAI)
@@ -690,8 +690,8 @@ static int Pzk_FlipField(pzkPlayer_t* player, const int a, const int b, char* bu
 // Puts a hand card (slot 1..4) of the player whose turn it is on the field
 static void Pzk_PlayCard(pzkGame_t* g, const int handSlot, int param)
 {
-	char bufP[768];
-	char bufO[768];
+	char bufP[768] = { 0 };
+	char bufO[768] = { 0 };
 	int pid = 0, oid = 0, cardid = 0, slot = 0;
 	size_t len = 0;
 	pzkPlayer_t* player = NULL;
@@ -807,7 +807,7 @@ static void Pzk_AINormal(pzkGame_t* g, int* outSlot, int* outParam, int* outStan
 {
 	const pzkPlayer_t* self = Pzk_P(g, 2);
 	const pzkPlayer_t* opponent = Pzk_P(g, 1);
-	pzkAIOption_t opts[PZK_HAND_SIZE * 4];
+	pzkAIOption_t opts[PZK_HAND_SIZE * 4] = { 0 };
 	const int numOpts = Pzk_AIOptions(self, opts);
 	int lowest = self->points;      // lowest total we can reach with a hand card
 	int best = self->points;        // closest we can get to 20 with a hand card
@@ -1046,8 +1046,8 @@ static void Pzk_SetDialog(pzkGame_t* g, pzkPlayer_t* player, pzkPlayer_t* oppone
 // Phase 4: end of turn, check for a won/lost/tied set
 static void Pzk_RunPhase4(pzkGame_t* g)
 {
-	char bufP[256];
-	char bufO[256];
+	char bufP[256] = { 0 };
+	char bufO[256] = { 0 };
 	int pid = 0, oid = 0;
 	int cont = 1;
 	int gotoPhase5 = 0;

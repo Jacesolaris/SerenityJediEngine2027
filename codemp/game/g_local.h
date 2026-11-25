@@ -2135,6 +2135,13 @@ void Svcmd_ToggleAllowVote_f(void);
 #include "g_xcvar.h"
 #undef XCVAR_PROTO
 void G_RegisterCvars(void);
+
+// g_cmds.c: the Missions squad (GT_SINGLE_PLAYER)
+int G_MissionSquadMax(void);
+int G_MissionSquadCount(int ignore, int* bots);
+void G_MissionQueueAdd(const gentity_t* ent);
+void G_MissionQueueRemove(int clientNum);
+void G_MissionSquadThink(void);
 void G_UpdateCvars(void);
 
 extern gameImport_t* trap;

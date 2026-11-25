@@ -71,8 +71,8 @@ static void NPC_Mark2_Part_Explode(gentity_t* self, const int bolt)
 {
 	if (bolt >= 0)
 	{
-		mdxaBone_t boltMatrix;
-		vec3_t org, dir;
+		mdxaBone_t boltMatrix = { 0 };
+		vec3_t org = { 0 }, dir = { 0 };
 
 		SHR_GetBoltMatrix(self, bolt, boltMatrix, self->SHR_currentAngles, self->SHR_currentOrigin);
 
@@ -148,9 +148,9 @@ Mark2_FireBlaster
 */
 static void Mark2_FireBlaster(void)
 {
-	vec3_t muzzle1;
+	vec3_t muzzle1 = { 0 };
 	static vec3_t forward, vright, up;
-	mdxaBone_t boltMatrix;
+	mdxaBone_t boltMatrix = { 0 };
 
 	SHR_GetBoltMatrix(NPCS.NPC, SHR_Bolt(NPCS.NPC, genericBolt1, "*flash"), boltMatrix, NPCS.NPC->SHR_currentAngles, NPCS.NPC->SHR_currentOrigin);
 
@@ -158,9 +158,9 @@ static void Mark2_FireBlaster(void)
 
 	if (NPCS.NPC->health)
 	{
-		vec3_t angle_to_enemy1;
-		vec3_t delta1;
-		vec3_t enemy_org1;
+		vec3_t angle_to_enemy1 = { 0 };
+		vec3_t delta1 = { 0 };
+		vec3_t enemy_org1 = { 0 };
 		CalcEntitySpot(NPCS.NPC->enemy, SPOT_HEAD, enemy_org1);
 		VectorSubtract(enemy_org1, muzzle1, delta1);
 		vectoangles(delta1, angle_to_enemy1);

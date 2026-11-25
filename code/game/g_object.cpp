@@ -35,7 +35,7 @@ G_BounceMissile
 */
 void G_BounceObject(gentity_t* ent, const trace_t* trace)
 {
-	vec3_t velocity;
+	vec3_t velocity = {};
 
 	// reflect the velocity on the trace plane
 	const int hit_time = level.previousTime + (level.time - level.previousTime) * trace->fraction;
@@ -88,7 +88,7 @@ extern void DoImpact(gentity_t* self, gentity_t* other, qboolean damageSelf, con
 
 void G_RunObject(gentity_t* ent)
 {
-	vec3_t origin, old_org;
+	vec3_t origin = {}, old_org = {};
 	trace_t tr;
 
 	//FIXME: floaters need to stop floating up after a while, even if gravity stays negative?
@@ -171,7 +171,7 @@ void G_RunObject(gentity_t* ent)
 			if (traceEnt && traceEnt->takedamage)
 			{
 				//hurt someone
-				vec3_t fx_dir;
+				vec3_t fx_dir = {};
 				VectorNormalize2(ent->s.pos.trDelta, fx_dir);
 				VectorScale(fx_dir, -1, fx_dir);
 				G_PlayEffect(G_EffectIndex("melee/kick_impact"), tr.endpos, fx_dir);

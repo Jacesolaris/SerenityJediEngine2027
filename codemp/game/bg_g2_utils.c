@@ -37,10 +37,10 @@ void BG_AttachToRancor(void* ghoul2, const float ranc_yaw, vec3_t ranc_origin, i
 	vec3_t modelScale, const qboolean in_mouth, vec3_t out_origin, vec3_t out_angles,
 	matrix3_t out_axis)
 {
-	mdxaBone_t boltMatrix;
+	mdxaBone_t boltMatrix = { 0 };
 	int boltIndex = 0;
-	vec3_t ranc_angles;
-	vec3_t temp_angles;
+	vec3_t ranc_angles = { 0 };
+	vec3_t temp_angles = { 0 };
 	// Getting the bolt here
 	if (in_mouth)
 	{
@@ -97,7 +97,7 @@ void BG_AttachToRancor(void* ghoul2, const float ranc_yaw, vec3_t ranc_origin, i
 	}
 	else if (out_angles)
 	{
-		matrix3_t temp_axis;
+		matrix3_t temp_axis = { 0 };
 		if (in_mouth)
 		{
 			//in mouth
@@ -127,9 +127,9 @@ void BG_AttachToSandCreature(void* ghoul2,
 	vec3_t out_angles,
 	vec3_t out_axis[3])
 {
-	mdxaBone_t boltMatrix;
-	vec3_t ranc_angles;
-	vec3_t temp_angles;
+	mdxaBone_t boltMatrix = { 0 };
+	vec3_t ranc_angles = { 0 };
+	vec3_t temp_angles = { 0 };
 	// Getting the bolt here
 	const int boltIndex = trap->G2API_AddBolt(ghoul2, 0, "*mouth");
 
@@ -158,7 +158,7 @@ void BG_AttachToSandCreature(void* ghoul2,
 	}
 	else if (out_angles)
 	{
-		vec3_t temp_axis[3];
+		vec3_t temp_axis[3] = { 0 };
 
 		BG_GiveMeVectorFromMatrix(&boltMatrix, NEGATIVE_Y, temp_axis[0]);
 		BG_GiveMeVectorFromMatrix(&boltMatrix, POSITIVE_Z, temp_axis[2]);

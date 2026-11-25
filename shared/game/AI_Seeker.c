@@ -199,8 +199,8 @@ static void Seeker_MaintainHeight(void)
 void Seeker_Strafe(void)
 {
 	int side = 0;
-	vec3_t end, right;
-	trace_t tr;
+	vec3_t end = { 0 }, right = { 0 };
+	trace_t tr = { qfalse };
 
 	if (Q_flrand(0.0f, 1.0f) > 0.7f || !NPCS.NPC->enemy || !NPCS.NPC->enemy->client)
 	{
@@ -237,7 +237,7 @@ void Seeker_Strafe(void)
 	}
 	else
 	{
-		vec3_t dir;
+		vec3_t dir = { 0 };
 		// Do a strafe to try and keep on the side of their enemy
 		AngleVectors(NPCS.NPC->enemy->client->renderInfo.eyeAngles, dir, right, NULL);
 
@@ -286,7 +286,7 @@ void Seeker_Strafe(void)
 //------------------------------------
 static void Seeker_Hunt(const qboolean visible, const qboolean advance)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	NPC_FaceEnemy(qtrue);
 
@@ -328,7 +328,7 @@ static void Seeker_Hunt(const qboolean visible, const qboolean advance)
 //------------------------------------
 static void Seeker_Fire(void)
 {
-	vec3_t dir, enemy_org, muzzle;
+	vec3_t dir = { 0 }, enemy_org = { 0 }, muzzle = { 0 };
 
 	CalcEntitySpot(NPCS.NPC->enemy, SPOT_HEAD, enemy_org);
 	VectorSubtract(enemy_org, NPCS.NPC->SHR_currentOrigin, dir);
@@ -412,7 +412,7 @@ static void Seeker_Attack(void)
 static void Seeker_FindEnemy(void)
 {
 	float best_dis = (SEEKER_SEEK_RADIUS * SEEKER_SEEK_RADIUS) + 1.0f;
-	vec3_t mins, maxs;
+	vec3_t mins = { 0 }, maxs = { 0 };
 
 	// FIX: move large array off stack → static buffer
 	static gentity_t* entity_list[MAX_GENTITIES];
@@ -501,8 +501,8 @@ static void Seeker_FindEnemy(void)
 	float bestDis = SEEKER_SEEK_RADIUS * SEEKER_SEEK_RADIUS + 1.0f;
 	float closestDist = SEEKER_SEEK_RADIUS * SEEKER_SEEK_RADIUS + 1.0f;
 
-	vec3_t mins;
-	vec3_t maxs;
+	vec3_t mins = { 0 };
+	vec3_t maxs = { 0 };
 
 	// ----------------------------------------------------------------------
 	// Move large array off the stack (fixes MSVC C6262)
@@ -676,7 +676,7 @@ static void Seeker_FollowPlayer(void)
 
 	if (dis < min_dist_sqr)
 	{
-		vec3_t dir;
+		vec3_t dir = { 0 };
 		vec3_t pt{};
 		// generally circle the player closely till we take an enemy..this is our target point
 		if (NPCS.NPC->client->NPC_class == CLASS_BOBAFETT || NPCS.NPC->client->NPC_class == CLASS_MANDO)
@@ -774,7 +774,7 @@ static void Seeker_FollowPlayer(void)
 
 	if (dis < min_dist_sqr)
 	{
-		vec3_t dir;
+		vec3_t dir = { 0 };
 		vec3_t pt = { 0 };
 		// generally circle the player closely till we take an enemy..this is our target point
 		if (NPCS.NPC->client->NPC_class == CLASS_BOBAFETT)

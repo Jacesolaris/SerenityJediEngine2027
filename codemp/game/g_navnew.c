@@ -87,7 +87,7 @@ NAVNEW_ClearPathBetweenPoints
 int NAVNEW_ClearPathBetweenPoints(vec3_t start, vec3_t end, vec3_t mins, vec3_t maxs, const int ignore,
 	const int clipmask)
 {
-	trace_t trace;
+	trace_t trace = { 0 };
 
 	//Test if they're even conceivably close to one another
 	if (!trap->InPVS(start, end))
@@ -108,8 +108,8 @@ NAVNEW_PushBlocker
 static void NAVNEW_PushBlocker(const gentity_t* self, const gentity_t* blocker, vec3_t right, const qboolean setBlockedInfo)
 {
 	//try pushing blocker to one side
-	trace_t tr;
-	vec3_t mins, end;
+	trace_t tr = { 0 };
+	vec3_t mins = { 0 }, end = { 0 };
 	float leftSucc = 0.0f;
 
 	if (self->NPC->shoveCount > 30)
@@ -216,7 +216,7 @@ static qboolean NAVNEW_DanceWithBlocker(gentity_t* self, const gentity_t* blocke
 	//sees if blocker has any lateral movement
 	if (blocker->client && !VectorCompare(blocker->client->ps.velocity, vec3_origin))
 	{
-		vec3_t blocker_movedir;
+		vec3_t blocker_movedir = { 0 };
 
 		VectorCopy(blocker->client->ps.velocity, blocker_movedir);
 		blocker_movedir[2] = 0; //cancel any vertical motion
@@ -251,9 +251,9 @@ static qboolean NAVNEW_SidestepBlocker(const gentity_t* self, const gentity_t* b
 	vec3_t movedir, vec3_t right)
 {
 	//trace to sides of blocker and see if either is clear
-	trace_t tr;
-	vec3_t avoidAngles;
-	vec3_t avoidRight_dir, avoidLeft_dir, block_pos, mins;
+	trace_t tr = { 0 };
+	vec3_t avoidAngles = { 0 };
+	vec3_t avoidRight_dir = { 0 }, avoidLeft_dir = { 0 }, block_pos = { 0 }, mins = { 0 };
 	float rightSucc = 0.0f, leftSucc = 0.0f;
 
 	VectorCopy(self->r.mins, mins);
@@ -378,7 +378,7 @@ qboolean NAVNEW_Bypass(gentity_t* self, gentity_t* blocker, vec3_t blocked_dir, 
 	vec3_t movedir,
 	const qboolean setBlockedInfo)
 {
-	vec3_t moveangles, right;
+	vec3_t moveangles = { 0 }, right = { 0 };
 
 	//Draw debug info if requested
 	if (NAVDEBUG_showCollision)
@@ -432,12 +432,12 @@ extern void CalcTeamDoorCenter(const gentity_t* ent, vec3_t center);
 qboolean NAVNEW_ResolveEntityCollision(gentity_t* self, gentity_t* blocker, vec3_t movedir, vec3_t pathDir,
 	const qboolean setBlockedInfo)
 {
-	vec3_t blocked_dir;
+	vec3_t blocked_dir = { 0 };
 
 	//Doors are ignored
 	if (Q_stricmp(blocker->classname, "func_door") == 0)
 	{
-		vec3_t center;
+		vec3_t center = { 0 };
 		CalcTeamDoorCenter(blocker, center);
 		if (DistanceSquared(self->r.currentOrigin, center) > MIN_DOOR_BLOCK_DIST_SQR)
 			return qtrue;
@@ -475,8 +475,8 @@ NAVNEW_AvoidCollision
 qboolean NAVNEW_AvoidCollision(gentity_t* self, gentity_t* goal, navInfo_t* info, const qboolean setBlockedInfo,
 	const int blockedMovesLimit)
 {
-	vec3_t movedir;
-	vec3_t movepos;
+	vec3_t movedir = { 0 };
+	vec3_t movepos = { 0 };
 
 	//Cap our distance
 	if (info->distance > MAX_COLL_AVOID_DIST)
@@ -554,11 +554,11 @@ qboolean NAVNEW_TestNodeConnectionBlocked(const int wp1, const int wp2, const ge
 	const qboolean checkEnts)
 {
 	//see if the direct path between 2 nodes is blocked by architecture or an ent
-	vec3_t pos1, pos2, mins, maxs;
-	trace_t trace;
+	vec3_t pos1 = { 0 }, pos2 = { 0 }, mins = { 0 }, maxs = { 0 };
+	trace_t trace = { 0 };
 	int clipmask = MASK_NPCSOLID | CONTENTS_BOTCLIP;
 	int ignoreEntNum = 0;
-	vec3_t playerMins, playerMaxs;
+	vec3_t playerMins = { 0 }, playerMaxs = { 0 };
 
 	if (!checkWorld && !checkEnts)
 	{
@@ -617,8 +617,8 @@ int NAVNEW_MoveToGoal(gentity_t* self, navInfo_t* info)
 {
 	int bestNode = WAYPOINT_NONE;
 	qboolean foundClearPath = qfalse;
-	vec3_t origin;
-	navInfo_t tempInfo;
+	vec3_t origin = { 0 };
+	navInfo_t tempInfo = { 0 };
 	qboolean setBlockedInfo = qtrue;
 	int numTries = 0;
 
@@ -864,7 +864,7 @@ int NAVNEW_MoveToGoal(gentity_t* self, navInfo_t* info)
 	//Draw any debug info, if requested
 	if (NAVDEBUG_showEnemyPath)
 	{
-		vec3_t dest, start;
+		vec3_t dest = { 0 }, start = { 0 };
 
 		//Get the positions
 		trap->Nav_GetNodePosition(self->NPC->goalEntity->waypoint, dest);
@@ -874,7 +874,7 @@ int NAVNEW_MoveToGoal(gentity_t* self, navInfo_t* info)
 		G_DrawNode(start, NODE_START);
 		if (bestNode != self->waypoint)
 		{
-			vec3_t wpPos;
+			vec3_t wpPos = { 0 };
 			trap->Nav_GetNodePosition(self->waypoint, wpPos);
 			G_DrawNode(wpPos, NODE_NAVGOAL);
 		}
@@ -911,7 +911,7 @@ qboolean NAV_MoveDirSafe(const gentity_t* self, const usercmd_t* cmd, const floa
 {
 	//use your current ps's moveDir or construct one from your current ucmd and then
 	//check to make sure we can move in that direction.
-	vec3_t moveDir;
+	vec3_t moveDir = { 0 };
 
 	if (!self || !self->client)
 	{
@@ -928,7 +928,7 @@ qboolean NAV_MoveDirSafe(const gentity_t* self, const usercmd_t* cmd, const floa
 	if (VectorCompare(self->client->ps.moveDir, vec3_origin))
 	{
 		//no movedir, build from cmd
-		vec3_t fwd, right, fwdAngs;
+		vec3_t fwd = { 0 }, right = { 0 }, fwdAngs = { 0 };
 		if (!cmd->forwardmove && !cmd->rightmove)
 		{
 			//not moving at all

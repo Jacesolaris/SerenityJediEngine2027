@@ -187,7 +187,7 @@ static void g_missile_stick(gentity_t* missile, gentity_t* other, trace_t* tr)
 {
 	if (other->NPC || !Q_stricmp(other->classname, "misc_model_breakable"))
 	{
-		vec3_t velocity;
+		vec3_t velocity = {};
 
 		const int hit_time = level.previousTime + (level.time - level.previousTime) * tr->fraction;
 
@@ -264,7 +264,7 @@ void g_reflect_missile_auto(gentity_t* ent, gentity_t* missile, vec3_t forward)
 	// If no valid client, reflection becomes generic.
 	qboolean hasClient = (owner && owner->client) ? qtrue : qfalse;
 
-	vec3_t bounce_dir;
+	vec3_t bounce_dir = {};
 	qboolean reflected = qfalse;
 
 	// Preserve original missile speed.
@@ -290,7 +290,7 @@ void g_reflect_missile_auto(gentity_t* ent, gentity_t* missile, vec3_t forward)
 		}
 
 		if (enemy) {
-			vec3_t bullseye;
+			vec3_t bullseye = {};
 			CalcEntitySpot(enemy, SPOT_HEAD, bullseye);
 
 			// Add slight aim randomness.
@@ -335,7 +335,7 @@ void g_reflect_missile_auto(gentity_t* ent, gentity_t* missile, vec3_t forward)
 		else
 		{
 			// Directional reflection based on saber angle.
-			vec3_t missile_dir;
+			vec3_t missile_dir = {};
 			VectorSubtract(ent->currentOrigin, missile->currentOrigin, missile_dir);
 
 			VectorCopy(missile->s.pos.trDelta, bounce_dir);
@@ -482,7 +482,7 @@ static void g_missile_bouncedoff_saber(gentity_t* ent, gentity_t* missile, vec3_
 	// qboolean correctness rule enforced
 	const qboolean hasClient = (owner && owner->client) ? qtrue : qfalse;
 
-	vec3_t bounce_dir;
+	vec3_t bounce_dir = {};
 	qboolean reflected = qfalse;
 
 	// Preserve original missile speed
@@ -511,7 +511,7 @@ static void g_missile_bouncedoff_saber(gentity_t* ent, gentity_t* missile, vec3_
 
 		if (enemy)
 		{
-			vec3_t bullseye;
+			vec3_t bullseye = {};
 			CalcEntitySpot(enemy, SPOT_CHEST, bullseye);
 
 			// Slight aim randomness
@@ -561,7 +561,7 @@ static void g_missile_bouncedoff_saber(gentity_t* ent, gentity_t* missile, vec3_
 		else
 		{
 			// Directional reflection based on saber angle
-			vec3_t missile_dir;
+			vec3_t missile_dir = {};
 			VectorSubtract(ent->currentOrigin, missile->currentOrigin, missile_dir);
 			VectorNormalize(missile_dir);
 
@@ -693,7 +693,7 @@ static gentity_t* G_BoltBlockTarget(gentity_t* blocker, const gentity_t* missile
 // Aim a reflected bolt at the target's chest (every bolt block mode aims there; "goes to enemy" aimed at the head)
 static void G_BoltBlockAimAt(const gentity_t* target, const gentity_t* missile, vec3_t bounce_dir)
 {
-	vec3_t bullseye;
+	vec3_t bullseye = {};
 
 	if (target->client)
 	{
@@ -739,7 +739,7 @@ static void WP_HandleBoltBlock(gentity_t* ent, gentity_t* missile, vec3_t forwar
 		return;
 	}
 
-	vec3_t bounce_dir;
+	vec3_t bounce_dir = {};
 	qboolean saber_block_reflection = qfalse;
 	qboolean bolt_block_reflection = qfalse;
 	qboolean npc_reflection = qfalse;
@@ -819,7 +819,7 @@ static void WP_HandleBoltBlock(gentity_t* ent, gentity_t* missile, vec3_t forwar
 	//--------------------------------------------------------------------------
 	if (saber_block_reflection && !npc_reflection)
 	{
-		vec3_t angs;
+		vec3_t angs = {};
 
 		if (d_blockinfo->integer || g_DebugSaberCombat->integer)
 		{
@@ -1053,7 +1053,7 @@ static void WP_HandleBoltBlock(gentity_t* ent, gentity_t* missile, vec3_t forwar
 		{
 			// the player: the bolt goes roughly where he looks, the closer the higher his saber defense (as MD; this
 			// was a random bounce, and a stagger even at saber defense 3). The velocity is unit length here.
-			vec3_t missile_dir;
+			vec3_t missile_dir = {};
 			VectorCopy(missile->s.pos.trDelta, missile_dir);
 			float aim_factor = 2.0f;
 			if (G_GetDefenseLevel(blocker) >= FORCE_LEVEL_3)
@@ -1124,7 +1124,7 @@ G_BounceRollMissile
 */
 static void g_bounce_roll_missile(gentity_t* ent, const trace_t* trace)
 {
-	vec3_t velocity, normal;
+	vec3_t velocity = {}, normal = {};
 
 	// reflect the velocity on the trace plane
 	const int hit_time = level.previousTime + (level.time - level.previousTime) * trace->fraction;
@@ -1175,7 +1175,7 @@ G_BounceMissile
 */
 void G_BounceMissile(gentity_t* ent, trace_t* trace)
 {
-	vec3_t velocity;
+	vec3_t velocity = {};
 
 	// reflect the velocity on the trace plane
 	const int hit_time = level.previousTime + (level.time - level.previousTime) * trace->fraction;
@@ -1414,7 +1414,7 @@ void G_MissileImpacted(gentity_t* ent, gentity_t* other, vec3_t impact_pos, vec3
 	{
 		if (ent->damage)
 		{
-			vec3_t velocity;
+			vec3_t velocity = {};
 			EvaluateTrajectoryDelta(&ent->s.pos, level.time, velocity);
 
 			if (VectorLength(velocity) == 0.0f)
@@ -1477,7 +1477,7 @@ void G_MissileImpacted(gentity_t* ent, gentity_t* other, vec3_t impact_pos, vec3
 					{// 75% chance to play pain anim
 						if (PM_CrouchAnim(other->client->ps.legsAnim))
 						{
-							vec3_t dir;
+							vec3_t dir = {};
 							VectorSubtract(ent->currentOrigin, other->currentOrigin, dir);
 							VectorNormalize(dir);
 
@@ -1590,7 +1590,7 @@ void G_MissileImpacted(gentity_t* ent, gentity_t* other, vec3_t impact_pos, vec3
 		// if the missile's weapon has one there and no vehicle weapon's own impact replaces it (CG_VehicleWeaponImpact):
 		// then its radius damage is not a map explosion as well
 		extern qboolean g_clothBlastByCgame;
-		float clothRadius, clothStrength;
+		float clothRadius = 0, clothStrength = 0;
 		g_clothBlastByCgame = !(ent->s.otherentityNum2 && g_vehWeaponInfo[ent->s.otherentityNum2].iImpactFX)
 			&& CG_ClothBlastSize(ent->s.weapon, ent->alt_fire, &clothRadius, &clothStrength) ? qtrue : qfalse;
 		G_RadiusDamage(impact_pos, ent->owner, ent->splashDamage,
@@ -1636,7 +1636,7 @@ static void g_missile_add_alerts(gentity_t* ent)
 //------------------------------------------------------
 static void G_MissileImpact(gentity_t* ent, trace_t* trace, const int hit_loc = HL_NONE)
 {
-	vec3_t diff;
+	vec3_t diff = {};
 
 	gentity_t* other = &g_entities[trace->entityNum];
 
@@ -1753,7 +1753,7 @@ static void G_MissileImpact(gentity_t* ent, trace_t* trace, const int hit_loc = 
 		{// 75% chance to play pain anim
 			if (PM_CrouchAnim(other->client->ps.legsAnim))
 			{
-				vec3_t dir;
+				vec3_t dir = {};
 				VectorSubtract(ent->currentOrigin, other->currentOrigin, dir);
 				VectorNormalize(dir);
 
@@ -1901,7 +1901,7 @@ static void G_MissileImpact(gentity_t* ent, trace_t* trace, const int hit_loc = 
 				// the hook yanks him off his feet towards the grappler, as force pull does (as MD)
 				if (other->health > 0 && ent->parent && ent->parent->client && other != ent->parent)
 				{
-					vec3_t pull_dir;
+					vec3_t pull_dir = {};
 					VectorSubtract(ent->parent->currentOrigin, other->currentOrigin, pull_dir);
 					pull_dir[2] = 0;
 					VectorNormalize(pull_dir);
@@ -1982,7 +1982,7 @@ static void G_MissileImpact(gentity_t* ent, trace_t* trace, const int hit_loc = 
 
 				if (other->client->ps.stats[STAT_HEALTH] <= 0) // if we are dead
 				{
-					vec3_t spot;
+					vec3_t spot = {};
 
 					VectorCopy(other->currentOrigin, spot);
 
@@ -2140,7 +2140,7 @@ Explode a missile without an impact
 void g_explode_missile(gentity_t* ent)
 {
 	vec3_t dir{};
-	vec3_t origin;
+	vec3_t origin = {};
 
 	EvaluateTrajectory(&ent->s.pos, level.time, origin);
 	SnapVector(origin);
@@ -2303,9 +2303,9 @@ static void g_roll_missile(gentity_t* ent)
 	}
 
 	int     numplanes = 0;
-	vec3_t  planes[MAX_CLIP_PLANES];
-	vec3_t  primal_velocity;
-	vec3_t  end_velocity;
+	vec3_t  planes[MAX_CLIP_PLANES] = {};
+	vec3_t  primal_velocity = {};
+	vec3_t  end_velocity = {};
 	trace_t trace;
 	pml_t   obj_pml;
 	float   bounce_amt = 0.0f;
@@ -2351,7 +2351,7 @@ static void g_roll_missile(gentity_t* ent)
 
 	for (int bumpcount = 0; bumpcount < numbumps; bumpcount++)
 	{
-		vec3_t end;
+		vec3_t end = {};
 
 		// Target position for this step
 		VectorMA(ent->currentOrigin, time_left, ent->s.pos.trDelta, end);
@@ -2436,8 +2436,8 @@ static void g_roll_missile(gentity_t* ent)
 
 		for (i = 0; i < numplanes; i++)
 		{
-			vec3_t clip_velocity;
-			vec3_t end_clip_velocity;
+			vec3_t clip_velocity = {};
+			vec3_t end_clip_velocity = {};
 			const float into = DotProduct(ent->s.pos.trDelta, planes[i]);
 
 			if (into >= 0.1f)
@@ -2479,7 +2479,7 @@ static void g_roll_missile(gentity_t* ent)
 				}
 
 				// Slide along the crease between the two planes
-				vec3_t dir;
+				vec3_t dir = {};
 				CrossProduct(planes[i], planes[j], dir);
 				VectorNormalize(dir);
 
@@ -2535,7 +2535,7 @@ extern void g_mover_touch_push_triggers(gentity_t* ent, vec3_t old_org);
 
 void g_run_missile(gentity_t* ent)
 {
-	vec3_t old_org;
+	vec3_t old_org = {};
 	trace_t tr;
 	int tr_hit_loc = HL_NONE;
 
@@ -2544,7 +2544,7 @@ void g_run_missile(gentity_t* ent)
 		//in a sand creature's mouth
 		if (ent->activator)
 		{
-			mdxaBone_t boltMatrix;
+			mdxaBone_t boltMatrix = {};
 			// Getting the bolt here
 			//in hand
 			vec3_t scAngles = { 0 };
@@ -2588,7 +2588,7 @@ void g_run_missile(gentity_t* ent)
 			}
 			else
 			{
-				vec3_t ang, fwd_dir, rt_dir;
+				vec3_t ang = {}, fwd_dir = {}, rt_dir = {};
 
 				ent->s.apos.trType = TR_INTERPOLATE;
 				VectorSet(ang, 0, ent->s.apos.trBase[1], 0);
@@ -2611,7 +2611,7 @@ void g_run_missile(gentity_t* ent)
 	}
 	else
 	{
-		vec3_t origin;
+		vec3_t origin = {};
 		EvaluateTrajectory(&ent->s.pos, level.time, origin);
 		// trace a line from the previous position to the current position,
 		// ignoring interactions with the missile owner

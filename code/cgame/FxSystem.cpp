@@ -200,7 +200,7 @@ int SFxHelper::GetOriginAxisFromBolt(
 		return 0;
 	}
 
-	mdxaBone_t bolt_matrix;
+	mdxaBone_t bolt_matrix = {};
 
 	// Base angles from lerpAngles
 	vec3_t G2Angles{};

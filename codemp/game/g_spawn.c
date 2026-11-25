@@ -1351,8 +1351,8 @@ void AddSpawnField(const char* field, const char* value)
 static void HandleEntityAdjustment(void)
 {
 	char* value = NULL;
-	vec3_t origin, newOrigin, angles;
-	char temp[MAX_QPATH];
+	vec3_t origin = { 0 }, newOrigin = { 0 }, angles = { 0 };
+	char temp[MAX_QPATH] = { 0 };
 
 	G_SpawnString("origin", NOVALUE, &value);
 	if (Q_stricmp(value, NOVALUE) != 0)
@@ -1490,7 +1490,7 @@ This does not actually spawn an entity.
 */
 qboolean G_ParseSpawnVars(const qboolean inSubBSP)
 {
-	char com_token[MAX_TOKEN_CHARS];
+	char com_token[MAX_TOKEN_CHARS] = { 0 };
 
 	level.numSpawnVars = 0;
 	level.numSpawnVarChars = 0;
@@ -1509,7 +1509,7 @@ qboolean G_ParseSpawnVars(const qboolean inSubBSP)
 	// go through all the key / value pairs
 	while (1)
 	{
-		char keyname[MAX_TOKEN_CHARS];
+		char keyname[MAX_TOKEN_CHARS] = { 0 };
 		// parse key
 		if (!trap->GetEntityToken(keyname, sizeof keyname))
 		{
@@ -1893,7 +1893,7 @@ static void SP_worldspawn(void)
 
 	for (i = 1; i < LS_NUM_STYLES; i++)
 	{
-		char temp[32];
+		char temp[32] = { 0 };
 		Com_sprintf(temp, sizeof temp, "ls_%dr", i);
 		G_SpawnString(temp, defaultStyles[i][0], &text);
 		const int lengthRed = strlen(text);
@@ -1987,7 +1987,7 @@ so a group nobody picked push or pull for is not stuck.
 static void G_MissionSpawnExtraEntities(void)
 {
 	static char buf[MISSION_ENTS_MAXSIZE];
-	char mapname[MAX_QPATH], path[MAX_QPATH];
+	char mapname[MAX_QPATH] = { 0 }, path[MAX_QPATH] = { 0 };
 	fileHandle_t f = 0;
 	int count = 0;
 
@@ -2025,7 +2025,7 @@ static void G_MissionSpawnExtraEntities(void)
 		level.numSpawnVarChars = 0;
 		while (1)
 		{
-			char key[MAX_TOKEN_CHARS];
+			char key[MAX_TOKEN_CHARS] = { 0 };
 			token = COM_Parse(&p);
 			if (!token[0] || token[0] == '}')
 			{

@@ -40,7 +40,7 @@ vmCvar_t bot_minplayers;
 
 float trap_Cvar_VariableValue(const char* var_name)
 {
-	char buf[MAX_CVAR_VALUE_STRING];
+	char buf[MAX_CVAR_VALUE_STRING] = { 0 };
 
 	trap->Cvar_VariableStringBuffer(var_name, buf, sizeof buf);
 	return atof(buf);
@@ -57,7 +57,7 @@ G_ParseInfos
 
 static int G_ParseInfos(const char* buf, const int max, char* infos[])
 {
-	char info[MAX_INFO_STRING];
+	char info[MAX_INFO_STRING] = { 0 };
 
 	int count = 0;
 
@@ -84,7 +84,7 @@ static int G_ParseInfos(const char* buf, const int max, char* infos[])
 		info[0] = '\0';
 		while (1)
 		{
-			char key[MAX_TOKEN_CHARS];
+			char key[MAX_TOKEN_CHARS] = { 0 };
 			token = COM_ParseExt(&buf, qtrue);
 			if (!token[0])
 			{
@@ -265,7 +265,7 @@ const char* G_RefreshNextMap(const int gametype, const qboolean forced)
 	int n = 0;
 	char* type = NULL;
 	qboolean loopingUp = qfalse;
-	vmCvar_t mapname;
+	vmCvar_t mapname = { 0 };
 
 	if (!g_autoMapCycle.integer && !forced)
 	{
@@ -393,7 +393,7 @@ void g_load_arenas(void)
 
 	for (; i < numFiles; i++)
 	{
-		char filename[MAX_QPATH];
+		char filename[MAX_QPATH] = { 0 };
 		const int len = strlen(fileptr);
 
 		Com_sprintf(filename, sizeof(filename), "scriptsmp/%s", fileptr);
@@ -462,7 +462,7 @@ void g_load_sp_arenas(void)
 
 	for (; i < numFiles; i++)
 	{
-		char filename[MAX_QPATH];
+		char filename[MAX_QPATH] = { 0 };
 		const int len = strlen(fileptr);
 
 		Com_sprintf(filename, sizeof(filename), "scriptsmp/%s", fileptr);
@@ -641,7 +641,7 @@ static qboolean G_AddRandomBotOfFaction(const int team, const int faction)
 			num--;
 			if (num <= 0)
 			{
-				char netname[MAX_NETNAME]; // was 36: bot names over 35 characters were cut and "not defined" (test phase 2026-10-13)
+				char netname[MAX_NETNAME] = { 0 }; // was 36: bot names over 35 characters were cut and "not defined" (test phase 2026-10-13)
 				const float skill = trap->Cvar_VariableIntegerValue("g_spSkill"); // bot skill 1-5 (g_npcspskill is the NPC difficulty)
 				if (team == TEAM_RED) teamstr = "red";
 				else if (team == TEAM_BLUE) teamstr = "blue";
@@ -808,6 +808,18 @@ static void G_CheckMinimumPlayers(void)
 	trap->Cvar_Update(&bot_minplayers);
 	int minplayers = bot_minplayers.integer;
 	if (minplayers <= 0) return;
+	if (level.gametype == GT_SINGLE_PLAYER)
+	{
+		// Missions: bots only with g_missionBots 1, and no more than the squad holds
+		if (!g_missionBots.integer)
+		{
+			return;
+		}
+		if (minplayers > G_MissionSquadMax())
+		{
+			minplayers = G_MissionSquadMax();
+		}
+	}
 
 	if (minplayers > sv_maxclients.integer)
 	{
@@ -905,7 +917,7 @@ G_BotConnect
 qboolean G_BotConnect(const int clientNum, const qboolean restart)
 {
 	bot_settings_t settings = { 0 };
-	char userinfo[MAX_INFO_STRING];
+	char userinfo[MAX_INFO_STRING] = { 0 };
 
 	trap->GetUserinfo(clientNum, userinfo, sizeof userinfo);
 
@@ -930,6 +942,14 @@ G_AddBot
 static void G_AddBot(const char* name, const float skill, const char* team, const int delay, const char* altname)
 {
 	char userinfo[MAX_INFO_STRING] = { 0 };
+
+	// Missions: bots only with g_missionBots 1, and not into a full squad (g_cmds.c G_MissionSquadThink)
+	if (level.gametype == GT_SINGLE_PLAYER && (!g_missionBots.integer || G_MissionSquadCount(-1, NULL) >= G_MissionSquadMax()))
+	{
+		trap->Print(S_COLOR_YELLOW "Missions: no bot added (%s)\n",
+			!g_missionBots.integer ? "bots are off: g_missionBots 0" : "the squad is full: g_missionMaxPlayers");
+		return;
+	}
 
 	// have the server allocate a client slot
 	const int clientNum = trap->BotAllocateClient();
@@ -1215,10 +1235,10 @@ void Svcmd_AddBot_f(void)
 {
 	float skill = 0.0f;
 	int delay = 0;
-	char name[MAX_TOKEN_CHARS];
-	char altname[MAX_TOKEN_CHARS];
-	char string[MAX_TOKEN_CHARS];
-	char team[MAX_TOKEN_CHARS];
+	char name[MAX_TOKEN_CHARS] = { 0 };
+	char altname[MAX_TOKEN_CHARS] = { 0 };
+	char string[MAX_TOKEN_CHARS] = { 0 };
+	char team[MAX_TOKEN_CHARS] = { 0 };
 
 	// are bots enabled?
 	if (!trap->Cvar_VariableIntegerValue("bot_enable"))
@@ -1280,14 +1300,14 @@ Svcmd_BotList_f
 */
 void Svcmd_BotList_f(void)
 {
-	char funname[MAX_NETNAME];
+	char funname[MAX_NETNAME] = { 0 };
 
 	trap->Print("name             model            personality              funname\n");
 	for (int i = 0; i < level.bots.num; i++)
 	{
-		char personality[MAX_QPATH];
-		char model[MAX_QPATH];
-		char name[MAX_NETNAME];
+		char personality[MAX_QPATH] = { 0 };
+		char model[MAX_QPATH] = { 0 };
+		char name[MAX_NETNAME] = { 0 };
 		Q_strncpyz(name, Info_ValueForKey(level.bots.infos[i], "name"), sizeof name);
 		if (!*name)
 		{
@@ -1376,7 +1396,7 @@ static void G_DropRepeatedBots(const int first, const char* filename)
 
 	for (int n = first; n < level.bots.num; n++)
 	{
-		char name[MAX_QPATH];
+		char name[MAX_QPATH] = { 0 };
 		qboolean repeated = qfalse;
 
 		Q_strncpyz(name, Info_ValueForKey(level.bots.infos[n], "name"), sizeof name);
@@ -1436,8 +1456,8 @@ G_LoadBots
 */
 static void G_LoadBots(void)
 {
-	vmCvar_t bots_file;
-	char dirlist[1024];
+	vmCvar_t bots_file = { 0 };
+	char dirlist[1024] = { 0 };
 	int dirlen = 0;
 
 	if (!trap->Cvar_VariableIntegerValue("bot_enable"))
@@ -1466,7 +1486,7 @@ static void G_LoadBots(void)
 		char* dirptr = dirlist;
 		for (int i = 0; i < numdirs; i++, dirptr += dirlen + 1)
 		{
-			char filename[MAX_QPATH];
+			char filename[MAX_QPATH] = { 0 };
 			dirlen = strlen(dirptr);
 			Com_sprintf(filename, sizeof filename, "%s/%s", botFolders[folder], dirptr);
 			G_LoadBotsFromFile(filename);

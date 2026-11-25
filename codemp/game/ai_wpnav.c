@@ -258,7 +258,7 @@ checkprint:
 	{
 		if (gWPArray[i] && gWPArray[i]->inuse)
 		{
-			vec3_t a;
+			vec3_t a = { 0 };
 			VectorSubtract(viewent->client->ps.origin, gWPArray[i]->origin, a);
 
 			const float checkdist = VectorLength(a);
@@ -797,7 +797,7 @@ static int NodeHere(vec3_t spot)
 
 static int CanGetToVector(vec3_t org1, vec3_t org2, vec3_t mins, vec3_t maxs)
 {
-	trace_t tr;
+	trace_t tr = { 0 };
 
 	trap->Trace(&tr, org1, mins, maxs, org2, ENTITYNUM_NONE, MASK_SOLID, qfalse, 0, 0);
 
@@ -869,12 +869,12 @@ static int CanGetToVectorTravel(vec3_t org1, vec3_t org2, vec3_t mins, vec3_t ma
 static int CanGetToVectorTravel(vec3_t org1, vec3_t moveTo, vec3_t mins, vec3_t maxs)
 //int ExampleAnimEntMove(gentity_t *self, vec3_t moveTo, float stepSize)
 {
-	trace_t tr;
-	vec3_t stepTo;
-	vec3_t stepSub;
+	trace_t tr = { 0 };
+	vec3_t stepTo = { 0 };
+	vec3_t stepSub = { 0 };
 	vec3_t stepGoal = { 0 };
-	vec3_t workingOrg;
-	vec3_t lastIncrement;
+	vec3_t workingOrg = { 0 };
+	vec3_t lastIncrement = { 0 };
 	int didMove = 0;
 	const int traceMask = MASK_PLAYERSOLID;
 	qboolean initialDone = qfalse;
@@ -892,7 +892,7 @@ static int CanGetToVectorTravel(vec3_t org1, vec3_t moveTo, vec3_t mins, vec3_t 
 
 	while (!initialDone || didMove)
 	{
-		vec3_t finalMeasure;
+		vec3_t finalMeasure = { 0 };
 		initialDone = qtrue;
 		didMove = 0;
 
@@ -904,7 +904,7 @@ static int CanGetToVectorTravel(vec3_t org1, vec3_t moveTo, vec3_t mins, vec3_t 
 
 		if (!tr.startsolid && !tr.allsolid && tr.fraction)
 		{
-			vec3_t vecSub;
+			vec3_t vecSub = { 0 };
 			VectorSubtract(workingOrg, tr.endpos, vecSub);
 
 			if (VectorLength(vecSub) > stepSize / 2)
@@ -918,10 +918,10 @@ static int CanGetToVectorTravel(vec3_t org1, vec3_t moveTo, vec3_t mins, vec3_t 
 		if (didMove != 1)
 		{
 			//stair check
-			vec3_t trFrom;
+			vec3_t trFrom = { 0 };
 			vec3_t trTo = { 0 };
-			vec3_t trDir;
-			vec3_t vecMeasure;
+			vec3_t trDir = { 0 };
+			vec3_t vecMeasure = { 0 };
 
 			VectorCopy(tr.endpos, trFrom);
 			trFrom[2] += 16;
@@ -942,8 +942,8 @@ static int CanGetToVectorTravel(vec3_t org1, vec3_t moveTo, vec3_t mins, vec3_t 
 				if (!tr.startsolid && !tr.allsolid && tr.fraction == 1)
 				{
 					//clear trace here, probably up a step
-					vec3_t trDown;
-					vec3_t trUp;
+					vec3_t trDown = { 0 };
+					vec3_t trUp = { 0 };
 					VectorCopy(tr.endpos, trUp);
 					VectorCopy(tr.endpos, trDown);
 					trDown[2] -= 16;
@@ -988,12 +988,12 @@ static int ConnectTrail(const int startindex, const int endindex, const qboolean
 	//for storing checked nodes and not trying to extend them each a bazillion times
 	float branchDistance = 0.0f;
 	float maxDistFactor = 256;
-	vec3_t a;
-	vec3_t startplace, starttrace;
+	vec3_t a = { 0 };
+	vec3_t startplace = { 0 }, starttrace = { 0 };
 	vec3_t mins = { 0 }, maxs = { 0 };
-	vec3_t testspot;
-	vec3_t validspotpos;
-	trace_t tr;
+	vec3_t testspot = { 0 };
+	vec3_t validspotpos = { 0 };
+	trace_t tr = { 0 };
 
 	memset(extendednodes, 0, sizeof extendednodes);
 
@@ -1082,8 +1082,8 @@ static int ConnectTrail(const int startindex, const int endindex, const qboolean
 		if (RMG.integer)
 		{
 			//adjust the branch distance dynamically depending on the distance from the start and end points.
-			vec3_t start_dist;
-			vec3_t end_dist;
+			vec3_t start_dist = { 0 };
+			vec3_t end_dist = { 0 };
 
 			VectorSubtract(nodetable[nodenum - 1].origin, gWPArray[startindex]->origin, start_dist);
 			VectorSubtract(nodetable[nodenum - 1].origin, gWPArray[endindex]->origin, end_dist);
@@ -1316,7 +1316,7 @@ static int ConnectTrail(const int startindex, const int endindex, const qboolean
 		//Since it failed, find whichever node is closest to the desired end.
 		while (n_count < nodenum)
 		{
-			vec3_t end_dist;
+			vec3_t end_dist = { 0 };
 			VectorSubtract(nodetable[n_count].origin, gWPArray[endindex]->origin, end_dist);
 			const float test_dist = VectorLength(end_dist);
 			if (ideal_node == -1)
@@ -1408,7 +1408,7 @@ static int OpposingEnds(const int start, const int end)
 static int DoorBlockingSection(const int start, const int end)
 {
 	//if a door blocks the trail, we'll just have to assume the points on each side are in visibility when it's open
-	trace_t tr;
+	trace_t tr = { 0 };
 
 	if (!gWPArray[start] || !gWPArray[start]->inuse || !gWPArray[end] || !gWPArray[end]->inuse)
 	{
@@ -1477,7 +1477,7 @@ static int RepairPaths(const qboolean behind_the_scenes)
 	{
 		if (gWPArray[i] && gWPArray[i]->inuse && gWPArray[i + 1] && gWPArray[i + 1]->inuse)
 		{
-			vec3_t a;
+			vec3_t a = { 0 };
 			VectorSubtract(gWPArray[i]->origin, gWPArray[i + 1]->origin, a);
 
 			if (!(gWPArray[i + 1]->flags & WPFLAG_NOVIS) &&
@@ -1509,8 +1509,8 @@ static int RepairPaths(const qboolean behind_the_scenes)
 
 static int OrgVisibleCurve(vec3_t org1, vec3_t mins, vec3_t maxs, vec3_t org2, const int ignore)
 {
-	trace_t tr;
-	vec3_t evenorg1;
+	trace_t tr = { 0 };
+	vec3_t evenorg1 = { 0 };
 
 	VectorCopy(org1, evenorg1);
 	evenorg1[2] = org2[2];
@@ -1533,7 +1533,7 @@ static int OrgVisibleCurve(vec3_t org1, vec3_t mins, vec3_t maxs, vec3_t org2, c
 static int CanForceJumpTo(const int baseindex, const int testingindex, const float distance)
 {
 	float heightdif = 0.0f;
-	vec3_t xy_base, xy_test, v, mins = { 0 }, maxs = { 0 };
+	vec3_t xy_base = { 0 }, xy_test = { 0 }, v = { 0 }, mins = { 0 }, maxs = { 0 };
 	wpobject_t* wp_base = gWPArray[baseindex];
 	wpobject_t* wp_test = gWPArray[testingindex];
 
@@ -1657,7 +1657,7 @@ static void CalculatePaths(void)
 				if (gWPArray[c] && gWPArray[c]->inuse && i != c &&
 					NotWithinRange(i, c))
 				{
-					vec3_t a;
+					vec3_t a = { 0 };
 					VectorSubtract(gWPArray[i]->origin, gWPArray[c]->origin, a);
 
 					const float nLDist = VectorLength(a);
@@ -1821,7 +1821,7 @@ static int GetNearestVisibleWPToItem(vec3_t org, const int ignore)
 			gWPArray[i]->origin[2] - 15 < org[2] &&
 			gWPArray[i]->origin[2] + 15 > org[2])
 		{
-			vec3_t a;
+			vec3_t a = { 0 };
 			VectorSubtract(org, gWPArray[i]->origin, a);
 			const float fl_len = VectorLength(a);
 
@@ -2007,8 +2007,8 @@ static void CalculateJumpRoutes(void)
 static int LoadPathData(const char* filename)
 {
 	fileHandle_t f = 0;
-	char routePath[MAX_QPATH];
-	wpobject_t thiswp;
+	char routePath[MAX_QPATH] = { 0 };
+	wpobject_t thiswp = { 0 };
 
 	int i = 0;
 	int i_cv = 0;
@@ -2214,8 +2214,8 @@ static void FlagObjects(void)
 {
 	int i = 0, bestindex = 0, found = 0;
 	float bestdist = 999999, tlen = 0.0f;
-	vec3_t a, mins = { 0 }, maxs = { 0 };
-	trace_t tr;
+	vec3_t a = { 0 }, mins = { 0 }, maxs = { 0 };
+	trace_t tr = { 0 };
 
 	gentity_t* flag_red = NULL;
 	gentity_t* flag_blue = NULL;
@@ -2334,7 +2334,7 @@ static void FlagObjects(void)
 static int SavePathData(const char* filename)
 {
 	fileHandle_t f = 0;
-	vec3_t a;
+	vec3_t a = { 0 };
 	float fl_len = 0.0f;
 
 	int i = 0;
@@ -2550,7 +2550,7 @@ static int G_NearestNodeToPoint(vec3_t point)
 
 	while (i < nodenum)
 	{
-		vec3_t v_sub;
+		vec3_t v_sub = { 0 };
 		VectorSubtract(nodetable[i].origin, point, v_sub);
 		const float testDist = VectorLength(v_sub);
 
@@ -2656,7 +2656,7 @@ static int G_RecursiveConnection(const int start, const int end, const int weigh
 	int recursive_index = -1;
 	int pass_weight = weight;
 	vec2_t given_xy = { 0 };
-	trace_t tr;
+	trace_t tr = { 0 };
 
 	pass_weight++;
 	nodetable[start].weight = pass_weight;
@@ -3105,8 +3105,8 @@ static void G_RMGPathing(void)
 	int startTime;
 	int endTime;
 #endif
-	vec3_t down_vec, tr_mins, tr_maxs;
-	trace_t tr;
+	vec3_t down_vec = { 0 }, tr_mins = { 0 }, tr_maxs = { 0 };
+	trace_t tr = { 0 };
 	const gentity_t* terrain = G_Find(NULL, FOFS(classname), "terrain");
 
 	if (!terrain || !terrain->inuse || terrain->s.eType != ET_TERRAIN)
@@ -3325,7 +3325,7 @@ static void BeginAutoPathRoutine(void)
 
 	while (i < gWPNum - 1)
 	{
-		vec3_t v;
+		vec3_t v = { 0 };
 		//disttonext is normally set on save, and when a file is loaded. For RMG we must do it after calc'ing.
 		VectorSubtract(gWPArray[i]->origin, gWPArray[i + 1]->origin, v);
 		gWPArray[i]->disttonext = VectorLength(v);
@@ -3339,7 +3339,7 @@ extern vmCvar_t bot_normgpath;
 
 void LoadPath_ThisLevel(void)
 {
-	vmCvar_t mapname;
+	vmCvar_t mapname = { 0 };
 	int i = 0;
 
 	trap->Cvar_Register(&mapname, "mapname", "", CVAR_SERVERINFO | CVAR_ROM);
@@ -3422,7 +3422,7 @@ static gentity_t* GetClosestSpawn(const gentity_t* ent)
 		if (spawn && spawn->inuse && (!Q_stricmp(spawn->classname, "info_player_start") || !Q_stricmp(
 			spawn->classname, "info_player_deathmatch")))
 		{
-			vec3_t v_sub;
+			vec3_t v_sub = { 0 };
 
 			VectorSubtract(ent->client->ps.origin, spawn->r.currentOrigin, v_sub);
 			const float checkDist = VectorLength(v_sub);
@@ -3551,7 +3551,7 @@ static int AG_FindNode(const int gx, const int gy, const float z)
 
 static qboolean AG_SpotOk(const vec3_t org, const trace_t* floor)
 {
-	vec3_t feet;
+	vec3_t feet = { 0 };
 
 	if (floor->plane.normal[2] < 0.7f || floor->surfaceFlags & SURF_SKY)
 	{
@@ -3581,7 +3581,7 @@ static qboolean AG_SpotOk(const vec3_t org, const trace_t* floor)
 // a hull trace that must get all the way
 static qboolean AG_Clear(const vec3_t from, const vec3_t to, const vec3_t maxs)
 {
-	trace_t tr;
+	trace_t tr = { 0 };
 
 	trap->Trace(&tr, from, agMins, maxs, to, ENTITYNUM_NONE, MASK_PLAYERSOLID, qfalse, 0, 0);
 	return !tr.startsolid && !tr.allsolid && tr.fraction >= 1.0f ? qtrue : qfalse;
@@ -3590,7 +3590,7 @@ static qboolean AG_Clear(const vec3_t from, const vec3_t to, const vec3_t maxs)
 // the floor under "from" within "down" units: the standing origin there in out
 static qboolean AG_Floor(const vec3_t from, const float down, const vec3_t maxs, vec3_t out, trace_t* tr)
 {
-	vec3_t end;
+	vec3_t end = { 0 };
 
 	VectorCopy(from, end);
 	end[2] -= down;
@@ -3606,8 +3606,8 @@ static qboolean AG_Floor(const vec3_t from, const float down, const vec3_t maxs,
 // walk (in substeps, standing or crouched) or jump from a standing origin to the cell at (tx, ty)
 static qboolean AG_Move(const vec3_t from, const float tx, const float ty, vec3_t out, int* flags)
 {
-	trace_t tr;
-	vec3_t pos, up, next;
+	trace_t tr = { 0 };
+	vec3_t pos = { 0 }, up = { 0 }, next = { 0 };
 	memset(&tr, 0, sizeof(tr)); // SJE: with 0 steps the loop below never traces - AG_SpotOk then read garbage
 	const float dx = tx - from[0], dy = ty - from[1];
 	const float dist = sqrtf(dx * dx + dy * dy);
@@ -3696,8 +3696,8 @@ static void AG_Link(const int a, const int b)
 // a node in the cell nearest to a point (a spawn point, an item), reached from it on foot
 static int AG_SeedNode(const vec3_t point, const float spacing)
 {
-	trace_t tr;
-	vec3_t start, floorOrg, out;
+	trace_t tr = { 0 };
+	vec3_t start = { 0 }, floorOrg = { 0 }, out = { 0 };
 	int flags = 0;
 
 	VectorCopy(point, start);
@@ -3731,7 +3731,7 @@ static int AG_Flood(const float spacing)
 		for (int d = 0; d < 8; d++)
 		{
 			const int gx = agNodes[a].gx + dirs[d][0], gy = agNodes[a].gy + dirs[d][1];
-			vec3_t out;
+			vec3_t out = { 0 };
 			int flags = 0;
 
 			if (!AG_Move(agNodes[a].org, gx * spacing, gy * spacing, out, &flags))
@@ -3819,7 +3819,7 @@ static qboolean agSeedNav = qfalse; // (G_WP_AutoGridServer: seeds from the SP n
 
 static void AG_AutoGrid(const gentity_t* pl, const float spacingArg, const qboolean force)
 {
-	vmCvar_t mapname;
+	vmCvar_t mapname = { 0 };
 	static int spawnEnts[MAX_GENTITIES];
 	int numSpawnEnts = 0;
 	// 64..256: over 127 the grid neighbours get no CalculatePaths links (only the walking order joins them) - for maps too
@@ -3876,7 +3876,7 @@ static void AG_AutoGrid(const gentity_t* pl, const float spacingArg, const qbool
 		const int numNav = trap->Nav_GetNumNodes();
 		for (int i = 0; i < numNav; i++)
 		{
-			vec3_t org;
+			vec3_t org = { 0 };
 			if (trap->Nav_GetNodePosition(i, org))
 			{
 				AG_SeedNode(org, spacing);
@@ -3928,7 +3928,7 @@ static void AG_AutoGrid(const gentity_t* pl, const float spacingArg, const qbool
 
 	// spawn points: first the points nearest the map's spawns, then the ones farthest from those already picked
 	int numSpawns = 0;
-	int spawnNodes[AG_MAX_SPAWNS];
+	int spawnNodes[AG_MAX_SPAWNS] = { 0 };
 	for (int pass = 0; pass < 2 && numSpawns < AG_MAX_SPAWNS; pass++)
 	{
 		const int tries = pass == 0 ? numSpawnEnts : AG_MAX_SPAWNS;
@@ -3999,7 +3999,7 @@ void G_WP_AutoGridServer(const float spacing, const qboolean force)
 
 int AcceptBotCommand(const char* cmd, const gentity_t* pl)
 {
-	vmCvar_t mapname;
+	vmCvar_t mapname = { 0 };
 
 	if (gBotEdit == 0)
 	{
@@ -4314,7 +4314,7 @@ int AcceptBotCommand(const char* cmd, const gentity_t* pl)
 	// SJE: bot_wp_autogrid [spacing] [force] (AG_AutoGrid)
 	if (Q_stricmp(cmd, "bot_wp_autogrid") == 0)
 	{
-		char arg[MAX_STRING_CHARS];
+		char arg[MAX_STRING_CHARS] = { 0 };
 		trap->Argv(1, arg, sizeof arg);
 		const float spacing = (float)atof(arg);
 		trap->Argv(2, arg, sizeof arg);

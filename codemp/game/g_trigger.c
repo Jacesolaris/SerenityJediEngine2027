@@ -468,7 +468,7 @@ void Touch_Multi(gentity_t* self, gentity_t* other, trace_t* trace)
 	if (self->spawnflags & 2)
 	{
 		//FACING
-		vec3_t forward;
+		vec3_t forward = { 0 };
 
 		if (other->client)
 		{
@@ -591,7 +591,7 @@ void Touch_Multi(gentity_t* self, gentity_t* other, trace_t* trace)
 
 	if (self->radius)
 	{
-		vec3_t eye_spot;
+		vec3_t eye_spot = { 0 };
 
 		//Only works if your head is in it, but we allow leaning out
 		//NOTE: We don't use CalcEntitySpot SPOT_HEAD because we don't want this
@@ -861,7 +861,7 @@ trigger_lightningstrike -rww
 //lightning strike trigger lightning strike event
 static void Do_Strike(gentity_t* ent)
 {
-	trace_t local_trace;
+	trace_t local_trace = { 0 };
 	vec3_t strike_from = { 0 };
 	vec3_t strike_point = { 0 };
 	vec3_t fx_ang = { 0 };
@@ -1096,7 +1096,7 @@ void trigger_push_touch(gentity_t* self, gentity_t* other, trace_t* trace)
 	if (self->spawnflags & PUSH_RELATIVE)
 	{
 		//relative, dir to it * speed
-		vec3_t dir;
+		vec3_t dir = { 0 };
 		VectorSubtract(self->s.origin2, other->r.currentOrigin, dir);
 		if (self->speed)
 		{
@@ -1135,7 +1135,7 @@ Calculate origin2 so the target apogee will be hit
 */
 void AimAtTarget(gentity_t* self)
 {
-	vec3_t origin;
+	vec3_t origin = { 0 };
 
 	VectorAdd(self->r.absmin, self->r.absmax, origin);
 	VectorScale(origin, 0.5f, origin);
@@ -1517,7 +1517,7 @@ void hurt_touch(gentity_t* self, gentity_t* other, trace_t* trace)
 		if (other->NPC)
 		{
 			//kill it now
-			vec3_t vDir;
+			vec3_t vDir = { 0 };
 
 			VectorSet(vDir, 0, 1, 0);
 			G_Damage(other, other, other, vDir, other->client->ps.origin, Q3_INFINITE, 0, MOD_FALLING);
@@ -1814,7 +1814,7 @@ void hyperspace_touch(const gentity_t* self, gentity_t* other, trace_t* trace)
 			const float time_frac = (float)(level.time - other->client->ps.hyperSpaceTime) / HYPERSPACE_TIME;
 			// (as SP) a ship is only sent through while it is in here: one about to fly out of the far side before its
 			// time (it came in deep, or the jump is long for the size of this box) is sent now, its clock moved on
-			vec3_t next_org;
+			vec3_t next_org = { 0 };
 			VectorMA(other->client->ps.origin, 0.15f, other->client->ps.velocity, next_org);
 			const qboolean leaving = time_frac < HYPERSPACE_TELEPORT_FRAC
 				&& !G_PointInBounds(next_org, (float*)self->r.absmin, (float*)self->r.absmax);
@@ -1825,7 +1825,7 @@ void hyperspace_touch(const gentity_t* self, gentity_t* other, trace_t* trace)
 			if (time_frac >= HYPERSPACE_TELEPORT_FRAC || leaving)
 			{
 				//half-way, now teleport them!
-				vec3_t diff, fwd, right, up, newOrg;
+				vec3_t diff = { 0 }, fwd = { 0 }, right = { 0 }, up = { 0 }, newOrg = { 0 };
 				//take off the flag so we only do this once
 				other->client->ps.eFlags2 &= ~EF2_HYPERSPACE;
 				//Get the offset from the local position
@@ -1858,7 +1858,7 @@ void hyperspace_touch(const gentity_t* self, gentity_t* other, trace_t* trace)
 				// one that is short of the target (or wide of it) could be put past the map's edge, out of the world
 				// (deathstar_trench: the exit is near a corner): then it comes out at the exit point itself
 				{
-					trace_t tr;
+					trace_t tr = { 0 };
 					trap->Trace(&tr, ent->s.origin, other->r.mins, other->r.maxs, newOrg, other->s.number, MASK_SOLID, qfalse, 0, 0);
 					if (tr.startsolid || tr.allsolid || tr.fraction < 1.0f)
 					{

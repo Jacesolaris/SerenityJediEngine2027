@@ -61,7 +61,7 @@ static qboolean SaberDroid_Move(void)
 	NPCS.NPCInfo->goalRadius = 30.0f;
 
 	const qboolean moved = NPC_MoveToGoal(qtrue);
-	navInfo_t info;
+	navInfo_t info SHR_NAVINFO_INIT;
 
 	//Get the doMove info
 	SHR_NAV_GetLastMove(info);
@@ -148,7 +148,7 @@ static void NPC_BSSaberDroid_Patrol(void)
 			{
 				//FIXME: walk over to it, maybe?  Not if not chase enemies
 				//NOTE: stops walking or doing anything else below
-				vec3_t dir, angles;
+				vec3_t dir = { 0 }, angles = { 0 };
 
 				VectorSubtract(NPCS.NPCInfo->investigateGoal, NPCS.NPC->client->renderInfo.eyePoint, dir);
 				vectoangles(dir, angles);

@@ -857,15 +857,15 @@ and returns.
 
 void pitch_roll_for_slope(gentity_t* forwhom, vec3_t pass_slope, vec3_t store_angles, const qboolean keep_pitch)
 {
-	vec3_t slope;
-	vec3_t nvf, ovf, ovr, new_angles = { 0, 0, 0 };
+	vec3_t slope = { 0 };
+	vec3_t nvf = { 0 }, ovf = { 0 }, ovr = { 0 }, new_angles = { 0, 0, 0 };
 
 	//if we don't have a slope, get one
 	if (!pass_slope || VectorCompare(vec3_origin, pass_slope))
 	{
-		vec3_t endspot;
-		vec3_t startspot;
-		trace_t trace;
+		vec3_t endspot = { 0 };
+		vec3_t startspot = { 0 };
+		trace_t trace = { qfalse };
 
 		VectorCopy(forwhom->currentOrigin, startspot);
 		startspot[2] += forwhom->mins[2] + 4;
@@ -1196,7 +1196,7 @@ DeadThink
 */
 static void DeadThink()
 {
-	trace_t trace;
+	trace_t trace = { qfalse };
 	const float old_maxs2 = NPC->maxs[2];
 
 	NPC->maxs[2] = NPC->client->renderInfo.eyePoint[2] - NPC->currentOrigin[2] + 4;
@@ -1336,15 +1336,15 @@ and returns.
 
 void pitch_roll_for_slope(gentity_t* forwhom, vec3_t pass_slope)
 {
-	vec3_t slope;
-	vec3_t nvf, ovf, ovr, new_angles = { 0, 0, 0 };
+	vec3_t slope = { 0 };
+	vec3_t nvf = { 0 }, ovf = { 0 }, ovr = { 0 }, new_angles = { 0, 0, 0 };
 
 	//if we don't have a slope, get one
 	if (!pass_slope || VectorCompare(vec3_origin, pass_slope))
 	{
-		vec3_t endspot;
-		vec3_t startspot;
-		trace_t trace;
+		vec3_t endspot = { 0 };
+		vec3_t startspot = { 0 };
+		trace_t trace = { 0 };
 
 		VectorCopy(forwhom->r.currentOrigin, startspot);
 		startspot[2] += forwhom->r.mins[2] + 4;
@@ -1413,7 +1413,7 @@ DeadThink
 */
 static void DeadThink(void)
 {
-	trace_t trace;
+	trace_t trace = { 0 };
 
 	const float oldMaxs2 = NPCS.NPC->r.maxs[2];
 
@@ -1554,7 +1554,7 @@ void NPC_ShowDebugInfo()
 	if (showBBoxes)
 	{
 		gentity_t* found = nullptr;
-		vec3_t mins, maxs;
+		vec3_t mins = { 0 }, maxs = { 0 };
 
 		//do player, too
 		VectorAdd(player->currentOrigin, player->mins, mins);
@@ -1673,8 +1673,8 @@ static void NPC_HandleAIFlags()
 			//-----------------------------------------
 			if (is_in_the_air)
 			{
-				vec3_t ground;
-				trace_t trace;
+				vec3_t ground = { 0 };
+				trace_t trace = { qfalse };
 				VectorCopy(NPC->currentOrigin, ground);
 				ground[2] -= 60.0f;
 				gi.trace(&trace, NPC->currentOrigin, nullptr, nullptr, ground, NPC->s.number, NPC->clipmask,
@@ -2016,7 +2016,7 @@ float NPC_MaxDistSquaredForWeapon(void);
 #endif
 static void NPC_CheckAttackHold(void)
 {
-	vec3_t vec;
+	vec3_t vec = { 0 };
 
 	// If they don't have an enemy they shouldn't hold their attack anim.
 	if (!NPCS.NPC->enemy)
@@ -3245,7 +3245,7 @@ extern qboolean Pilot_MasterUpdate(void); // AI_Vehicle.c
 
 static void NPC_RunBehavior(const npcteam_t team, const int b_state)
 {
-	qboolean dontSetAim;
+	qboolean dontSetAim = qfalse;
 
 	// flying a fighter (ai_fighter.c: the space maps' empty ships)
 	if (NPC_FighterAI())
@@ -3684,7 +3684,7 @@ static void NPC_ChatterLoad(void)
 {
 	char* buf = nullptr;
 	char* file = nullptr;
-	const char* p;
+	const char* p = NULL;
 
 	numChatSets = 0;
 	memset(chatSets, 0, sizeof chatSets);
@@ -3713,7 +3713,7 @@ static void NPC_ChatterLoad(void)
 		}
 		while (1)
 		{
-			char key[32];
+			char key[32] = { 0 };
 
 			token = COM_ParseExt(&p, qtrue);
 			if (!token[0] || !Q_stricmp(token, "}"))
@@ -3725,8 +3725,8 @@ static void NPC_ChatterLoad(void)
 			if (!Q_stricmp(key, "classes") || !Q_stricmp(key, "types") || !Q_stricmp(key, "dialog"))
 			{
 				// a list: space separated (classes, types) or ";" separated (dialog)
-				char list[1024];
-				char* s;
+				char list[1024] = { 0 };
+				char* s = NULL;
 				const char sep = !Q_stricmp(key, "dialog") ? ';' : ' ';
 				int n = 0;
 
@@ -3839,7 +3839,7 @@ static int activeChats[MAX_ACTIVE_CHATS]; // entity number + 1 of each talk's le
 static void NPC_ChatterLoad(void)
 {
 	char* buf = NULL;
-	const char* p;
+	const char* p = NULL;
 
 	numChatSets = 0;
 	memset(chatSets, 0, sizeof chatSets);
@@ -3881,7 +3881,7 @@ static void NPC_ChatterLoad(void)
 		}
 		while (1)
 		{
-			char key[32];
+			char key[32] = { 0 };
 
 			token = COM_ParseExt(&p, qtrue);
 			if (!token[0] || !Q_stricmp(token, "}"))
@@ -3893,8 +3893,8 @@ static void NPC_ChatterLoad(void)
 			if (!Q_stricmp(key, "classes") || !Q_stricmp(key, "types") || !Q_stricmp(key, "dialog"))
 			{
 				// a list: space separated (classes, types) or ";" separated (dialog)
-				char list[1024];
-				char* s;
+				char list[1024] = { 0 };
+				char* s = NULL;
 				const char sep = !Q_stricmp(key, "dialog") ? ';' : ' ';
 				int n = 0;
 
@@ -3956,7 +3956,7 @@ static void NPC_ChatterLoad(void)
 // the voice set an NPC talks with, -1 = none (cached in chatSet: 0 = not looked up, else set + 1, -1 = none)
 static int NPC_ChatterSet(gentity_t* ent)
 {
-	int i, j;
+	int i = 0, j = 0;
 
 	if (ent->chatSet)
 	{
@@ -3975,7 +3975,7 @@ static int NPC_ChatterSet(gentity_t* ent)
 		}
 		for (j = 0; j < chatSets[i].numTypes && ent->NPC_type; j++)
 		{
-			char type[64];
+			char type[64] = { 0 };
 			Q_strncpyz(type, ent->NPC_type, sizeof type);
 			Q_strlwr(type);
 			if (strstr(type, chatSets[i].types[j]))
@@ -4011,7 +4011,7 @@ static qboolean NPC_ChatterFree(const gentity_t* ent)
 static void NPC_ChatterEnd(gentity_t* ent)
 {
 	gentity_t* other = ent->chatPartner > 0 ? &g_entities[ent->chatPartner - 1] : NULL;
-	int i;
+	int i = 0;
 
 	for (i = 0; i < MAX_ACTIVE_CHATS; i++)
 	{
@@ -4031,7 +4031,7 @@ static void NPC_ChatterEnd(gentity_t* ent)
 
 static void NPC_ChatterFace(gentity_t* ent, const gentity_t* other)
 {
-	vec3_t dir, angles;
+	vec3_t dir = { 0 }, angles = { 0 };
 
 	VectorSubtract(other->SHR_currentOrigin, ent->SHR_currentOrigin, dir);
 	vectoangles(dir, angles);
@@ -4054,8 +4054,8 @@ extern bool in_camera;
 
 void NPC_ChatterThink(gentity_t* ent)
 {
-	gentity_t* other;
-	int set, i;
+	gentity_t* other = NULL;
+	int set = 0, i = 0;
 
 	if (!(g_npcChatter && g_npcChatter->integer) || !ent || !ent->client || !ent->NPC || in_camera)
 	{
@@ -4163,7 +4163,7 @@ void NPC_ChatterThink(gentity_t* ent)
 		}
 		for (i = 0; i < count; i++)
 		{
-			int other_set;
+			int other_set = 0;
 
 			other = near_list[i];
 			if (!other || other == ent || !NPC_ChatterFree(other) || other->chatPartner > 0 || other->chatNext > level.time + CHAT_COOLDOWN)
@@ -4207,8 +4207,8 @@ static void NPC_ChatterSay(gentity_t* speaker, const char* sound)
 // every NPC think (after its behaviour state)
 void NPC_ChatterThink(gentity_t* ent)
 {
-	gentity_t* other;
-	int set, i;
+	gentity_t* other = NULL;
+	int set = 0, i = 0;
 
 	if (!g_npcChatter.integer || !ent || !ent->client || !ent->NPC)
 	{
@@ -4316,7 +4316,7 @@ void NPC_ChatterThink(gentity_t* ent)
 		}
 		for (i = 0; i < count; i++)
 		{
-			int other_set;
+			int other_set = 0;
 
 			other = near_list[i];
 			if (!other || other == ent || !NPC_ChatterFree(other) || other->chatPartner > 0 || other->chatNext > level.time + CHAT_COOLDOWN)
@@ -4349,8 +4349,8 @@ extern void G_CivilianReset(void);
 // Bots (ai_main.c bot_social_think, 2026-11-16): a random line of the voice set this bot / NPC has, qfalse = none
 qboolean NPC_ChatterRandomLine(gentity_t* ent, char* out, const int out_size)
 {
-	int set;
-	const chatSet_t* cs;
+	int set = 0;
+	const chatSet_t* cs = NULL;
 
 	if (numChatSets < 0)
 	{
@@ -4540,8 +4540,8 @@ static void NPC_ExecuteBState(const gentity_t* self) //, int msec )
 
 static void NPC_CheckInSolid()
 {
-	trace_t trace;
-	vec3_t point;
+	trace_t trace = { qfalse };
+	vec3_t point = { 0 };
 	VectorCopy(NPC->currentOrigin, point);
 	point[2] -= 0.25;
 
@@ -4656,7 +4656,7 @@ extern int AITime;
 void NPC_Think(gentity_t* self)
 {
 	PROFILE_ZONE("NPC_Think");
-	vec3_t old_move_dir;
+	vec3_t old_move_dir = { 0 };
 
 	self->nextthink = level.time + FRAMETIME / 2;
 
@@ -4731,7 +4731,7 @@ void NPC_Think(gentity_t* self)
 		if (self->owner)
 		{
 			//still have attached owner, check and see if can forget him (so he can use me later)
-			vec3_t dir2_owner;
+			vec3_t dir2_owner = { 0 };
 			VectorSubtract(self->owner->currentOrigin, self->currentOrigin, dir2_owner);
 
 			gentity_t* old_owner = self->owner;
@@ -5273,8 +5273,8 @@ static void NPC_ExecuteBState(const gentity_t* self) //, int msec )
 
 static void NPC_CheckInSolid(void)
 {
-	trace_t trace;
-	vec3_t point;
+	trace_t trace = { 0 };
+	vec3_t point = { 0 };
 	VectorCopy(NPCS.NPC->r.currentOrigin, point);
 	point[2] -= 0.25;
 
@@ -5341,7 +5341,7 @@ extern void G_ScriptHeldAnimThink(gentity_t* ent);
 
 void NPC_Think(gentity_t* self)
 {
-	vec3_t oldMoveDir;
+	vec3_t oldMoveDir = { 0 };
 	const int i = 0;
 	static qboolean spreadRegistered = qfalse;
 
@@ -5416,7 +5416,7 @@ void NPC_Think(gentity_t* self)
 		if (self->s.owner != ENTITYNUM_NONE)
 		{
 			//still have attached owner, check and see if can forget him (so he can use me later)
-			vec3_t dir2owner;
+			vec3_t dir2owner = { 0 };
 			const gentity_t* oldOwner = &g_entities[self->s.owner];
 
 			VectorSubtract(g_entities[self->s.owner].r.currentOrigin, self->r.currentOrigin, dir2owner);

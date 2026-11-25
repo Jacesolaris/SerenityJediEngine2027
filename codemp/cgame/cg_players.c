@@ -48,11 +48,11 @@ static void CG_AddSaberLight(const vec3_t org, const float radius, const vec3_t 
 	// flood the blade and the body; shots and explosions keep the boost. Vanilla renderer: those cvars do nothing anyway.
 	if (cg_saberLightClassic.integer)
 	{
-		char buf[64];
+		char buf[64] = { 0 };
 		trap->Cvar_VariableStringBuffer("cl_renderer", buf, sizeof buf);
 		if (strstr(buf, "rend2"))
 		{
-			float globalIntensity, globalRadius;
+			float globalIntensity = 0, globalRadius = 0;
 			trap->Cvar_VariableStringBuffer("r_dlightIntensity", buf, sizeof buf);
 			globalIntensity = atof(buf);
 			trap->Cvar_VariableStringBuffer("r_dlightRadius", buf, sizeof buf);
@@ -288,7 +288,7 @@ sfxHandle_t CG_CustomSound(int clientNum, const char* sound_name)
 	int num_c_siege_sounds = 0;
 	int num_c_duel_sounds = 0;
 	int num_c_call_sounds = 0;
-	char l_sound_name[MAX_QPATH];
+	char l_sound_name[MAX_QPATH] = { 0 };
 
 	if (sound_name[0] != '*')
 	{
@@ -477,7 +477,7 @@ static qboolean CG_ParseSurfsFile(const char* modelName, const char* skin_name, 
 	const char* text_p = NULL;
 	const char* value = NULL;
 	static char text[20000];
-	char sfilename[MAX_QPATH];
+	char sfilename[MAX_QPATH] = { 0 };
 	fileHandle_t f = 0;
 	int i = 0;
 
@@ -581,12 +581,12 @@ qboolean BG_ValidateSkinForTeam(const char* modelName, char* skin_name, int team
 static qboolean CG_RegisterClientModelname(clientInfo_t* ci, const char* modelName, const char* skin_name,
 	const char* team_name, const int clientNum)
 {
-	char afilename[MAX_QPATH];
+	char afilename[MAX_QPATH] = { 0 };
 	char GLAName[MAX_QPATH] = { 0 };
 	const vec3_t temp_vec = { 0, 0, 0 };
 	qboolean bad_model = qfalse;
-	char surf_off[MAX_SURF_LIST_SIZE];
-	char surf_on[MAX_SURF_LIST_SIZE];
+	char surf_off[MAX_SURF_LIST_SIZE] = { 0 };
+	char surf_on[MAX_SURF_LIST_SIZE] = { 0 };
 	char* use_skin_name = NULL;
 
 retryModel:
@@ -895,7 +895,7 @@ retryModel:
 	if (!ci->modelIcon)
 	{
 		int i = 0;
-		char icon_name[2048];
+		char icon_name[2048] = { 0 };
 		strcpy(icon_name, "icon_");
 		int j = strlen(icon_name);
 		while (skin_name[i] && skin_name[i] != '|' && j < 1024)
@@ -1077,7 +1077,7 @@ void CG_LoadCISounds(clientInfo_t* ci, const qboolean modelloaded)
 	int i = 0;
 	int f_len = 0;
 	char sound_path[MAX_QPATH] = { 0 };
-	char sound_name[1024];
+	char sound_name[1024] = { 0 };
 	const char* s = NULL;
 
 	const char* dir = ci->modelName;
@@ -1437,7 +1437,7 @@ static void CG_LoadClientInfo(clientInfo_t* ci)
 	ci->newAnims = qfalse;
 	if (ci->torsoModel)
 	{
-		orientation_t tag;
+		orientation_t tag = { 0 };
 		// if the torso model has the "tag_flag"
 		if (trap->R_LerpTag(&tag, ci->torsoModel, 0, 0, 1, "tag_flag"))
 		{
@@ -1474,7 +1474,7 @@ static void CG_LoadClientInfo(clientInfo_t* ci)
 // the saber builder (from JA Enhanced): a built hilt gets the skin of its parts ("sk1" / "sk2" in the configstring)
 static void CG_SetBuiltSaberSkin(clientInfo_t* ci, const int saberNum)
 {
-	char skin[MAX_QPATH];
+	char skin[MAX_QPATH] = { 0 };
 	const char* saberName = saberNum ? ci->saber2Name : ci->saber_name;
 
 	if (BG_SaberBuiltSkin(saberName, ci->saber[saberNum].model, ci->saberSkinParts[saberNum], skin, sizeof skin))
@@ -1960,7 +1960,7 @@ extern void* CG_G2WeaponInstance2(const centity_t* cent, int weapon);
 void CG_NewClientInfo(int clientNum, qboolean entities_initialized)
 {
 	clientInfo_t* ci = NULL;
-	clientInfo_t new_info;
+	clientInfo_t new_info = { 0 };
 	const char* configstring = NULL;
 	const char* v = NULL;
 	char* slash = NULL;
@@ -2118,7 +2118,7 @@ void CG_NewClientInfo(int clientNum, qboolean entities_initialized)
 	{
 		// forcemodel makes everyone use a single model
 		// to prevent load hitches
-		char model_str[MAX_QPATH];
+		char model_str[MAX_QPATH] = { 0 };
 		char* skin = NULL;
 
 		trap->Cvar_VariableStringBuffer("model", model_str, sizeof model_str);
@@ -2612,10 +2612,10 @@ static void player_foot_step(const vec3_t origin,
 	const centity_t* cent,
 	const footstepType_t foot_step_type)
 {
-	vec3_t      end;
+	vec3_t      end = { 0 };
 	const vec3_t maxs = { 7, 7, 2 };
 	const vec3_t mins = { -7, -7, 0 };
-	trace_t     trace;
+	trace_t     trace = { 0 };
 	footstep_t  sound_type = FOOTSTEP_STONEWALK; // safe default, will be overridden
 	qboolean    b_mark = qfalse;
 	qhandle_t   footMarkShader = 0;
@@ -2838,8 +2838,8 @@ static void CG_PlayerFootsteps(centity_t* cent, const footstepType_t foot_step_t
 		&& cent->currentState.NPC_class != CLASS_SENTRY
 		&& cent->currentState.NPC_class != CLASS_SWAMP)
 	{
-		mdxaBone_t boltMatrix;
-		vec3_t temp_angles = { 0 }, sideOrigin;
+		mdxaBone_t boltMatrix = { 0 };
+		vec3_t temp_angles = { 0 }, sideOrigin = { 0 };
 		int foot_bolt = 0;
 
 		temp_angles[PITCH] = 0;
@@ -3104,9 +3104,9 @@ static void CG_PlayerAnimEventDo(centity_t* cent, animevent_t* anim_event)
 			}
 			if (bolt_index != -1)
 			{
-				vec3_t l_angles;
-				vec3_t b_point, bAngle;
-				mdxaBone_t matrix;
+				vec3_t l_angles = { 0 };
+				vec3_t b_point = { 0 }, bAngle = { 0 };
+				mdxaBone_t matrix = { 0 };
 
 				VectorSet(l_angles, 0, cent->lerpAngles[YAW], 0);
 
@@ -3120,7 +3120,7 @@ static void CG_PlayerAnimEventDo(centity_t* cent, animevent_t* anim_event)
 			}
 			else
 			{
-				vec3_t bAngle;
+				vec3_t bAngle = { 0 };
 
 				VectorSet(bAngle, 0, 1, 0);
 				trap->FX_PlayEffectID(anim_event->eventData[AED_EFFECTINDEX], cent->lerpOrigin, bAngle, -1, -1, qfalse);
@@ -4305,8 +4305,8 @@ static const char* cg_effectorStringTable[] =
 //pose if the pelvis is flipped opposite of the base pose or something -rww
 static int CG_RagAnimForPositioning(centity_t* cent)
 {
-	vec3_t dir;
-	mdxaBone_t matrix;
+	vec3_t dir = { 0 };
+	mdxaBone_t matrix = { 0 };
 
 	assert(cent->ghoul2);
 	const int bolt = trap->G2API_AddBolt(cent->ghoul2, 0, "pelvis");
@@ -4377,7 +4377,7 @@ static qboolean CG_SaberStuckInBody(const int ent)
 
 qboolean CG_RagDoll(centity_t* cent, vec3_t forced_angles)
 {
-	vec3_t   used_org;
+	vec3_t   used_org = { 0 };
 	qboolean in_something = qfalse;
 
 	// -----------------------------------------------------------------
@@ -4427,7 +4427,7 @@ qboolean CG_RagDoll(centity_t* cent, vec3_t forced_angles)
 	// (also while ragging: the instance may have been replaced by one of another model since the ragdoll started)
 	if (cent->ghoul2)
 	{
-		char glaName[MAX_QPATH];
+		char glaName[MAX_QPATH] = { 0 };
 
 		glaName[0] = 0;
 		trap->G2API_GetGLAName(cent->ghoul2, 0, glaName);
@@ -4455,7 +4455,7 @@ qboolean CG_RagDoll(centity_t* cent, vec3_t forced_angles)
 		// 1.2: High-speed airborne ragdoll trigger
 		else if (cent->currentState.groundEntityNum == ENTITYNUM_NONE)
 		{
-			vec3_t c_vel;
+			vec3_t c_vel = { 0 };
 
 			VectorCopy(cent->currentState.pos.trDelta, c_vel);
 
@@ -4504,10 +4504,10 @@ qboolean CG_RagDoll(centity_t* cent, vec3_t forced_angles)
 			// Bolt indices and positions
 			int    bolt_checks[5] = { 0 };
 			vec3_t bolt_points[5] = { { 0,0,0 } };
-			vec3_t t_ang;
+			vec3_t t_ang = { 0 };
 
-			trace_t     tr;
-			mdxaBone_t  boltMatrix;
+			trace_t     tr = { 0 };
+			mdxaBone_t  boltMatrix = { 0 };
 			int         i = 0;
 
 			VectorSet(t_ang,
@@ -4540,8 +4540,8 @@ qboolean CG_RagDoll(centity_t* cent, vec3_t forced_angles)
 			// Trace from hands/head/feet to either head or origin
 			while (i < 5)
 			{
-				vec3_t tr_start;
-				vec3_t tr_end;
+				vec3_t tr_start = { 0 };
+				vec3_t tr_end = { 0 };
 
 				if (i < 2)
 				{
@@ -4606,8 +4606,8 @@ qboolean CG_RagDoll(centity_t* cent, vec3_t forced_angles)
 	// -----------------------------------------------------------------
 	{
 		int rag_anim = 0;
-		sharedRagDollParams_t       t_parms;
-		sharedRagDollUpdateParams_t tu_parms;
+		sharedRagDollParams_t       t_parms = { 0 };
+		sharedRagDollUpdateParams_t tu_parms = { 0 };
 
 		memset(&t_parms, 0, sizeof(t_parms));
 		memset(&tu_parms, 0, sizeof(tu_parms));
@@ -4739,13 +4739,13 @@ qboolean CG_RagDoll(centity_t* cent, vec3_t forced_angles)
 
 		if (grabEnt->ghoul2)
 		{
-			mdxaBone_t matrix;
-			vec3_t     b_org;
-			vec3_t     this_hand;
-			vec3_t     hands;
-			vec3_t     pcj_min, pcj_max;
-			vec3_t     p_dif;
-			vec3_t     thor_point;
+			mdxaBone_t matrix = { 0 };
+			vec3_t     b_org = { 0 };
+			vec3_t     this_hand = { 0 };
+			vec3_t     hands = { 0 };
+			vec3_t     pcj_min = { 0 }, pcj_max = { 0 };
+			vec3_t     p_dif = { 0 };
+			vec3_t     thor_point = { 0 };
 			int        thor_bolt = 0;
 
 			// Get holder's hand position
@@ -4815,7 +4815,7 @@ qboolean CG_RagDoll(centity_t* cent, vec3_t forced_angles)
 
 				if (dif_len > 0.0f)
 				{
-					vec3_t d_vel;
+					vec3_t d_vel = { 0 };
 					int    i = 0;
 
 					if (dif_len < 12.0f)
@@ -4826,7 +4826,7 @@ qboolean CG_RagDoll(centity_t* cent, vec3_t forced_angles)
 
 					while (cg_effectorStringTable[i])
 					{
-						vec3_t r_vel;
+						vec3_t r_vel = { 0 };
 
 						VectorCopy(p_dif, d_vel);
 						d_vel[2] = 0.0f;
@@ -4873,8 +4873,8 @@ qboolean CG_RagDoll(centity_t* cent, vec3_t forced_angles)
 		// -----------------------------------------------------------------
 		// 5. Reset overridden bones back to normal rag state
 		// -----------------------------------------------------------------
-		vec3_t pcj_min, pcj_max;
-		vec3_t d_vel;
+		vec3_t pcj_min = { 0 }, pcj_max = { 0 };
+		vec3_t d_vel = { 0 };
 
 		// Clear effector goals
 		trap->G2API_RagEffectorGoal(cent->ghoul2, "rhand", NULL);
@@ -4920,7 +4920,7 @@ void CG_G2ServerBoneAngles(const centity_t* cent)
 {
 	int i = 0;
 	int bone = cent->currentState.boneIndex1;
-	vec3_t bone_angles;
+	vec3_t bone_angles = { 0 };
 
 	VectorCopy(cent->currentState.boneAngles1, bone_angles);
 
@@ -4976,7 +4976,7 @@ CG_G2SetHeadBlink
 */
 static void CG_G2SetHeadBlink(const centity_t* cent, const qboolean b_start)
 {
-	vec3_t desired_angles;
+	vec3_t desired_angles = { 0 };
 	int blendTime = 80;
 	qboolean b_wink = qfalse;
 	const int h_reye = trap->G2API_AddBolt(cent->ghoul2, 0, "reye");
@@ -5220,7 +5220,7 @@ static void CG_G2PlayerAngles(centity_t* cent, matrix3_t legs, vec3_t legs_angle
 	//rww - now do ragdoll stuff
 	if (cent->currentState.eFlags & EF_DEAD || cent->currentState.eFlags & EF_RAG)
 	{
-		vec3_t forced_angles;
+		vec3_t forced_angles = { 0 };
 
 		VectorClear(forced_angles);
 		forced_angles[YAW] = cent->lerpAngles[YAW];
@@ -5253,7 +5253,7 @@ static void CG_G2PlayerAngles(centity_t* cent, matrix3_t legs, vec3_t legs_angle
 	if (BG_AnimSetIsHumanoidLike(cent->localAnimIndex))
 	{
 		//don't do these things on non-humanoids
-		vec3_t look_angles;
+		vec3_t look_angles = { 0 };
 		const entityState_t* emplaced = NULL;
 
 		if (cent->currentState.hasLookTarget)
@@ -5291,8 +5291,8 @@ static void CG_G2PlayerAngles(centity_t* cent, matrix3_t legs, vec3_t legs_angle
 
 			if (other && other->ghoul2 && ci->bolt_lhand)
 			{
-				mdxaBone_t boltMatrix;
-				vec3_t bolt_org;
+				mdxaBone_t boltMatrix = { 0 };
+				vec3_t bolt_org = { 0 };
 
 				trap->G2API_GetBoltMatrix(other->ghoul2, 0, ci->bolt_lhand, &boltMatrix, other->turAngles,
 					other->lerpOrigin, cg.time, cgs.game_models, other->modelScale);
@@ -5313,7 +5313,7 @@ static void CG_G2PlayerAngles(centity_t* cent, matrix3_t legs, vec3_t legs_angle
 	}
 	else if (cent->m_pVehicle && cent->m_pVehicle->m_pVehicleInfo->type == VH_WALKER)
 	{
-		vec3_t look_angles;
+		vec3_t look_angles = { 0 };
 
 		VectorCopy(cent->lerpAngles, legs_angles);
 		legs_angles[PITCH] = 0;
@@ -5345,7 +5345,7 @@ static void CG_G2PlayerAngles(centity_t* cent, matrix3_t legs, vec3_t legs_angle
 		}
 		else
 		{
-			vec3_t nh_angles;
+			vec3_t nh_angles = { 0 };
 
 			if (cent->currentState.eType == ET_NPC &&
 				cent->currentState.NPC_class == CLASS_VEHICLE &&
@@ -5403,11 +5403,11 @@ CG_PlayerFlag
 */
 static void CG_PlayerFlag(centity_t* cent, const qhandle_t h_model)
 {
-	refEntity_t ent;
-	vec3_t angles;
-	matrix3_t axis;
-	vec3_t bolt_org, t_ang, get_ang, right;
-	mdxaBone_t boltMatrix;
+	refEntity_t ent = { 0 };
+	vec3_t angles = { 0 };
+	matrix3_t axis = { 0 };
+	vec3_t bolt_org = { 0 }, t_ang = { 0 }, get_ang = { 0 }, right = { 0 };
+	mdxaBone_t boltMatrix = { 0 };
 	clientInfo_t* ci = NULL;
 
 	if (cent->currentState.number == cg.snap->ps.clientNum
@@ -5571,7 +5571,7 @@ static void CG_PlayerPowerups(centity_t* cent)
 	//------------------------------------------------------
 	if (powerups & 1 << PW_GALAK_SHIELD)
 	{
-		refEntity_t tent;
+		refEntity_t tent = { 0 };
 
 		assert(cent->ghoul2);
 		const int bolt = trap->G2API_AddBolt(cent->ghoul2, 0, "thoracic");
@@ -5593,7 +5593,7 @@ static void CG_PlayerPowerups(centity_t* cent)
 			tent.frame = cent->client->poisonTime;
 		}*/
 
-		mdxaBone_t boltMatrix;
+		mdxaBone_t boltMatrix = { 0 };
 		const vec3_t angles = { 0, 0, 0 };
 
 		trap->G2API_GetBoltMatrix(cent->ghoul2, 0, bolt, &boltMatrix, angles, cent->lerpOrigin, cg.time,
@@ -5646,7 +5646,7 @@ Float a sprite over the player's head
 static void CG_PlayerFloatSprite(const centity_t* cent, const qhandle_t shader)
 {
 	int rf = 0;
-	refEntity_t ent;
+	refEntity_t ent = { 0 };
 
 	if (cent->currentState.number == cg.snap->ps.clientNum && !cg.renderingThirdPerson)
 	{
@@ -5756,10 +5756,10 @@ Returns the Z component of the surface being shadowed
 
 static qboolean CG_PlayerShadow(centity_t* const cent, float* const shadowPlane)
 {
-	vec3_t end;
+	vec3_t end = { 0 };
 	const vec3_t maxs = { 15, 15, 2 };
 	const vec3_t mins = { -15, -15, 0 };
-	trace_t trace;
+	trace_t trace = { 0 };
 	float radius = 24.0f;
 
 	*shadowPlane = 0;
@@ -5885,10 +5885,10 @@ Behaviour preserved exactly.
 */
 static void CG_PlayerSplash(const centity_t* cent)
 {
-	vec3_t      start;
-	vec3_t      end;
-	trace_t     trace;
-	polyVert_t  verts[4];
+	vec3_t      start = { 0 };
+	vec3_t      end = { 0 };
+	trace_t     trace = { 0 };
+	polyVert_t  verts[4] = { 0 };
 
 	// Explicitly zero-initialize verts to avoid uninitialized memory warnings.
 	memset(verts, 0, sizeof(verts));
@@ -6011,7 +6011,7 @@ static void CG_ClothForcePush(const centity_t* cent)
 	{
 		return;
 	}
-	vec3_t fwd, org;
+	vec3_t fwd = { 0 }, org = { 0 };
 	AngleVectors(cent->lerpAngles, fwd, NULL, NULL);
 	VectorCopy(cent->lerpOrigin, org);
 	org[2] += 32.0f;
@@ -6042,7 +6042,7 @@ static void CG_GrassForceWave(const centity_t* cent)
 	{
 		return;
 	}
-	vec3_t fwd;
+	vec3_t fwd = { 0 };
 	AngleVectors(cent->lerpAngles, fwd, NULL, NULL);
 	int type = 0;		// push
 	float range = 640.0f;
@@ -6173,8 +6173,8 @@ static void CG_ForcePushBlur(vec3_t org, centity_t* cent)
 	else
 	{
 		//superkewl "refraction" (well sort of) effect -rww
-		refEntity_t ent;
-		vec3_t ang;
+		refEntity_t ent = { 0 };
+		vec3_t ang = { 0 };
 		float scale = 0.0f;
 
 		if (!cent->bodyFadeTime)
@@ -6319,8 +6319,8 @@ static void CG_ForceRepulseRefraction(vec3_t org, centity_t* cent, vec3_t colour
 	else
 	{
 		//superkewl "refraction" (well sort of) effect -rww
-		refEntity_t ent;
-		vec3_t ang;
+		refEntity_t ent = { 0 };
+		vec3_t ang = { 0 };
 		float scale = 0.0f;
 		float alpha = 0.0f;
 
@@ -6463,7 +6463,7 @@ static const char* cg_pushBoneNames[] =
 
 static void CG_ForcePushBodyBlur(centity_t* cent)
 {
-	mdxaBone_t boltMatrix;
+	mdxaBone_t boltMatrix = { 0 };
 
 	if (!BG_AnimSetIsHumanoidLike(cent->localAnimIndex))
 	{
@@ -6485,7 +6485,7 @@ static void CG_ForcePushBodyBlur(centity_t* cent)
 
 	for (int i = 0; cg_pushBoneNames[i]; i++)
 	{
-		vec3_t fx_org;
+		vec3_t fx_org = { 0 };
 		//go through all the bones we want to put a blur effect on
 		const int bolt = trap->G2API_AddBolt(cent->ghoul2, 0, cg_pushBoneNames[i]);
 
@@ -6518,7 +6518,7 @@ static void CG_ForcePushBodyBlur(centity_t* cent)
 			&& cent->currentState.forcePowersActive & 1 << FP_PUSH && cent->currentState.groundEntityNum ==
 			ENTITYNUM_NONE)
 		{
-			vec3_t blue;
+			vec3_t blue = { 0 };
 			VectorScale(colorTable[CT_LTBLUE1], 255.0f, blue);
 			CG_ForceRepulseRefraction(fx_org, NULL, blue);
 		}
@@ -6631,7 +6631,7 @@ void CG_SaberSliceTransfer(centity_t* body, centity_t* from)
 
 static qboolean CG_SaberSliceUseCaps(void)
 {
-	char renderer[64];
+	char renderer[64] = { 0 };
 	if (cg_saberSliceCaps.integer <= 0)
 	{
 		return qfalse;
@@ -6708,11 +6708,11 @@ static const saberSliceSeg_t* CG_SaberSliceSeg(void* ghoul2, const int slot)
 // the glowing cut face: the bone's cross section (ellipse) laid on the cut plane
 static void CG_SaberSliceDrawCap(const centity_t* cent, const refEntity_t* ent, const int b, const float* world_plane, const float heat, const float side)
 {
-	mdxaBone_t m_joint, m_child;
-	vec3_t joint, child, j, c, u, n, center, a, c2;
+	mdxaBone_t m_joint = { 0 }, m_child = { 0 };
+	vec3_t joint = { 0 }, child = { 0 }, j = { 0 }, c = { 0 }, u = { 0 }, n = { 0 }, center = { 0 }, a = { 0 }, c2 = { 0 };
 	polyVert_t verts[16] = { 0 };
-	byte col[4];
-	float nu, r, rx, ry, scale = 1.0f, h;
+	byte col[4] = { 0 };
+	float nu = 0, r = 0, rx = 0, ry = 0, scale = 1.0f, h = 0;
 	const saberSliceSeg_t* slice_seg = CG_SaberSliceSeg(cent->ghoul2, b);
 	if (!slice_seg || !CG_SaberSliceBoneModel(cent->ghoul2, slice_seg->bone, &m_joint, NULL)
 		|| !CG_SaberSliceBoneModel(cent->ghoul2, slice_seg->child, &m_child, NULL))
@@ -6786,7 +6786,7 @@ static void CG_SaberSliceDrawCap(const centity_t* cent, const refEntity_t* ent, 
 	{
 		const float ang = 6.2831853f * i / 16;
 		const float cs = cos(ang), sn = sin(ang);
-		vec3_t p;
+		vec3_t p = { 0 };
 		VectorScale(a, rx * cs, p);
 		VectorMA(p, ry * sn, c2, p);
 		// slide along the bone onto the cut plane, then a hair towards the side that stays
@@ -6841,11 +6841,11 @@ static qboolean CG_SaberSliceIsMetal(const centity_t* cent)
 
 qboolean CG_SaberSliceApply(centity_t* cent, refEntity_t* ent)
 {
-	int count;
-	qboolean caps;
-	int cool_time;
+	int count = 0;
+	qboolean caps = qfalse;
+	int cool_time = 0;
 	float hottest = 0.0f;
-	qboolean metal;
+	qboolean metal = qfalse;
 	static fxHandle_t sparks_fx = 0;
 
 	if (!cent || cent->saberSliceCount <= 0 || !ent || !ent->ghoul2 || !cent->ghoul2)
@@ -6873,8 +6873,8 @@ qboolean CG_SaberSliceApply(centity_t* cent, refEntity_t* ent)
 	ent->sliceInvert = 0;
 	for (int s = 0; s < count; s++)
 	{
-		mdxaBone_t m;
-		float model_plane[4];
+		mdxaBone_t m = { 0 };
+		float model_plane[4] = { 0 };
 		const qboolean piece = (cent->saberSliceInvert & 1 << s) ? qtrue : qfalse;
 		const saberSliceSeg_t* seg = CG_SaberSliceSeg(cent->ghoul2, cent->saberSliceBone[s]);
 		if (!seg || !CG_SaberSliceBoneModel(cent->ghoul2, seg->bone, &m, NULL)
@@ -6925,7 +6925,7 @@ qboolean CG_SaberSliceApply(centity_t* cent, refEntity_t* ent)
 	if (hottest > (metal ? 0.6f : 0.25f) && cent->saberSliceFxTime <= cg.time)
 	{
 		int bolt = -1;
-		mdxaBone_t m;
+		mdxaBone_t m = { 0 };
 		const saberSliceSeg_t* seg = CG_SaberSliceSeg(cent->ghoul2, cent->saberSliceBone[count - 1]);
 		cent->saberSliceFxTime = cg.time + 700;
 		if (seg && CG_SaberSliceBoneModel(cent->ghoul2, seg->bone, &m, &bolt) && bolt >= 0)
@@ -6957,7 +6957,7 @@ model is set up. Returns qfalse when it must not be drawn (yet).
 */
 qboolean CG_SaberSlicePiece(centity_t* cent)
 {
-	centity_t* body;
+	centity_t* body = NULL;
 	const int bone = cent->currentState.generic1;
 
 	if (!cg_dismember.integer || bone < 0 || bone >= SABERSLICE_SLOT_COUNT
@@ -6969,8 +6969,8 @@ qboolean CG_SaberSlicePiece(centity_t* cent)
 
 	if (!cent->ghoul2 || cent->saberSliceGhoul2 != cent->ghoul2)
 	{
-		int anchor_bolt;
-		mdxaBone_t m;
+		int anchor_bolt = 0;
+		mdxaBone_t m = { 0 };
 		if (!body->ghoul2 || !trap->G2_HaveWeGhoul2Models(body->ghoul2))
 		{
 			return qfalse;
@@ -7050,7 +7050,7 @@ qboolean CG_SaberSlicePiece(centity_t* cent)
 	}
 	{
 		const float smooth_factor = 0.5f * timescale.value;
-		vec3_t pos_dif;
+		vec3_t pos_dif = { 0 };
 		VectorSubtract(cent->lerpOrigin, cent->turAngles, pos_dif);
 		for (int k = 0; k < 3; k++)
 		{
@@ -7143,7 +7143,7 @@ static void CG_PlayerShieldRecharging(const int entityNum)
 
 static void CG_DrawPlayerShield(const centity_t* cent, vec3_t origin)
 {
-	refEntity_t ent;
+	refEntity_t ent = { 0 };
 
 	// Don't draw the shield when the player is dead.
 	if (cent->currentState.eFlags & EF_DEAD)
@@ -7197,9 +7197,9 @@ CG_LightVerts
 */
 static int CG_LightVerts(vec3_t normal, const int numVerts, polyVert_t* verts)
 {
-	vec3_t ambient_light;
-	vec3_t lightDir;
-	vec3_t directed_light;
+	vec3_t ambient_light = { 0 };
+	vec3_t lightDir = { 0 };
+	vec3_t directed_light = { 0 };
 
 	trap->R_LightForPoint(verts[0].xyz, ambient_light, directed_light, lightDir);
 
@@ -7242,7 +7242,7 @@ static int CG_LightVerts(vec3_t normal, const int numVerts, polyVert_t* verts)
 
 static void RGB_LerpColor(vec3_t from, vec3_t to, const float frac, vec3_t out)
 {
-	vec3_t diff;
+	vec3_t diff = { 0 };
 
 	VectorSubtract(to, from, diff);
 
@@ -7562,7 +7562,7 @@ static qboolean cg_saberNoIgniteFlare = qfalse;
 
 static void CG_AddSaberSolidCore(const refEntity_t* core, const saber_colors_t color)
 {
-	refEntity_t mask;
+	refEntity_t mask = { 0 };
 
 	if (cg_saberSolidCore.integer <= 0 || color == SABER_BLACK)
 	{
@@ -7585,7 +7585,7 @@ static void CG_DoCustomSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_ti
 	float radius, saber_colors_t color, int rfx, qboolean do_light, int cnum,
 	int bnum)
 {
-	vec3_t dif, mid, blade_dir, end_dir, trail_dir, base_dir;
+	vec3_t dif = { 0 }, mid = { 0 }, blade_dir = { 0 }, end_dir = { 0 }, trail_dir = { 0 }, base_dir = { 0 };
 	float radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f, effectalpha = 0.0f, angle_scale = 0.0f;
 	float blade_len = 0.0f, end_len = 0.0f, trail_len = 0.0f, base_len = 0.0f, dis_tip = 0.0f, dis_muz = 0.0f, dis_dif = 0.0f;
 	float v1 = 0.0f, v2 = 0.0f;
@@ -7593,7 +7593,7 @@ static void CG_DoCustomSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_ti
 	int i = 0;
 	qhandle_t ignite = 0;
 	qhandle_t blade = 0, glow = 0;
-	refEntity_t saber, sbak;
+	refEntity_t saber = { 0 }, sbak = { 0 };
 	float ignite_len = 0.0f, ignite_radius = 0.0f;
 
 	VectorSubtract(blade_tip, blade_muz, blade_dir);
@@ -8126,9 +8126,9 @@ static void CG_DoCustomSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_ti
 static void CG_DoCloakedSaber(vec3_t origin, vec3_t dir, float length, float length_max, float radius, saber_colors_t color,
 	int rfx, qboolean do_light, int cnum, int bnum)
 {
-	vec3_t mid;
+	vec3_t mid = { 0 };
 	qhandle_t blade = 0, glow = 0;
-	refEntity_t saber;
+	refEntity_t saber = { 0 };
 	float radiusmult = 0.0f;
 	float radius_range = 0.0f;
 	float radius_start = 0.0f;
@@ -8340,9 +8340,9 @@ static void CG_DoCloakedSaber(vec3_t origin, vec3_t dir, float length, float len
 static void CG_DoSaber(vec3_t origin, vec3_t dir, float length, float length_max, float radius, saber_colors_t color, int rfx,
 	qboolean do_light, int cnum, int bnum)
 {
-	vec3_t mid, dif;
+	vec3_t mid = { 0 }, dif = { 0 };
 	qhandle_t blade = 0, glow = 0;
-	refEntity_t saber;
+	refEntity_t saber = { 0 };
 	float radiusmult = 0.0f;
 	float effectradius = 0.0f, coreradius = 0.0f;
 	float v1 = 0.0f, v2 = 0.0f;
@@ -8597,7 +8597,7 @@ static void CG_DoSaber(vec3_t origin, vec3_t dir, float length, float length_max
 static void CG_DoTFASaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, vec3_t trail_muz, float length_max,
 	float radius, saber_colors_t color, int rfx, qboolean do_light, int cnum, int bnum)
 {
-	vec3_t dif, mid, blade_dir, end_dir, trail_dir, base_dir;
+	vec3_t dif = { 0 }, mid = { 0 }, blade_dir = { 0 }, end_dir = { 0 }, trail_dir = { 0 }, base_dir = { 0 };
 	float radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f, effectalpha = 0.0f, angle_scale = 0.0f;
 	float blade_len = 0.0f, end_len = 0.0f, trail_len = 0.0f, base_len = 0.0f, dis_tip = 0.0f, dis_muz = 0.0f, dis_dif = 0.0f;
 	float v1 = 0.0f, v2 = 0.0f;
@@ -8605,7 +8605,7 @@ static void CG_DoTFASaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 	int i = 0;
 	qhandle_t ignite = 0;
 	qhandle_t blade = 0, glow = 0;
-	refEntity_t saber, sbak;
+	refEntity_t saber = { 0 }, sbak = { 0 };
 	float ignite_len = 0.0f, ignite_radius = 0.0f;
 
 	VectorSubtract(blade_tip, blade_muz, blade_dir);
@@ -9138,9 +9138,9 @@ static void CG_DoTFASaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 static void CG_DoSaberUnstable(vec3_t origin, vec3_t dir, float length, float length_max, float radius, saber_colors_t color,
 	int rfx, qboolean do_light, int cnum, int bnum)
 {
-	vec3_t mid;
+	vec3_t mid = { 0 };
 	qhandle_t blade = 0, glow = 0;
-	refEntity_t saber;
+	refEntity_t saber = { 0 };
 	float radiusmult = 0.0f;
 	float radius_range = 0.0f;
 	float radius_start = 0.0f;
@@ -9354,14 +9354,14 @@ static void CG_DoBattlefrontSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t tra
 	float radius, saber_colors_t color, int rfx, qboolean do_light, int cnum,
 	int bnum)
 {
-	vec3_t dif, mid, blade_dir, end_dir, trail_dir, base_dir;
+	vec3_t dif = { 0 }, mid = { 0 }, blade_dir = { 0 }, end_dir = { 0 }, trail_dir = { 0 }, base_dir = { 0 };
 	float radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f, effectalpha = 0.0f, angle_scale = 0.0f;
 	float blade_len = 0.0f, end_len = 0.0f, trail_len = 0.0f, base_len = 0.0f, dis_tip = 0.0f, dis_muz = 0.0f, dis_dif = 0.0f;
 	float v1 = 0.0f, v2 = 0.0f;
 	vec3_t rgb = { 1, 1, 1 };
 	int i = 0;
 	qhandle_t blade = 0, glow = 0, ignite = 0;
-	refEntity_t saber, sbak;
+	refEntity_t saber = { 0 }, sbak = { 0 };
 	float ignite_len = 0.0f, ignite_radius = 0.0f;
 
 	VectorSubtract(blade_tip, blade_muz, blade_dir);
@@ -9894,7 +9894,7 @@ static void CG_DoBattlefrontSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t tra
 static void CG_DoEp1Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, vec3_t trail_muz, float length_max,
 	float radius, saber_colors_t color, int rfx, qboolean do_light, int cnum, int bnum)
 {
-	vec3_t dif, mid, blade_dir, end_dir, trail_dir, base_dir;
+	vec3_t dif = { 0 }, mid = { 0 }, blade_dir = { 0 }, end_dir = { 0 }, trail_dir = { 0 }, base_dir = { 0 };
 	float radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f, effectalpha = 0.0f, angle_scale = 0.0f;
 	float blade_len = 0.0f, end_len = 0.0f, trail_len = 0.0f, base_len = 0.0f, dis_tip = 0.0f, dis_muz = 0.0f, dis_dif = 0.0f;
 	float v1 = 0.0f, v2 = 0.0f;
@@ -9902,7 +9902,7 @@ static void CG_DoEp1Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 	int i = 0;
 	qhandle_t ignite = 0;
 	qhandle_t blade = 0, glow = 0;
-	refEntity_t saber, sbak;
+	refEntity_t saber = { 0 }, sbak = { 0 };
 	float ignite_len = 0.0f, ignite_radius = 0.0f;
 
 	VectorSubtract(blade_tip, blade_muz, blade_dir);
@@ -10435,7 +10435,7 @@ static void CG_DoEp1Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 static void CG_DoEp2Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, vec3_t trail_muz, float length_max,
 	float radius, saber_colors_t color, int rfx, qboolean do_light, int cnum, int bnum)
 {
-	vec3_t dif, mid, blade_dir, end_dir, trail_dir, base_dir;
+	vec3_t dif = { 0 }, mid = { 0 }, blade_dir = { 0 }, end_dir = { 0 }, trail_dir = { 0 }, base_dir = { 0 };
 	float radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f, effectalpha = 0.0f, angle_scale = 0.0f;
 	float blade_len = 0.0f, end_len = 0.0f, trail_len = 0.0f, base_len = 0.0f, dis_tip = 0.0f, dis_muz = 0.0f, dis_dif = 0.0f;
 	float v1 = 0.0f, v2 = 0.0f;
@@ -10443,7 +10443,7 @@ static void CG_DoEp2Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 	int i = 0;
 	qhandle_t ignite = 0;
 	qhandle_t blade = 0, glow = 0;
-	refEntity_t saber, sbak;
+	refEntity_t saber = { 0 }, sbak = { 0 };
 	float ignite_len = 0.0f, ignite_radius = 0.0f;
 
 	VectorSubtract(blade_tip, blade_muz, blade_dir);
@@ -10976,7 +10976,7 @@ static void CG_DoEp2Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 static void CG_DoEp3Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, vec3_t trail_muz, float length_max,
 	float radius, saber_colors_t color, int rfx, qboolean do_light, int cnum, int bnum)
 {
-	vec3_t dif, mid, blade_dir, end_dir, trail_dir, base_dir;
+	vec3_t dif = { 0 }, mid = { 0 }, blade_dir = { 0 }, end_dir = { 0 }, trail_dir = { 0 }, base_dir = { 0 };
 	float radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f, effectalpha = 0.0f, angle_scale = 0.0f;
 	float blade_len = 0.0f, end_len = 0.0f, trail_len = 0.0f, base_len = 0.0f, dis_tip = 0.0f, dis_muz = 0.0f, dis_dif = 0.0f;
 	float v1 = 0.0f, v2 = 0.0f;
@@ -10984,7 +10984,7 @@ static void CG_DoEp3Saber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 	int i = 0;
 	qhandle_t ignite = 0;
 	qhandle_t blade = 0, glow = 0;
-	refEntity_t saber, sbak;
+	refEntity_t saber = { 0 }, sbak = { 0 };
 	float ignite_len = 0.0f, ignite_radius = 0.0f;
 
 	VectorSubtract(blade_tip, blade_muz, blade_dir);
@@ -11518,7 +11518,7 @@ static void CG_DoOTSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, v
 	float radius,
 	saber_colors_t color, int rfx, qboolean do_light, int cnum, int bnum)
 {
-	vec3_t dif, mid, blade_dir, end_dir, trail_dir, base_dir;
+	vec3_t dif = { 0 }, mid = { 0 }, blade_dir = { 0 }, end_dir = { 0 }, trail_dir = { 0 }, base_dir = { 0 };
 	float radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f, effectalpha = 0.0f, angle_scale = 0.0f;
 	float blade_len = 0.0f, end_len = 0.0f, trail_len = 0.0f, base_len = 0.0f, dis_tip = 0.0f, dis_muz = 0.0f, dis_dif = 0.0f;
 	float v1 = 0.0f, v2 = 0.0f;
@@ -11528,7 +11528,7 @@ static void CG_DoOTSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, v
 	int count = 0;
 	qhandle_t ignite = 0;
 	qhandle_t blade = 0, glow = 0;
-	refEntity_t saber, sbak;
+	refEntity_t saber = { 0 }, sbak = { 0 };
 	float ignite_len = 0.0f, ignite_radius = 0.0f;
 
 	VectorSubtract(blade_tip, blade_muz, blade_dir);
@@ -12089,7 +12089,7 @@ static void CG_DoOTSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, v
 static void CG_DoSFXSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, vec3_t trail_muz, float length_max,
 	float radius, saber_colors_t color, int rfx, qboolean do_light, int cnum, int bnum)
 {
-	vec3_t dif, mid, blade_dir, end_dir, trail_dir, base_dir;
+	vec3_t dif = { 0 }, mid = { 0 }, blade_dir = { 0 }, end_dir = { 0 }, trail_dir = { 0 }, base_dir = { 0 };
 	float radiusmult = 0.0f, effectradius = 0.0f, coreradius = 0.0f, effectalpha = 0.0f, angle_scale = 0.0f;
 	float blade_len = 0.0f, end_len = 0.0f, trail_len = 0.0f, base_len = 0.0f, dis_tip = 0.0f, dis_muz = 0.0f, dis_dif = 0.0f;
 	float v1 = 0.0f, v2 = 0.0f;
@@ -12097,7 +12097,7 @@ static void CG_DoSFXSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 	int i = 0;
 	qhandle_t ignite = 0;
 	qhandle_t blade = 0, glow = 0;
-	refEntity_t saber, sbak;
+	refEntity_t saber = { 0 }, sbak = { 0 };
 	float ignite_len = 0.0f, ignite_radius = 0.0f;
 
 	VectorSubtract(blade_tip, blade_muz, blade_dir);
@@ -12629,7 +12629,7 @@ static void CG_DoSFXSaber(vec3_t blade_muz, vec3_t blade_tip, vec3_t trail_tip, 
 
 #define	MAX_MARK_FRAGMENTS	128
 #define	MAX_MARK_POINTS		384
-extern markPoly_t* CG_AllocMark();
+extern markPoly_t* CG_AllocMark(void);
 
 static void CG_CreateSaberMarks(vec3_t start, vec3_t end, vec3_t normal)
 {
@@ -12637,9 +12637,9 @@ static void CG_CreateSaberMarks(vec3_t start, vec3_t end, vec3_t normal)
 	int i = 0, j = 0;
 	matrix3_t axis = { 0 };
 	vec3_t original_points[4] = { 0 };
-	vec3_t markPoints[MAX_MARK_POINTS] = { 0 }, projection;
+	vec3_t markPoints[MAX_MARK_POINTS] = { 0 }, projection = { 0 };
 	polyVert_t* v = NULL;
-	markFragment_t markFragments[MAX_MARK_FRAGMENTS], * mf = NULL;
+	markFragment_t markFragments[MAX_MARK_FRAGMENTS] = { 0 }, * mf = NULL;
 
 	if (!cg_marks.integer)
 	{
@@ -12681,8 +12681,8 @@ static void CG_CreateSaberMarks(vec3_t start, vec3_t end, vec3_t normal)
 
 		for (j = 0, v = verts; j < mf->numPoints; j++, v++)
 		{
-			vec3_t mid;
-			vec3_t delta;
+			vec3_t mid = { 0 };
+			vec3_t delta = { 0 };
 
 			// Set up our texture coords, this may need some work
 			VectorCopy(markPoints[mf->firstPoint + j], v->xyz);
@@ -12698,8 +12698,8 @@ static void CG_CreateSaberMarks(vec3_t start, vec3_t end, vec3_t normal)
 		{
 			int i1 = 0;
 			int i_2 = 0;
-			addpolyArgStruct_t apArgs;
-			vec3_t x;
+			addpolyArgStruct_t apArgs = { 0 };
+			vec3_t x = { 0 };
 
 			memset(&apArgs, 0, sizeof apArgs);
 
@@ -12805,7 +12805,7 @@ static void CG_CreateSaberMarks(vec3_t start, vec3_t end, vec3_t normal)
 qboolean CG_G2TraceCollide(trace_t* tr, const vec3_t mins, const vec3_t maxs, const vec3_t last_valid_start,
 	const vec3_t last_valid_end)
 {
-	G2Trace_t g2_trace;
+	G2Trace_t g2_trace = { 0 };
 	int t_n = 0;
 	float f_radius = 0.0f;
 
@@ -12866,14 +12866,14 @@ qboolean CG_G2TraceCollide(trace_t* tr, const vec3_t mins, const vec3_t maxs, co
 
 static void CG_G2SaberEffects(vec3_t start, vec3_t end, const centity_t* owner)
 {
-	trace_t trace;
+	trace_t trace = { 0 };
 	qboolean back_wards = qfalse;
 	qboolean done_with_traces = qfalse;
 
 	while (!done_with_traces)
 	{
-		vec3_t end_tr;
-		vec3_t start_tr;
+		vec3_t end_tr = { 0 };
+		vec3_t start_tr = { 0 };
 		if (!back_wards)
 		{
 			VectorCopy(start, start_tr);
@@ -12926,7 +12926,7 @@ void CG_AddGhoul2Mark(const int shader, const float size,
 	vec3_t entposition, const float entangle,
 	void* ghoul2, vec3_t scale, const int lifeTime)
 {
-	SSkinGoreData goreSkin;
+	SSkinGoreData goreSkin = { 0 };
 
 	assert(ghoul2);
 
@@ -12991,7 +12991,7 @@ Runs after the server reports a saber hit and applies:
 static void CG_SaberCompWork(vec3_t start, vec3_t end, centity_t* owner,
 	const int saberNum, const int bladeNum)
 {
-	trace_t        trace;
+	trace_t        trace = { 0 };
 	qboolean       doEffect = qfalse;
 	clientInfo_t* client = NULL;
 
@@ -13004,7 +13004,7 @@ static void CG_SaberCompWork(vec3_t start, vec3_t end, centity_t* owner,
 		return;
 
 	// Perform a single trace from saber start → end
-	vec3_t startTr, endTr;
+	vec3_t startTr = { 0 }, endTr = { 0 };
 	VectorCopy(start, startTr);
 	VectorCopy(end, endTr);
 
@@ -13036,7 +13036,7 @@ static void CG_SaberCompWork(vec3_t start, vec3_t end, centity_t* owner,
 						!trEnt->m_pVehicle ||
 						trEnt->m_pVehicle->m_pVehicleInfo->type != VH_FIGHTER)
 					{
-						vec3_t ePos;
+						vec3_t ePos = { 0 };
 						int weaponMarkShader = 0;
 						int markShader = cgs.media.bdecal_saberglow;
 
@@ -13094,7 +13094,7 @@ static void CG_SaberCompWork(vec3_t start, vec3_t end, centity_t* owner,
 							// Splashback mark on the attacker’s weapon
 							if (weaponMarkShader)
 							{
-								vec3_t splashDir;
+								vec3_t splashDir = { 0 };
 								VectorScale(ePos, -1, splashDir);
 
 								CG_AddGhoul2Mark(weaponMarkShader,
@@ -13246,7 +13246,7 @@ static void CG_SaberRainFizz(const centity_t* cent, const int saberNum, const ve
 
 	if (cg_saberRainOutside[num][saberNum])
 	{
-		vec3_t pos;
+		vec3_t pos = { 0 };
 		vec3_t up = { 0.0f, 0.0f, 1.0f };
 
 		VectorMA(org, length * Q_flrand(0.0f, 1.0f), dir, pos);
@@ -13261,7 +13261,7 @@ static void CG_SaberRainFizz(const centity_t* cent, const int saberNum, const ve
 static void CG_GrassCutSmoke(const vec3_t from, const vec3_t to, const qhandle_t shader)
 {
 	static int lineTimes[64];
-	vec3_t d;
+	vec3_t d = { 0 };
 	VectorSubtract(to, from, d);
 	int n = (int)(VectorLength(d) / 8.0f) + 1;
 	n = n > 4 ? 4 : n;
@@ -13277,7 +13277,7 @@ static void CG_GrassCutSmoke(const vec3_t from, const vec3_t to, const qhandle_t
 			return;
 		}
 		lineTimes[slot] = cg.time;
-		vec3_t org;
+		vec3_t org = { 0 };
 		VectorMA(from, (i + 0.5f) / n, d, org);
 		org[0] += Q_flrand(-2.0f, 2.0f);
 		org[1] += Q_flrand(-2.0f, 2.0f);
@@ -13357,7 +13357,7 @@ static void CG_GrassCut(const centity_t* cent, const int saberNum, const int bla
 		return; // drawn twice this frame
 	}
 	const qboolean had = *when && cg.time > *when && cg.time - *when < 150 ? qtrue : qfalse;
-	vec3_t pb, pt;
+	vec3_t pb = { 0 }, pt = { 0 };
 	VectorCopy(p, pb);
 	VectorCopy(p + 3, pt);
 	VectorCopy(base, p);
@@ -13368,7 +13368,7 @@ static void CG_GrassCut(const centity_t* cent, const int saberNum, const int bla
 		return;
 	}
 	// a swing: the tip moves 3+ units against the hilt (walking with the blade low cuts nothing)
-	vec3_t swing;
+	vec3_t swing = { 0 };
 	for (int k = 0; k < 3; k++)
 	{
 		swing[k] = tip[k] - pt[k] - (base[k] - pb[k]);
@@ -13391,8 +13391,8 @@ static void CG_GrassCut(const centity_t* cent, const int saberNum, const int bla
 		{
 			lastSoundCheck[num] = cg.time;
 		}
-		vec3_t from, down;
-		trace_t tr;
+		vec3_t from = { 0 }, down = { 0 };
+		trace_t tr = { 0 };
 		VectorCopy(base[2] < tip[2] ? base : tip, from);
 		VectorCopy(from, down);
 		down[2] -= 40.0f;
@@ -13429,7 +13429,7 @@ static void CG_GrassCut(const centity_t* cent, const int saberNum, const int bla
 			}
 			if (smokeDue)
 			{	// smoke from the cut ends along the blade's low end since last frame
-				vec3_t lastLow;
+				vec3_t lastLow = { 0 };
 				VectorCopy(pb[2] < pt[2] ? pb : pt, lastLow);
 				CG_GrassCutSmoke(lastLow, from, smokeShader);
 				lastSmoke[num] = cg.time;
@@ -13444,15 +13444,15 @@ static void CG_GrassCut(const centity_t* cent, const int saberNum, const int bla
 void CG_AddSaberBlade(centity_t* cent, centity_t* scent, int renderfx, int saberNum, int bladeNum, vec3_t origin,
 	vec3_t angles, qboolean from_saber, qboolean dont_draw)
 {
-	vec3_t org, end,
+	vec3_t org = { 0 }, end = { 0 },
 		axis[3] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 }; // shut the compiler up
 	vec3_t rgb1 = { 255.0f, 255.0f, 255.0f };
-	trace_t trace;
+	trace_t trace = { 0 };
 	float saber_len = 0.0f;
 	clientInfo_t* client = NULL;
 	centity_t* saberEnt = NULL;
 	saberTrail_t* saber_trail = NULL;
-	mdxaBone_t boltMatrix;
+	mdxaBone_t boltMatrix = { 0 };
 	vec3_t future_angles = { 0 };
 	effectTrailArgStruct_t fx = { 0 };
 	int scolor = 0;
@@ -13608,7 +13608,7 @@ void CG_AddSaberBlade(centity_t* cent, centity_t* scent, int renderfx, int saber
 				//I'm only bothering with this because I want to do a backwards trace too in the comp trace, so if the
 				//blade is sticking through a player or something the standard trace doesn't it, it will make sparks
 				//on each side.
-				vec3_t se_dif;
+				vec3_t se_dif = { 0 };
 
 				VectorSubtract(trace.endpos, org, se_dif);
 				VectorNormalize(se_dif);
@@ -13642,8 +13642,8 @@ void CG_AddSaberBlade(centity_t* cent, centity_t* scent, int renderfx, int saber
 
 			if (trace.fraction < 1.0f)
 			{
-				vec3_t v;
-				vec3_t tr_dir;
+				vec3_t v = { 0 };
+				vec3_t tr_dir = { 0 };
 				int doit = 1; //consider NonX
 
 				VectorCopy(trace.plane.normal, tr_dir);
@@ -14123,7 +14123,7 @@ CheckTrail:
 		if (cg.time > saber_trail->lastTime)
 		{
 			float dirlen0 = 0.0f, dirlen1 = 0.0f, dirlen2 = 0.0f, lagscale = 0.0f;
-			vec3_t dir0, dir1, dir2;
+			vec3_t dir0 = { 0 }, dir1 = { 0 }, dir2 = { 0 };
 
 			VectorCopy(saber_trail->base, saber_trail->dualbase);
 			VectorCopy(saber_trail->tip, saber_trail->dualtip);
@@ -14792,7 +14792,7 @@ JustDoIt:
 
 		if (cg.time > saber_trail->inAction)
 		{
-			vec3_t draw_dir;
+			vec3_t draw_dir = { 0 };
 			float draw_len = 0.0f;
 			saber_trail->inAction = cg.time;
 
@@ -14899,9 +14899,9 @@ int CG_IsMindTricked(const int trick_index1, const int trick_index2, const int t
 
 static void CG_DrawPlayerSphere(const centity_t* cent, vec3_t origin, const float scale, const int shader)
 {
-	refEntity_t ent;
-	vec3_t ang;
-	vec3_t view_dir;
+	refEntity_t ent = { 0 };
+	vec3_t ang = { 0 };
+	vec3_t view_dir = { 0 };
 
 	// Don't draw the shield when the player is dead.
 	if (cent->currentState.eFlags & EF_DEAD)
@@ -15031,9 +15031,9 @@ static void CG_DrawPlayerSphere(const centity_t* cent, vec3_t origin, const floa
 
 static void CG_AddLightningBeam(vec3_t start, vec3_t end)
 {
-	vec3_t dir, chaos,
-		c1, c2,
-		v1, v2;
+	vec3_t dir = { 0 }, chaos = { 0 },
+		c1 = { 0 }, c2 = { 0 },
+		v1 = { 0 }, v2 = { 0 };
 
 	addbezierArgStruct_t b = { 0 };
 
@@ -15143,7 +15143,7 @@ int CG_HandleAppendedSkin(const char* modelName)
 		if (skin_name[0])
 		{
 			//got it, register the skin under the model path.
-			char base_folder[MAX_QPATH];
+			char base_folder[MAX_QPATH] = { 0 };
 
 			strcpy(base_folder, modelName);
 			p = Q_strrchr(base_folder, '/'); //go back to the first /, should be the path point
@@ -15209,7 +15209,7 @@ void CG_CacheG2AnimInfo(const char* modelName)
 	if (g2)
 	{
 		char GLAName[MAX_QPATH] = { 0 };
-		char original_model_name[MAX_QPATH];
+		char original_model_name[MAX_QPATH] = { 0 };
 
 		int AnimIndex = -1;
 
@@ -15348,7 +15348,7 @@ static void CG_G2AnimEntModelLoad(centity_t* cent)
 
 	if (c_model_name && c_model_name[0])
 	{
-		char modelName[MAX_QPATH];
+		char modelName[MAX_QPATH] = { 0 };
 		int skin_id = 0;
 
 		strcpy(modelName, c_model_name);
@@ -15426,14 +15426,14 @@ static void CG_G2AnimEntModelLoad(centity_t* cent)
 		{
 			char* slash = NULL;
 			char GLAName[MAX_QPATH] = { 0 };
-			char original_model_name[MAX_QPATH];
+			char original_model_name[MAX_QPATH] = { 0 };
 			char* saber = NULL;
 
 			if (cent->currentState.NPC_class == CLASS_VEHICLE &&
 				cent->m_pVehicle)
 			{
 				//do special vehicle stuff
-				char strTemp[128];
+				char strTemp[128] = { 0 };
 
 				// Setup the default first bolt
 				int i = 0;
@@ -15615,8 +15615,8 @@ static void CG_CreateSurfaceDebris(centity_t* cent, const int surfNum, const int
 {
 	int lost_part_fx = 0;
 	int b = -1;
-	vec3_t v, d;
-	mdxaBone_t boltMatrix;
+	vec3_t v = { 0 }, d = { 0 };
+	mdxaBone_t boltMatrix = { 0 };
 	const char* surfName = NULL;
 
 	if (surfNum > 0)
@@ -15710,7 +15710,7 @@ static void CG_CreateSurfaceDebris(centity_t* cent, const int surfNum, const int
 	if (throw_part && lost_part_fx)
 	{
 		//throw off a ship part, too
-		vec3_t fxFwd;
+		vec3_t fxFwd = { 0 };
 		AngleVectors(cent->lerpAngles, fxFwd, NULL, NULL);
 		trap->FX_PlayEffectID(lost_part_fx, v, fxFwd, -1, -1, qfalse);
 	}
@@ -15720,8 +15720,8 @@ static void CG_CreateSurfaceDebris(centity_t* cent, const int surfNum, const int
 //because I am lazy.
 static void CG_CreateSurfaceSmoke(centity_t* cent, const int ship_surf, const int fx_id)
 {
-	vec3_t v, d;
-	mdxaBone_t boltMatrix;
+	vec3_t v = { 0 }, d = { 0 };
+	mdxaBone_t boltMatrix = { 0 };
 	const char* surfName = NULL;
 
 	if (!cent->ghoul2)
@@ -15805,8 +15805,8 @@ static qboolean CG_VehicleAttachDroidUnit(centity_t* droid_cent)
 			&& veh_cent->ghoul2
 			&& veh_cent->m_pVehicle->m_iDroidUnitTag != -1)
 		{
-			mdxaBone_t boltMatrix;
-			vec3_t fwd, rt, temp_ang;
+			mdxaBone_t boltMatrix = { 0 };
+			vec3_t fwd = { 0 }, rt = { 0 }, temp_ang = { 0 };
 
 			trap->G2API_GetBoltMatrix(veh_cent->ghoul2, 0, veh_cent->m_pVehicle->m_iDroidUnitTag, &boltMatrix,
 				veh_cent->lerpAngles, veh_cent->lerpOrigin, cg.time,
@@ -15897,7 +15897,7 @@ void CG_G2Animated(centity_t* cent)
 
 	if ((cent->currentState.eFlags & EF_DEAD || cent->currentState.eFlags & EF_RAG) && BG_AnimSetIsHumanoid(cent->localAnimIndex))
 	{
-		vec3_t forced_angles;
+		vec3_t forced_angles = { 0 };
 
 		VectorClear(forced_angles);
 		forced_angles[YAW] = cent->lerpAngles[YAW];
@@ -16065,7 +16065,7 @@ int FindGender(const char* model_path, const centity_t* cent)
 {
 	fileHandle_t f = 0;
 	qboolean is_female = qfalse;
-	char modelName[MAX_QPATH];
+	char modelName[MAX_QPATH] = { 0 };
 
 	if (cent->currentState.NPC_class != CLASS_PLAYER)
 	{
@@ -16091,7 +16091,7 @@ int FindGender(const char* model_path, const centity_t* cent)
 
 	if (f)
 	{
-		char sound_path[MAX_QPATH];
+		char sound_path[MAX_QPATH] = { 0 };
 		// SJE: never read more than the buffer holds (see CG_LoadCISounds)
 		if (f_len < 0)
 		{
@@ -16174,7 +16174,7 @@ static qboolean CG_ContinuousFxReady(const int ent_num, const int slot)
 {
 	static int next_time[MAX_GENTITIES][CFX_NUM_SLOTS];
 	int* next = NULL;
-	int interval;
+	int interval = 0;
 
 	if (ent_num < 0 || ent_num >= MAX_GENTITIES || slot < 0 || slot >= CFX_NUM_SLOTS)
 	{
@@ -16204,15 +16204,15 @@ extern markPoly_t* CG_AllocMark(void);
 static void CG_LightningWallMark(const vec3_t origin, const vec3_t dir, const float radius)
 {
 	enum { LM_MAX_FRAGMENTS = 32, LM_MAX_POINTS = 128 };
-	vec3_t axis[3];
-	vec3_t original_points[4];
-	vec3_t projection;
-	vec3_t mark_points[LM_MAX_POINTS];
-	markFragment_t mark_frags[LM_MAX_FRAGMENTS];
-	int num_frags, i, j, k;
+	vec3_t axis[3] = { 0 };
+	vec3_t original_points[4] = { 0 };
+	vec3_t projection = { 0 };
+	vec3_t mark_points[LM_MAX_POINTS] = { 0 };
+	markFragment_t mark_frags[LM_MAX_FRAGMENTS] = { 0 };
+	int num_frags = 0, i = 0, j = 0, k = 0;
 	const float tex_scale = 0.5f / radius;
-	byte glow[4];
-	qhandle_t scorch_shader;
+	byte glow[4] = { 0 };
+	qhandle_t scorch_shader = 0;
 
 	if (!cg_marks.integer || radius <= 0.0f)
 	{
@@ -16253,8 +16253,8 @@ static void CG_LightningWallMark(const vec3_t origin, const vec3_t dir, const fl
 	for (i = 0; i < num_frags; i++)
 	{
 		markFragment_t* mf = &mark_frags[i];
-		polyVert_t verts[MAX_VERTS_ON_POLY];
-		markPoly_t* mark;
+		polyVert_t verts[MAX_VERTS_ON_POLY] = { 0 };
+		markPoly_t* mark = NULL;
 
 		if (mf->numPoints > MAX_VERTS_ON_POLY)
 		{
@@ -16263,7 +16263,7 @@ static void CG_LightningWallMark(const vec3_t origin, const vec3_t dir, const fl
 		memset(verts, 0, sizeof verts);
 		for (j = 0; j < mf->numPoints; j++)
 		{
-			vec3_t delta;
+			vec3_t delta = { 0 };
 			VectorCopy(mark_points[mf->firstPoint + j], verts[j].xyz);
 			VectorMA(verts[j].xyz, 0.125f, dir, verts[j].xyz); // off the surface a little (no z-fighting)
 			VectorSubtract(verts[j].xyz, origin, delta);
@@ -16301,10 +16301,10 @@ static void CG_LightningWallMark(const vec3_t origin, const vec3_t dir, const fl
 static void CG_LightningScorch(const centity_t* cent, const vec3_t hand, const int force_level)
 {
 	static int next_time[MAX_GENTITIES];
-	trace_t tr;
-	vec3_t ang, fwd, end;
-	float range;
-	int interval;
+	trace_t tr = { 0 };
+	vec3_t ang = { 0 }, fwd = { 0 }, end = { 0 };
+	float range = 0;
+	int interval = 0;
 	const int num = cent->currentState.number;
 
 	if (!cg_lightningMarks.integer || num < 0 || num >= MAX_GENTITIES)
@@ -16359,7 +16359,7 @@ static void CG_LightningScorch(const centity_t* cent, const vec3_t hand, const i
 			&& hit->ghoul2 && cgs.media.bdecal_burn1
 			&& hit->currentState.NPC_class != CLASS_VEHICLE)
 		{
-			vec3_t past;
+			vec3_t past = { 0 };
 			VectorMA(tr.endpos, 4.0f, fwd, past);
 			CG_AddGhoul2Mark(cgs.media.lightningBurnBodyShader ? cgs.media.lightningBurnBodyShader : cgs.media.bdecal_burn1, flrand(2.5f, 4.0f), tr.endpos, past, tr.entityNum,
 				hit->lerpOrigin, hit->lerpAngles[YAW], hit->ghoul2, hit->modelScale, Q_irand(6000, 10000));
@@ -16372,10 +16372,10 @@ static void CG_ForceElectrocution(centity_t* cent, const vec3_t origin, vec3_t t
 {
 	// Undoing for now, at least this code should compile if I ( or anyone else ) decides to work on this effect
 	qboolean found = qfalse;
-	vec3_t fx_org, fx_org2, dir;
-	vec3_t rgb;
-	mdxaBone_t boltMatrix;
-	trace_t tr;
+	vec3_t fx_org = { 0 }, fx_org2 = { 0 }, dir = { 0 };
+	vec3_t rgb = { 0 };
+	mdxaBone_t boltMatrix = { 0 };
+	trace_t tr = { 0 };
 	int bolt = -1;
 	int iter = 0;
 	int torso_bolt = -1;
@@ -16511,7 +16511,7 @@ static void CG_ForceElectrocution(centity_t* cent, const vec3_t origin, vec3_t t
 
 	if (tr.fraction < 1.0f || Q_flrand(0.0f, 1.0f) > 0.94f || always_do)
 	{
-		addElectricityArgStruct_t p;
+		addElectricityArgStruct_t p = { 0 };
 
 		VectorCopy(fx_org, p.start);
 		VectorCopy(tr.endpos, p.end);
@@ -16665,12 +16665,12 @@ static QINLINE void CG_VehicleEffects(centity_t* cent)
 		if (cent->currentState.speed && cg.predictedPlayerState.speed + cent->currentState.speed > 500)
 		{
 			//he's moving and between the two of us, we're moving fast
-			vec3_t diff;
+			vec3_t diff = { 0 };
 			VectorSubtract(cent->lerpOrigin, cg.predictedPlayerState.origin, diff);
 			if (VectorLength(diff) < 2048)
 			{
 				//close
-				vec3_t my_fwd, their_fwd;
+				vec3_t my_fwd = { 0 }, their_fwd = { 0 };
 				AngleVectors(cg.predictedPlayerState.viewangles, my_fwd, NULL, NULL);
 				VectorScale(my_fwd, cg.predictedPlayerState.speed, my_fwd);
 				AngleVectors(cent->lerpAngles, their_fwd, NULL, NULL);
@@ -16759,16 +16759,16 @@ static QINLINE void CG_VehicleEffects(centity_t* cent)
 		if (p_veh_npc->m_iLastFXTime <= cg.time)
 		{
 			//until we attach it, we need to debounce this
-			vec3_t fwd, rt, up;
-			vec3_t flat;
+			vec3_t fwd = { 0 }, rt = { 0 }, up = { 0 };
+			vec3_t flat = { 0 };
 			const float next_fx_delay = 50;
 			VectorSet(flat, 0, cent->lerpAngles[1], cent->lerpAngles[2]);
 			AngleVectors(flat, fwd, rt, up);
 			if (cent->currentState.speed > 0)
 			{
 				//FIXME: only do this when accelerator is being pressed! (must have a driver?)
-				vec3_t org;
-				qboolean doExhaust;
+				vec3_t org = { 0 };
+				qboolean doExhaust = qfalse;
 				VectorMA(cent->lerpOrigin, -16, up, org);
 				VectorMA(org, -42, fwd, org);
 				// Play damage effects.
@@ -16842,8 +16842,8 @@ static QINLINE void CG_VehicleEffects(centity_t* cent)
 						else
 						{
 							//fixme: bolt these too
-							mdxaBone_t boltMatrix;
-							vec3_t bolt_org, bolt_dir;
+							mdxaBone_t boltMatrix = { 0 };
+							vec3_t bolt_org = { 0 }, bolt_dir = { 0 };
 
 							trap->G2API_GetBoltMatrix(cent->ghoul2, 0, p_veh_npc->m_iExhaustTag[i], &boltMatrix, flat,
 								cent->lerpOrigin, cg.time, cgs.game_models, cent->modelScale);
@@ -16862,8 +16862,8 @@ static QINLINE void CG_VehicleEffects(centity_t* cent)
 				//FIXME: not in space!!!
 				if (p_veh_npc->m_pVehicleInfo->iTrailFX != 0 && cent->ghoul2)
 				{
-					mdxaBone_t boltMatrix;
-					vec3_t get_bolt_angles;
+					mdxaBone_t boltMatrix = { 0 };
+					vec3_t get_bolt_angles = { 0 };
 
 					VectorCopy(cent->lerpAngles, get_bolt_angles);
 					if (p_veh_npc->m_pVehicleInfo->type != VH_FIGHTER)
@@ -16874,8 +16874,8 @@ static QINLINE void CG_VehicleEffects(centity_t* cent)
 
 					for (int i = 1; i < 5; i++)
 					{
-						vec3_t bolt_dir;
-						vec3_t bolt_org;
+						vec3_t bolt_dir = { 0 };
+						vec3_t bolt_org = { 0 };
 						const int trail_bolt = trap->G2API_AddBolt(cent->ghoul2, 0, va("*trail%d", i));
 						// We hit an invalid tag, we quit (they should be created in order so tough luck if not).
 						if (trail_bolt == -1)
@@ -16899,7 +16899,7 @@ static QINLINE void CG_VehicleEffects(centity_t* cent)
 				{
 					//just plain dead, use flames
 					vec3_t up_1 = { 0, 0, 1 };
-					vec3_t bolt_org;
+					vec3_t bolt_org = { 0 };
 
 					//if ( pVehNPC->m_iDriverTag == -1 )
 					{
@@ -17016,8 +17016,8 @@ void CG_CheckThirdPersonAlpha(const centity_t* cent, refEntity_t* legs)
 				&& cent->m_pVehicle->m_pVehicleInfo->cameraAlpha)
 			{
 				//vehicle has auto third-person alpha on
-				trace_t trace;
-				vec3_t dir2_crosshair, end;
+				trace_t trace = { 0 };
+				vec3_t dir2_crosshair = { 0 }, end = { 0 };
 				VectorSubtract(cg_crosshairPos, cameraCurLoc, dir2_crosshair);
 				VectorNormalize(dir2_crosshair);
 				VectorMA(cameraCurLoc, cent->m_pVehicle->m_pVehicleInfo->cameraRange * 2.0f, dir2_crosshair, end);
@@ -17486,8 +17486,8 @@ void ApplyAxisRotation(vec3_t axis[3], const int rot_type, const float value)
 	//apply matrix rotation to this axis.
 	//rotType = type of rotation (PITCH, YAW, ROLL)
 	//value = size of rotation in degrees, no action if == 0
-	vec3_t result[3]; //The resulting axis
-	vec3_t rotation[3]; //rotation matrix
+	vec3_t result[3] = { 0 }; //The resulting axis
+	vec3_t rotation[3] = { 0 }; //rotation matrix
 
 	if (value == 0)
 	{
@@ -17562,10 +17562,10 @@ extern stringID_table_t holsterTypeTable[];
 
 static void CG_HolsteredWeaponRender(centity_t* cent, const clientInfo_t* ci, const int holster_type)
 {
-	refEntity_t ent;
+	refEntity_t ent = { 0 };
 	vec3_t axis[3] = { { 0, 0, 0 },{ 0, 0, 0 },{ 0, 0, 0 } };
-	vec3_t bolt_org;
-	mdxaBone_t boltMatrix;
+	vec3_t bolt_org = { 0 };
+	mdxaBone_t boltMatrix = { 0 };
 	vec3_t pos_offset = { 0, 0, 0 };
 	vec3_t ang_offset = { 0, 0, 0 };
 	qhandle_t offset_bolt = 0;
@@ -17802,7 +17802,7 @@ static void* cg_holsterBolted[MAX_GENTITIES][4]; // the model on each tag: right
 static void CG_HolsterBoltCheck(centity_t* cent, const int slot, const int g2_index, const int weapon, int* state)
 {
 	const int num = cent->currentState.number;
-	void* want;
+	void* want = NULL;
 
 	if (num < 0 || num >= MAX_GENTITIES)
 	{
@@ -17832,7 +17832,7 @@ static void CG_HolsterBoltCheck(centity_t* cent, const int slot, const int g2_in
 // Only he carries the style's bryar pistol on the left hip (as MD9 MP; Jace 2026-10-29)
 static qboolean CG_SaberBlasterKyleModel(const clientInfo_t* ci)
 {
-	char model[MAX_QPATH];
+	char model[MAX_QPATH] = { 0 };
 	Q_strncpyz(model, ci->modelName, sizeof model);
 	Q_strlwr(model);
 	// Cal Kestis too (item 373, DH 2026-11-15): cal_kestis*, cal_survivor, cal_inquisitor, cal_jacket, jedi_cal
@@ -18032,9 +18032,9 @@ static void CG_SaberBlasterChargeGlow(centity_t* cent) // not const: the Ghoul2 
 	const qboolean local = cent->currentState.number == ps->clientNum ? qtrue : qfalse;
 	const int start = local ? ps->weaponChargeTime : cent->currentState.constantLight;
 	const int torso = local ? ps->torsoAnim : cent->currentState.torsoAnim;
-	mdxaBone_t bolt;
-	addspriteArgStruct_t fxSArgs;
-	vec3_t flash;
+	mdxaBone_t bolt = { 0 };
+	addspriteArgStruct_t fxSArgs = { 0 };
+	vec3_t flash = { 0 };
 
 	if (!cent->saberBlasterPistol || !cent->ghoul2 || start <= 0
 		|| torso != BOTH_FORCEGRIP_HOLD && !PM_InSaberLock(torso) // the charge, or the saberlock shot's charge
@@ -18098,8 +18098,8 @@ static const char* CG_ScepterModelPath(void)
 	static char path[MAX_QPATH];
 	static qboolean searched = qfalse;
 	static const char* const worldModel = "models/weapons2/sith_scepter/sith_scepter_w.glm";
-	char list[4096];
-	char dirList[8192];
+	char list[4096] = { 0 };
+	char dirList[8192] = { 0 };
 	fileHandle_t f = 0;
 
 	if (searched)
@@ -18125,7 +18125,7 @@ static const char* CG_ScepterModelPath(void)
 
 		for (int d = 0; d < numDirs && !path[0]; d++)
 		{
-			char dir[MAX_QPATH];
+			char dir[MAX_QPATH] = { 0 };
 
 			if (pass)
 			{
@@ -18223,10 +18223,10 @@ void CG_ScepterShutdown(void)
 // its own 50 ms repeat with 50 ms lines
 static void CG_ScepterBeam(centity_t* cent)
 {
-	mdxaBone_t bolt;
-	vec3_t tip, eye, fwd, end, dir;
-	matrix3_t axis;
-	trace_t tr;
+	mdxaBone_t bolt = { 0 };
+	vec3_t tip = { 0 }, eye = { 0 }, fwd = { 0 }, end = { 0 }, dir = { 0 };
+	matrix3_t axis = { 0 };
+	trace_t tr = { 0 };
 
 	if (cg.time < cent->scepterFxTime)
 	{
@@ -18316,7 +18316,7 @@ static void* cg_handModelOwner[MAX_GENTITIES];
 static void CG_HandModelUpdate(centity_t* cent, const clientInfo_t* ci)
 {
 	const int num = cent->currentState.number;
-	int value, model, bolt;
+	int value = 0, model = 0, bolt = 0;
 
 	if (!cent->ghoul2 || !ci || num < 0 || num >= MAX_GENTITIES)
 	{
@@ -18406,7 +18406,7 @@ static void CG_ScepterUpdate(centity_t* cent, const clientInfo_t* ci)
 
 		if (!inSlot || !cent->scepterModel)
 		{
-			void* scepter;
+			void* scepter = NULL;
 
 			if (inSlot)
 			{
@@ -19527,11 +19527,11 @@ static qboolean CG_DroidWreckClass(const centity_t* cent)
 
 static void CG_DroidWreckMarks(centity_t* cent, const vec3_t center, const float radius, const int count, const int life)
 {
-	int i;
+	int i = 0;
 	for (i = 0; i < count; i++)
 	{
 		// rays from above (a little off to the sides), so the marks land on the side the player sees
-		vec3_t dir, hit, past;
+		vec3_t dir = { 0 }, hit = { 0 }, past = { 0 };
 		const qhandle_t shader = i & 1 ? cgs.media.bdecal_burn1 : cgs.media.bdecal_saberglow;
 		VectorSet(dir, flrand(-0.6f, 0.6f), flrand(-0.6f, 0.6f), 1.0f);
 		VectorNormalize(dir);
@@ -19558,11 +19558,11 @@ static void CG_DroidWreckFx(centity_t* cent, const refEntity_t* ent)
 	static qboolean marked[MAX_GENTITIES];
 	static void* bodyGhoul2[MAX_GENTITIES];
 	const int num = cent->currentState.number;
-	qboolean remote;
-	float radius;
-	int age;
-	vec3_t start, end, spot;
-	trace_t tr;
+	qboolean remote = qfalse;
+	float radius = 0;
+	int age = 0;
+	vec3_t start = { 0 }, end = { 0 }, spot = { 0 };
+	trace_t tr = { 0 };
 
 	if (num < 0 || num >= MAX_GENTITIES)
 	{
@@ -19636,8 +19636,8 @@ static void CG_DroidWreckFx(centity_t* cent, const refEntity_t* ent)
 	{
 		// a puff every 0.3 s at first, every 0.9 s at the end; each puff is 4 sprites that rise at different
 		// speeds and grow, so together they make a soft column
-		vec3_t puff;
-		int k;
+		vec3_t puff = { 0 };
+		int k = 0;
 		const float thick = 1.0f - 0.6f * (float)age / DROID_WRECK_SMOKE_TIME;
 		const float scale = remote ? 0.6f : 1.0f;
 		nextSmoke[num] = cg.time + 300 + age / 100 + Q_irand(0, 150);
@@ -19665,7 +19665,7 @@ static void CG_DroidWreckFx(centity_t* cent, const refEntity_t* ent)
 	if (darkFx && cg.time >= nextDark[num])
 	{
 		// darker smoke in the column (DH 2026-11-12 11:05): the black volumetric smoke, about every 1-2 s
-		vec3_t up;
+		vec3_t up = { 0 };
 		nextDark[num] = cg.time + 900 + age / 60 + Q_irand(0, 300);
 		VectorSet(up, 0, 0, 1);
 		trap->FX_PlayEffectID(darkFx, spot, up, -1, -1, qfalse);
@@ -19673,12 +19673,12 @@ static void CG_DroidWreckFx(centity_t* cent, const refEntity_t* ent)
 	if (sparkFx && age < DROID_WRECK_SPARK_TIME && cg.time >= nextSpark[num])
 	{
 		// sparks every 0.3-0.8 s at first, every 0.9-1.4 s by the end, 1-3 at a time from different spots
-		int k;
+		int k = 0;
 		const int count = Q_irand(1, 3);
 		nextSpark[num] = cg.time + Q_irand(300, 800) + age / 50;
 		for (k = 0; k < count; k++)
 		{
-			vec3_t spark, dir;
+			vec3_t spark = { 0 }, dir = { 0 };
 			VectorSet(dir, flrand(-1.0f, 1.0f), flrand(-1.0f, 1.0f), flrand(0.3f, 1.0f));
 			VectorNormalize(dir);
 			VectorMA(spot, radius * flrand(0.3f, 0.7f), dir, spark);
@@ -19690,17 +19690,17 @@ static void CG_DroidWreckFx(centity_t* cent, const refEntity_t* ent)
 void CG_Player(centity_t* cent)
 {
 	clientInfo_t* ci = NULL;
-	refEntity_t legs;
-	refEntity_t torso;
+	refEntity_t legs = { 0 };
+	refEntity_t torso = { 0 };
 	int renderfx = 0;
 	qboolean shadow = qfalse;
 	float shadowPlane = 0;
-	vec3_t root_angles;
+	vec3_t root_angles = { 0 };
 	float angle = 0.0f;
-	vec3_t angles, dir, elevated;
+	vec3_t angles = { 0 }, dir = { 0 }, elevated = { 0 };
 	int iwantout = 0;
 	int team = 0;
-	mdxaBone_t boltMatrix, l_hand_matrix;
+	mdxaBone_t boltMatrix = { 0 }, l_hand_matrix = { 0 };
 	int do_alpha = 0;
 	qboolean got_l_hand_matrix = qfalse;
 	qboolean g2_has_weapon = qfalse;
@@ -19739,8 +19739,8 @@ void CG_Player(centity_t* cent)
 
 		if (seat >= 0)
 		{
-			mdxaBone_t seat_matrix;
-			vec3_t chair_angles;
+			mdxaBone_t seat_matrix = { 0 };
+			vec3_t chair_angles = { 0 };
 
 			VectorSet(chair_angles, 0, cent->lerpAngles[YAW], 0);
 			if (trap->G2API_GetBoltMatrix(chair->ghoul2, 0, seat, &seat_matrix, chair_angles, chair->lerpOrigin, cg.time,
@@ -19774,7 +19774,7 @@ void CG_Player(centity_t* cent)
 		number)
 	{
 		//always smooth when being thrown
-		vec3_t pos_dif;
+		vec3_t pos_dif = { 0 };
 		float smooth_factor = 0.0f;
 		int k = 0;
 		float f_tolerance = 20000.0f;
@@ -19848,7 +19848,7 @@ void CG_Player(centity_t* cent)
 				cent->playerState->clientNum != cg.snap->ps.clientNum)
 			{
 				//has a pilot...???
-				vec3_t old_ps_org;
+				vec3_t old_ps_org = { 0 };
 
 				//make sure it has its pilot and parent set
 				veh->m_pVehicle->m_pPilot = (bgEntity_t*)&cg_entities[veh->currentState.owner];
@@ -20066,13 +20066,13 @@ void CG_Player(centity_t* cent)
 
 		if (cent->currentState.eFlags & EF_JETPACK_ACTIVE)
 		{
-			mdxaBone_t mat;
+			mdxaBone_t mat = { 0 };
 			int n = 0;
 
 			while (n < 2)
 			{
-				vec3_t flame_dir;
-				vec3_t flame_pos;
+				vec3_t flame_dir = { 0 };
+				vec3_t flame_pos = { 0 };
 				//Get the position/dir of the flame bolt on the jetpack model bolted to the player
 				trap->G2API_GetBoltMatrix(cent->ghoul2, 3, n, &mat, cent->turAngles, cent->lerpOrigin, cg.time,
 					cgs.game_models, cent->modelScale);
@@ -20134,8 +20134,8 @@ void CG_Player(centity_t* cent)
 		&& cent->currentState.eFlags & (EF_JETPACK_ACTIVE | EF_JETPACK_FLAMING | EF3_JETPACK_HOVER))
 		&& !(cent->currentState.eFlags & EF_DEAD))
 	{
-		mdxaBone_t mat;
-		vec3_t flame_pos, flame_dir;
+		mdxaBone_t mat = { 0 };
+		vec3_t flame_pos = { 0 }, flame_dir = { 0 };
 		qboolean wj = qfalse;
 		// the rockettrooper's own jet flame (SP RT_FlyStart: rockettrooper/flameNEW), Boba's for the others
 		const fxHandle_t flame_effect = cent->currentState.NPC_class == CLASS_ROCKETTROOPER ||
@@ -20295,8 +20295,8 @@ void CG_Player(centity_t* cent)
 			cent->currentState.trickedentindex3,
 			cent->currentState.trickedentindex4, cg.snap->ps.clientNum))
 		{
-			vec3_t absmax;
-			vec3_t absmin;
+			vec3_t absmax = { 0 };
+			vec3_t absmin = { 0 };
 			VectorAdd(cent->lerpOrigin, bmins, absmin);
 			VectorAdd(cent->lerpOrigin, bmaxs, absmax);
 			CG_CubeOutline(absmin, absmax, 1, COLOR_RED);
@@ -20614,7 +20614,7 @@ void CG_Player(centity_t* cent)
 	if ((cent->currentState.eFlags & EF_SEEKERDRONE || cent->currentState.genericenemyindex != -1) && cent->currentState
 		.eType != ET_NPC)
 	{
-		vec3_t seekorg;
+		vec3_t seekorg = { 0 };
 		int successchange = 0;
 		refEntity_t seeker = { 0 };
 
@@ -20661,7 +20661,7 @@ void CG_Player(centity_t* cent)
 
 			if (enent)
 			{
-				vec3_t enang;
+				vec3_t enang = { 0 };
 				VectorSubtract(enent->lerpOrigin, seekorg, enang);
 				VectorNormalize(enang);
 				vectoangles(enang, angles);
@@ -20786,10 +20786,10 @@ void CG_Player(centity_t* cent)
 			|| cent->currentState.weapon == WP_MELEE) && !cg.predictedPlayerState.zoomMode)
 		{
 			//<True View varibles
-			mdxaBone_t eye_matrix;
-			vec3_t eye_angles;
-			vec3_t eye_axis[3];
-			vec3_t oldeye_origin;
+			mdxaBone_t eye_matrix = { 0 };
+			vec3_t eye_angles = { 0 };
+			vec3_t eye_axis[3] = { 0 };
+			vec3_t oldeye_origin = { 0 };
 			qhandle_t eyes_bolt = 0;
 			qboolean bone_based = qfalse;
 
@@ -20915,7 +20915,7 @@ SkipTrueView:
 	if (cent->frame_minus1_refreshed ||
 		cent->frame_minus2_refreshed)
 	{
-		vec3_t t_dir;
+		vec3_t t_dir = { 0 };
 		int dist_vel_base = 0;
 
 		VectorCopy(cent->currentState.pos.trDelta, t_dir);
@@ -20996,8 +20996,8 @@ SkipTrueView:
 	if (hand_fx_ready && cent->currentState.activeForcePass > FORCE_LEVEL_3
 		&& cent->currentState.NPC_class != CLASS_VEHICLE)
 	{
-		matrix3_t axis;
-		vec3_t t_ang, f_ang, fx_dir;
+		matrix3_t axis = { 0 };
+		vec3_t t_ang = { 0 }, f_ang = { 0 }, fx_dir = { 0 };
 		vec3_t ef_org = { 0 };
 
 		int real_force_lev = cent->currentState.activeForcePass - FORCE_LEVEL_3;
@@ -21013,7 +21013,7 @@ SkipTrueView:
 			&& Q_irand(0, 1))
 		{
 			//alternate back and forth between left and right
-			mdxaBone_t r_hand_matrix;
+			mdxaBone_t r_hand_matrix = { 0 };
 			trap->G2API_GetBoltMatrix(cent->ghoul2, 0, ci->bolt_rhand, &r_hand_matrix, cent->turAngles,
 				cent->lerpOrigin,
 				cg.time, cgs.game_models, cent->modelScale);
@@ -21050,8 +21050,8 @@ SkipTrueView:
 	else if (hand_fx_ready && cent->currentState.activeForcePass && cent->currentState.NPC_class != CLASS_VEHICLE)
 	{
 		//doing the electrocuting
-		vec3_t axis[3];
-		vec3_t t_ang, f_ang, fx_dir;
+		vec3_t axis[3] = { 0 };
+		vec3_t t_ang = { 0 }, f_ang = { 0 }, fx_dir = { 0 };
 		vec3_t ef_org_l = { 0 }; //origin left hand
 		vec3_t ef_org_r = { 0 }; //origin right hand
 
@@ -21068,7 +21068,7 @@ SkipTrueView:
 			|| cent->currentState.torsoAnim == BOTH_FORCE_2HANDEDLIGHTNING_HOLD
 			|| cent->currentState.torsoAnim == BOTH_FORCE_2HANDEDLIGHTNING_RELEASE)
 		{
-			mdxaBone_t r_hand_matrix;
+			mdxaBone_t r_hand_matrix = { 0 };
 			trap->G2API_GetBoltMatrix(cent->ghoul2, 0, ci->bolt_rhand, &r_hand_matrix, cent->turAngles,
 				cent->lerpOrigin,
 				cg.time, cgs.game_models, cent->modelScale);
@@ -21228,8 +21228,8 @@ SkipTrueView:
 	if (cent->currentState.PlayerEffectFlags & 1 << PEF_FLAMING/* && cg.snap->ps.forceHandExtend == HANDEXTEND_FLAMETHROWER_HOLD*/)
 	{
 		//player is firing flamethrower, render effect.
-		vec3_t axis[3];
-		vec3_t t_ang, f_ang, fx_dir;
+		vec3_t axis[3] = { 0 };
+		vec3_t t_ang = { 0 }, f_ang = { 0 }, fx_dir = { 0 };
 		vec3_t ef_org = { 0 };
 
 		VectorSet(t_ang, cent->turAngles[PITCH], cent->turAngles[YAW], cent->turAngles[ROLL]);
@@ -21293,7 +21293,7 @@ SkipTrueView:
 	// body, as SP's PW_FORCE_REPULSE (2026-10-12)
 	if (cent->currentState.forcePowersActive & 1 << FP_REPULSE && cent->currentState.eType != ET_NPC)
 	{
-		vec3_t blue;
+		vec3_t blue = { 0 };
 		VectorScale(colorTable[CT_LTBLUE1], 255.0f, blue);
 		trap->R_AddLightToScene(cent->lerpOrigin, 200 + (rand() & 31), 0.2f, 0.2f, 1.0f);
 		CG_ForceRepulseRefraction(cent->lerpOrigin, NULL, blue);
@@ -21303,7 +21303,7 @@ SkipTrueView:
 	// around the body, a blue light; its own timer so the push effects below don't restart it
 	if (cent->currentState.eFlags & EF_BODYPUSH && cent->currentState.torsoAnim == BOTH_SUPERPUSH)
 	{
-		vec3_t blue;
+		vec3_t blue = { 0 };
 		const int savedFade = cent->bodyFadeTime;
 		VectorScale(colorTable[CT_LTBLUE1], 255.0f, blue);
 		trap->R_AddLightToScene(cent->lerpOrigin, 200 + (rand() & 31), 0.2f, 0.2f, 1.0f);
@@ -21343,7 +21343,7 @@ SkipTrueView:
 
 	if (cent->currentState.powerups & 1 << PW_DISINT_4)
 	{
-		vec3_t t_ang;
+		vec3_t t_ang = { 0 };
 		vec3_t ef_org = { 0 };
 
 		VectorSet(t_ang, cent->turAngles[PITCH], cent->turAngles[YAW], cent->turAngles[ROLL]);
@@ -21363,8 +21363,8 @@ SkipTrueView:
 		if (cent->currentState.forcePowersActive & 1 << FP_GRIP &&
 			(cg.renderingThirdPerson || cent->currentState.number != cg.snap->ps.clientNum))
 		{
-			vec3_t bolt_dir;
-			vec3_t orig_bolt;
+			vec3_t bolt_dir = { 0 };
+			vec3_t orig_bolt = { 0 };
 			VectorCopy(ef_org, orig_bolt);
 			BG_GiveMeVectorFromMatrix(&l_hand_matrix, NEGATIVE_Y, bolt_dir);
 
@@ -21429,7 +21429,7 @@ SkipTrueView:
 		}
 		else
 		{
-			vec4_t pre_col;
+			vec4_t pre_col = { 0 };
 			int pre_rfx = 0;
 
 			pre_rfx = legs.renderfx;
@@ -21487,8 +21487,8 @@ SkipTrueView:
 	{
 		if (cent->ghoul2)
 		{
-			vec3_t ef_org;
-			vec3_t t_ang, fx_ang;
+			vec3_t ef_org = { 0 };
+			vec3_t t_ang = { 0 }, fx_ang = { 0 };
 			matrix3_t axis = { 0 };
 
 			//VectorSet( tAng, 0, cent->pe.torso.yawAngle, 0 );
@@ -21525,7 +21525,7 @@ SkipTrueView:
 	{
 		int i = 0;
 		int rendered_holos = 0;
-		refEntity_t holo_ref;
+		refEntity_t holo_ref = { 0 };
 
 		while (i < NUM_FORCE_POWERS && rendered_holos < 3)
 		{
@@ -21595,8 +21595,8 @@ SkipTrueView:
 
 				{
 					float wv = 0.0f;
-					addspriteArgStruct_t fx_s_args;
-					vec3_t holo_center;
+					addspriteArgStruct_t fx_s_args = { 0 };
+					vec3_t holo_center = { 0 };
 
 					holo_center[0] = holo_ref.origin[0] + holo_ref.axis[2][0] * 18;
 					holo_center[1] = holo_ref.origin[1] + holo_ref.axis[2][1] * 18;
@@ -21720,8 +21720,8 @@ SkipTrueView:
 	{
 		if (cent->ghoul2)
 		{
-			vec3_t ef_org;
-			vec3_t t_ang, fx_ang;
+			vec3_t ef_org = { 0 };
+			vec3_t t_ang = { 0 }, fx_ang = { 0 };
 			matrix3_t axis = { 0 };
 
 			VectorSet(t_ang, cent->turAngles[PITCH], cent->turAngles[YAW], cent->turAngles[ROLL]);
@@ -21753,9 +21753,9 @@ SkipTrueView:
 	{
 		if (cent->ghoul2)
 		{
-			vec3_t ef_org;
-			vec3_t t_ang, fx_ang;
-			matrix3_t axis;
+			vec3_t ef_org = { 0 };
+			vec3_t t_ang = { 0 }, fx_ang = { 0 };
+			matrix3_t axis = { 0 };
 
 			VectorSet(t_ang, cent->turAngles[PITCH], cent->turAngles[YAW], cent->turAngles[ROLL]);
 
@@ -21797,7 +21797,7 @@ stillDoSaber:
 				|| ci->saber[1].soundLoop) //??? //racc - or we have dual sabers
 			&& !(cent->currentState.eFlags & EF_DEAD)) //still alive
 		{
-			vec3_t sound_spot;
+			vec3_t sound_spot = { 0 };
 			qboolean did_first_sound = qfalse;
 
 			if (cg.snap->ps.clientNum == cent->currentState.number)
@@ -21895,7 +21895,7 @@ stillDoSaber:
 			{
 				//saber is in flight, do not have it as a standard weapon model
 				qboolean add_bolts = qfalse;
-				mdxaBone_t bolt_mat;
+				mdxaBone_t bolt_mat = { 0 };
 
 				if (g2_has_weapon)
 				{
@@ -22015,11 +22015,11 @@ stillDoSaber:
 
 			if (saberEnt && saberEnt->ghoul2)
 			{
-				vec3_t blade_angles;
-				vec3_t t_ang;
-				vec3_t ef_org;
+				vec3_t blade_angles = { 0 };
+				vec3_t t_ang = { 0 };
+				vec3_t ef_org = { 0 };
 				float wv = 0.0f;
-				addspriteArgStruct_t fx_s_args;
+				addspriteArgStruct_t fx_s_args = { 0 };
 
 				if (!cent->bolt2)
 				{
@@ -22059,7 +22059,7 @@ stillDoSaber:
 					if (!(ci->saber[0].saberFlags & SFL_RETURN_DAMAGE)
 						|| cent->currentState.saberHolstered)
 					{
-						vec3_t owndir;
+						vec3_t owndir = { 0 };
 
 						VectorSubtract(saberEnt->lerpOrigin, cent->lerpOrigin, owndir);
 						VectorNormalize(owndir);
@@ -22565,7 +22565,7 @@ stillDoSaber:
 
 	if (cent->frame_hold_time >= cg.time)
 	{
-		refEntity_t reframe_hold;
+		refEntity_t reframe_hold = { 0 };
 
 		if (!cent->frame_hold_refreshed)
 		{
@@ -23265,7 +23265,7 @@ stillDoSaber:
 	if (cent->currentState.emplacedOwner > cg.time)
 	{
 		int dif = cent->currentState.emplacedOwner - cg.time;
-		vec3_t temp_angles;
+		vec3_t temp_angles = { 0 };
 
 		if (dif > 0 && Q_flrand(0.0f, 1.0f) > 0.4f)
 		{

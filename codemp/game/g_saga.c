@@ -142,13 +142,13 @@ static void SiegeSetCompleteData(const int team)
 
 void InitSiegeMode(void)
 {
-	vmCvar_t mapname;
-	char levelname[512];
-	char team_icon[128];
-	char goalreq[64];
-	char teams[2048];
+	vmCvar_t mapname = { 0 };
+	char levelname[512] = { 0 };
+	char team_icon[128] = { 0 };
+	char goalreq[64] = { 0 };
+	char teams[2048] = { 0 };
 	static char objective[MAX_SIEGE_INFO_SIZE];
-	char objec_str[8192];
+	char objec_str[8192] = { 0 };
 	int i = 0;
 	int objective_num_team1 = 0;
 	int objective_num_team2 = 0;
@@ -570,7 +570,7 @@ static void UseSiegeTarget(gentity_t* other, gentity_t* en, const char* target)
 
 static void SiegeBroadcast_OBJECTIVECOMPLETE(const int team, const int client, const int objective)
 {
-	vec3_t nomatter;
+	vec3_t nomatter = { 0 };
 
 	VectorClear(nomatter);
 
@@ -583,7 +583,7 @@ static void SiegeBroadcast_OBJECTIVECOMPLETE(const int team, const int client, c
 
 static void SiegeBroadcast_ROUNDOVER(const int winningteam, const int winningclient)
 {
-	vec3_t nomatter;
+	vec3_t nomatter = { 0 };
 
 	VectorClear(nomatter);
 
@@ -696,8 +696,8 @@ static void SiegeTeamSwitch(const int winTeam, const int winTime)
 
 static void SiegeRoundComplete(const int winningteam, int winningclient)
 {
-	vec3_t nomatter;
-	char teamstr[1024];
+	vec3_t nomatter = { 0 };
+	char teamstr[1024] = { 0 };
 	int original_winning_client = winningclient;
 
 	//trap->Print("Team %i won\n", winningteam);
@@ -849,7 +849,7 @@ void G_ValidateSiegeClassForTeam(const gentity_t* ent, const int team)
 //bypass most of the normal checks in SetTeam
 void SetTeamQuick(const gentity_t* ent, const int team, const qboolean doBegin)
 {
-	char userinfo[MAX_INFO_STRING];
+	char userinfo[MAX_INFO_STRING] = { 0 };
 
 	trap->GetUserinfo(ent->s.number, userinfo, sizeof userinfo);
 
@@ -915,7 +915,7 @@ void SiegeRespawn(gentity_t* ent)
 static void SiegeBeginRound(const int entNum)
 {
 	//entNum is just used as something to fire targets from.
-	char targname[1024];
+	char targname[1024] = { 0 };
 
 	if (!g_preroundState && !G_SiegeMissionsTFFA()) // SJE (2026-10-16): nobody is respawned in Team FFA
 	{
@@ -1152,7 +1152,7 @@ static void SiegeObjectiveCompleted(const int team, const int objective, const i
 
 static void siegeTriggerUse(gentity_t* ent, gentity_t* other, gentity_t* activator)
 {
-	char teamstr[64];
+	char teamstr[64] = { 0 };
 	static char desiredobjective[MAX_SIEGE_INFO_SIZE];
 	int cl_user = ENTITYNUM_NONE;
 
@@ -1187,7 +1187,7 @@ static void siegeTriggerUse(gentity_t* ent, gentity_t* other, gentity_t* activat
 
 	if (BG_SiegeGetValueGroup(siege_info, teamstr, gParseObjectives))
 	{
-		char objectivestr[64];
+		char objectivestr[64] = { 0 };
 		Com_sprintf(objectivestr, sizeof objectivestr, "Objective%i", ent->objective);
 
 		if (BG_SiegeGetValueGroup(gParseObjectives, objectivestr, desiredobjective))
@@ -1337,7 +1337,7 @@ void SP_info_siege_radaricon(gentity_t* ent)
 static void decompTriggerUse(const gentity_t* ent, gentity_t* other, gentity_t* activator)
 {
 	int final = 0;
-	char teamstr[1024];
+	char teamstr[1024] = { 0 };
 	static char desiredobjective[MAX_SIEGE_INFO_SIZE];
 
 	desiredobjective[0] = '\0';
@@ -1378,7 +1378,7 @@ static void decompTriggerUse(const gentity_t* ent, gentity_t* other, gentity_t* 
 
 	if (BG_SiegeGetValueGroup(siege_info, teamstr, gParseObjectives))
 	{
-		char objectivestr[64];
+		char objectivestr[64] = { 0 };
 		Com_sprintf(objectivestr, sizeof objectivestr, "Objective%i", ent->objective);
 
 		if (BG_SiegeGetValueGroup(gParseObjectives, objectivestr, desiredobjective))
@@ -1464,7 +1464,7 @@ void SiegeItemRemoveOwner(gentity_t* ent, gentity_t* carrier)
 
 static void SiegeItemRespawnEffect(gentity_t* ent, vec3_t new_org)
 {
-	vec3_t up_ang;
+	vec3_t up_ang = { 0 };
 
 	if (ent->target5 && ent->target5[0])
 	{
@@ -1568,14 +1568,14 @@ static void SiegeItemThink(gentity_t* ent)
 			{
 				//perform a startsolid check to make sure the seige item doesn't get stuck
 				//in a wall or something
-				trace_t tr;
+				trace_t tr = { 0 };
 				trap->Trace(&tr, carrier->client->ps.origin, ent->r.mins, ent->r.maxs, carrier->client->ps.origin,
 					ent->s.number, ent->clipmask, qfalse, 0, 0);
 
 				if (tr.startsolid)
 				{
 					//bad spawning area, try again with the trace up a bit.
-					vec3_t TracePoint;
+					vec3_t TracePoint = { 0 };
 					VectorCopy(carrier->client->ps.origin, TracePoint);
 					TracePoint[2] += 30;
 					trap->Trace(&tr, TracePoint, ent->r.mins, ent->r.maxs, TracePoint, ent->s.number, ent->clipmask,
@@ -1586,7 +1586,7 @@ static void SiegeItemThink(gentity_t* ent)
 						//hmm, well that didn't work. try one last time with the item back
 						//away from where the dude was facing (in case the carrier was
 						//close to something they were attacking.)
-						vec3_t fwd;
+						vec3_t fwd = { 0 };
 						AngleVectors(carrier->client->ps.viewangles, fwd, NULL, NULL);
 						VectorMA(TracePoint, -30, fwd, TracePoint);
 						trap->Trace(&tr, TracePoint, ent->r.mins, ent->r.maxs, TracePoint, ent->s.number, ent->clipmask,
@@ -1643,7 +1643,7 @@ static void SiegeItemTouch(gentity_t* self, gentity_t* other, const trace_t* tra
 		if (trace && trace->startsolid)
 		{
 			//let me out! (ideally this should not happen, but such is life)
-			vec3_t escape_pos;
+			vec3_t escape_pos = { 0 };
 			VectorCopy(self->r.currentOrigin, escape_pos);
 			escape_pos[2] += 1.0f;
 
@@ -1727,7 +1727,7 @@ static void SiegeItemDie(gentity_t* self, gentity_t* inflictor, gentity_t* attac
 	if (self->genericValue3)
 	{
 		//An indexed effect to play on death
-		vec3_t up_ang;
+		vec3_t up_ang = { 0 };
 
 		VectorSet(up_ang, 0, 0, 1);
 		G_PlayEffectID(self->genericValue3, self->r.currentOrigin, up_ang);
@@ -1796,8 +1796,8 @@ static void SiegeItemUse(gentity_t* ent, gentity_t* other, gentity_t* activator)
 		{
 			//perform a startsolid check to make sure the seige item doesn't get stuck
 			//in a wall or something
-			trace_t tr;
-			vec3_t trace_point;
+			trace_t tr = { 0 };
+			vec3_t trace_point = { 0 };
 			VectorCopy(targ->r.currentOrigin, trace_point);
 			trap->Trace(&tr, targ->r.currentOrigin, ent->r.mins, ent->r.maxs, targ->r.currentOrigin, targ->s.number,
 				ent->clipmask, qfalse, 0, 0);
@@ -1815,7 +1815,7 @@ static void SiegeItemUse(gentity_t* ent, gentity_t* other, gentity_t* activator)
 					//hmm, well that didn't work. try one last time with the item back
 					//away from where the dude was facing (in case the carrier was
 					//close to something they were attacking.)
-					vec3_t fwd;
+					vec3_t fwd = { 0 };
 					if (targ->client)
 					{
 						AngleVectors(targ->client->ps.viewangles, fwd, NULL, NULL);
@@ -2076,7 +2076,7 @@ void G_SiegeClientExData(const gentity_t* msg_targ)
 {
 	int count = 0;
 	int i = 0;
-	char str[MAX_STRING_CHARS];
+	char str[MAX_STRING_CHARS] = { 0 };
 
 	while (i < level.num_entities && count < MAX_EXDATA_ENTS_TO_SEND)
 	{
@@ -2086,7 +2086,7 @@ void G_SiegeClientExData(const gentity_t* msg_targ)
 			ent->s.eType == ET_PLAYER && msg_targ->client->sess.sessionTeam == ent->client->sess.sessionTeam &&
 			trap->InPVS(msg_targ->client->ps.origin, ent->client->ps.origin))
 		{
-			char scratch[MAX_STRING_CHARS];
+			char scratch[MAX_STRING_CHARS] = { 0 };
 			//another client in the same pvs, send his jive
 			if (count)
 			{

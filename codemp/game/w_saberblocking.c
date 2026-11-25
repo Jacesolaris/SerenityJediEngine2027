@@ -111,9 +111,9 @@ static void SabBeh_SaberShouldBeDisarmedBlocker(gentity_t* blocker, const gentit
 
 qboolean g_accurate_blocking(const gentity_t* blocker, const gentity_t* attacker, vec3_t hit_loc)
 {
-	vec3_t p_angles, p_right;
+	vec3_t p_angles = { 0 }, p_right = { 0 };
 	vec3_t parrier_move = { 0 };
-	vec3_t hit_pos, hit_flat = { 0 };
+	vec3_t hit_pos = { 0 }, hit_flat = { 0 };
 
 	// Slight tolerance so attacks slightly off-center can still be blocked
 	const qboolean in_front_of_me =
@@ -793,7 +793,7 @@ static int WP_SaberAISkill(const gentity_t* ent)
 // Is he turtling: guard up (holding block, or in a parry) and not swinging?
 qboolean WP_SaberAIEnemyTurtling(const gentity_t* enemy)
 {
-	const playerState_t* ps;
+	const playerState_t* ps = NULL;
 	if (!enemy || !enemy->client || enemy->health <= 0)
 	{
 		return qfalse;
@@ -826,7 +826,7 @@ static int saber_swing_times[MAX_CLIENTS][4];
 // PM_SetSaberMove (through WP_SaberAIAdaptRecord): a human player started an attack
 static void WP_SaberAISwingNote(const int client)
 {
-	int i;
+	int i = 0;
 	if (client < 0 || client >= MAX_CLIENTS)
 	{
 		return;
@@ -841,7 +841,7 @@ static void WP_SaberAISwingNote(const int client)
 // ms the enemy has been holding block (turtling), 0 = not turtling or turtle break off
 int WP_SaberAITurtleTime(const gentity_t* enemy)
 {
-	int start;
+	int start = 0;
 	if (!g_saberAITurtleBreak.integer || !WP_SaberAIEnemyTurtling(enemy))
 	{
 		return 0;
@@ -853,7 +853,7 @@ int WP_SaberAITurtleTime(const gentity_t* enemy)
 // 4 or more swings started in the last 3 s (human players)
 qboolean WP_SaberAISpamming(const gentity_t* enemy)
 {
-	int oldest;
+	int oldest = 0;
 	if (!g_saberAISpamPunish.integer || !enemy || enemy->s.number < 0 || enemy->s.number >= MAX_CLIENTS)
 	{
 		return qfalse;
@@ -935,7 +935,7 @@ static void G_DynDiffNudge(const float amount, const char* why)
 // every 60 s: the human players' average (health left, kills)
 static void G_DynDiffWindow(void)
 {
-	int i, humans = 0, hp_pct = 0;
+	int i = 0, humans = 0, hp_pct = 0;
 	if (level.time - dd_windowStart < 60000)
 	{
 		return;
@@ -943,7 +943,7 @@ static void G_DynDiffWindow(void)
 	for (i = 0; i < level.maxclients; i++)
 	{
 		const gentity_t* ent = &g_entities[i];
-		int max;
+		int max = 0;
 		if (!G_DynHuman(ent) || ent->health <= 0)
 		{
 			continue;
@@ -985,7 +985,7 @@ int G_DynSkill(const int base)
 // player_die: a human player died (scaled by how many humans play), or a human killed an NPC
 void G_DynDiffDeath(const gentity_t* self, const gentity_t* attacker)
 {
-	int i, humans = 0;
+	int i = 0, humans = 0;
 	if (!self || !G_DynOn() || self->s.number < 0 || self->s.number >= MAX_GENTITIES)
 	{
 		return;
@@ -1015,8 +1015,8 @@ void G_DynDiffDeath(const gentity_t* self, const gentity_t* attacker)
 }
 qboolean WP_SaberAIFeintWanted(gentity_t* npc)
 {
-	const gentity_t* enemy;
-	int skill;
+	const gentity_t* enemy = NULL;
+	int skill = 0;
 	if (!g_saberAITactics.integer || !npc || !npc->client || npc->s.number < 0 || npc->s.number >= MAX_GENTITIES)
 	{
 		return qfalse;
@@ -1064,7 +1064,7 @@ qboolean WP_SaberAIFeintWanted(gentity_t* npc)
 // within 3 s if it has room for it.
 qboolean WP_SaberAITauntWanted(const gentity_t* npc)
 {
-	int t;
+	int t = 0;
 	if (!npc || npc->s.number < 0 || npc->s.number >= MAX_GENTITIES)
 	{
 		return qfalse;
@@ -1172,8 +1172,8 @@ static qboolean saber_pb_landed[MAX_GENTITIES];
 // g_active.c: a new timed press. qtrue: open the perfect block window (window ms).
 qboolean WP_SaberPerfectBlockPress(const gentity_t* ent, const int window)
 {
-	int n;
-	qboolean locked;
+	int n = 0;
+	qboolean locked = qfalse;
 	if (!ent)
 	{
 		return qfalse;
@@ -1222,9 +1222,9 @@ static void WP_SaberAIBlockedNote(const gentity_t* attacker, const gentity_t* bl
 
 qboolean WP_SaberBotBlockedWait(const gentity_t* bot)
 {
-	const gentity_t* blocker;
-	const playerState_t* eps;
-	int n;
+	const gentity_t* blocker = NULL;
+	const playerState_t* eps = NULL;
+	int n = 0;
 	if (!bot || !bot->client)
 	{
 		return qfalse;
@@ -1300,7 +1300,7 @@ static void WP_SaberPerfectParryBonus(gentity_t* blocker, gentity_t* attacker)
 // Every frame after Pmove (g_active.c ClientThink_real): the riposte window lasts 500 ms, the riposte swing 1.5 s at most.
 void G_SaberRiposteUpdate(gentity_t* ent)
 {
-	playerState_t* ps;
+	playerState_t* ps = NULL;
 	if (!ent || !ent->client)
 	{
 		return;
@@ -1577,7 +1577,7 @@ static qboolean WP_SaberAIAdaptSpecial(const int move)
 
 void WP_SaberAIAdaptRecord(const int clientNum, const int move)
 {
-	int repeats = 0, chance, i;
+	int repeats = 0, chance = 0, i = 0;
 	if (clientNum >= 0 && clientNum < MAX_CLIENTS && WP_SaberAIIsHuman(&g_entities[clientNum]))
 	{
 		WP_SaberAISwingNote(clientNum); // spam punish (2026-11-22)
@@ -1626,7 +1626,7 @@ void WP_SaberAIAdaptRecord(const int clientNum, const int move)
 // Has a blocking saber NPC / bot read this swing of attacker? Used once: the read is spent by the perfect block.
 static qboolean WP_SaberAIAdaptRead(const gentity_t* blocker, const gentity_t* attacker)
 {
-	int b, skill;
+	int b = 0, skill = 0;
 	if (!g_saberAIAdapt.integer || !WP_SaberAIIsAI(blocker) || !WP_SaberAIIsHuman(attacker)
 		|| WP_SaberRiposteSwingActive(attacker))
 	{
@@ -1935,7 +1935,7 @@ qboolean sab_beh_block_vs_attack(
 				if ((attacker->client->ps.fd.saberAnimLevel == SS_DESANN || attacker->client->ps.fd.saberAnimLevel == SS_BLASTER) ||
 					attacker->client->ps.fd.saberAnimLevel == SS_STRONG)
 				{
-					int heavy_cost;
+					int heavy_cost = 0;
 					WP_SaberFatiguedParryDirection(blocker, hit_loc, qfalse);
 
 					// 2026-11-10 bug fix: blocking a heavy style cost nothing here. Now it costs the normal block
@@ -2331,8 +2331,8 @@ void WP_SaberWearHiltTrace(gentity_t* victim, const gentity_t* attacker)
 static qboolean WP_SaberWearSwap(gentity_t* ent)
 {
 	gclient_t* client = ent->client;
-	char piece1[SABER_NAME_LENGTH];
-	char piece2[SABER_NAME_LENGTH];
+	char piece1[SABER_NAME_LENGTH] = { 0 };
+	char piece2[SABER_NAME_LENGTH] = { 0 };
 	const saber_colors_t color1 = client->saber[0].blade[0].color;
 	const saber_colors_t color2 = client->saber[0].numBlades > 1 ? client->saber[0].blade[1].color : color1;
 
@@ -2375,7 +2375,7 @@ static qboolean WP_SaberWearSwap(gentity_t* ent)
 static void WP_SaberWearBreak(gentity_t* ent, const qboolean heavy)
 {
 	gclient_t* client = ent->client;
-	vec3_t fwd, push, org, up = { 0, 0, 1 };
+	vec3_t fwd = { 0 }, push = { 0 }, org = { 0 }, up = { 0, 0, 1 };
 
 	client->ps.stats[STAT_SABER_WEAR] = 0;
 	client->saberWearTimer = 0;
@@ -2402,7 +2402,7 @@ static void WP_SaberWearBreak(gentity_t* ent, const qboolean heavy)
 			G_Knockdown(ent, ent, push, 300, qtrue);
 			if (client->saber[1].model[0] && client->ps.saberEntityNum)
 			{
-				vec3_t throw_vel;
+				vec3_t throw_vel = { 0 };
 				VectorScale(push, 150.0f, throw_vel);
 				throw_vel[2] = 350.0f;
 				WP_saberKnockOutOfHand(&g_entities[client->ps.saberEntityNum], ent, throw_vel);
@@ -2453,7 +2453,7 @@ void WP_SaberWearThink(gentity_t* ent, const int msec)
 	}
 	if (wear > SABERWEAR_CRACKED && !BG_SabersOff(ps) && Q_irand(0, 1500) < msec)
 	{
-		vec3_t org, up = { 0, 0, 1 };
+		vec3_t org = { 0 }, up = { 0, 0, 1 };
 		VectorCopy(client->lastSaberBase_Always, org);
 		G_PlayEffectID(G_EffectIndex("sparks/spark_nosnd"), org, up);
 	}

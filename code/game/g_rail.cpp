@@ -602,8 +602,8 @@ void Rail_Update()
 		//------------------------
 		if (player && gi.WE_IsOutside(player->currentOrigin))
 		{
-			vec3_t wooshSoundPos;
-			vec3_t playerToMover;
+			vec3_t wooshSoundPos = {};
+			vec3_t playerToMover = {};
 
 			// Iterate Over All The Movers
 			//-----------------------------
@@ -615,7 +615,7 @@ void Rail_Update()
 				//--------------------------------------------------------
 				if (mover.Active() && !mover.mSoundPlayed)
 				{
-					vec3_t moverOrigin;
+					vec3_t moverOrigin = {};
 					VectorAdd(mover.mEnt->currentOrigin, mover.mOriginOffset.v, moverOrigin);
 					VectorSubtract(moverOrigin, player->currentOrigin, playerToMover);
 					playerToMover[2] = 0.0f;

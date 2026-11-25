@@ -249,8 +249,8 @@ Interrogator_Strafe
 */
 static void Interrogator_Strafe(void)
 {
-	vec3_t end, right;
-	trace_t tr;
+	vec3_t end = { 0 }, right = { 0 };
+	trace_t tr = { qfalse };
 
 	AngleVectors(NPCS.NPC->client->renderInfo.eyeAngles, NULL, right, NULL);
 
@@ -298,7 +298,7 @@ Interrogator_Hunt
 
 static void Interrogator_Hunt(const qboolean visible, const qboolean advance)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	Interrogator_PartsMove();
 

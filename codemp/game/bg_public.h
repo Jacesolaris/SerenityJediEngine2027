@@ -2119,8 +2119,8 @@ void	BG_PlayerStateToEntityStateExtraPolate(playerState_t* ps, entityState_t* s,
 
 qboolean	BG_PlayerTouchesItem(const playerState_t* ps, const entityState_t* item, int at_time);
 
-void	BG_InitAnimsets();
-void	BG_ClearAnimsets();
+void	BG_InitAnimsets(void);
+void	BG_ClearAnimsets(void);
 int		bg_parse_animation_file(const char* filename, animation_t* anim_set, qboolean is_humanoid);
 // SJE: per-model skeletons (like SP). A model.glm may name its own GLA; its <GLA dir>/animation.cfg is then used.
 int		BG_ParseAnimationFileForGLA(const char* glaName);	// glaName as G2API_GetGLAName gives it (no .gla); -1 on failure
@@ -2182,7 +2182,7 @@ void* BG_AllocUnaligned(int size);
 void* BG_TempAlloc(int size);
 void BG_TempFree(int size);
 char* BG_StringAlloc(const char* source);
-qboolean BG_OutOfMemory();
+qboolean BG_OutOfMemory(void);
 
 qboolean BG_IsWhiteSpace(char c);
 

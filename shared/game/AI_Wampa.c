@@ -302,7 +302,7 @@ void Wampa_Move(const qboolean visible)
 	{
 		NPCS.NPCInfo->goalEntity = NPCS.NPC->enemy;
 
-		trace_t trace;
+		trace_t trace = { qfalse };
 		if (!NAV_CheckAhead(NPCS.NPC, NPCS.NPCInfo->goalEntity->SHR_currentOrigin, trace, NPCS.NPC->clipmask | CONTENTS_BOTCLIP))
 		{
 			if (!NPC_MoveToGoal(qfalse))
@@ -436,7 +436,7 @@ static void Wampa_ClawHitEffect(gentity_t* victim)
 	{
 		return; // the blood effect only with g_Bloodmist 1 (DH)
 	}
-	vec3_t center, dir, org;
+	vec3_t center = { 0 }, dir = { 0 }, org = { 0 };
 	// the chest bone where the model has one (a held victim hangs head down from the hand, so its box says little)
 	if (victim->chestBolt != -1 && victim->ghoul2.size() && victim->playerModel >= 0)
 	{
@@ -461,16 +461,18 @@ static void Wampa_ClawHitEffect(gentity_t* victim)
 #ifdef SP_GAME
 static void Wampa_Slash(const int boltIndex, const qboolean backhand)
 {
-	gentity_t* radius_ents[128];
+	gentity_t* radius_ents[128] = { NULL };
 	const float radius = 88;
 	const float radius_squared = radius * radius;
-	vec3_t bolt_org;
+	vec3_t bolt_org = { 0 };
 	const int damage = backhand ? Q_irand(10, 15) : Q_irand(20, 30);
 
 	const int num_ents = NPC_GetEntsNearBolt(radius_ents, radius, boltIndex, bolt_org);
 
 	for (int i = 0; i < num_ents; i++)
 	{
+		if (!radius_ents[i])
+			continue;
 		if (!radius_ents[i]->inuse)
 		{
 			continue;
@@ -514,8 +516,8 @@ static void Wampa_Slash(const int boltIndex, const qboolean backhand)
 			if (backhand)
 			{
 				//actually push the enemy
-				vec3_t push_dir;
-				vec3_t angs;
+				vec3_t push_dir = { 0 };
+				vec3_t angs = { 0 };
 				VectorCopy(NPCS.NPC->client->ps.viewangles, angs);
 				angs[YAW] += Q_flrand(25, 50);
 				angs[PITCH] = Q_flrand(-25, -15);
@@ -567,8 +569,8 @@ static void Wampa_Slash(const int boltIndex, const qboolean backhand)
 			{
 				//a normal hit that did damage knocks down too
 				//one out of every 4 normal hits does a knockdown, too
-				vec3_t push_dir;
-				vec3_t angs;
+				vec3_t push_dir = { 0 };
+				vec3_t angs = { 0 };
 				VectorCopy(NPCS.NPC->client->ps.viewangles, angs);
 				angs[YAW] += Q_flrand(25, 50);
 				angs[PITCH] = Q_flrand(-25, -15);
@@ -582,10 +584,10 @@ static void Wampa_Slash(const int boltIndex, const qboolean backhand)
 #else // MP keeps its own version of this function
 void Wampa_Slash(const int boltIndex, const qboolean backhand)
 {
-	int radius_ent_nums[128];
+	int radius_ent_nums[128] = { 0 };
 	const float radius = 88;
 	const float radiusSquared = radius * radius;
-	vec3_t bolt_org;
+	vec3_t bolt_org = { 0 };
 	const int damage = backhand ? Q_irand(10, 15) : Q_irand(20, 30);
 
 	const int num_ents = NPC_GetEntsNearBolt(radius_ent_nums, radius, boltIndex, bolt_org);
@@ -618,8 +620,8 @@ void Wampa_Slash(const int boltIndex, const qboolean backhand)
 			if (backhand)
 			{
 				//actually push the enemy
-				vec3_t push_dir;
-				vec3_t angs;
+				vec3_t push_dir = { 0 };
+				vec3_t angs = { 0 };
 				VectorCopy(NPCS.NPC->client->ps.viewangles, angs);
 				angs[YAW] += flrand(25, 50);
 				angs[PITCH] = flrand(-25, -15);
@@ -660,8 +662,8 @@ void Wampa_Slash(const int boltIndex, const qboolean backhand)
 			else if (!Q_irand(0, 3) && radius_ent->health > 0)
 			{
 				//one out of every 4 normal hits does a knockdown, too
-				vec3_t push_dir;
-				vec3_t angs;
+				vec3_t push_dir = { 0 };
+				vec3_t angs = { 0 };
 				VectorCopy(NPCS.NPC->client->ps.viewangles, angs);
 				angs[YAW] += flrand(25, 50);
 				angs[PITCH] = flrand(-25, -15);
@@ -691,7 +693,7 @@ void Wampa_Attack(const float distance, const qboolean do_charge)
 			//leap
 			NPC_SetAnim(NPCS.NPC, SETANIM_BOTH, BOTH_ATTACK2, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 			TIMER_Set(NPCS.NPC, "attack_dmg", 500);
-			vec3_t fwd;
+			vec3_t fwd = { 0 };
 			const vec3_t yaw_ang = { 0, NPCS.NPC->client->ps.viewangles[YAW], 0 };
 			AngleVectors(yaw_ang, fwd, NULL, NULL);
 			VectorScale(fwd, distance * 1.5f, NPCS.NPC->client->ps.velocity);
@@ -778,7 +780,7 @@ void Wampa_Attack(const float distance, const qboolean do_charge)
 		else if (do_charge || distance > 270 && distance < 430 && !Q_irand(0, 1))
 		{
 			//leap
-			vec3_t fwd, yawAng;
+			vec3_t fwd = { 0 }, yawAng = { 0 };
 			VectorSet(yawAng, 0, NPCS.NPC->client->ps.viewangles[YAW], 0);
 			NPC_SetAnim(NPCS.NPC, SETANIM_BOTH, BOTH_ATTACK2, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 			TIMER_Set(NPCS.NPC, "attack_dmg", 500);
@@ -1141,7 +1143,7 @@ qboolean Wampa_CheckDropVictim(gentity_t* self, const qboolean exclude_me)
 	const vec3_t end = {
 		self->activator->SHR_currentOrigin[0], self->activator->SHR_currentOrigin[1], self->activator->SHR_absmax[2] - 1
 	};
-	trace_t trace;
+	trace_t trace = { qfalse };
 	if (exclude_me)
 	{
 		gi.unlinkentity(self);
@@ -1172,8 +1174,8 @@ qboolean Wampa_CheckDropVictim(gentity_t* self, const qboolean exclude_me)
 static qboolean Wampa_CheckDropVictim(gentity_t* self)
 {
 	gentity_t* vic = G_MonsterVictim(self);
-	trace_t trace;
-	vec3_t mins, maxs, start, end;
+	trace_t trace = { 0 };
+	vec3_t mins = { 0 }, maxs = { 0 }, start = { 0 }, end = { 0 };
 
 	if (!vic)
 	{
@@ -1269,8 +1271,8 @@ static qboolean Wampa_TryGrab(void)
 		//smack
 		SHR_Sound(NPCS.NPC->enemy, G_SoundIndex("sound/chars/rancor/swipehit.wav"));
 		//actually push the enemy
-		vec3_t push_dir;
-		vec3_t angs;
+		vec3_t push_dir = { 0 };
+		vec3_t angs = { 0 };
 		VectorCopy(NPCS.NPC->client->ps.viewangles, angs);
 		angs[YAW] += Q_flrand(25, 50);
 		angs[PITCH] = Q_flrand(-25, -15);
@@ -1293,7 +1295,7 @@ static qboolean Wampa_TryGrab(void)
 static qboolean Wampa_TryGrab(void)
 {
 	gentity_t* enemy = NPCS.NPC->enemy;
-	vec3_t hand;
+	vec3_t hand = { 0 };
 
 	if (!enemy || !enemy->client || enemy->health <= 0)
 	{
@@ -1317,7 +1319,7 @@ static qboolean Wampa_TryGrab(void)
 	if (enemyDist < 128.0f)
 	{
 		//smack
-		vec3_t pushDir, angs;
+		vec3_t pushDir = { 0 }, angs = { 0 };
 		G_Sound(enemy, CHAN_AUTO, G_SoundIndex("sound/chars/rancor/swipehit.wav"));
 		//actually push the enemy
 		VectorCopy(NPCS.NPC->client->ps.viewangles, angs);
@@ -1935,8 +1937,8 @@ static void G_MonsterBoltOrg(gentity_t* self, const char* boltName, vec3_t out)
 // the nearest one we may grab within radius of org (in front of us when frontOnly)
 static gentity_t* G_MonsterFindVictim(gentity_t* self, const vec3_t org, const float radius, const qboolean frontOnly)
 {
-	int touch[128];
-	vec3_t mins, maxs, fwd, yaw;
+	int touch[128] = { 0 };
+	vec3_t mins = { 0 }, maxs = { 0 }, fwd = { 0 }, yaw = { 0 };
 	gentity_t* best = NULL;
 	float bestDist = radius;
 
@@ -1951,7 +1953,7 @@ static gentity_t* G_MonsterFindVictim(gentity_t* self, const vec3_t org, const f
 	for (int i = 0; i < num; i++)
 	{
 		gentity_t* ent = &g_entities[touch[i]];
-		vec3_t dir;
+		vec3_t dir = { 0 };
 
 		if (!G_MonsterCanGrab(self, ent))
 		{
@@ -1996,7 +1998,7 @@ static gentity_t* G_MonsterVictim(const gentity_t* self)
 // is targ in front of it, within reach (flat distance) and not far above / below it
 static qboolean G_MonsterInReach(const gentity_t* self, const gentity_t* targ, const float reach)
 {
-	vec3_t dir, fwd, yaw;
+	vec3_t dir = { 0 }, fwd = { 0 }, yaw = { 0 };
 
 	VectorSubtract(targ->r.currentOrigin, self->r.currentOrigin, dir);
 	if (targ->r.currentOrigin[2] < self->r.absmin[2] - 16.0f || targ->r.currentOrigin[2] > self->r.absmax[2] + 32.0f)
@@ -2063,7 +2065,7 @@ void G_MonsterReleaseVictim(gentity_t* self, const qboolean dropAnim)
 		{
 			if (victim->s.number < MAX_CLIENTS)
 			{
-				vec3_t vicAngles;
+				vec3_t vicAngles = { 0 };
 				VectorSet(vicAngles, 0, AngleNormalize180(cl->ps.viewangles[YAW] + 180.0f), 0);
 				SetClientViewAngle(victim, vicAngles);
 			}
@@ -2152,7 +2154,7 @@ static qboolean G_MonsterStandStillAnim(const gentity_t* self, const int monster
 // SP Wampa_TryGrab, at the end of BOTH_HOLD_START
 static void G_WampaTryGrab(gentity_t* self)
 {
-	vec3_t hand;
+	vec3_t hand = { 0 };
 	gentity_t* target = self->client->monsterTarget >= 0 && self->client->monsterTarget < ENTITYNUM_WORLD
 		? &g_entities[self->client->monsterTarget] : NULL;
 
@@ -2170,7 +2172,7 @@ static void G_WampaTryGrab(gentity_t* self)
 	if (target && G_MonsterCanGrab(self, target) && Distance(target->r.currentOrigin, hand) < 128.0f)
 	{
 		// smack
-		vec3_t push_dir, angs;
+		vec3_t push_dir = { 0 }, angs = { 0 };
 
 		G_Sound(target, CHAN_AUTO, G_SoundIndex("sound/chars/rancor/swipehit.wav"));
 		VectorCopy(self->client->ps.viewangles, angs);
@@ -2211,7 +2213,7 @@ static void G_WampaThink(gentity_t* self, usercmd_t* ucmd, const qboolean isBot)
 
 	if (!cl->monsterHold)
 	{
-		vec3_t front, fwd, yaw;
+		vec3_t front = { 0 }, fwd = { 0 }, yaw = { 0 };
 
 		if (cl->ps.weaponTime > 0 || cl->ps.groundEntityNum == ENTITYNUM_NONE)
 		{
@@ -2345,8 +2347,8 @@ static void G_WampaThink(gentity_t* self, usercmd_t* ucmd, const qboolean isBot)
 // SP Rancor_Swing with try_grab: grab one, smack the rest
 static void G_RancorSwing(gentity_t* self)
 {
-	int touch[128];
-	vec3_t hand, mins, maxs;
+	int touch[128] = { 0 };
+	vec3_t hand = { 0 }, mins = { 0 }, maxs = { 0 };
 	const float scale = self->modelScale[0] > 0.0f ? self->modelScale[0] : 1.0f;
 	// the SP reach (88) also for the smaller MP rancor (70%), more for a bigger one
 	const float radius = 88.0f * (scale > 1.0f ? scale : 1.0f);
@@ -2379,7 +2381,7 @@ static void G_RancorSwing(gentity_t* self)
 	for (int i = 0; i < num; i++)
 	{
 		gentity_t* ent = &g_entities[touch[i]];
-		vec3_t push_dir, angs;
+		vec3_t push_dir = { 0 }, angs = { 0 };
 
 		if (ent == victim || !G_MonsterCanGrab(self, ent) || Distance(ent->r.currentOrigin, hand) > radius)
 		{
@@ -2502,7 +2504,7 @@ static void G_RancorThink(gentity_t* self, usercmd_t* ucmd, const qboolean isBot
 
 	if (!cl->monsterHold)
 	{
-		vec3_t front, fwd, center, yaw;
+		vec3_t front = { 0 }, fwd = { 0 }, center = { 0 }, yaw = { 0 };
 
 		cl->ps.eFlags2 &= ~(EF2_USE_ALT_ANIM | EF2_GENERIC_NPC_FLAG);
 		if (cl->ps.weaponTime > 0 || cl->ps.groundEntityNum == ENTITYNUM_NONE)
@@ -2679,7 +2681,7 @@ qboolean G_HeldByMonsterPlayer(gentity_t* ent, gentity_t* monster, usercmd_t* uc
 		if (cl->heldAttackTime && level.time >= cl->heldAttackTime)
 		{
 			// the slash lands: any hit makes a wampa drop him, 40 damage a rancor (G_RancorThink)
-			vec3_t dir;
+			vec3_t dir = { 0 };
 			cl->heldAttackTime = 0;
 			VectorSubtract(monster->r.currentOrigin, cl->ps.origin, dir);
 			VectorNormalize(dir);

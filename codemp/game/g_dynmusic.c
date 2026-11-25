@@ -14,7 +14,7 @@ void LoadDynamicMusic(void)
 	// FIX: move huge buffer off the stack
 	static char buffer[DMS_INFO_SIZE];
 
-	vmCvar_t mapname;
+	vmCvar_t mapname = { 0 };
 
 	// Open up the dynamic music file
 	const int len = trap->FS_Open("ext_data/dms.dat", &f, FS_READ);
@@ -75,7 +75,7 @@ static void LoadDMSSongData(const char* buffer, char* song, DynamicMusicSet_t* s
 	char* transition = strstr(SongGroup, "exit");
 	while (transition)
 	{
-		char Value[MAX_QPATH];
+		char Value[MAX_QPATH] = { 0 };
 
 		if (numTransitions >= MAX_DMS_TRANSITIONS)
 		{
@@ -124,8 +124,8 @@ static void LoadDMSSongData(const char* buffer, char* song, DynamicMusicSet_t* s
 static void LoadLengthforSong(const char* buffer, DynamicMusicSet_t* song)
 {
 	//load in the song lengths for the given DMS song
-	char TempLength[MAX_QPATH];
-	char token[MAX_QPATH];
+	char TempLength[MAX_QPATH] = { 0 };
+	char token[MAX_QPATH] = { 0 };
 	int transNum = song->numTransitions;
 
 	//get length for the primary song
@@ -235,7 +235,7 @@ static void LoadDMSSongLengths(void)
 //loads in the DMS data for this map
 void LoadDynamicMusicGroup(char* mapname, char* buffer)
 {
-	char text[MAX_QPATH];
+	char text[MAX_QPATH] = { 0 };
 
 	// FIX: move huge buffer off the stack
 	static char MapMusicGroup[DMS_INFO_SIZE];
@@ -417,7 +417,7 @@ void G_DynamicMusicUpdate(void)
 		// FIX: move large array off the stack
 		static int entity_list[MAX_GENTITIES];
 
-		vec3_t center;
+		vec3_t center = { 0 };
 		gentity_t* player = &g_entities[i];
 
 		if (!player || !player->inuse

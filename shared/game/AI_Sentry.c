@@ -117,9 +117,9 @@ Sentry_Fire
 */
 static void Sentry_Fire(void)
 {
-	vec3_t muzzle;
+	vec3_t muzzle = { 0 };
 	static vec3_t forward, vright, up;
-	mdxaBone_t boltMatrix;
+	mdxaBone_t boltMatrix = { 0 };
 	int bolt = 0;
 
 	NPCS.NPC->flags &= ~FL_SHIELDED;
@@ -337,8 +337,8 @@ Sentry_Strafe
 */
 static void Sentry_Strafe(void)
 {
-	vec3_t end, right;
-	trace_t tr;
+	vec3_t end = { 0 }, right = { 0 };
+	trace_t tr = { qfalse };
 
 	AngleVectors(NPCS.NPC->client->renderInfo.eyeAngles, NULL, right, NULL);
 
@@ -376,7 +376,7 @@ Sentry_Hunt
 */
 static void Sentry_Hunt(const qboolean visible, const qboolean advance)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	//If we're not supposed to stand still, pursue the player
 	if (NPCS.NPCInfo->standTime < level.time)

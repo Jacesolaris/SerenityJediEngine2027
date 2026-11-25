@@ -112,16 +112,16 @@ static qboolean NPC_WPRoute_Valid(const int wp)
 static int NPC_WPRoute_Nearest(const gentity_t* self, const vec3_t org, const int ignoreEnt, const int avoid)
 {
 	enum { NUM_CANDIDATES = 6 };
-	int cand[NUM_CANDIDATES];
-	float candDist[NUM_CANDIDATES];
+	int cand[NUM_CANDIDATES] = { 0 };
+	float candDist[NUM_CANDIDATES] = { 0 };
 	int numCand = 0;
-	int i;
-	vec3_t mins, maxs;
+	int i = 0;
+	vec3_t mins = { 0 }, maxs = { 0 };
 
 	for (i = 0; i < gWPNum; i++)
 	{
-		float d;
-		int k;
+		float d = 0;
+		int k = 0;
 		if (i == avoid || !NPC_WPRoute_Valid(i))
 		{
 			continue;
@@ -152,8 +152,8 @@ static int NPC_WPRoute_Nearest(const gentity_t* self, const vec3_t org, const in
 	VectorSet(maxs, 8.0f, 8.0f, 8.0f);
 	for (i = 0; i < numCand; i++)
 	{
-		trace_t tr;
-		vec3_t start;
+		trace_t tr = { 0 };
+		vec3_t start = { 0 };
 		VectorCopy(org, start);
 		start[2] += 16.0f;
 		trap->Trace(&tr, start, mins, maxs, gWPArray[cand[i]]->origin, ignoreEnt, self->clipmask & ~CONTENTS_BODY, qfalse, 0, 0);
@@ -203,8 +203,8 @@ static int NPC_WPRoute_HeapPop(int* heapSize)
 static int NPC_WPRoute_AStar(const int start, const int end, const int jumpLevel, const int avoid, short* path, const int maxNodes)
 {
 	int heapSize = 0;
-	int node;
-	int count, i;
+	int node = 0;
+	int count = 0, i = 0;
 	static int s_chain[MAX_WPARRAY_SIZE];
 
 	if (++s_astarSearch <= 0)
@@ -224,8 +224,8 @@ static int NPC_WPRoute_AStar(const int start, const int end, const int jumpLevel
 	node = -1;
 	while (heapSize > 0)
 	{
-		const wpobject_t* wp;
-		int n;
+		const wpobject_t* wp = NULL;
+		int n = 0;
 		node = NPC_WPRoute_HeapPop(&heapSize);
 		if (s_astarClosed[node])
 		{
@@ -241,7 +241,7 @@ static int NPC_WPRoute_AStar(const int start, const int end, const int jumpLevel
 		for (n = 0; n < wp->neighbornum && n < MAX_NEIGHBOR_SIZE; n++)
 		{
 			const int next = wp->neighbors[n].num;
-			float g;
+			float g = 0;
 			if (next == avoid || !NPC_WPRoute_Valid(next))
 			{
 				continue;
@@ -338,7 +338,7 @@ the next waypoint on the route) and returns qtrue; qfalse = no route either (the
 */
 qboolean NPC_WPRoute_Direction(gentity_t* self, const vec3_t goal, vec3_t dir)
 {
-	npcPath_t* p;
+	npcPath_t* p = NULL;
 	vec3_t toNode = { 0.0f, 0.0f, 0.0f };
 	float flatDist = 0.0f; // (set by the route walk below whenever a waypoint is left to head for)
 

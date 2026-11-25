@@ -3003,7 +3003,7 @@ static void WP_SaberSetupKeywordHash(void)
 qboolean WP_SaberParseParms(const char* saber_name, saberInfo_t* saber)
 {
 	const char* token = NULL, * p = NULL;
-	char useSaber[SABER_NAME_LENGTH];
+	char useSaber[SABER_NAME_LENGTH] = { 0 };
 	qboolean triedDefault = qfalse;
 
 	// make sure the hash table has been setup
@@ -3305,7 +3305,7 @@ static char bgSaberParseTBuffer[MAX_SABER_DATA_SIZE];
 void WP_SaberLoadParms()
 {
 	int saberExtFNLen = 0;
-	char saberExtensionListBuf[2048]; //	The list of file names read in
+	char saberExtensionListBuf[2048] = { 0 }; //	The list of file names read in
 	fileHandle_t f = 0;
 
 	int len = 0;

@@ -170,8 +170,8 @@ ImperialProbe_Strafe
 
 static void ImperialProbe_Strafe(void)
 {
-	vec3_t end, right;
-	trace_t tr;
+	vec3_t end = { 0 }, right = { 0 };
+	trace_t tr = { qfalse };
 
 	AngleVectors(NPCS.NPC->client->renderInfo.eyeAngles, NULL, right, NULL);
 
@@ -207,7 +207,7 @@ ImperialProbe_Hunt
 
 static void ImperialProbe_Hunt(const qboolean visible, const qboolean advance)
 {
-	vec3_t forward;
+	vec3_t forward = { 0 };
 
 	NPC_SetAnim(NPCS.NPC, SETANIM_BOTH, BOTH_RUN1, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 
@@ -251,9 +251,9 @@ ImperialProbe_FireBlaster
 */
 static void ImperialProbe_FireBlaster(void)
 {
-	vec3_t muzzle1;
+	vec3_t muzzle1 = { 0 };
 	static vec3_t forward, vright, up;
-	mdxaBone_t boltMatrix;
+	mdxaBone_t boltMatrix = { 0 };
 
 	//FIXME: use {0, NPCS.NPC->client->ps.legsYaw, 0}
 	SHR_GetBoltMatrix(NPCS.NPC, SHR_Bolt(NPCS.NPC, genericBolt1, "*flash"), boltMatrix, NPCS.NPC->SHR_currentAngles, NPCS.NPC->SHR_currentOrigin);
@@ -266,9 +266,9 @@ static void ImperialProbe_FireBlaster(void)
 
 	if (NPCS.NPC->health)
 	{
-		vec3_t angle_to_enemy1;
-		vec3_t delta1;
-		vec3_t enemy_org1;
+		vec3_t angle_to_enemy1 = { 0 };
+		vec3_t delta1 = { 0 };
+		vec3_t enemy_org1 = { 0 };
 		CalcEntitySpot(NPCS.NPC->enemy, SPOT_CHEST, enemy_org1);
 		enemy_org1[0] += Q_irand(0, 10);
 		enemy_org1[1] += Q_irand(0, 10);
@@ -411,8 +411,8 @@ void NPC_Probe_Pain(SHR_PAIN_PARAMS)
 
 	if (self->health < 30 || pain_mod == MOD_DEMP2 || pain_mod == MOD_DEMP2_ALT) // demp2 always messes them up real good
 	{
-		vec3_t end_pos;
-		trace_t trace;
+		vec3_t end_pos = { 0 };
+		trace_t trace = { qfalse };
 
 		VectorSet(end_pos, self->SHR_currentOrigin[0], self->SHR_currentOrigin[1], self->SHR_currentOrigin[2] - 128);
 		SHR_Trace(&trace, self->SHR_currentOrigin, NULL, NULL, end_pos, self->s.number, MASK_SOLID);
@@ -422,7 +422,7 @@ void NPC_Probe_Pain(SHR_PAIN_PARAMS)
 #ifdef SP_GAME // MP has no clientInfo.headModel
 			if (self->client->clientInfo.headModel != 0)
 			{
-				vec3_t origin;
+				vec3_t origin = { 0 };
 
 				VectorCopy(self->SHR_currentOrigin, origin);
 				origin[2] += 50;
@@ -438,7 +438,7 @@ void NPC_Probe_Pain(SHR_PAIN_PARAMS)
 
 			if ((pain_mod == MOD_DEMP2 || pain_mod == MOD_DEMP2_ALT) && attacker)
 			{
-				vec3_t dir;
+				vec3_t dir = { 0 };
 
 				NPC_SetAnim(self, SETANIM_BOTH, BOTH_PAIN1, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
 
@@ -539,8 +539,8 @@ static void ImperialProbe_Wait(void)
 {
 	if (NPCS.NPCInfo->localState == LSTATE_DROP)
 	{
-		vec3_t end_pos;
-		trace_t trace;
+		vec3_t end_pos = { 0 };
+		trace_t trace = { qfalse };
 
 		NPCS.NPCInfo->desiredYaw = AngleNormalize360(NPCS.NPCInfo->desiredYaw + 25);
 

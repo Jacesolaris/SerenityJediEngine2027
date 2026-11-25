@@ -745,7 +745,7 @@ extern cvar_t* com_rend2;
 
 void IT_LoadWeatherParms(void)
 {
-	vmCvar_t mapname;
+	vmCvar_t mapname = {};
 	const char* info = CG_ConfigString(CS_SERVERINFO);
 	const char* s = Info_ValueForKey(info, "mapname");
 
@@ -784,11 +784,11 @@ void IT_LoadWeatherParms(void)
 		// the last wind after a clear (Bug 50), so the map's wind seemed to stay - t1_rail's head wind on the train roof,
 		// where the game braces the player against it, came only from that. Now that a clear really clears, the map's wind
 		// commands are sent again after the file: the file replaces the map's rain / snow / fog, not its wind.
-		char cmds[4096];
+		char cmds[4096] = {};
 		Com_sprintf(cmds, sizeof cmds, "weather clear\nexecq Weather/%s\n", mapname.string);
 		for (int i = 1; i < MAX_WORLD_FX; i++)
 		{
-			char fx[MAX_STRING_CHARS];
+			char fx[MAX_STRING_CHARS] = {};
 			gi.GetConfigstring(CS_WORLD_FX + i, fx, sizeof fx);
 			if (!fx[0])
 			{

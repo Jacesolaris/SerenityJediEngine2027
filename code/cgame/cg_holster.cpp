@@ -238,7 +238,7 @@ static void Hls_Parse(holsterModel_t* model, const char* fileName, const char* t
 			{
 				break;
 			}
-			char key[64];
+			char key[64] = {};
 			Q_strncpyz(key, token, sizeof key);
 			const char* value = COM_ParseExt(&p, qfalse);
 
@@ -307,7 +307,7 @@ static const holsterModel_t* Hls_ModelData(const char* modelName)
 	memset(model, 0, sizeof * model); // every holster type: HLB_NONE (not drawn) until the file says
 	Q_strncpyz(model->name, modelName, sizeof model->name);
 
-	char fileName[MAX_QPATH];
+	char fileName[MAX_QPATH] = {};
 	char* buf = nullptr;
 	Com_sprintf(fileName, sizeof fileName, "models/players/%s/holster.cfg", modelName);
 	long len = gi.FS_ReadFile(fileName, reinterpret_cast<void**>(&buf));
@@ -342,7 +342,7 @@ static qboolean Hls_ModelName(const gentity_t* gent, char* out, const int size)
 	{
 		return qfalse;
 	}
-	char file[MAX_QPATH];
+	char file[MAX_QPATH] = {};
 	Q_strncpyz(file, gent->ghoul2[gent->playerModel].mFileName, sizeof file);
 	for (char* c = file; *c; c++)
 	{
@@ -381,7 +381,7 @@ static CGhoul2Info_v* Hls_WeaponG2(const int weapon)
 		hlsWeaponTried[weapon] = qtrue;
 		// weapons.dat has the view model (merr_sonn.md3): the world model is merr_sonn_w.glm, the one
 		// G_CreateG2AttachedWeaponModel puts in the hand
-		char modelFile[64];
+		char modelFile[64] = {};
 		Q_strncpyz(modelFile, weaponData[weapon].weaponMdl, sizeof modelFile);
 		if (char* ext = strstr(modelFile, ".md3"))
 		{
@@ -549,14 +549,14 @@ static void Hls_Render(centity_t* cent, const holsterModel_t* model, const int h
 		return; // the model has no such bone (a droid, a creature)
 	}
 
-	mdxaBone_t boltMatrix;
-	vec3_t angles, org, axis[3] = { { 0, 0, 0 },{ 0, 0, 0 },{ 0, 0, 0 } };
+	mdxaBone_t boltMatrix = {};
+	vec3_t angles = {}, org = {}, axis[3] = { { 0, 0, 0 },{ 0, 0, 0 },{ 0, 0, 0 } };
 	VectorCopy(g2Angles, angles);
 	VectorCopy(origin, org);
 	gi.G2API_GetBoltMatrix(gent->ghoul2, gent->playerModel, bolt, &boltMatrix, angles, org, cg.time,
 		cgs.model_draw, cent->currentState.modelScale);
 
-	vec3_t boltOrg;
+	vec3_t boltOrg = {};
 	gi.G2API_GiveMeVectorFromMatrix(boltMatrix, ORIGIN, boltOrg);
 	// The same three axes multiplayer takes (its POSITIVE_X, NEGATIVE_Z, POSITIVE_Y), so the holster.cfg
 	// offsets mean the same in both. Singleplayer's bolt matrices name them differently (measured on every
@@ -574,7 +574,7 @@ static void Hls_Render(centity_t* cent, const holsterModel_t* model, const int h
 	{
 		// SS_BLASTER (2026-10-15): moved this far sideways (along the left / right axis) towards the middle of the
 		// body, never past it, so the gun sits closer to the body
-		vec3_t toBody;
+		vec3_t toBody = {};
 		VectorSubtract(origin, boltOrg, toBody);
 		const float side = DotProduct(toBody, axis[0]);
 		const float move = fabs(side) < pullIn ? fabs(side) : pullIn;
@@ -635,7 +635,7 @@ void CG_HolsteredWeapons(centity_t* cent, const vec3_t g2Angles, const vec3_t or
 		return;
 	}
 
-	char modelName[MAX_QPATH];
+	char modelName[MAX_QPATH] = {};
 	if (!Hls_ModelName(gent, modelName, sizeof modelName))
 	{
 		return;

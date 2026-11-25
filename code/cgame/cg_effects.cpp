@@ -71,7 +71,7 @@ void CG_ExplosionEffects(vec3_t origin, const float intensity, const int radius,
 {
 	//FIXME: When exactly is the vieworg calculated in relation to the rest of the frame?s
 
-	vec3_t dir;
+	vec3_t dir = {};
 
 	VectorSubtract(cg.refdef.vieworg, origin, dir);
 	const float dist = VectorNormalize(dir);
@@ -98,7 +98,7 @@ Adds an explosion to a misc model breakables
 void CG_MiscModelExplosion(vec3_t mins, vec3_t maxs, const int size, const material_t chunk_type)
 {
 	int ct = 13;
-	vec3_t org{}, mid;
+	vec3_t org{}, mid = {};
 	const char* effect = nullptr, * effect2 = nullptr;
 
 	VectorAdd(mins, maxs, mid);
@@ -175,7 +175,7 @@ void CG_MiscModelExplosion(vec3_t mins, vec3_t maxs, const int size, const mater
 	// spawn chunk roughly in the bbox of the thing..
 	for (int i = 0; i < ct; i++)
 	{
-		vec3_t dir;
+		vec3_t dir = {};
 		for (int j = 0; j < 3; j++)
 		{
 			const float r = Q_flrand(0.0f, 1.0f) * 0.8f + 0.1f;
@@ -376,7 +376,7 @@ void CG_Chunks(const int owner, vec3_t origin, const vec3_t mins, const vec3_t m
 		// It wouldn't look good to throw a bunch of RGB axis models...so make sure we have something to work with.
 		if (chunk_model)
 		{
-			vec3_t dir;
+			vec3_t dir = {};
 			localEntity_t* le = CG_AllocLocalEntity();
 			refEntity_t* re = &le->refEntity;
 
@@ -576,9 +576,9 @@ static float off_x[20][20], off_z[20][20];
 
 static void CG_DoGlassQuad(vec3_t p[4], vec2_t uv[4], const bool stick, const int time, vec3_t dmg_dir)
 {
-	vec3_t rot_delta;
-	vec3_t vel, accel;
-	vec3_t rgb1;
+	vec3_t rot_delta = {};
+	vec3_t vel = {}, accel = {};
+	vec3_t rgb1 = {};
 
 	VectorSet(vel, Q_flrand(-1.0f, 1.0f) * 12, Q_flrand(-1.0f, 1.0f) * 12, -1);
 
@@ -619,7 +619,7 @@ static void CG_DoGlassQuad(vec3_t p[4], vec2_t uv[4], const bool stick, const in
 
 static void CG_CalcBiLerp(vec3_t verts[4], vec3_t sub_verts[4], vec2_t uv[4])
 {
-	vec3_t temp;
+	vec3_t temp = {};
 
 	// Nasty crap
 	VectorScale(verts[0], 1.0f - uv[0][0], sub_verts[0]);
@@ -653,7 +653,7 @@ static void CG_CalcBiLerp(vec3_t verts[4], vec3_t sub_verts[4], vec2_t uv[4])
 
 static void CG_CalcHeightWidth(vec3_t verts[4], float* height, float* width)
 {
-	vec3_t dir1, dir2, cross;
+	vec3_t dir1 = {}, dir2 = {}, cross = {};
 
 	VectorSubtract(verts[3], verts[0], dir1); // v
 	VectorSubtract(verts[1], verts[0], dir2); // p-a
@@ -748,7 +748,7 @@ void CG_DoGlass(vec3_t verts[], vec3_t dmg_pt, vec3_t dmg_dir, const float dmg_r
 		for (x = 0.0f, t = 0; x < 1.0f; x += step_width, t++)
 		{
 			vec2_t bi_points[4]{};
-			vec3_t sub_verts[4];
+			vec3_t sub_verts[4] = {};
 			// This is nasty..we do this because we don't want to add a random offset on the edge of the glass brush
 			//	...but we do in the center, otherwise the breaking scheme looks way too orderly
 			if (t > 0 && t < mx_width)
@@ -858,7 +858,7 @@ void CG_DoGlass(vec3_t verts[], vec3_t dmg_pt, vec3_t dmg_dir, const float dmg_r
 void CG_DrawTargetBeam(vec3_t start, vec3_t end, vec3_t norm, const char* beam_fx, const char* impact_fx)
 {
 	int handle = 0;
-	vec3_t dir;
+	vec3_t dir = {};
 
 	// overriding the effect, so give us a copy first
 	const SEffectTemplate* temp = theFxScheduler.GetEffectCopy(beam_fx, &handle);
@@ -903,7 +903,7 @@ void CG_DrawTargetBeam(vec3_t start, vec3_t end, vec3_t norm, const char* beam_f
 
 void CG_PlayEffectBolted(const char* fx_name, const int modelIndex, const int boltIndex, const int entNum, vec3_t origin, const int i_loop_time, const bool is_relative)
 {
-	vec3_t axis[3];
+	vec3_t axis[3] = {};
 	int boltInfo = 0;
 
 	//pack the data into boltInfo as if we were going to send it over the network
@@ -933,7 +933,7 @@ void CG_PlayEffectIDBolted(const int fx_id, const int modelIndex, const int bolt
 
 void CG_PlayEffectOnEnt(const char* fx_name, const int clientNum, vec3_t origin, const vec3_t fwd)
 {
-	vec3_t temp, axis[3]{};
+	vec3_t temp = {}, axis[3]{};
 
 	// Assume angles, we'll do a cross product to finish up
 	VectorCopy(fwd, axis[0]);
@@ -951,7 +951,7 @@ void CG_PlayEffectIDOnEnt(const int fx_id, const int clientNum, vec3_t origin, c
 
 void CG_PlayEffect(const char* fx_name, vec3_t origin, const vec3_t fwd)
 {
-	vec3_t temp, axis[3]{};
+	vec3_t temp = {}, axis[3]{};
 
 	// Assume angles, we'll do a cross product to finish up
 	VectorCopy(fwd, axis[0]);
@@ -989,7 +989,7 @@ constexpr auto GIB_JUMP = 250;
 
 void CG_GibPlayer(vec3_t player_origin)
 {
-	vec3_t origin, velocity{};
+	vec3_t origin = {}, velocity{};
 
 	VectorCopy(player_origin, origin);
 	velocity[0] = crandom() * GIB_VELOCITY;
@@ -1047,7 +1047,7 @@ constexpr auto HEAD_JUMP = 3000;
 
 void CG_GibPlayerHeadshot(vec3_t player_origin)
 {
-	vec3_t origin, velocity{};
+	vec3_t origin = {}, velocity{};
 
 	VectorCopy(player_origin, origin);
 	origin[2] += 25;

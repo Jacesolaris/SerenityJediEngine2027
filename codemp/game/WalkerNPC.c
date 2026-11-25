@@ -338,7 +338,7 @@ static void ProcessOrientCommands(const Vehicle_t* p_veh)
 // This function makes sure that the vehicle is properly animated.
 static void AnimateVehicle(const Vehicle_t* p_veh)
 {
-	animNumber_t Anim;
+	animNumber_t Anim = FACE_TALK0;
 	int iFlags = 0, i_blend = 0;
 	gentity_t* parent = (gentity_t*)p_veh->m_pParentEntity;
 

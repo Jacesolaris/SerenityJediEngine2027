@@ -306,7 +306,7 @@ void Touch_Multi(gentity_t* self, gentity_t* other, trace_t* trace)
 	if (self->spawnflags & 2)
 	{
 		//FACING
-		vec3_t forward;
+		vec3_t forward = {};
 
 		if (other->client)
 		{
@@ -351,7 +351,7 @@ void Touch_Multi(gentity_t* self, gentity_t* other, trace_t* trace)
 
 	if (other->client && self->radius)
 	{
-		vec3_t eye_spot;
+		vec3_t eye_spot = {};
 
 		//Only works if your head is in it, but we allow leaning out
 		//NOTE: We don't use CalcEntitySpot SPOT_HEAD because we don't want this
@@ -477,7 +477,7 @@ void SP_trigger_multiple(gentity_t* ent)
 	char* s = nullptr;
 	if (G_SpawnString("noise", "*NOSOUND*", &s))
 	{
-		char buffer[MAX_QPATH];
+		char buffer[MAX_QPATH] = {};
 		Q_strncpyz(buffer, s, sizeof buffer);
 		COM_DefaultExtension(buffer, sizeof buffer, ".wav");
 		ent->noise_index = G_SoundIndex(buffer);
@@ -548,7 +548,7 @@ void SP_trigger_once(gentity_t* ent)
 	char* s = nullptr;
 	if (G_SpawnString("noise", "*NOSOUND*", &s))
 	{
-		char buffer[MAX_QPATH];
+		char buffer[MAX_QPATH] = {};
 		Q_strncpyz(buffer, s, sizeof buffer);
 		COM_DefaultExtension(buffer, sizeof buffer, ".wav");
 		ent->noise_index = G_SoundIndex(buffer);
@@ -600,7 +600,7 @@ When an ent is asked for it's location, it will return this ent's "message" fiel
 */
 char* G_GetLocationForEnt(const gentity_t* ent)
 {
-	vec3_t mins, maxs;
+	vec3_t mins = {}, maxs = {};
 	gentity_t* found = nullptr;
 
 	VectorAdd(ent->currentOrigin, ent->mins, mins);
@@ -755,7 +755,7 @@ void trigger_push_touch(gentity_t* self, gentity_t* other, trace_t* trace)
 	// Apply push
 	if (self->spawnflags & 16)
 	{
-		vec3_t dir;
+		vec3_t dir = {};
 		VectorSubtract(self->s.origin2, other->currentOrigin, dir);
 
 		if (self->speed)
@@ -808,7 +808,7 @@ Calculate origin2 so the target apogee will be hit
 */
 void AimAtTarget(gentity_t* self)
 {
-	vec3_t origin;
+	vec3_t origin = {};
 
 	VectorAdd(self->absmin, self->absmax, origin);
 	VectorScale(origin, 0.5, origin);
@@ -886,7 +886,7 @@ void AimAtTarget(gentity_t* self)
 void trigger_push_checkclear(gentity_t* self)
 {
 	trace_t trace;
-	vec3_t center;
+	vec3_t center = {};
 
 	self->nextthink = level.time + 500;
 
@@ -1102,14 +1102,14 @@ void trigger_teleporter_touch(const gentity_t* self, gentity_t* other, trace_t* 
 void trigger_teleporter_find_closest_portal(gentity_t* self)
 {
 	gentity_t* found = nullptr;
-	vec3_t org;
+	vec3_t org = {};
 	float best_dist = 64 * 64;
 
 	VectorAdd(self->mins, self->maxs, org);
 	VectorScale(org, 0.5, org);
 	while ((found = G_Find(found, FOFS(classname), "misc_portal_surface")) != nullptr)
 	{
-		vec3_t vec;
+		vec3_t vec = {};
 		VectorSubtract(found->currentOrigin, org, vec);
 		const float dist = VectorLengthSquared(vec);
 		if (dist < best_dist)
@@ -1385,7 +1385,7 @@ void SP_trigger_hurt(gentity_t* self)
 
 	if (!(self->spawnflags & 4))
 	{
-		char buffer[MAX_QPATH];
+		char buffer[MAX_QPATH] = {};
 		G_SpawnString("noise", "sound/world/electro", &s);
 
 		Q_strncpyz(buffer, s, sizeof buffer);
@@ -1638,7 +1638,7 @@ void hyperspace_touch(const gentity_t* self, gentity_t* other, trace_t* trace)
 			//A ship is only sent through while it is in here. If it is about to fly out of the far side before its time
 			//(it came in deep, or the jump is long for the size of this box) send it now, and move its clock on to that
 			//point: it used to fly on in hyperspace, into the ship boundary of the map, which turned it back and killed it.
-			vec3_t next_org;
+			vec3_t next_org = {};
 			VectorMA(other->client->ps.origin, 0.15f, other->client->ps.velocity, next_org);
 			const auto leaving = static_cast<qboolean>(time_frac < HYPERSPACE_TELEPORT_FRAC
 				&& !G_PointInBounds(next_org, self->absmin, self->absmax));
@@ -1649,7 +1649,7 @@ void hyperspace_touch(const gentity_t* self, gentity_t* other, trace_t* trace)
 			if (time_frac >= HYPERSPACE_TELEPORT_FRAC || leaving)
 			{
 				//half-way, now teleport them!
-				vec3_t diff, fwd, right, up, newOrg;
+				vec3_t diff = {}, fwd = {}, right = {}, up = {}, newOrg = {};
 				//take off the flag so we only do this once
 				other->client->ps.eFlags2 &= ~EF2_HYPERSPACE;
 				//Get the offset from the local position
@@ -2087,7 +2087,7 @@ if it finds either of these within distance it will fire.
 
 void trigger_entdist_use(gentity_t* self, gentity_t* other, gentity_t* activator)
 {
-	vec3_t diff;
+	vec3_t diff = {};
 	gentity_t* found = nullptr;
 	const gentity_t* owner = nullptr;
 	const char* hold_string = nullptr;
@@ -2183,7 +2183,7 @@ void trigger_visible_check_player_visibility(gentity_t* self)
 		return;
 	}
 
-	vec3_t dir;
+	vec3_t dir = {};
 	gentity_t* player = &g_entities[0];
 
 	if (!player || !player->client)
@@ -2208,7 +2208,7 @@ void trigger_visible_check_player_visibility(gentity_t* self)
 	if (dist < self->radius)
 	{
 		//Within range
-		vec3_t forward;
+		vec3_t forward = {};
 		//2: see if dot to us and player viewangles is > 0.7
 		AngleVectors(player->client->renderInfo.eyeAngles, forward, nullptr, nullptr);
 		const float dot = DotProduct(forward, dir);

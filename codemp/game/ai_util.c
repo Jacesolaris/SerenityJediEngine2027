@@ -522,7 +522,7 @@ int BotDoChat(bot_state_t* bs, const char* section, const int always)
 static void ParseEmotionalAttachments(bot_state_t* bs, const char* buf)
 {
 	int i = 0;
-	char tbuf[16];
+	char tbuf[16] = { 0 };
 
 	while (buf[i] && buf[i] != '}')
 	{

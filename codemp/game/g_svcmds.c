@@ -69,8 +69,8 @@ StringToFilter
 */
 static qboolean StringToFilter(char* s, ipFilter_t* f)
 {
-	char num[128];
-	byteAlias_t b, m;
+	char num[128] = { 0 };
+	byteAlias_t b = { 0 }, m = { 0 };
 
 	b.ui = m.ui = 0u;
 
@@ -119,14 +119,14 @@ UpdateIPBans
 */
 static void UpdateIPBans(void)
 {
-	char iplist_final[MAX_CVAR_VALUE_STRING];
+	char iplist_final[MAX_CVAR_VALUE_STRING] = { 0 };
 
 	*iplist_final = 0;
 	for (int i = 0; i < numIPFilters; i++)
 	{
-		char ip[NET_ADDRSTRMAXLEN];
-		byteAlias_t m;
-		byteAlias_t b;
+		char ip[NET_ADDRSTRMAXLEN] = { 0 };
+		byteAlias_t m = { 0 };
+		byteAlias_t b = { 0 };
 		if (ipFilters[i].compare == 0xFFFFFFFFu)
 			continue;
 
@@ -268,7 +268,7 @@ Svcmd_AddIP_f
 */
 static void Svcmd_AddIP_f(void)
 {
-	char str[MAX_TOKEN_CHARS];
+	char str[MAX_TOKEN_CHARS] = { 0 };
 
 	if (trap->Argc() < 2)
 	{
@@ -323,7 +323,7 @@ static qboolean G_WeatherIsOwned(const int index)
 
 static qboolean G_WeatherStringInUse(const char* str)
 {
-	char s[MAX_STRING_CHARS];
+	char s[MAX_STRING_CHARS] = { 0 };
 
 	for (int i = 1; i < MAX_FX; i++)
 	{
@@ -339,8 +339,8 @@ static qboolean G_WeatherStringInUse(const char* str)
 // sets "*<command>" in the first free effect slot after 'after', returns the slot or -1 if there is none
 static int G_WeatherAddString(const char* command, const int after)
 {
-	char str[MAX_QPATH];
-	char s[MAX_STRING_CHARS];
+	char str[MAX_QPATH] = { 0 };
+	char s[MAX_STRING_CHARS] = { 0 };
 	int i = 0;
 
 	Com_sprintf(str, sizeof str, "*%s", command);
@@ -390,7 +390,7 @@ them, which also removes the weather of the map's entities.
 */
 static void G_SetWeather(const char* const* commands, const int numCommands, const qboolean clearFirst)
 {
-	char s[MAX_STRING_CHARS];
+	char s[MAX_STRING_CHARS] = { 0 };
 	int last = 0;
 	int i = 0;
 
@@ -459,8 +459,8 @@ static const char* G_WeatherCommandForWord(const char* word)
 // the map's Weather/<mapname>.cfg ("r_weather N" lines, one weather each, as in SP): returns the number of commands
 static int G_WeatherReadMapFile(const char** commands, const int maxCommands)
 {
-	char mapname[MAX_QPATH];
-	char buf[2048];
+	char mapname[MAX_QPATH] = { 0 };
+	char buf[2048] = { 0 };
 	fileHandle_t f = 0;
 	int num = 0;
 
@@ -489,7 +489,7 @@ static int G_WeatherReadMapFile(const char** commands, const int maxCommands)
 	while (*p && num < maxCommands)
 	{
 		char* end = p;
-		char word[2][MAX_QPATH];
+		char word[2][MAX_QPATH] = { 0 };
 		int words = 0;
 
 		while (*end && *end != '\n' && *end != '\r' && *end != ';')
@@ -544,8 +544,8 @@ CG_ApplyWeather; the damage always follows this server weather.
 */
 void G_WeatherLoadMapDefault(void)
 {
-	const char* commands[G_WEATHER_MAX_COMMANDS];
-	char mapname[MAX_QPATH];
+	const char* commands[G_WEATHER_MAX_COMMANDS] = { 0 };
+	char mapname[MAX_QPATH] = { 0 };
 	static const char* const rend2NoWeatherMaps[] = {
 		// as SP g_itemLoad.cpp: no file weather on these with rend2
 		"yavin1", "demo", "01nar", "md2_bd_ch", "md_sn_intro_jedi", "md_ch_battledroids", "md_ep4_intro", "secbase",
@@ -586,7 +586,7 @@ static void G_WeatherUsage(const gentity_t* ent)
 
 	// the weather strings everybody runs, what the weather damage sees now and whether the asking player is outside
 	char list[256] = { 0 };
-	char s[MAX_STRING_CHARS];
+	char s[MAX_STRING_CHARS] = { 0 };
 	for (int i = 1; i < MAX_FX; i++)
 	{
 		trap->GetConfigstring(CS_EFFECTS + i, s, sizeof s);
@@ -620,8 +620,8 @@ The named types keep their old meaning (sand = wind + sand, fog = heavyrainfog),
 */
 void G_WeatherCommand_f(const gentity_t* ent)
 {
-	char arg[MAX_TOKEN_CHARS];
-	const char* commands[G_WEATHER_MAX_COMMANDS];
+	char arg[MAX_TOKEN_CHARS] = { 0 };
+	const char* commands[G_WEATHER_MAX_COMMANDS] = { 0 };
 	int num = 0;
 
 	trap->Argv(1, arg, sizeof arg);
@@ -639,7 +639,7 @@ void G_WeatherCommand_f(const gentity_t* ent)
 	else if (!Q_stricmp(arg, "default") || !Q_stricmp(arg, "map"))
 	{
 		// the map's weather again: its entities' weather strings (copied, they come after the "clear"), then the file
-		char s[MAX_STRING_CHARS];
+		char s[MAX_STRING_CHARS] = { 0 };
 		static char entityWeather[G_WEATHER_MAX_COMMANDS][MAX_QPATH];
 
 		for (int i = 1; i < MAX_FX && num < G_WEATHER_MAX_COMMANDS; i++)
@@ -703,7 +703,7 @@ void G_WeatherCommand_f(const gentity_t* ent)
 
 void G_Rename_Player(gentity_t* player, const char* newname)
 {
-	char userinfo[MAX_INFO_STRING];
+	char userinfo[MAX_INFO_STRING] = { 0 };
 	int clientNum = player - g_entities;
 	trap->GetUserinfo(clientNum, userinfo, sizeof(userinfo));
 	Info_SetValueForKey(userinfo, "name", newname);
@@ -719,8 +719,8 @@ Svcmd_RemoveIP_f
 */
 static void Svcmd_RemoveIP_f(void)
 {
-	ipFilter_t f;
-	char str[MAX_TOKEN_CHARS];
+	ipFilter_t f = { 0 };
+	char str[MAX_TOKEN_CHARS] = { 0 };
 
 	if (trap->Argc() < 2)
 	{
@@ -755,7 +755,7 @@ static void Svcmd_ListIP_f(void)
 
 	for (int i = 0; i < numIPFilters; i++)
 	{
-		byteAlias_t b;
+		byteAlias_t b = { 0 };
 		if (ipFilters[i].compare == 0xffffffffu)
 			continue;
 
@@ -777,8 +777,8 @@ static void Svcmd_CenterSay_f(void)
 	else
 	{//since someone is running basejka, we need to add line breaks to make up for the
 		//50 chars per line limit of basejka's cp code.
-		char temp[1024];  //MAX_STRINGED_SV_STRING
-		char output[1024];
+		char temp[1024] = { 0 };  //MAX_STRINGED_SV_STRING
+		char output[1024] = { 0 };
 
 		//copy the print text.
 		strcpy(temp, ConcatArgs(1));
@@ -889,7 +889,7 @@ static gclient_t* ClientForString(const char* s)
 {
 	gclient_t* cl = NULL;
 	int idnum = 0;
-	char cleanInput[MAX_STRING_CHARS];
+	char cleanInput[MAX_STRING_CHARS] = { 0 };
 
 	// numeric values could be slot numbers
 	if (StringIsInteger(s))
@@ -934,7 +934,7 @@ forceteam <player> <team>
 */
 void Svcmd_ForceTeam_f(void)
 {
-	char str[MAX_TOKEN_CHARS];
+	char str[MAX_TOKEN_CHARS] = { 0 };
 
 	if (trap->Argc() < 3)
 	{
@@ -1030,7 +1030,7 @@ static const char* AL_File(void)
 // "a.b.c.d" (a ":port" after it is ignored), '*' for any number in a part
 static qboolean AL_ParseIP(const char* s, unsigned char* ip, unsigned char* mask)
 {
-	int part;
+	int part = 0;
 
 	ip[0] = ip[1] = ip[2] = ip[3] = 0;
 	*mask = 0;
@@ -1075,12 +1075,12 @@ static qboolean AL_ParseIP(const char* s, unsigned char* ip, unsigned char* mask
 static const char* AL_IPString(const adminListEntry_t* e)
 {
 	static char buf[32];
-	int i;
+	int i = 0;
 
 	buf[0] = 0;
 	for (i = 0; i < 4; i++)
 	{
-		char part[8];
+		char part[8] = { 0 };
 		if (e->mask & 1 << i)
 		{
 			Com_sprintf(part, sizeof part, "%s%i", i ? "." : "", e->ip[i]);
@@ -1167,7 +1167,7 @@ int G_AdminParseDuration(const char* s)
 static void AL_Save(void)
 {
 	fileHandle_t f = 0;
-	int i;
+	int i = 0;
 
 	trap->FS_Open(AL_File(), &f, FS_WRITE);
 	if (!f)
@@ -1188,8 +1188,8 @@ static void AL_Load(void)
 {
 	static char buf[ADMINLIST_MAX * 128];
 	fileHandle_t f = 0;
-	char* p;
-	int len;
+	char* p = NULL;
+	int len = 0;
 
 	adminListLoaded = qtrue;
 	adminListCount = 0;
@@ -1212,7 +1212,7 @@ static void AL_Load(void)
 	while (*p && adminListCount < ADMINLIST_MAX)
 	{
 		char* end = p;
-		char type = 0, ipstr[32];
+		char type = 0, ipstr[32] = { 0 };
 		int id = 0, expire = 0, used = 0;
 
 		while (*end && *end != '\n' && *end != '\r')
@@ -1248,7 +1248,7 @@ static void AL_Load(void)
 static void AL_Purge(void)
 {
 	const int now = AL_Now();
-	int i, j = 0;
+	int i = 0, j = 0;
 
 	if (!adminListLoaded)
 	{
@@ -1275,8 +1275,8 @@ static void AL_Purge(void)
 
 static adminListEntry_t* AL_Match(const char type, const char* ipstr)
 {
-	unsigned char ip[4], mask;
-	int i;
+	unsigned char ip[4] = { 0 }, mask = 0;
+	int i = 0;
 
 	if (!AL_ParseIP(ipstr, ip, &mask) || mask != 15)
 	{
@@ -1286,7 +1286,7 @@ static adminListEntry_t* AL_Match(const char type, const char* ipstr)
 	for (i = 0; i < adminListCount; i++)
 	{
 		const adminListEntry_t* e = &adminList[i];
-		int part;
+		int part = 0;
 		if (e->type != type)
 		{
 			continue;
@@ -1309,9 +1309,9 @@ static adminListEntry_t* AL_Match(const char type, const char* ipstr)
 // a new entry (or the same IP's one of this type changed): its id, -1 = not an IP (a bot, the host) or the list is full
 int G_AdminListAdd(const char type, const char* ipmask, const int seconds, const char* reason)
 {
-	unsigned char ip[4], mask;
+	unsigned char ip[4] = { 0 }, mask = 0;
 	adminListEntry_t* e = NULL;
-	int i;
+	int i = 0;
 
 	if (!AL_ParseIP(ipmask, ip, &mask) || !mask)
 	{
@@ -1349,7 +1349,7 @@ int G_AdminListAdd(const char type, const char* ipmask, const int seconds, const
 // takes away an entry by its id (a ban, a mute or a login lock); its type, 0 = none had that id
 char G_AdminListRemove(const int id)
 {
-	int i;
+	int i = 0;
 
 	AL_Purge();
 	for (i = 0; i < adminListCount; i++)
@@ -1370,7 +1370,7 @@ char G_AdminListRemove(const int id)
 int G_AdminListRemoveIP(const char type, const char* ipstr)
 {
 	int n = 0;
-	adminListEntry_t* e;
+	adminListEntry_t* e = NULL;
 
 	while ((e = AL_Match(type, ipstr)) != NULL && n < ADMINLIST_MAX)
 	{
@@ -1383,15 +1383,15 @@ int G_AdminListRemoveIP(const char type, const char* ipstr)
 // The list as text, to a client (clientNum) or the server console (-1)
 void G_AdminListPrint(const int clientNum)
 {
-	char chunk[1000];
-	int i;
+	char chunk[1000] = { 0 };
+	int i = 0;
 
 	AL_Purge();
 	Com_sprintf(chunk, sizeof chunk, "^3Admin list (%s): %i entr%s. B = ban, M = mute, L = admin login locked\n",
 		AL_File(), adminListCount, adminListCount == 1 ? "y" : "ies");
 	for (i = 0; i <= adminListCount; i++)
 	{
-		char line[192];
+		char line[192] = { 0 };
 
 		line[0] = 0;
 		if (i < adminListCount)
@@ -1442,7 +1442,7 @@ const char* G_AdminBanCheck(const char* ipstr)
 // seconds of mute left (-1 = permanent), 0 = not muted
 int G_AdminMuteLeft(const gentity_t* ent)
 {
-	const adminListEntry_t* e;
+	const adminListEntry_t* e = NULL;
 
 	if (!ent || !ent->client || ent->s.number < 0 || ent->s.number >= MAX_CLIENTS || ent->r.svFlags & SVF_ADMIN)
 	{
@@ -1473,9 +1473,9 @@ int G_AdminLoginLocked(const char* ipstr)
 
 static adminFail_t* AL_FailSlot(const char* ipstr, const qboolean create)
 {
-	unsigned char ip[4], mask;
+	unsigned char ip[4] = { 0 }, mask = 0;
 	adminFail_t* oldest = &adminFails[0];
-	int i;
+	int i = 0;
 
 	if (!AL_ParseIP(ipstr, ip, &mask) || mask != 15)
 	{
@@ -1540,9 +1540,9 @@ void G_AdminLoginGood(const char* ipstr)
 // rcon: "adminban <player | ip mask> [time] [reason]" (time: 30m, 2h, 7d, 0 = permanent; none = 1 day)
 static void Svcmd_AdminBan_f(void)
 {
-	char arg[MAX_TOKEN_CHARS], reason[ADMINLIST_REASON];
+	char arg[MAX_TOKEN_CHARS] = { 0 }, reason[ADMINLIST_REASON] = { 0 };
 	gclient_t* cl = NULL;
-	int seconds, id;
+	int seconds = 0, id = 0;
 
 	if (trap->Argc() < 2)
 	{
@@ -1595,7 +1595,7 @@ static void Svcmd_AdminBan_f(void)
 	else
 	{
 		// everyone on that IP range goes now
-		int i;
+		int i = 0;
 		for (i = 0; i < level.maxclients; i++)
 		{
 			if (level.clients[i].pers.connected != CON_DISCONNECTED && G_AdminBanCheck(level.clients[i].sess.IP))
@@ -1609,8 +1609,8 @@ static void Svcmd_AdminBan_f(void)
 // rcon: "adminunban <id>" (adminbanlist shows them; also takes away a mute or a login lock)
 static void Svcmd_AdminUnban_f(void)
 {
-	char arg[MAX_TOKEN_CHARS];
-	char type;
+	char arg[MAX_TOKEN_CHARS] = { 0 };
+	char type = 0;
 
 	trap->Argv(1, arg, sizeof arg);
 	if (!arg[0])
@@ -1635,9 +1635,9 @@ static void Svcmd_AdminBanList_f(void)
 // rcon: "adminmute <player> [time] [reason]" (none = 10 minutes), "adminunmute <player>"
 static void Svcmd_AdminMute_f(void)
 {
-	char arg[MAX_TOKEN_CHARS], reason[ADMINLIST_REASON];
-	gclient_t* cl;
-	int seconds;
+	char arg[MAX_TOKEN_CHARS] = { 0 }, reason[ADMINLIST_REASON] = { 0 };
+	gclient_t* cl = NULL;
+	int seconds = 0;
 
 	if (trap->Argc() < 2)
 	{
@@ -1673,8 +1673,8 @@ static void Svcmd_AdminMute_f(void)
 
 static void Svcmd_AdminUnmute_f(void)
 {
-	char arg[MAX_TOKEN_CHARS];
-	gclient_t* cl;
+	char arg[MAX_TOKEN_CHARS] = { 0 };
+	gclient_t* cl = NULL;
 
 	trap->Argv(1, arg, sizeof arg);
 	if (!arg[0])
@@ -1712,7 +1712,7 @@ extern void G_FighterTest_f(void); // (2026-10-13) g_vehicles.c, developer test 
 static void Svcmd_WPAutoGrid_f(void)
 {
 	extern void G_WP_AutoGridServer(float spacing, qboolean force);
-	char arg[MAX_TOKEN_CHARS];
+	char arg[MAX_TOKEN_CHARS] = { 0 };
 
 	trap->Argv(1, arg, sizeof arg);
 	const float spacing = (float)atof(arg);
@@ -1726,7 +1726,7 @@ static void Svcmd_MissionContinue_f(void)
 {
 	extern qboolean G_MissionLoadSave(const char* campaign);
 	extern const char* G_MissionCampaign(const char* map);
-	char arg[MAX_QPATH], mapname[MAX_QPATH];
+	char arg[MAX_QPATH] = { 0 }, mapname[MAX_QPATH] = { 0 };
 
 	trap->Argv(1, arg, sizeof arg);
 	if (!arg[0])

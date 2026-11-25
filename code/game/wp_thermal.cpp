@@ -192,7 +192,7 @@ static void G_GrenadeStatus(gentity_t* victim, gentity_t* attacker, const int ki
 
 	case GK_STUN:
 	{
-		vec3_t dir;
+		vec3_t dir = {};
 
 		VectorSubtract(victim->currentOrigin, org, dir);
 		dir[2] = 0.0f;
@@ -211,7 +211,7 @@ static void G_GrenadeStatus(gentity_t* victim, gentity_t* attacker, const int ki
 	case GK_FLASH:
 	{
 		// blinded: fully when looking at the blast, a third as long when looking away
-		vec3_t fwd, to;
+		vec3_t fwd = {}, to = {};
 
 		AngleVectors(cl->ps.viewangles, fwd, nullptr, nullptr);
 		VectorSubtract(org, victim->currentOrigin, to);
@@ -271,8 +271,8 @@ extern cvar_t* g_grenadeAreas;
 
 static void G_SpawnGrenadeArea(const vec3_t org, gentity_t* attacker, const int kind, const float blast_radius)
 {
-	int life;
-	float radius;
+	int life = 0;
+	float radius = 0;
 
 	if (!g_grenadeAreas || !g_grenadeAreas->integer)
 	{
@@ -417,7 +417,7 @@ static qboolean G_GrenadeBlast(gentity_t* ent)
 		* grenadeKindDamage[kind]);
 	const int time = wv->effectTime > 0 ? wv->effectTime : grenadeKindTime[kind];
 	gentity_t* attacker = ent->owner;
-	vec3_t org;
+	vec3_t org = {};
 
 	VectorSet(org, ent->currentOrigin[0], ent->currentOrigin[1], ent->currentOrigin[2] + 8);
 	ent->takedamage = qfalse; // don't allow double deaths!
@@ -545,7 +545,7 @@ void G_GrenadeClientThink(gentity_t* ent)
 		{
 			gentity_t* attacker = ent->grenadeDotAttacker >= 0 && ent->grenadeDotAttacker < ENTITYNUM_WORLD
 				&& g_entities[ent->grenadeDotAttacker].inuse ? &g_entities[ent->grenadeDotAttacker] : nullptr;
-			vec3_t org;
+			vec3_t org = {};
 
 			ent->grenadeDotNext = level.time + GRENADE_DOT_TICK;
 			VectorSet(org, ent->currentOrigin[0], ent->currentOrigin[1], ent->currentOrigin[2] + 20);
@@ -586,7 +586,7 @@ void thermalDetonatorExplode(gentity_t* ent)
 	}
 	else
 	{
-		vec3_t pos;
+		vec3_t pos = {};
 
 		if (G_GrenadeBlast(ent))
 		{
@@ -638,7 +638,7 @@ qboolean WP_LobFire(const gentity_t* self, vec3_t start, vec3_t target, vec3_t m
 {
 	constexpr float speed_inc = 100;
 	float best_impact_dist = Q3_INFINITE; //fireSpeed,
-	vec3_t shot_vel, fail_case = { 0.0f };
+	vec3_t shot_vel = {}, fail_case = { 0.0f };
 	trace_t trace;
 	trajectory_t tr{};
 	int hit_count = 0;
@@ -664,7 +664,7 @@ qboolean WP_LobFire(const gentity_t* self, vec3_t start, vec3_t target, vec3_t m
 	}
 	while (hit_count < max_hits)
 	{
-		vec3_t target_dir;
+		vec3_t target_dir = {};
 		VectorSubtract(target, start, target_dir);
 		const float target_dist = VectorNormalize(target_dir);
 
@@ -684,7 +684,7 @@ qboolean WP_LobFire(const gentity_t* self, vec3_t start, vec3_t target, vec3_t m
 
 		if (trace_path)
 		{
-			vec3_t last_pos;
+			vec3_t last_pos = {};
 			constexpr int time_step = 500;
 			//do a rough trace of the path
 			qboolean blocked = qfalse;
@@ -699,7 +699,7 @@ qboolean WP_LobFire(const gentity_t* self, vec3_t start, vec3_t target, vec3_t m
 			//This may be kind of wasteful, especially on long throws... use larger steps?  Divide the travelTime into a certain hard number of slices?  Trace just to apex and down?
 			for (int elapsed_time = time_step; elapsed_time < floor(travelTime) + time_step; elapsed_time += time_step)
 			{
-				vec3_t test_pos;
+				vec3_t test_pos = {};
 				if (static_cast<float>(elapsed_time) > travelTime)
 				{
 					//cap it
@@ -877,7 +877,7 @@ gentity_t* WP_FireThermalDetonator(gentity_t* ent, const qboolean alt_fire)
 		return NULL;
 	}
 
-	vec3_t dir, start;
+	vec3_t dir = {}, start = {};
 	float damageScale = 1.0f;
 
 	VectorCopy(forward_vec, dir);
@@ -981,12 +981,12 @@ gentity_t* WP_FireThermalDetonator(gentity_t* ent, const qboolean alt_fire)
 		if (((has_npc == qtrue) || ((ent->s.number != 0) && (this_is_a_shooter == qtrue))) &&
 			ent->enemy != NULL)
 		{
-			vec3_t target;
+			vec3_t target = {};
 			VectorCopy(ent->enemy->currentOrigin, target);
 
 			if (target[2] <= start[2])
 			{
-				vec3_t vec;
+				vec3_t vec = {};
 				VectorSubtract(target, start, vec);
 				VectorNormalize(vec);
 				VectorMA(target, Q_flrand(0.0f, -32.0f), vec, target);

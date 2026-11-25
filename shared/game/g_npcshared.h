@@ -84,6 +84,10 @@ extern npcSharedStatic_t NPCS;
 #define SHR_HasWeapon(ps, w)	((ps).weapons[(w)])
 #define SHR_SetShocked(ent, until)	do { (ent)->s.powerups |= 1 << PW_SHOCKED; (ent)->client->ps.powerups[PW_SHOCKED] = (until); } while (0)
 #define SHR_CalcMuzzlePoint(ent, fwd, right, muzzle, lead)	calcmuzzlePoint((ent), (fwd), (muzzle), (lead))	// SJE SP: calcmuzzlePoint(ent, fwd, muzzle, lead)
+#define SHR_NAVINFO_INIT		// SP: navInfo_t has its own constructor
+extern qboolean PM_InOnGroundAnims(int anim);
+#define SHR_InOnGroundAnims(ent)	PM_InOnGroundAnims((ent)->client->ps.legsAnim)	// SP bg_panimate.cpp takes the legs anim
+#define SHR_SABERSTYLE(ps)	((ps)->saberAnimLevel)	// SP: the saber stance
 
 // navigation and scripts (SP: game-side navigator and ICARUS; MP: engine)
 #define SHR_ReachedEnt(actor, target, radius, flying)	STEER::Reached((actor), (target), (radius), !!(flying))
@@ -200,6 +204,10 @@ extern int PM_AnimLength(int index, animNumber_t anim);
 #define ARMOR_EFFECT_TIME	500	// SP wp_saber.h
 #endif
 #define SHR_CalcMuzzlePoint(ent, fwd, right, muzzle, lead)	calcmuzzlePoint((ent), (fwd), (right), (muzzle))
+#define SHR_NAVINFO_INIT	= { 0 }	// MP: navInfo_t is a plain C struct, zero it
+extern qboolean PM_InOnGroundAnims(const playerState_t* ps);
+#define SHR_InOnGroundAnims(ent)	PM_InOnGroundAnims(&(ent)->client->ps)	// MP bg_panimate.c takes the playerState
+#define SHR_SABERSTYLE(ps)	((ps)->fd.saberAnimLevel)	// MP: the saber stance
 
 #define SHR_ReachedEnt(actor, target, radius, flying) \
 	NAV_HitNavGoal((actor)->r.currentOrigin, (actor)->r.mins, (actor)->r.maxs, (target)->r.currentOrigin, (radius), (flying))
@@ -273,3 +281,17 @@ gitem_t* BG_FindItemForAmmo(const ammo_t ammo);
 #define SHR_PAIN_ATTACKER other
 
 #endif
+
+// fight reading shared by the NPC Jedi and the MP bots (AI_Utils.c, 2026-11-25)
+enum
+{
+	SHR_MOVE_STILL,
+	SHR_MOVE_LINEAR,
+	SHR_MOVE_STRAFE,
+	SHR_MOVE_CHARGE,
+	SHR_MOVE_RETREAT,
+	SHR_MOVE_AIR
+};
+int SHR_ReadMove(const gentity_t* watcher, const gentity_t* target, float lookahead, vec3_t predicted);
+int SHR_SwingThreat(const gentity_t* self, const gentity_t* attacker, float reach);
+int SHR_CounterSaberStyle(int enemy_style);

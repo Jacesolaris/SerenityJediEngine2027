@@ -80,7 +80,7 @@ Print a single mission objective
 static void ObjectivePrint_Line(const int color, const int object_index, int& mission_ycnt)
 {
 	int y = 0;
-	char finalText[2048];
+	char finalText[2048] = {};
 	qhandle_t graphic = 0;
 
 	const int iYPixelsPerLine = cgi_R_Font_HeightPixels(cgs.media.qhFontMedium, 1.0f);
@@ -90,7 +90,7 @@ static void ObjectivePrint_Line(const int color, const int object_index, int& mi
 	// A hack to be able to count prisoners
 	if (object_index == T2_RANCOR_OBJ5)
 	{
-		char value[64];
+		char value[64] = {};
 
 		gi.Cvar_VariableStringBuffer("ui_prisonerobj_currtotal", value, sizeof value);
 		const int curr_total = atoi(value);
@@ -163,7 +163,7 @@ static void ObjectivePrint_Line(const int color, const int object_index, int& mi
 		else
 		{
 			constexpr int max_hold_text = 1024;
-			char hold_text[max_hold_text];
+			char hold_text[max_hold_text] = {};
 			char hold_text2[2]{};
 			pixelLen = 0;
 			int char_len = 0;
@@ -531,7 +531,7 @@ static int CG_DrawLoadWeaponsPrintRow(const char* item_name, const int weapons_b
 	int end_index = 0, printed_icon_cnt = 0;
 	int x = 0, y = 0;
 	int width = 0, height = 0;
-	vec4_t color;
+	vec4_t color = {};
 	qhandle_t background = 0;
 
 	if (!cgi_UI_GetMenuItemInfo(
@@ -628,7 +628,7 @@ static int CG_DrawLoadForcePrintRow(const char* item_name, const int force_bits,
 	int end_index = 0, printedIconCnt = 0;
 	int x = 0, y = 0;
 	int width = 0, height = 0;
-	vec4_t color;
+	vec4_t color = {};
 	qhandle_t background = 0;
 
 	if (!cgi_UI_GetMenuItemInfo(
@@ -736,7 +736,7 @@ static void CG_DrawLoadForcePowers(const int force_bits)
 // Get the player weapons and force power info
 static void CG_GetLoadScreenInfo(int* weapon_bits, int* force_bits)
 {
-	char  s[MAX_STRING_CHARS];
+	char  s[MAX_STRING_CHARS] = {};
 	int   i_dummy = 0;
 	float f_dummy = 0.0f;
 
@@ -792,7 +792,7 @@ Load screen displays the map pic, the mission briefing and weapons/force powers
 static void CG_DrawLoadingScreen(const qhandle_t levelshot, const char* map_name)
 {
 	int xPos = 0, yPos = 0, width = 0, height = 0;
-	vec4_t color;
+	vec4_t color = {};
 	qhandle_t background = 0;
 	int weapons = 0, forcepowers = 0;
 

@@ -807,7 +807,7 @@ static void SJE_Pazaak_DrawHandSlot(const int slot, const float x, const float y
 static void SJE_Pazaak_DrawNames(const int player, float x, const float y)
 {
 	const char* text = NULL;
-	char cleanText[64];
+	char cleanText[64] = { 0 };
 	vec4_t shadow = { 0.15f, 0.15f, 0.15f, 1.0f };
 
 	if (!PzkState.active)
@@ -929,7 +929,7 @@ static float SJE_Pazaak_HowToWords(const char* text, const int len, const float 
 {
 	const int font = PZK_Font();
 	const float gap = PZK_TextWidth(" ", font, 1.0f) * scale + PZK_HOWTO_WORDGAP;
-	char word[128];
+	char word[128] = { 0 };
 	float width = 0.0f;
 	int i = 0, words = 0;
 
@@ -2262,7 +2262,7 @@ static int Shop_CatOf(const char* base)
 		{ "WP_REPEATER", "2" },{ "WP_DEMP2", "2" },{ "WP_FLECHETTE", "2" },{ "WP_ROCKET_LAUNCHER", "2" },
 		{ "WP_CONCUSSION", "2" },{ "WP_THERMAL", "3" }
 	};
-	int i;
+	int i = 0;
 	for (i = 0; i < (int)(sizeof(cats) / sizeof(cats[0])); i++)
 	{
 		if (!Q_stricmp(base, cats[i][0]))
@@ -2349,14 +2349,14 @@ static const char* Shop_Token(const char** p, char* out, const int size)
 static void Shop_ParseFile(const char* text)
 {
 	const char* p = text;
-	char tok[MAX_QPATH], key[64];
+	char tok[MAX_QPATH] = { 0 }, key[64] = { 0 };
 	int variant = 0;
 
 	while (Shop_Token(&p, tok, sizeof(tok)))
 	{
 		// <classname> { key value ... }: every block is a variant, numbered from 1 in file order (as the game does)
-		char base[64];
-		shopItem_t item;
+		char base[64] = { 0 };
+		shopItem_t item = { 0 };
 
 		if (!Shop_Token(&p, tok, sizeof(tok)) || Q_stricmp(tok, "{"))
 		{
@@ -2408,7 +2408,7 @@ static void Shop_ParseFile(const char* text)
 
 static void Shop_LoadItems(void)
 {
-	shopItem_t* it;
+	shopItem_t* it = NULL;
 
 	if (shopNumItems >= 0)
 	{
@@ -2462,7 +2462,7 @@ static void Shop_LoadItems(void)
 #endif
 	// the holdable items (2026-11-02)
 	{
-		int h;
+		int h = 0;
 		for (h = 0; h < SHOP_NUM_HOLD; h++)
 		{
 			it = &shopItems[shopNumItems++];
@@ -2477,7 +2477,7 @@ static void Shop_LoadItems(void)
 
 static int Shop_CatCount(const int cat)
 {
-	int i, n = 0;
+	int i = 0, n = 0;
 	for (i = 0; i < shopNumItems; i++)
 	{
 		if (shopItems[i].cat == cat)
@@ -2497,7 +2497,7 @@ static int Shop_NumPages(void)
 // The item on this row of the page (NULL: empty row)
 static shopItem_t* Shop_RowItem(const int row)
 {
-	int i, n = 0;
+	int i = 0, n = 0;
 	const int want = shopPage * SHOP_ROWS + row;
 
 	for (i = 0; i < shopNumItems; i++)
@@ -2537,7 +2537,7 @@ static int Shop_ItemPrice(const shopItem_t* it)
 
 static void Shop_ReadBits(const char* hex, unsigned int* bits)
 {
-	int i, j;
+	int i = 0, j = 0;
 	memset(bits, 0, sizeof(unsigned int) * 8);
 	for (i = 0; i < 8 && hex; i++)
 	{
@@ -2652,7 +2652,7 @@ static void Shop_TalkOpen(const char* text)
 // "price:count:max,..." of the holdable items, in the game's table order (2026-11-02)
 static void Shop_ReadHoldables(const char* s)
 {
-	int h;
+	int h = 0;
 	for (h = 0; h < SHOP_NUM_HOLD; h++)
 	{
 		shopHoldPrice[h] = shopHoldCount[h] = 0;
@@ -2766,9 +2766,9 @@ static void Shop_DrawRow(const int row, const float x, const float y, const floa
 	static const float grey[4] = { 0.6f, 0.6f, 0.6f, 1 };
 	static const float red[4] = { 1.0f, 0.4f, 0.35f, 1 };
 	shopItem_t* it = Shop_RowItem(row);
-	const char* status;
-	const float* statusColor;
-	int price;
+	const char* status = NULL;
+	const float* statusColor = NULL;
+	int price = 0;
 
 	if (!it)
 	{

@@ -83,7 +83,7 @@ static qboolean BG_WeatherAddCloud(const qboolean waterParticles, const float gr
 // command: a weather command without the leading '*', e.g. "acidrain 500"
 void BG_WeatherCommand(const char* command)
 {
-	char token[MAX_QPATH];
+	char token[MAX_QPATH] = { 0 };
 	int i = 0;
 
 	if (!command)
@@ -196,8 +196,8 @@ const char* BG_WeatherPresetName(const int preset)
 
 qboolean BG_IsOutside(const vec3_t pos, const int passEntityNum)
 {
-	trace_t tr;
-	vec3_t end;
+	trace_t tr = { 0 };
+	vec3_t end = { 0 };
 	int contents = 0;
 
 #if defined(_GAME)

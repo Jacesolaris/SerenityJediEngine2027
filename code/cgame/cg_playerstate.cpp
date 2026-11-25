@@ -131,7 +131,7 @@ static void CG_DamageFeedback(const int yaw_byte, const int pitch_byte, const in
 	else
 	{
 		vec3_t angles{};
-		vec3_t dir;
+		vec3_t dir = {};
 		// positional
 		const float pitch = pitch_byte / 255.0 * 360;
 		const float yaw = yaw_byte / 255.0 * 360;

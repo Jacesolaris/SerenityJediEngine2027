@@ -238,7 +238,7 @@ static void NPC_BSTusken_Patrol(void)
 			{
 				//FIXME: walk over to it, maybe?  Not if not chase enemies
 				//NOTE: stops walking or doing anything else below
-				vec3_t dir, angles;
+				vec3_t dir = { 0 }, angles = { 0 };
 
 				VectorSubtract(NPCS.NPCInfo->investigateGoal, NPCS.NPC->client->renderInfo.eyePoint, dir);
 				vectoangles(dir, angles);
@@ -537,11 +537,11 @@ static void Tusken_StaffTrace(void)
 		int last_hit = ENTITYNUM_NONE;
 		for (int time = curTime - 25; time <= curTime + 25 && !hit; time += 25)
 		{
-			mdxaBone_t boltMatrix;
-			vec3_t tip, dir, base;
+			mdxaBone_t boltMatrix = { 0 };
+			vec3_t tip = { 0 }, dir = { 0 }, base = { 0 };
 			const vec3_t angles = { 0, NPCS.NPC->SHR_currentAngles[YAW], 0 };
 			const vec3_t mins = { -2, -2, -2 }, maxs = { 2, 2, 2 };
-			trace_t trace;
+			trace_t trace = { qfalse };
 
 			gi.G2API_GetBoltMatrix(NPCS.NPC->ghoul2, NPCS.NPC->weaponModel[0],
 				boltIndex,
@@ -604,11 +604,11 @@ void Tusken_StaffTracenew(gentity_t* self)
 		int last_hit = ENTITYNUM_NONE;
 		for (int time = curTime - 25; time <= curTime + 25 && !hit; time += 25)
 		{
-			mdxaBone_t boltMatrix;
-			vec3_t tip, dir, base;
+			mdxaBone_t boltMatrix = { 0 };
+			vec3_t tip = { 0 }, dir = { 0 }, base = { 0 };
 			const vec3_t angles = { 0, self->SHR_currentAngles[YAW], 0 };
 			const vec3_t mins = { -2, -2, -2 }, maxs = { 2, 2, 2 };
-			trace_t trace;
+			trace_t trace = { qfalse };
 
 			gi.G2API_GetBoltMatrix(self->ghoul2, self->weaponModel[0],
 				boltIndex,

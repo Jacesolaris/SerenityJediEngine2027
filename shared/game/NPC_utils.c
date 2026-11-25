@@ -63,9 +63,9 @@ extern cvar_t* com_outcast;
 
 void CalcEntitySpot(const gentity_t* ent, const spot_t spot, vec3_t point)
 {
-	vec3_t forward, up, right;
-	vec3_t start, end;
-	trace_t tr;
+	vec3_t forward = { 0 }, up = { 0 }, right = { 0 };
+	vec3_t start = { 0 }, end = { 0 };
+	trace_t tr = { qfalse };
 
 	if (!ent)
 	{
@@ -1136,7 +1136,7 @@ static gentity_t* NPC_PickEnemyExt(const qboolean check_alerts = qfalse)
 					return event->owner;
 
 				//If it's on our team, then take its enemy as well
-				if (event->owner->client && event->owner->client->playerTeam == NPC->client->playerTeam &&
+				if (event->owner && event->owner->client && event->owner->client->playerTeam == NPC->client->playerTeam &&
 					NPC_ValidEnemy(event->owner))
 					return event->owner->enemy;
 			}
@@ -1302,7 +1302,7 @@ NPC_FacePosition
 
 qboolean NPC_FacePosition(vec3_t position, const qboolean do_pitch)
 {
-	vec3_t muzzle;
+	vec3_t muzzle = { 0 };
 	qboolean facing = qtrue;
 
 	//Get the positions
@@ -1327,7 +1327,7 @@ qboolean NPC_FacePosition(vec3_t position, const qboolean do_pitch)
 	}
 
 	//Find the desired angles
-	vec3_t angles;
+	vec3_t angles = { 0 };
 
 	GetAnglesForDirection(muzzle, position, angles);
 
@@ -1373,7 +1373,7 @@ NPC_FaceEntity
 
 qboolean NPC_FaceEntity(const gentity_t* ent, const qboolean do_pitch)
 {
-	vec3_t ent_pos;
+	vec3_t ent_pos = { 0 };
 
 	//Get the positions
 	CalcEntitySpot(ent, SPOT_HEAD_LEAN, ent_pos);
@@ -1586,7 +1586,7 @@ void G_GetBoltPosition(gentity_t* self, const int boltIndex, vec3_t pos, const i
 	{
 		return;
 	}
-	mdxaBone_t boltMatrix;
+	mdxaBone_t boltMatrix = { 0 };
 	const vec3_t angles = { 0, self->currentAngles[YAW], 0 };
 
 	gi.G2API_GetBoltMatrix(self->ghoul2, modelIndex,
@@ -1595,7 +1595,7 @@ void G_GetBoltPosition(gentity_t* self, const int boltIndex, vec3_t pos, const i
 		nullptr, self->s.modelScale);
 	if (pos)
 	{
-		vec3_t result;
+		vec3_t result = { 0 };
 		gi.G2API_GiveMeVectorFromMatrix(boltMatrix, ORIGIN, result);
 		VectorCopy(result, pos);
 	}
@@ -1747,9 +1747,9 @@ Added: Uses shootAngles if a NPC has them
 */
 void CalcEntitySpot(const gentity_t* ent, const spot_t spot, vec3_t point)
 {
-	vec3_t forward, up, right;
-	vec3_t start, end;
-	trace_t tr;
+	vec3_t forward = { 0 }, up = { 0 }, right = { 0 };
+	vec3_t start = { 0 }, end = { 0 };
+	trace_t tr = { 0 };
 
 	if (!ent)
 	{
@@ -1958,7 +1958,7 @@ qboolean NPC_UpdateAngles(const qboolean do_pitch, const qboolean do_yaw)
 
 	if (NPCS.NPC->s.weapon == WP_SABER && NPCS.NPC->client->ps.fd.forcePowersActive & 1 << FP_SPEED)
 	{
-		char buf[128];
+		char buf[128] = { 0 };
 
 		trap->Cvar_VariableStringBuffer("timescale", buf, sizeof buf);
 
@@ -2866,7 +2866,7 @@ static gentity_t* NPC_PickEnemyExt(const qboolean check_alerts)
 				}
 
 				//If it's on our team, then take its enemy as well
-				if (event->owner->client && event->owner->client->playerTeam == NPCS.NPC->client->playerTeam &&
+				if (event->owner && event->owner->client && event->owner->client->playerTeam == NPCS.NPC->client->playerTeam &&
 					NPC_ValidEnemy(event->owner))
 					return event->owner->enemy;
 			}
@@ -3026,8 +3026,8 @@ NPC_FacePosition
 // Behaviour preserved; only safety and structure improved.
 qboolean NPC_FacePosition(vec3_t position, const qboolean do_pitch)
 {
-	vec3_t muzzle;
-	vec3_t angles;
+	vec3_t muzzle = { 0 };
+	vec3_t angles = { 0 };
 	qboolean facing = qtrue;
 
 	// SAFETY FIX: NPC, NPC->client, NPCS.client must exist
@@ -3113,7 +3113,7 @@ NPC_FaceEntity
 
 qboolean NPC_FaceEntity(const gentity_t* ent, const qboolean do_pitch)
 {
-	vec3_t entPos;
+	vec3_t entPos = { 0 };
 
 	//Get the positions
 	CalcEntitySpot(ent, SPOT_HEAD_LEAN, entPos);
@@ -3275,8 +3275,8 @@ void G_CheckCharmed(gentity_t* self)
 
 void G_GetBoltPosition(gentity_t* self, const int boltIndex, vec3_t pos, const int modelIndex)
 {
-	mdxaBone_t boltMatrix;
-	vec3_t angles;
+	mdxaBone_t boltMatrix = { 0 };
+	vec3_t angles = { 0 };
 
 	if (!self || !self->inuse)
 	{
@@ -3304,7 +3304,7 @@ void G_GetBoltPosition(gentity_t* self, const int boltIndex, vec3_t pos, const i
 		NULL, self->modelScale);
 	if (pos)
 	{
-		vec3_t result;
+		vec3_t result = { 0 };
 		BG_GiveMeVectorFromMatrix(&boltMatrix, ORIGIN, result);
 		VectorCopy(result, pos);
 	}
@@ -3312,7 +3312,7 @@ void G_GetBoltPosition(gentity_t* self, const int boltIndex, vec3_t pos, const i
 
 float NPC_EntRangeFromBolt(const gentity_t* targ_ent, const int boltIndex)
 {
-	vec3_t org;
+	vec3_t org = { 0 };
 
 	if (!targ_ent)
 	{
@@ -3334,7 +3334,7 @@ int NPC_GetEntsNearBolt(int* radius_ents, const float radius, const int boltInde
 	vec3_t mins = { 0 }, maxs = { 0 };
 
 	//get my handRBolt's position
-	vec3_t org;
+	vec3_t org = { 0 };
 
 	G_GetBoltPosition(NPCS.NPC, boltIndex, org, 0);
 

@@ -64,9 +64,9 @@ void rocketThink(gentity_t* ent)
 	}
 	if (ent->enemy && ent->enemy->inuse)
 	{
-		vec3_t org;
-		vec3_t targetdir;
-		vec3_t newdir;
+		vec3_t org = {};
+		vec3_t targetdir = {};
+		vec3_t newdir = {};
 		float vel = ent->spawnflags & 1 ? ent->speed : ROCKET_VELOCITY;
 		const float new_dir_mult = ent->angle ? ent->angle * 2.0f : 1.0f;
 		const float old_dir_mult = ent->angle ? (1.0f - ent->angle) * 2.0f : 1.0f;
@@ -118,7 +118,7 @@ void rocketThink(gentity_t* ent)
 		// a dot of 1.0 means right-on-target.
 		if (dot < 0.0f)
 		{
-			vec3_t right;
+			vec3_t right = {};
 			// Go in the direction opposite, start a 180.
 			CrossProduct(ent->movedir, up, right);
 			const float dot2 = DotProduct(targetdir, right);
@@ -190,7 +190,7 @@ void rocketThink(gentity_t* ent)
 void WP_FireRocket(gentity_t* ent, const qboolean alt_fire)
 //---------------------------------------------------------
 {
-	vec3_t start;
+	vec3_t start = {};
 	int damage = weaponData[WP_ROCKET_LAUNCHER].damage;
 	float vel = ROCKET_VELOCITY;
 
@@ -285,7 +285,7 @@ void WP_FireRocket(gentity_t* ent, const qboolean alt_fire)
 					}
 					else
 					{
-						vec3_t dir, dir2;
+						vec3_t dir = {}, dir2 = {};
 
 						AngleVectors(missile->enemy->currentAngles, dir, nullptr, nullptr);
 						AngleVectors(ent->client->renderInfo.eyeAngles, dir2, nullptr, nullptr);

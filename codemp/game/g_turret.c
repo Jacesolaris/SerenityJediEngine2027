@@ -73,7 +73,7 @@ static void TurretBasePain(const gentity_t* self, gentity_t* attacker, const int
 static void auto_turret_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, int damage, int meansOfDeath)
 //------------------------------------------------------------------------------------------------------------
 {
-	vec3_t forward = { 0, 0, 1 }, pos;
+	vec3_t forward = { 0, 0, 1 }, pos = { 0 };
 
 	// Turn off the thinking of the base & use it's targets
 	g_entities[self->r.ownerNum].think = NULL;
@@ -151,7 +151,7 @@ static void bottom_die(const gentity_t* self, gentity_t* inflictor, gentity_t* a
 static void turret_fire(gentity_t* ent, vec3_t start, vec3_t dir)
 //----------------------------------------------------------------
 {
-	vec3_t org;
+	vec3_t org = { 0 };
 
 	if (trap->PointContents(start, ent->s.number) & MASK_SHOT)
 	{
@@ -208,7 +208,7 @@ void turret_head_think(gentity_t* self)
 	}
 	if (self->painDebounceTime > level.time)
 	{
-		vec3_t v_up;
+		vec3_t v_up = { 0 };
 		VectorSet(v_up, 0, 0, 1);
 		G_PlayEffect(EFFECT_SPARKS, self->r.currentOrigin, v_up);
 		if (Q_irand(0, 3))
@@ -220,7 +220,7 @@ void turret_head_think(gentity_t* self)
 	// if it's time to fire and we have an enemy, then gun 'em down!  pushDebounce time controls next fire time
 	if (self->enemy && self->setTime < level.time && self->attackDebounceTime < level.time)
 	{
-		vec3_t fwd, org;
+		vec3_t fwd = { 0 }, org = { 0 };
 		// set up our next fire time
 		self->setTime = level.time + self->wait;
 
@@ -251,7 +251,7 @@ void turret_head_think(gentity_t* self)
 static void turret_aim(const gentity_t* self)
 //-----------------------------------------------------
 {
-	vec3_t desiredAngles = { 0 }, setAngle;
+	vec3_t desiredAngles = { 0 }, setAngle = { 0 };
 	float diff_yaw = 0.0f, diff_pitch = 0.0f;
 	const float pitchCap = 40.0f;
 	gentity_t* top = &g_entities[self->r.ownerNum];
@@ -286,9 +286,9 @@ static void turret_aim(const gentity_t* self)
 	}
 	else if (self->enemy)
 	{
-		vec3_t org2;
-		vec3_t org;
-		vec3_t enemyDir;
+		vec3_t org2 = { 0 };
+		vec3_t org = { 0 };
+		vec3_t enemyDir = { 0 };
 		// ...then we'll calculate what new aim adjustments we should attempt to make this frame
 		// Aim at enemy
 		VectorCopy(self->enemy->r.currentOrigin, org);
@@ -423,7 +423,7 @@ static qboolean turret_find_enemies(gentity_t* self)
 {
 	qboolean found = qfalse;
 	float bestDist = self->radius * self->radius;
-	vec3_t org, org2;
+	vec3_t org = { 0 }, org2 = { 0 };
 
 	// static: too big for the stack, and BG_Alloc is never freed: asked for on every call, this ran the pool dry
 	static gentity_t* entity_list[MAX_GENTITIES];
@@ -501,7 +501,7 @@ static qboolean turret_find_enemies(gentity_t* self)
 		if (!tr->allsolid && !tr->startsolid &&
 			(tr->fraction == 1.0f || tr->entityNum == target->s.number))
 		{
-			vec3_t enemyDir;
+			vec3_t enemyDir = { 0 };
 			VectorSubtract(target->r.currentOrigin, top->r.currentOrigin, enemyDir);
 			const float enemyDist = VectorLengthSquared(enemyDir);
 
@@ -579,7 +579,7 @@ void turret_base_think(gentity_t* self)
 		//FIXME: remain single-minded or look for a new enemy every now and then?
 		if (self->enemy->health > 0)
 		{
-			vec3_t enemyDir;
+			vec3_t enemyDir = { 0 };
 			// enemy is alive
 			VectorSubtract(self->enemy->r.currentOrigin, self->r.currentOrigin, enemyDir);
 			const float enemyDist = VectorLengthSquared(enemyDir);
@@ -589,10 +589,10 @@ void turret_base_think(gentity_t* self)
 				// was in valid radius
 				if (trap->InPVS(self->r.currentOrigin, self->enemy->r.currentOrigin))
 				{
-					vec3_t org2;
-					vec3_t org;
+					vec3_t org2 = { 0 };
+					vec3_t org = { 0 };
 					// Every now and again, check to see if we can even trace to the enemy
-					trace_t tr;
+					trace_t tr = { 0 };
 
 					if (self->enemy->client)
 					{
@@ -801,7 +801,7 @@ void SP_misc_panel_turret(gentity_t* self)
 //-----------------------------------------------------
 qboolean turret_base_spawn_top(gentity_t* base)
 {
-	vec3_t org;
+	vec3_t org = { 0 };
 	int t = 0;
 
 	gentity_t* top = G_Spawn();

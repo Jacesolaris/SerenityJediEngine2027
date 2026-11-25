@@ -302,7 +302,7 @@ char* BG_GetNextValueGroup(char* inbuf, char* outbuf)
 int BG_SiegeGetValueGroup(const char* buf, char* group, char* outbuf)
 {
 	int i = 0;
-	char checkGroup[4096];
+	char checkGroup[4096] = { 0 };
 	int parse_groups = 0;
 
 	while (buf[i])
@@ -548,7 +548,7 @@ int BG_SiegeGetValueGroup(const char* buf, char* group, char* outbuf)
 int BG_SiegeGetPairedValue(const char* buf, char* key, char* outbuf)
 {
 	int i = 0;
-	char checkKey[4096];
+	char checkKey[4096] = { 0 };
 
 	while (buf[i])
 	{
@@ -725,8 +725,8 @@ int BG_SiegeGetPairedValue(const char* buf, char* key, char* outbuf)
 //======================================
 static void BG_SiegeTranslateForcePowers(const char* buf, siegeClass_t* siegeClass)
 {
-	char checkPower[1024];
-	char checkLevel[256];
+	char checkPower[1024] = { 0 };
+	char checkLevel[256] = { 0 };
 	int i = 0;
 	int parsed_level = 0;
 	qboolean allPowers = qfalse;
@@ -849,7 +849,7 @@ static void BG_SiegeTranslateForcePowers(const char* buf, siegeClass_t* siegeCla
 static int BG_SiegeTranslateGenericTable(const char* buf, const stringID_table_t* table, const qboolean bitflag)
 {
 	int items = 0;
-	char checkItem[1024];
+	char checkItem[1024] = { 0 };
 	int i = 0;
 
 	if (buf[0] == '0' && !buf[1])
@@ -926,8 +926,8 @@ static void BG_SiegeParseClassFile(const char* filename, siegeClassDesc_t* descB
 {
 	fileHandle_t f = 0;
 	int i = 0;
-	char classInfo[4096];
-	char parseBuf[4096];
+	char classInfo[4096] = { 0 };
+	char parseBuf[4096] = { 0 };
 
 	const int len = trap->FS_Open(filename, &f, FS_READ);
 
@@ -1366,7 +1366,7 @@ siegeClass_t* BG_GetClassOnBaseClass(const int team, const short classIndex, con
 void BG_SiegeLoadClasses(siegeClassDesc_t* descBuffer)
 {
 	int filelen = 0;
-	char filelist[4096];
+	char filelist[4096] = { 0 };
 
 	bgNumSiegeClasses = 0;
 
@@ -1376,7 +1376,7 @@ void BG_SiegeLoadClasses(siegeClassDesc_t* descBuffer)
 
 	for (int i = 0; i < numFiles; i++, fileptr += filelen + 1)
 	{
-		char filename[MAX_QPATH];
+		char filename[MAX_QPATH] = { 0 };
 		filelen = strlen(fileptr);
 		Q_strncpyz(filename, "ext_data/Siege/Classes/", sizeof filename);
 		Q_strcat(filename, sizeof filename, fileptr);
@@ -1419,8 +1419,8 @@ siegeClass_t* BG_SiegeFindClassByName(const char* classname)
 static void BG_SiegeParseTeamFile(const char* filename)
 {
 	fileHandle_t f = 0;
-	char teamInfo[2048];
-	char parseBuf[1024];
+	char teamInfo[2048] = { 0 };
+	char parseBuf[1024] = { 0 };
 	qboolean success = qtrue;
 
 	const int len = trap->FS_Open(filename, &f, FS_READ);
@@ -1465,7 +1465,7 @@ static void BG_SiegeParseTeamFile(const char* filename)
 		int i = 1;
 		while (success && i < MAX_SIEGE_CLASSES)
 		{
-			char lookString[256];
+			char lookString[256] = { 0 };
 			//keep checking for group values named class# up to MAX_SIEGE_CLASSES until we can't find one.
 			Q_strncpyz(lookString, va("class%i", i), sizeof lookString);
 
@@ -1502,7 +1502,7 @@ static void BG_SiegeParseTeamFile(const char* filename)
 void BG_SiegeLoadTeams(void)
 {
 	int filelen = 0;
-	char filelist[4096];
+	char filelist[4096] = { 0 };
 
 	bgNumSiegeTeams = 0;
 
@@ -1512,7 +1512,7 @@ void BG_SiegeLoadTeams(void)
 
 	for (int i = 0; i < numFiles; i++, fileptr += filelen + 1)
 	{
-		char filename[MAX_QPATH];
+		char filename[MAX_QPATH] = { 0 };
 		filelen = strlen(fileptr);
 		Q_strncpyz(filename, "ext_data/Siege/Teams/", sizeof filename);
 		Q_strcat(filename, sizeof filename, fileptr);
@@ -1548,7 +1548,7 @@ extern int BG_ModelCache(const char* modelName, const char* skin_name); //bg_mis
 
 void BG_PrecacheSabersForSiegeTeam(const int team)
 {
-	saberInfo_t saber;
+	saberInfo_t saber = { 0 };
 
 	const siegeTeam_t* t = BG_SiegeFindThemeForTeam(team);
 

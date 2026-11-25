@@ -429,7 +429,7 @@ static void NPC_AnimalFindPath(const gentity_t* ent, const int node)
 // follows the path: qfalse when there is none (any more)
 static qboolean NPC_AnimalUpdatePath(gentity_t* ent)
 {
-	vec3_t pos;
+	vec3_t pos = { 0 };
 	if (!NAV_NodePosition(animalPathNode[ent->s.number] - 1, pos)
 		|| STEER_Reached(ent, pos, ANIMAL_PATH_REACHED)
 		|| !NAV_GoToPos(ent, pos, ANIMAL_PATH_REACHED))

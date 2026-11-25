@@ -64,7 +64,7 @@ returns true if can see from point 1 to 2, even through glass (1 pane)- doesn't 
 */
 qboolean G_ClearLineOfSight(const vec3_t point1, const vec3_t point2, const int ignore, const int clipmask)
 {
-	trace_t tr;
+	trace_t tr = { qfalse };
 
 	SHR_Trace(&tr, point1, NULL, NULL, point2, ignore, clipmask);
 	if (tr.fraction == 1.0)
@@ -75,7 +75,7 @@ qboolean G_ClearLineOfSight(const vec3_t point1, const vec3_t point2, const int 
 	const gentity_t* hit = &g_entities[tr.entityNum];
 	if (EntIsGlass(hit))
 	{
-		vec3_t newpoint1;
+		vec3_t newpoint1 = { 0 };
 		VectorCopy(tr.endpos, newpoint1);
 		SHR_Trace(&tr, newpoint1, NULL, NULL, point2, hit->s.number, clipmask);
 
@@ -99,9 +99,9 @@ FIXME do we need fat and thin version of this?
 */
 qboolean CanSee(const gentity_t* ent)
 {
-	trace_t tr;
-	vec3_t eyes;
-	vec3_t spot;
+	trace_t tr = { qfalse };
+	vec3_t eyes = { 0 };
+	vec3_t spot = { 0 };
 
 	CalcEntitySpot(NPCS.NPC, SPOT_HEAD_LEAN, eyes);
 
@@ -135,7 +135,7 @@ qboolean CanSee(const gentity_t* ent)
 
 qboolean InFront(vec3_t spot, vec3_t from, vec3_t from_angles, const float thresh_hold = 0.0f)
 {
-	vec3_t dir, forward, angles;
+	vec3_t dir = { 0 }, forward = { 0 }, angles = { 0 };
 
 	VectorSubtract(spot, from, dir);
 	dir[2] = 0;
@@ -161,7 +161,7 @@ IDEA: further off to side of FOV range, higher chance of failing even if technic
 
 qboolean InFOV(vec3_t spot, vec3_t from, vec3_t fromAngles, const int hFOV, const int vFOV)
 {
-	vec3_t deltaVector, angles, deltaAngles{};
+	vec3_t deltaVector = { 0 }, angles = { 0 }, deltaAngles{};
 
 	VectorSubtract(spot, from, deltaVector);
 	vectoangles(deltaVector, angles);
@@ -181,7 +181,7 @@ qboolean InFOV(vec3_t spot, vec3_t from, vec3_t fromAngles, const int hFOV, cons
 
 qboolean InFOV(vec3_t origin, const gentity_t* from, const int hFOV, const int vFOV)
 {
-	vec3_t fromAngles, eyes;
+	vec3_t fromAngles = { 0 }, eyes = { 0 };
 
 	if (from->client)
 	{
@@ -200,10 +200,10 @@ qboolean InFOV(vec3_t origin, const gentity_t* from, const int hFOV, const int v
 //Entity to entity
 qboolean InFOVFromPlayerView(const gentity_t* ent, const int hFOV, const int vFOV)
 {
-	vec3_t eyes;
-	vec3_t spot;
-	vec3_t deltaVector;
-	vec3_t angles, fromAngles;
+	vec3_t eyes = { 0 };
+	vec3_t spot = { 0 };
+	vec3_t deltaVector = { 0 };
+	vec3_t angles = { 0 }, fromAngles = { 0 };
 	vec3_t deltaAngles{};
 
 	if (!player || !player->client)
@@ -264,10 +264,10 @@ qboolean InFOVFromPlayerView(const gentity_t* ent, const int hFOV, const int vFO
 
 qboolean InFOV(const gentity_t* ent, const gentity_t* from, const int hFOV, const int vFOV)
 {
-	vec3_t eyes;
-	vec3_t spot;
-	vec3_t deltaVector;
-	vec3_t angles, fromAngles;
+	vec3_t eyes = { 0 };
+	vec3_t spot = { 0 };
+	vec3_t deltaVector = { 0 };
+	vec3_t angles = { 0 }, fromAngles = { 0 };
 	vec3_t deltaAngles{};
 
 	if (from->client)
@@ -330,9 +330,9 @@ qboolean InVisrange(const gentity_t* ent)
 {
 	//FIXME: make a calculate visibility for ents that takes into account
 	//lighting, movement, turning, crouch/stand up, other anims, hide brushes, etc.
-	vec3_t eyes;
-	vec3_t spot;
-	vec3_t deltaVector;
+	vec3_t eyes = { 0 };
+	vec3_t spot = { 0 };
+	vec3_t deltaVector = { 0 };
 	const float visrange = NPCInfo->stats.visrange * NPCInfo->stats.visrange * 2;
 
 	CalcEntitySpot(NPC, SPOT_HEAD_LEAN, eyes);
@@ -368,7 +368,7 @@ NPC_CheckVisibility
 
 qboolean InFront(vec3_t spot, vec3_t from, vec3_t from_angles, const float thresh_hold)
 {
-	vec3_t dir, forward, angles;
+	vec3_t dir = { 0 }, forward = { 0 }, angles = { 0 };
 
 	VectorSubtract(spot, from, dir);
 	dir[2] = 0;
@@ -394,7 +394,7 @@ IDEA: further off to side of FOV range, higher chance of failing even if technic
 
 qboolean InFOV3(vec3_t spot, vec3_t from, vec3_t fromAngles, const int hFOV, const int vFOV)
 {
-	vec3_t deltaVector, angles, deltaAngles = { 0 };
+	vec3_t deltaVector = { 0 }, angles = { 0 }, deltaAngles = { 0 };
 
 	VectorSubtract(spot, from, deltaVector);
 	vectoangles(deltaVector, angles);
@@ -414,7 +414,7 @@ qboolean InFOV3(vec3_t spot, vec3_t from, vec3_t fromAngles, const int hFOV, con
 
 qboolean InFOV2(vec3_t origin, const gentity_t* from, const int hFOV, const int vFOV)
 {
-	vec3_t fromAngles, eyes;
+	vec3_t fromAngles = { 0 }, eyes = { 0 };
 
 	if (from->client)
 	{
@@ -434,10 +434,10 @@ qboolean InFOV2(vec3_t origin, const gentity_t* from, const int hFOV, const int 
 
 qboolean InFOV(const gentity_t* ent, const gentity_t* from, const int hFOV, const int vFOV)
 {
-	vec3_t eyes;
-	vec3_t spot;
-	vec3_t deltaVector;
-	vec3_t angles, fromAngles;
+	vec3_t eyes = { 0 };
+	vec3_t spot = { 0 };
+	vec3_t deltaVector = { 0 };
+	vec3_t angles = { 0 }, fromAngles = { 0 };
 	vec3_t deltaAngles = { 0 };
 
 	if (from->client)
@@ -497,9 +497,9 @@ qboolean InVisrange(const gentity_t* ent)
 {
 	//FIXME: make a calculate visibility for ents that takes into account
 	//lighting, movement, turning, crouch/stand up, other anims, hide brushes, etc.
-	vec3_t eyes;
-	vec3_t spot;
-	vec3_t deltaVector;
+	vec3_t eyes = { 0 };
+	vec3_t spot = { 0 };
+	vec3_t deltaVector = { 0 };
 	const float visrange = NPCS.NPCInfo->stats.visrange * NPCS.NPCInfo->stats.visrange * 2;
 
 	CalcEntitySpot(NPCS.NPC, SPOT_HEAD_LEAN, eyes);
@@ -677,7 +677,7 @@ static int G_CheckSoundEvents(gentity_t* self, float max_hear_dist, const int ig
 
 static float G_GetLightLevel(vec3_t pos, vec3_t from_dir)
 {
-	vec3_t ambient = { 0 }, directed, lightDir;
+	vec3_t ambient = { 0 }, directed = { 0 }, lightDir = { 0 };
 
 	cgi_R_GetLighting(pos, ambient, directed, lightDir);
 
@@ -863,7 +863,7 @@ int G_CheckAlertEvents(gentity_t* self, const qboolean checkSight, const qboolea
 		{
 			//valid best sight event, more important than the sound event
 			//get the light level of the alert event for this checker
-			vec3_t eyePoint, sightDir;
+			vec3_t eyePoint = { 0 }, sightDir = { 0 };
 			//get eye point
 			CalcEntitySpot(self, SPOT_HEAD_LEAN, eyePoint);
 			VectorSubtract(level.alertEvents[best_sight_event].position, eyePoint, sightDir);
@@ -1120,8 +1120,8 @@ int G_CheckAlertEvents(gentity_t* self,
 	// ----------------------------------------------------------------------
 	if (bestSightEvent >= 0 && bestSightAlert > bestSoundAlert)
 	{
-		vec3_t eyePoint;
-		vec3_t sightDir;
+		vec3_t eyePoint = { 0 };
+		vec3_t sightDir = { 0 };
 
 		CalcEntitySpot(self, SPOT_HEAD_LEAN, eyePoint);
 		VectorSubtract(level.alertEvents[bestSightEvent].position, eyePoint, sightDir);
@@ -1429,7 +1429,7 @@ G_ClearLOS
 __declspec(noinline)
 qboolean G_ClearLOS(gentity_t* self, const vec3_t start, const vec3_t end)
 {
-	trace_t tr;
+	trace_t tr = { qfalse };
 	int traceCount = 0;
 
 	gi.trace(&tr, start, NULL, NULL, end, ENTITYNUM_NONE,
@@ -1461,7 +1461,7 @@ qboolean G_ClearLOS(gentity_t* self, const vec3_t start, const vec3_t end)
 // ======================================================
 qboolean G_ClearLOS(gentity_t* self, const gentity_t* ent, const vec3_t end)
 {
-	vec3_t eyes;
+	vec3_t eyes = { 0 };
 	CalcEntitySpot(ent, SPOT_HEAD_LEAN, eyes);
 	return G_ClearLOS(self, eyes, end);
 }
@@ -1471,7 +1471,7 @@ qboolean G_ClearLOS(gentity_t* self, const gentity_t* ent, const vec3_t end)
 // ======================================================
 qboolean G_ClearLOS(gentity_t* self, const vec3_t start, const gentity_t* ent)
 {
-	vec3_t spot;
+	vec3_t spot = { 0 };
 
 	// Chest
 	CalcEntitySpot(ent, SPOT_ORIGIN, spot);
@@ -1491,7 +1491,7 @@ qboolean G_ClearLOS(gentity_t* self, const vec3_t start, const gentity_t* ent)
 // ======================================================
 qboolean G_ClearLOS(gentity_t* self, const gentity_t* ent)
 {
-	vec3_t eyes;
+	vec3_t eyes = { 0 };
 	CalcEntitySpot(self, SPOT_HEAD_LEAN, eyes);
 	return G_ClearLOS(self, eyes, ent);
 }
@@ -1501,7 +1501,7 @@ qboolean G_ClearLOS(gentity_t* self, const gentity_t* ent)
 // ======================================================
 qboolean G_ClearLOS(gentity_t* self, const vec3_t end)
 {
-	vec3_t eyes;
+	vec3_t eyes = { 0 };
 	CalcEntitySpot(self, SPOT_HEAD_LEAN, eyes);
 	return G_ClearLOS(self, eyes, end);
 }
@@ -1523,7 +1523,7 @@ G_ClearLOS
 // Position to position
 qboolean G_ClearLOS(gentity_t* self, const vec3_t start, const vec3_t end)
 {
-	trace_t tr;
+	trace_t tr = { 0 };
 	int traceCount = 0;
 
 	// Initial trace
@@ -1571,7 +1571,7 @@ qboolean G_ClearLOS(gentity_t* self, const vec3_t start, const vec3_t end)
 //Entity to position
 qboolean G_ClearLOS2(gentity_t* self, const gentity_t* ent, const vec3_t end)
 {
-	vec3_t eyes;
+	vec3_t eyes = { 0 };
 
 	CalcEntitySpot(ent, SPOT_HEAD_LEAN, eyes);
 
@@ -1581,7 +1581,7 @@ qboolean G_ClearLOS2(gentity_t* self, const gentity_t* ent, const vec3_t end)
 //Position to entity
 qboolean G_ClearLOS3(gentity_t* self, const vec3_t start, const gentity_t* ent)
 {
-	vec3_t spot;
+	vec3_t spot = { 0 };
 
 	//Look for the chest first
 	CalcEntitySpot(ent, SPOT_ORIGIN, spot);
@@ -1601,7 +1601,7 @@ qboolean G_ClearLOS3(gentity_t* self, const vec3_t start, const gentity_t* ent)
 //NPC's eyes to entity
 qboolean G_ClearLOS4(gentity_t* self, gentity_t* ent)
 {
-	vec3_t eyes;
+	vec3_t eyes = { 0 };
 
 	//Calculate my position
 	CalcEntitySpot(self, SPOT_HEAD_LEAN, eyes);
@@ -1612,7 +1612,7 @@ qboolean G_ClearLOS4(gentity_t* self, gentity_t* ent)
 //NPC's eyes to position
 qboolean G_ClearLOS5(gentity_t* self, const vec3_t end)
 {
-	vec3_t eyes;
+	vec3_t eyes = { 0 };
 
 	//Calculate the my position
 	CalcEntitySpot(self, SPOT_HEAD_LEAN, eyes);
@@ -1629,7 +1629,7 @@ NPC_GetFOVPercentage
 #endif
 float NPC_GetHFOVPercentage(vec3_t spot, vec3_t from, vec3_t facing, const float hFOV)
 {
-	vec3_t deltaVector, angles;
+	vec3_t deltaVector = { 0 }, angles = { 0 };
 
 	VectorSubtract(spot, from, deltaVector);
 
@@ -1651,7 +1651,7 @@ NPC_GetVFOVPercentage
 
 float NPC_GetVFOVPercentage(vec3_t spot, vec3_t from, vec3_t facing, const float vFOV)
 {
-	vec3_t deltaVector, angles;
+	vec3_t deltaVector = { 0 }, angles = { 0 };
 
 	VectorSubtract(spot, from, deltaVector);
 
@@ -1687,7 +1687,7 @@ int G_FindLocalInterestPoint(gentity_t* self)
 {
 	int bestPoint = ENTITYNUM_NONE;
 	float bestDist = Q3_INFINITE;
-	vec3_t eyes;
+	vec3_t eyes = { 0 };
 
 	CalcEntitySpot(self, SPOT_HEAD_LEAN, eyes);
 	for (int i = 0; i < level.numInterestPoints; i++)
@@ -1695,7 +1695,7 @@ int G_FindLocalInterestPoint(gentity_t* self)
 		//Don't ignore portals?  If through a portal, need to look at portal!
 		if (SHR_inPVS(level.interestPoints[i].origin, eyes))
 		{
-			vec3_t diffVec;
+			vec3_t diffVec = { 0 };
 			VectorSubtract(level.interestPoints[i].origin, eyes, diffVec);
 			if ((fabs(diffVec[0]) + fabs(diffVec[1])) / 2 < 48 &&
 				fabs(diffVec[2]) > (fabs(diffVec[0]) + fabs(diffVec[1])) / 2)

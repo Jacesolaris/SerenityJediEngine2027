@@ -48,7 +48,7 @@ UI_ParseInfos
 
 static int UI_ParseInfos(const char* buf, int max, char* infos[])
 {
-	char	info[MAX_INFO_STRING];
+	char	info[MAX_INFO_STRING] = { 0 };
 
 	int count = 0;
 
@@ -70,7 +70,7 @@ static int UI_ParseInfos(const char* buf, int max, char* infos[])
 
 		info[0] = '\0';
 		while (1) {
-			char key[MAX_TOKEN_CHARS];
+			char key[MAX_TOKEN_CHARS] = { 0 };
 			token = COM_ParseExt(&buf, qtrue);
 			if (!token[0]) {
 				Com_Printf("Unexpected end of info file\n");
@@ -159,7 +159,7 @@ void UI_LoadArenas(void)
 	char* dirptr = dirlist;
 	for (int i = 0; i < numdirs; i++, dirptr += dirlen + 1)
 	{
-		char filename[MAX_QPATH];
+		char filename[MAX_QPATH] = { 0 };
 		dirlen = strlen(dirptr);
 		strcpy(filename, "scriptsmp/");
 		strcat(filename, dirptr);
@@ -258,7 +258,7 @@ void UI_LoadSPArenas(void)
 	char* dirptr = dirlist;
 	for (int i = 0; i < numdirs; i++, dirptr += dirlen + 1)
 	{
-		char filename[MAX_QPATH];
+		char filename[MAX_QPATH] = { 0 };
 		dirlen = strlen(dirptr);
 		strcpy(filename, "scriptsmp/");
 		strcat(filename, dirptr);
@@ -353,7 +353,7 @@ static void UI_DropRepeatedBots(const int first, const char* filename)
 
 	for (int n = first; n < ui_numBots; n++)
 	{
-		char name[MAX_QPATH];
+		char name[MAX_QPATH] = { 0 };
 		qboolean repeated = qfalse;
 
 		Q_strncpyz(name, Info_ValueForKey(ui_botInfos[n], "name"), sizeof name);
@@ -431,8 +431,8 @@ UI_LoadBots
 */
 void UI_LoadBots(void)
 {
-	vmCvar_t	botsFile;
-	char		dirlist[1024];
+	vmCvar_t	botsFile = { 0 };
+	char		dirlist[1024] = { 0 };
 	int			dirlen = 0;
 
 	ui_numBots = 0;
@@ -456,7 +456,7 @@ void UI_LoadBots(void)
 		char* dirptr = dirlist;
 		for (int i = 0; i < numdirs; i++, dirptr += dirlen + 1)
 		{
-			char filename[MAX_QPATH];
+			char filename[MAX_QPATH] = { 0 };
 			dirlen = strlen(dirptr);
 			Com_sprintf(filename, sizeof filename, "%s/%s", botFolders[folder], dirptr);
 			UI_LoadBotsFromFile(filename);

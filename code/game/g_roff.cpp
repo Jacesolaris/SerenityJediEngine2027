@@ -41,7 +41,7 @@ static void G_RoffNotetrackCallback(gentity_t* ent, const char* notetrack)
 	char type[256]{};
 	char argument[512]{};
 	char addlArg[512]{};
-	char errMsg[256];
+	char errMsg[256] = {};
 	char teststr[256]{};
 	int addlArgs = 0;
 
@@ -141,7 +141,7 @@ static void G_RoffNotetrackCallback(gentity_t* ent, const char* notetrack)
 
 	if (strcmp(type, "effect") == 0)
 	{
-		vec3_t parsedOffset;
+		vec3_t parsedOffset = {};
 		char t[64]{};
 		int posoffset_gathered = 0;
 		if (!addlArgs)
@@ -223,11 +223,11 @@ static void G_RoffNotetrackCallback(gentity_t* ent, const char* notetrack)
 
 		if (objectID)
 		{
-			vec3_t up;
-			vec3_t right;
-			vec3_t forward;
-			vec3_t useOrigin;
-			vec3_t useAngles;
+			vec3_t up = {};
+			vec3_t right = {};
+			vec3_t forward = {};
+			vec3_t useOrigin = {};
+			vec3_t useAngles = {};
 			if (addlArgs)
 			{
 				vec3_t parsedAngles{};
@@ -653,7 +653,7 @@ extern cvar_t* com_outcast;
 
 int G_LoadRoff(const char* fileName)
 {
-	char file[MAX_QPATH];
+	char file[MAX_QPATH] = {};
 	byte* data = nullptr;
 	int len = 0, roff_id = 0;
 
@@ -797,7 +797,7 @@ void G_Roff(gentity_t* ent)
 
 	// The ID is one higher than the array index
 	const roff_list_t* roff = &roffs[roff_id - 1];
-	vec3_t org, ang;
+	vec3_t org = {}, ang = {};
 
 	if (roff->type == 2)
 	{
@@ -963,7 +963,7 @@ void G_LoadCachedRoffs()
 	// Now bring 'em back to life
 	for (int i = 0; i < count; i++)
 	{
-		char buffer[MAX_QPATH];
+		char buffer[MAX_QPATH] = {};
 		saved_game.read_chunk<int32_t>(INT_ID('S', 'L', 'E', 'N'), len);
 
 		if (len < 0 || static_cast<size_t>(len) >= sizeof buffer)
