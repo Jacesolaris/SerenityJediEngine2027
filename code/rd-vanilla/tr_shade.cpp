@@ -443,6 +443,7 @@ void RB_BeginSurface(shader_t* shader, const int fogNum)
 	tess.currentStageIteratorFunc = shader->sky ? RB_StageIteratorSky : RB_StageIteratorGeneric;
 
 	tess.fading = false;
+	tess.clothShadeNum = 0;	// SJE r_meshClothFolds
 
 	tess.registration++;
 }
@@ -1346,6 +1347,23 @@ static void ComputeColors(shaderStage_t* p_stage, alphaGen_t forceAlphaGen, colo
 			ba_dest->ui = ba_source->ui;
 		}
 		break;
+	}
+
+	// SJE r_meshClothFolds: the valleys of mesh cloth's folds a little darker (per vertex, from RB_SurfaceGhoul)
+	if (tess.clothShadeNum > 0 && forceRGBGen != CGEN_SKIP)
+	{
+		const int n = tess.clothShadeNum < tess.numVertexes ? tess.clothShadeNum : tess.numVertexes;
+		for (i = 0; i < n; i++)
+		{
+			const unsigned int s = tess.clothShade[i];
+			if (s >= 255)
+			{
+				continue;
+			}
+			tess.svars.colors[i][0] = static_cast<byte>(tess.svars.colors[i][0] * (s + 1) >> 8);
+			tess.svars.colors[i][1] = static_cast<byte>(tess.svars.colors[i][1] * (s + 1) >> 8);
+			tess.svars.colors[i][2] = static_cast<byte>(tess.svars.colors[i][2] * (s + 1) >> 8);
+		}
 	}
 
 	//

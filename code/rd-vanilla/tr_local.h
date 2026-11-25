@@ -1447,6 +1447,11 @@ struct shaderCommands_s
 
 	//rww - doing a fade, don't compute shader color/alpha overrides
 	bool		fading;
+
+	// SJE r_meshClothFolds: mesh cloth darkens the valleys of its folds. clothShade[i] (255 = as lit) holds for the first
+	// clothShadeNum vertices of the batch; 0 = none (RB_BeginSurface). Set by RB_SurfaceGhoul, used by ComputeColors.
+	int			clothShadeNum;
+	byte		clothShade[SHADER_MAX_VERTEXES];
 };
 
 #ifdef _MSC_VER

@@ -109,6 +109,8 @@ struct mcCapsule_t {
 	//     round it (as a sleeve is round an arm), so it is always kept clear of it
 };
 
+const int MC_MAX_BLADE_AIR = 4;	// SJE r_meshClothBladeAir: lit blades whose air one character's cloth feels
+
 struct mcParams_t {
 	float	gravity;		// units / s^2
 	float	drag;			// air resistance along the cloth normal
@@ -117,7 +119,7 @@ struct mcParams_t {
 	float	inertia;		// 0..1 how much of the character's own travel the cloth feels
 	float	maxAccel;		// units/s^2 of character acceleration the cloth feels (0 = no limit)
 	float	airDrag;		// 1/s drag on all motion relative to the air: capes trail when running and lift when falling
-	int		layers = 0;		// SJE r_meshClothLayers: 1 = a character's cloth layers keep their order (a cape stays over a robe)
+	int		layers = 0;		// SJE r_meshClothLayers: 1 = a character's cloth layers keep their order (a cape stays over a robe); 2 = without the body tests
 	float	twistFree = 540.0f;	// SJE r_meshClothTwistFree: deg/s of the attached edge's turn about up that the cloth lags by itself
 	float	twistLag = 20.0f;	// SJE r_meshClothTwistLag: degrees the free cloth may be behind a faster turn before it is carried along
 							// (under 0 = carried at once, wherever the cloth is: as before). For a flick: in a turn that goes on
@@ -218,6 +220,28 @@ struct mcParams_t {
 	float	waterDrag = 0.0f;	// 1/s drag on cloth below waterZ; it also floats up gently there
 	float	wet = 0.0f;		// 0..1 how soaked the cloth is: wet cloth weighs up to twice as much
 	int		hipBone = -1;	// SJE: the skeleton's hip bone (pelvis), for cloth lines with 'bell'; -1 = none
+	float	turb = 1.0f;	// SJE r_meshClothTurbulence: the air a character moves through, or that blows past him, is not one even
+						//   stream: its direction wanders, and eddies travel down the cloth with it (random, smooth, each character
+						//   its own), so the same move does not stream the cloth the same way every time. 0 = off (as before)
+	float	bladeAir = 1.0f;	// SJE r_meshClothBladeAir: a lit blade swung near cloth drags the air beside it along (0 = off)
+	int		numBladeAir = 0;	// ... the blades near this character: their ends now and how fast those move (world, units/s)
+	float	bladeA[MC_MAX_BLADE_AIR][3], bladeB[MC_MAX_BLADE_AIR][3], bladeVA[MC_MAX_BLADE_AIR][3], bladeVB[MC_MAX_BLADE_AIR][3];
+	float	dampLag = 0.3f;	// SJE r_meshClothDampLag: seconds by which the frame 'damp' works in follows the character's speed (the
+						//   air he drags along): after a stop or a change of direction the cape swings out. 0 = his speed at once
+	float	springPose = 1.0f;	// SJE r_meshClothSpringPose: 'spring' lets go at once when the pose itself jumps (an attack, a change of
+						//   animation) and takes hold again slowly: the cape swings on from where it is. 0 = it is pulled after the pose
+	float	tailSide = 1.0f;	// SJE r_meshClothTailSide: with the back to a strong wind the cape goes off to one side and streams
+						//   past the body there (it tries the lee side first, then the other). 0 = it lies on the back
+	float	turnCalm = 1.0f;	// SJE r_meshClothTurnCalm: while the attached edge turns faster than a person turns the shoulders, 'spring'
+						//   and 'ring' let go and 'damp' sideways grows: the cape is not whipped round with every flick of the mouse. 0 = off
+	float	whirl = 1.0f;	// SJE r_meshClothWhirl: in a turn that goes on round and round (circling, a spin on the spot) the cloth is
+						//   carried with its wearer's turning beyond what a body can do: it streams as in a run, it is not flung out level. 0 = off
+	float	airPhys = 0.0f;	// SJE r_meshClothAirPhys: the air acts on each point by its own speed through it and by how the
+						//   cloth lies to it (drag across the cloth by the square of the speed, next to none along it); the travel wind,
+						//   the linear drag, the sink and landing rules, the lift limit and 'damp' fall away. 0 = off (those rules)
+	float	airFree = 1.0f;	// SJE r_meshClothAirFree: moving air (travel, a fall, wind) frees the cloth - its bend links and 'damp'
+						//   give, the eddies are sized by the real air speed, a fall's air counts apart from the wind's, the lift
+						//   limit opens from a slower fall, loose cloth sinks no faster than the air lets it. 0 = as before
 };
 
 // Per character (instanceKey), eased over time, for the glue (main thread):
@@ -340,6 +364,15 @@ void MC_Push(const float center[3], const float dir[3], float strength, float ra
 // SJE: scales (optional, one per character): the size each is drawn at, 1 = its own (r_meshClothShapeScale)
 // SJE r_meshClothBlastGain: multiplies every MC_Blast (default 3; 1 = as before). Main thread.
 void MC_SetBlastGain(float gain);
+// SJE r_meshClothBladeAir: how fast a lit blade moves (base a, tip b; world). The glue tells every blade it finds near a
+// character, once per frame (frameId: the renderer's frame count; timeMs: the scene time); it is matched to the blades
+// told in the frame before. False (va, vb zero) for a blade not seen then, or when the time did not move. Main thread.
+bool MC_BladeMotion(int frameId, int timeMs, const float a[3], const float b[3], float va[3], float vb[3]);
+// SJE r_meshClothLee: the part of the weather wind that reaches a character's cloth (1 = all, down to MC_LEE_KEEP): a
+// wall, a crate, a train car upwind of it shelters it. trace(from, to) gives the part of the line that is clear (0..1); it
+// is called five times per character every 150 ms, and the result is eased per key. Main thread.
+typedef float (*mcLeeTraceFn_t)(const float from[3], const float to[3]);
+float MC_WindLee(const void* key, int timeMs, const float origin[3], const float wind[3], mcLeeTraceFn_t trace);
 void MC_SetCharacters(int frameId, const float (*origins)[3], int count, const float* scales = nullptr);
 bool MC_CharactersListed(int frameId);
 int  MC_NearCharacters(const float origin[3], mcCapsule_t* out, int max);

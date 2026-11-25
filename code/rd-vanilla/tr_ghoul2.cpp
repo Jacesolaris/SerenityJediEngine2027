@@ -3332,9 +3332,12 @@ void R_MeshClothLoadConfig()
 	}
 }
 
+static void RB_MeshClothFoldsClear();	// SJE r_meshClothFolds
+
 void R_MeshClothShutdown()
 {
 	MC_Clear();
+	RB_MeshClothFoldsClear();	// SJE r_meshClothFolds: its per-surface data go with the models
 	MC_WindZonesClear();	// SJE r_meshClothFans: the zones belong to a map (the cgame sends them again)
 }
 
@@ -3579,7 +3582,9 @@ static bool MC_WaterHeight(const vec3_t origin, float* z)
 //  r_meshClothFriction  scales every surface's friction / sfriction (1 = the config's, 0 = frictionless)
 //  r_meshClothLift      -2 = each surface's 'lift', -1 = no limit, N = units a cape may rise above its attached edge
 //  r_meshClothEdgeCol   1 = cloth edges are pushed off arms, fists and hilts too (no forearm through a cape)
-//  r_meshClothLayers    1 = a character's cloth layers keep their order: a cape stays over a robe (0 = off)
+//  r_meshClothLayers    1 = a character's cloth layers keep their order: a cape stays over a robe (0 = off;
+//                       2 = as before: turned-over triangles, points far on the wrong side and cloth lying
+//                       against the body are pushed too - for comparison)
 //  r_meshClothBodyCarry 1 = the cloth is carried along with the body's own fast travel inside its animation,
 //                       e.g. the landing of a jump: no cape thrown up over the shoulders there (0 = off)
 //  r_meshClothLiftAir 1 = air from below (a fall, an updraft) and strong wind open the lift limit behind the attached
@@ -4266,6 +4271,96 @@ static int MC_BladesNear(const trRefEntity_t* ent, mcCapsule_t* out)
 	return n;
 }
 
+// SJE r_meshClothLee: the part of a line that is clear of walls (0..1; a start inside a wall counts as clear)
+static float MC_LeeTrace(const float from[3], const float to[3])
+{
+	trace_t trc;
+	ri.SV_Trace(&trc, from, nullptr, nullptr, to, ENTITYNUM_NONE, CONTENTS_SOLID, G2_NOCOLLIDE, 0);
+	return (trc.startsolid || trc.allsolid) ? 1.0f : trc.fraction;
+}
+
+// SJE: the air round a character's cloth (tr_meshcloth.cpp), main thread:
+//  r_meshClothTurbulence (1 = on, 0 = off, other values scale it): the travel air and the wind are not one even stream -
+//    its direction wanders and eddies travel down the cloth with it, so the same move does not stream the cloth the
+//    same way every time;
+//  r_meshClothBladeAir (1 = on, 0 = off, other values scale it): a lit blade swung near cloth drags the air along (the
+//    blades r_meshClothBlade found near this character; how fast they move from the frames before: MC_BladeMotion);
+//  r_meshClothLee (1 = on, 0 = off): a wall, a crate or a train car upwind shelters the cloth from the weather wind
+//    (MC_WindLee: five traces upwind every 150 ms, eased; the pushers' air is not touched). Not for cloth beyond
+//    r_meshClothLodFar (not simulated).
+static void MC_AirAround(const trRefEntity_t* ent, const void* key, const int timeMs, mcParams_t& prm, const mcCapsule_t* blades, const int numBlades)
+{
+	static cvar_t* tu = nullptr;
+	static cvar_t* ba = nullptr;
+	static cvar_t* le = nullptr;
+	static cvar_t* dl = nullptr;
+	static cvar_t* spo = nullptr;
+	static cvar_t* tcm = nullptr;
+	static cvar_t* whl = nullptr;
+	static cvar_t* aph = nullptr;
+	static cvar_t* af = nullptr;
+	static cvar_t* ts = nullptr;
+	if (!tu)
+	{
+		// SJE r_meshClothTailSide (1 = on, 0 = off): with the back to a strong wind the cape goes off to one side (tr_meshcloth.cpp)
+		// (2 = on, without the stronger push while a lit blade is held - for comparison)
+		ts = ri.Cvar_Get("r_meshClothTailSide", "1", CVAR_ARCHIVE_ND);
+		// SJE r_meshClothAirFree (1 = on, 0 = off, between: part of it): moving air frees loose cloth (tr_meshcloth.cpp)
+		af = ri.Cvar_Get("r_meshClothAirFree", "1", CVAR_ARCHIVE_ND);
+		// SJE r_meshClothAirPhys (1 = on, 0 = the older air rules): the air's push by each point's own speed through it (tr_meshcloth.cpp)
+		aph = ri.Cvar_Get("r_meshClothAirPhys", "1", CVAR_ARCHIVE_ND);
+		// SJE r_meshClothWhirl (1 = on, 0 = off): in a turn that goes on round and round the cape is not flung out level (tr_meshcloth.cpp)
+		// (2 = only the frame 'damp' works in goes round with him; the cloth feels all of the whirl)
+		whl = ri.Cvar_Get("r_meshClothWhirl", "1", CVAR_ARCHIVE_ND);
+		// SJE r_meshClothTurnCalm (1 = on, 0 = off): the cape is not whipped round with fast turns of the shoulders (tr_meshcloth.cpp)
+		// (2 = on, with the turn measured as before: a tremble of the shoulders counts as a turn - for comparison)
+		tcm = ri.Cvar_Get("r_meshClothTurnCalm", "1", CVAR_ARCHIVE_ND);
+		// SJE r_meshClothDampLag (seconds; 0 = off): the frame 'damp' works in follows the character's speed with a lag (tr_meshcloth.cpp)
+		dl = ri.Cvar_Get("r_meshClothDampLag", "0.3", CVAR_ARCHIVE_ND);
+		// SJE r_meshClothSpringPose (1 = on, 0 = off): 'spring' lets go when the pose itself jumps (tr_meshcloth.cpp)
+		spo = ri.Cvar_Get("r_meshClothSpringPose", "1", CVAR_ARCHIVE_ND);
+		tu = ri.Cvar_Get("r_meshClothTurbulence", "1", CVAR_ARCHIVE_ND);
+		ba = ri.Cvar_Get("r_meshClothBladeAir", "1", CVAR_ARCHIVE_ND);
+		le = ri.Cvar_Get("r_meshClothLee", "1", CVAR_ARCHIVE_ND);
+	}
+	prm.turb = tu ? tu->value : 0.0f;
+	prm.dampLag = dl ? dl->value : 0.0f;
+	prm.springPose = spo ? spo->value : 0.0f;
+	prm.turnCalm = tcm ? tcm->value : 0.0f;
+	prm.whirl = whl ? whl->value : 0.0f;
+	prm.airPhys = aph ? aph->value : 0.0f;
+	if (prm.airPhys > 0.0f) {
+		// SJE r_meshClothAirPhys: the cloth falls as everything in the game does - the air model is made for that (how fast
+		// a sheet sinks is root(gravity x weight / drag)). r_meshClothGravity (700) belongs to the older air rules.
+		const float gg = ri.Cvar_VariableValue("g_gravity");
+		prm.gravity = gg > 0.0f ? gg : 800.0f;	// (a client that cannot read the server's value: the game's usual 800)
+	}
+	prm.airFree = af ? af->value : 0.0f;
+	prm.tailSide = ts ? ts->value : 0.0f;
+	prm.bladeAir = ba ? ba->value : 0.0f;
+	prm.numBladeAir = 0;
+	if (prm.bladeAir > 0.0f)
+	{
+		for (int i = 0; i < numBlades && prm.numBladeAir < MC_MAX_BLADE_AIR; i++)
+		{
+			const int k = prm.numBladeAir;
+			if (MC_BladeMotion(tr.frameCount, timeMs, blades[i].a, blades[i].b, prm.bladeVA[k], prm.bladeVB[k]))
+			{
+				VectorCopy(blades[i].a, prm.bladeA[k]);
+				VectorCopy(blades[i].b, prm.bladeB[k]);
+				prm.numBladeAir++;
+			}
+		}
+	}
+	float lee = 1.0f;
+	if (le && le->integer && tr.world && !(s_mcRefdef->rdflags & RDF_NOWORLDMODEL) && (prm.wind[0] != 0.0f || prm.wind[1] != 0.0f)
+		&& !(prm.lodFar > 0.0f && prm.lodDist > prm.lodFar))
+	{
+		lee = MC_WindLee(key, timeMs, ent->e.origin, prm.wind, MC_LeeTrace);
+		VectorScale(prm.wind, lee, prm.wind);
+	}
+}
+
 // the floor under a character, for its cloth: one trace per character per frame
 static void MC_FloorUnder(const trRefEntity_t* ent, const int timeMs, mcParams_t& prm)
 {
@@ -4542,6 +4637,7 @@ static bool RB_MeshClothPrepare(CBoneCache* bones, const mdxmSurface_t* surface,
 	MC_FloorUnder(ent, timeMs, prm);
 	cp.numOthers = MC_OthersNear(ent, cp.others);
 	cp.numBlades = MC_BladesNear(ent, cp.blades);
+	MC_AirAround(ent, bones, timeMs, prm, cp.blades, cp.numBlades);	// SJE r_meshClothTurbulence / BladeAir / Lee
 	cp.numHeld = MC_HeldShapes(ent, cp.axis, cp.held);
 	cp.numCarried = MC_CarriedShapes(s_mcRefdef, ent, cp.carried);	// SJE r_meshClothCarried
 	// r_meshClothBodyFit (KatarnEngine): only for characters at full cloth detail (inside r_meshClothLodNear)
@@ -5817,6 +5913,193 @@ static int RB_SaberSliceSurface(const CRenderableSurface* surf, const mdxmSurfac
 	return nextVert;
 }
 
+// SJE r_meshClothFolds (0.5; 0 = off): mesh cloth darkens the valleys of its folds. A coarse cape has too few points for
+// its folds to shade themselves: lit by the vertex normals alone, a fold between two points is a soft gradient at best,
+// and in ambient light nothing at all. Each point is shaded by how deep it lies in a valley of the cloth as it is drawn -
+// the mean height of its neighbours over its tangent plane, as a part of their distance (a curvature measure, as in
+// cavity shading) - beyond what the model's own bind shape has there (painted folds are not darkened twice): from
+// MC_FOLD_LO on, up to this much darker at MC_FOLD_HI. Points with the same place in the model (texture seams) count
+// as one. Drawing only; the shade is one byte per vertex in tess (ComputeColors multiplies the stage colours by it).
+struct mcFold_t
+{
+	std::vector<int> group;		// per vertex: its group (vertices at the same bind place)
+	std::vector<int> start, nb;	// per group: where its neighbour groups start in nb (+ 1 entry)
+	std::vector<float> bind;	// per group: the bind shape's valley measure
+};
+static std::unordered_map<const mdxmSurface_t*, mcFold_t> s_mcFold;
+static cvar_t* mc_folds = nullptr;
+static void RB_MeshClothFoldsClear()
+{
+	s_mcFold.clear();
+}
+static const float MC_FOLD_LO = 0.02f;	// valley measure (beyond the bind shape's) from which a point is darkened ...
+static const float MC_FOLD_HI = 0.22f;	// ... and at which it is darkened in full (running capes: a tenth of the points are over 0.15,
+										// one in a hundred over 0.3 - measured on Dooku, Vader and the Mandalorian)
+
+static float MC_FoldValley(const mcFold_t& f, const int g, const float* gp, const float* gn)
+{
+	const float* p = &gp[static_cast<size_t>(g) * 3], * n = &gn[static_cast<size_t>(g) * 3];
+	float h = 0.0f, len = 0.0f;
+	for (int k = f.start[g]; k < f.start[g + 1]; k++)
+	{
+		const float* q = &gp[static_cast<size_t>(f.nb[k]) * 3];
+		const float d[3] = { q[0] - p[0], q[1] - p[1], q[2] - p[2] };
+		h += n[0] * d[0] + n[1] * d[1] + n[2] * d[2];
+		len += sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+	}
+	return len > 1e-4f ? h / len : 0.0f;
+}
+
+// group positions and unit normals from per-vertex data (stride floats apart)
+static void MC_FoldGather(const mcFold_t& f, const int numGroups, const float* xyz, const float* nrm, const int stride, std::vector<float>& gp, std::vector<float>& gn)
+{
+	gp.assign(static_cast<size_t>(numGroups) * 3, 0.0f);
+	gn.assign(static_cast<size_t>(numGroups) * 3, 0.0f);
+	static std::vector<int> cnt;
+	cnt.assign(numGroups, 0);
+	for (size_t i = 0; i < f.group.size(); i++)
+	{
+		const int g = f.group[i];
+		for (int c = 0; c < 3; c++)
+		{
+			gp[static_cast<size_t>(g) * 3 + c] += xyz[i * stride + c];
+			gn[static_cast<size_t>(g) * 3 + c] += nrm[i * stride + c];
+		}
+		cnt[g]++;
+	}
+	for (int g = 0; g < numGroups; g++)
+	{
+		float* p = &gp[static_cast<size_t>(g) * 3], * n = &gn[static_cast<size_t>(g) * 3];
+		const float ic = cnt[g] > 0 ? 1.0f / cnt[g] : 0.0f;
+		p[0] *= ic; p[1] *= ic; p[2] *= ic;
+		const float l = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+		if (l > 1e-6f) { n[0] /= l; n[1] /= l; n[2] /= l; }
+	}
+}
+
+static void RB_MeshClothFolds(const mdxmSurface_t* surface, const int baseVertex, const int numVerts)
+{
+	if (!mc_folds)
+	{
+		mc_folds = ri.Cvar_Get("r_meshClothFolds", "0.5", CVAR_ARCHIVE_ND);
+	}
+	const float strength = mc_folds->value > 1.0f ? 1.0f : mc_folds->value;
+	if (!(strength > 0.0f) || numVerts < 3 || baseVertex < 0 || baseVertex + numVerts > SHADER_MAX_VERTEXES)
+	{
+		return;
+	}
+	static std::vector<float> gp, gn;
+	auto it = s_mcFold.find(surface);
+	if (it == s_mcFold.end())
+	{
+		if (s_mcFold.size() > 512)
+		{
+			s_mcFold.clear();
+		}
+		mcFold_t f;
+		const mdxmVertex_t* v = reinterpret_cast<const mdxmVertex_t*>(reinterpret_cast<const byte*>(surface) + surface->ofsVerts);
+		// vertices at the same bind place are one group
+		std::unordered_map<unsigned long long, int> at;
+		f.group.resize(numVerts);
+		int numGroups = 0;
+		for (int i = 0; i < numVerts; i++)
+		{
+			unsigned long long key = 0;
+			for (int c = 0; c < 3; c++)
+			{
+				key = key * 2097169ULL + static_cast<unsigned long long>(static_cast<long long>(floorf(v[i].vertCoords[c] * 64.0f + 0.5f)) + 1048576LL);
+			}
+			const auto found = at.find(key);
+			if (found == at.end())
+			{
+				at.emplace(key, numGroups);
+				f.group[i] = numGroups++;
+			}
+			else
+			{
+				f.group[i] = found->second;
+			}
+		}
+		// each group's neighbour groups, from the triangles
+		std::vector<std::vector<int>> nbs(numGroups);
+		const int* tri = reinterpret_cast<const int*>(reinterpret_cast<const byte*>(surface) + surface->ofsTriangles);
+		for (int k = 0; k < surface->numTriangles; k++)
+		{
+			for (int e = 0; e < 3; e++)
+			{
+				const int ia = tri[k * 3 + e], ib = tri[k * 3 + (e + 1) % 3];
+				if (ia < 0 || ia >= numVerts || ib < 0 || ib >= numVerts)
+				{
+					continue;
+				}
+				const int a = f.group[ia], b = f.group[ib];
+				if (a == b)
+				{
+					continue;
+				}
+				if (std::find(nbs[a].begin(), nbs[a].end(), b) == nbs[a].end()) nbs[a].push_back(b);
+				if (std::find(nbs[b].begin(), nbs[b].end(), a) == nbs[b].end()) nbs[b].push_back(a);
+			}
+		}
+		f.start.resize(static_cast<size_t>(numGroups) + 1);
+		for (int g = 0; g < numGroups; g++)
+		{
+			f.start[g] = static_cast<int>(f.nb.size());
+			f.nb.insert(f.nb.end(), nbs[g].begin(), nbs[g].end());
+		}
+		f.start[numGroups] = static_cast<int>(f.nb.size());
+		// the bind shape's own valleys
+		std::vector<float> bp(static_cast<size_t>(numVerts) * 3), bn(static_cast<size_t>(numVerts) * 3);
+		for (int i = 0; i < numVerts; i++)
+		{
+			for (int c = 0; c < 3; c++)
+			{
+				bp[static_cast<size_t>(i) * 3 + c] = v[i].vertCoords[c];
+				bn[static_cast<size_t>(i) * 3 + c] = v[i].normal[c];
+			}
+		}
+		MC_FoldGather(f, numGroups, bp.data(), bn.data(), 3, gp, gn);
+		f.bind.resize(numGroups);
+		for (int g = 0; g < numGroups; g++)
+		{
+			f.bind[g] = MC_FoldValley(f, g, gp.data(), gn.data());
+		}
+		it = s_mcFold.emplace(surface, std::move(f)).first;
+	}
+	const mcFold_t& f = it->second;
+	if (static_cast<int>(f.group.size()) != numVerts)
+	{
+		return;
+	}
+	const int numGroups = static_cast<int>(f.bind.size());
+	MC_FoldGather(f, numGroups, &tess.xyz[baseVertex][0], &tess.normal[baseVertex][0], 4, gp, gn);
+	static std::vector<unsigned char> gs;
+	gs.resize(numGroups);
+	bool any = false;
+	for (int g = 0; g < numGroups; g++)
+	{
+		float x = (MC_FoldValley(f, g, gp.data(), gn.data()) - f.bind[g] - MC_FOLD_LO) * (1.0f / (MC_FOLD_HI - MC_FOLD_LO));
+		x = x < 0.0f ? 0.0f : (x > 1.0f ? 1.0f : x);
+		x = x * x * (3.0f - 2.0f * x);
+		gs[g] = static_cast<unsigned char>(255.0f * (1.0f - strength * x) + 0.5f);
+		any = any || gs[g] < 255;
+	}
+	if (!any && tess.clothShadeNum == 0)
+	{
+		return;	// nothing to darken in this batch so far
+	}
+	// vertices of the batch before this surface are lit as they are
+	for (int i = tess.clothShadeNum; i < baseVertex; i++)
+	{
+		tess.clothShade[i] = 255;
+	}
+	for (int i = 0; i < numVerts; i++)
+	{
+		tess.clothShade[baseVertex + i] = gs[f.group[i]];
+	}
+	tess.clothShadeNum = baseVertex + numVerts;
+}
+
 // SJE: r_meshClothSubdiv (0 = off, 1 = on, 2 = twice). A coarse cape (Vader's: 10-15 units between points) is drawn
 // with flat facets and straight edges, most visibly along its outline and in its folds. Mesh cloth surfaces are
 // drawn with each triangle split in four, the new points on the smooth curved patch through the corners and their
@@ -5884,6 +6167,10 @@ static void RB_MeshClothSubdivide(const int firstVert, const int firstIndex)
 		MC_EdgePoint(tess.xyz[a], tess.normal[a], tess.xyz[b], tess.normal[b], tess.xyz[v], tess.normal[v], mc_subdivMean ? mc_subdivMean->integer : 1);
 		tess.xyz[v][3] = tess.xyz[a][3];
 		tess.normal[v][3] = tess.normal[a][3];
+		if (tess.clothShadeNum > 0)	// SJE r_meshClothFolds
+		{
+			tess.clothShade[v] = static_cast<byte>((tess.clothShade[a] + tess.clothShade[b] + 1) >> 1);
+		}
 		for (int s = 0; s < NUM_TEX_COORDS; s++)
 		{
 			tess.texCoords[v][s][0] = 0.5f * (tess.texCoords[a][s][0] + tess.texCoords[b][s][0]);
@@ -6175,6 +6462,20 @@ void RB_SurfaceGhoul(CRenderableSurface* surf)
 		tess.numIndexes = baseIndex + sliceNumIndexes;
 		tess.numVertexes += sliceNumVerts;
 	}
+	// SJE r_meshClothFolds: the valleys of the cloth's folds a little darker (per vertex; the slice's and the subdivision's
+	// new vertices follow)
+	if (isCloth)
+	{
+		RB_MeshClothFolds(surface, baseVertex, surface->numVerts);
+	}
+	if (tess.clothShadeNum > 0)
+	{
+		for (int g = tess.clothShadeNum; g < tess.numVertexes; g++)
+		{
+			tess.clothShade[g] = 255;
+		}
+		tess.clothShadeNum = tess.numVertexes;
+	}
 	// SJE: r_meshClothSubdiv: the cloth's triangles drawn split, on the curved patch through its points
 	for (int lv = 0; lv < mcLevels; lv++)
 	{
@@ -6202,7 +6503,15 @@ void RB_SurfaceGhoul(CRenderableSurface* surf)
 			const float a = 1.0f - 2.0f * t, b = 1.0f - fabsf(a);
 			for (int x = 0; x < 3; x++) n[x] = a * n[x] + b * toView[x];
 			VectorNormalize(n);
+			if (g < tess.clothShadeNum)	// SJE r_meshClothFolds: seen from its inner side a valley is a ridge - not darkened
+			{
+				tess.clothShade[g] = static_cast<byte>(tess.clothShade[g] + t * (255 - tess.clothShade[g]));
+			}
 		}
+	}
+	if (tess.clothShadeNum > 0)	// SJE r_meshClothFolds: the subdivision's new vertices have theirs
+	{
+		tess.clothShadeNum = tess.numVertexes;
 	}
 
 #ifdef G2_PERFORMANCE_ANALYSIS

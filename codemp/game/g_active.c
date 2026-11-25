@@ -4585,6 +4585,63 @@ void WP_ReloadGun(gentity_t* ent)
 	}
 }
 
+// An AI gunner (bot or NPC) fires an overheated gun on like a player who isn't watching his gun's heat: it misfires
+// and hurts him (FireOverheatFail). After one or two of those he notices: he lets go of the trigger, the gun cools as
+// a player's does, and once it is cool enough to reload (below 12, as for a player) he reloads it (WP_ReloadGun).
+static int g_aiOverheatMisfires[MAX_GENTITIES];
+static int g_aiOverheatNotice[MAX_GENTITIES];	// misfires before he notices (1 or 2)
+static int g_aiOverheatLast[MAX_GENTITIES];
+static qboolean g_aiOverheatHold[MAX_GENTITIES];
+
+static void G_AIOverheatMisfired(const gentity_t* ent)
+{
+	const int n = ent->s.number;
+
+	if (n < 0 || n >= MAX_GENTITIES
+		|| (n < MAX_CLIENTS && !(ent->r.svFlags & SVF_BOT) && ent->s.eType != ET_NPC))
+	{
+		return; // a human player decides for himself
+	}
+	if (!g_aiOverheatMisfires[n] || level.time - g_aiOverheatLast[n] > 5000)
+	{
+		g_aiOverheatMisfires[n] = 0;
+		g_aiOverheatNotice[n] = Q_irand(1, 2);
+	}
+	g_aiOverheatMisfires[n]++;
+	g_aiOverheatLast[n] = level.time;
+	if (g_aiOverheatMisfires[n] >= g_aiOverheatNotice[n])
+	{
+		g_aiOverheatHold[n] = qtrue;
+	}
+}
+
+// ClientThink_real, before the command is used: an AI gunner who noticed his gun is overheated
+static void G_AIOverheatThink(gentity_t* ent, usercmd_t* ucmd)
+{
+	const int n = ent->s.number;
+
+	if (n < 0 || n >= MAX_GENTITIES || !g_aiOverheatHold[n])
+	{
+		return;
+	}
+	if (!ent->client || ent->health <= 0 || !IsHoldingReloadableGun(ent))
+	{
+		g_aiOverheatHold[n] = qfalse;
+		g_aiOverheatMisfires[n] = 0;
+		return;
+	}
+	ucmd->buttons &= ~(BUTTON_ATTACK | BUTTON_ALT_ATTACK); // hands off the trigger: the gun cools
+	if (ent->client->ps.BlasterAttackChainCount < BLASTERMISHAPLEVEL_TWELVE && ent->reloadTime < level.time
+		&& ent->client->ps.weaponTime <= 0 && ent->client->ps.weaponstate != WEAPON_CHARGING
+		&& ent->client->ps.weaponstate != WEAPON_CHARGING_ALT)
+	{
+		ent->reloadTime = 0;
+		WP_ReloadGun(ent); // the player's reload: anim, sound, clip, and the gun's heat back to none
+		g_aiOverheatHold[n] = qfalse;
+		g_aiOverheatMisfires[n] = 0;
+	}
+}
+
 void FireOverheatFail(gentity_t* ent)
 {
 	if (IsHoldingReloadableGun(ent))
@@ -4606,6 +4663,7 @@ void FireOverheatFail(gentity_t* ent)
 		{
 			G_RemoveGunnerAimFlagEnt(ent, qtrue);
 		}
+		G_AIOverheatMisfired(ent); // bots / NPCs: after one or two of these they reload (G_AIOverheatThink)
 	}
 }
 
@@ -5060,6 +5118,8 @@ static void ClientThink_real(gentity_t* ent)
 		//don't update the game world if an ROQ files is running.
 		return;
 	}
+
+	G_AIOverheatThink(ent, ucmd); // an AI gunner who noticed his gun overheating: off the trigger, then reload
 
 	if (ent->s.eType == ET_NPC)
 	{

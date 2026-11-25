@@ -688,6 +688,13 @@ static void WP_FireEmplacedMissile(gentity_t* ent, vec3_t start, vec3_t dir, con
 	missile->bounceCount = 8;
 }
 
+// The spread rules a shot gets: qtrue = a human player's (crouch / aiming steady, running and fatigue widen it),
+// qfalse = the NPC slop, which bots get too (bots and NPCs should not be told apart by how they shoot).
+static qboolean G_WeaponPlayerAim(const gentity_t* ent)
+{
+	return ent->s.number < MAX_CLIENTS && !(ent->r.svFlags & SVF_BOT) && ent->s.eType != ET_NPC ? qtrue : qfalse;
+}
+
 //---------------------------------------------------------
 void WP_FireWristMissile(gentity_t* ent, vec3_t start, vec3_t dir)
 //---------------------------------------------------------
@@ -730,7 +737,7 @@ static void WP_FireWrist(gentity_t* ent)
 	else if (NPC_IsNotHavingEnoughForceSight(ent))
 	{
 		// force sight 2+ gives perfect aim
-		if (!(ent->r.svFlags & SVF_BOT))
+		if (G_WeaponPlayerAim(ent))
 		{
 			if (PM_CrouchAnim(ent->client->ps.legsAnim))
 			{
@@ -790,7 +797,7 @@ static void WP_FireBlaster(gentity_t* ent, const qboolean alt_fire)
 	// Start from perfect forward aim
 	vectoangles(forward, angs);
 
-	const qboolean is_player_controlled = (ent->r.svFlags & SVF_BOT) ? qtrue : qfalse;
+	const qboolean is_player_controlled = G_WeaponPlayerAim(ent); // was qtrue for bots (SVF_BOT): bots got the player spread, humans the NPC one
 	const int mishap = ent->client ? ent->client->ps.BlasterAttackChainCount : 0;
 	// Determine movement state
 	const int running = (ent->client && PM_RunningAnim(ent->client->ps.legsAnim));
@@ -1534,7 +1541,7 @@ static void WP_BowcasterMainFire(gentity_t* ent)
 		else if (NPC_IsNotHavingEnoughForceSight(ent))
 		{
 			// force sight 2+ gives perfect aim
-			if (!(ent->r.svFlags & SVF_BOT))
+			if (G_WeaponPlayerAim(ent))
 			{
 				if ((PM_CrouchAnim(ent->client->ps.legsAnim) == qtrue) || g_entities[ent->s.number].client->IsAiming == qtrue)
 				{
@@ -1917,7 +1924,7 @@ static void WP_FireRepeater(gentity_t* ent, const qboolean alt_fire)
 		else if (NPC_IsNotHavingEnoughForceSight(ent))
 		{
 			// force sight 2+ gives perfect aim
-			if (!(ent->r.svFlags & SVF_BOT))
+			if (G_WeaponPlayerAim(ent))
 			{
 				if (PM_CrouchAnim(ent->client->ps.legsAnim) == qtrue || g_entities[ent->s.number].client->IsAiming == qtrue)
 				{
@@ -2296,7 +2303,7 @@ static void WP_FlechetteMainFire(gentity_t* ent)
 			else if (NPC_IsNotHavingEnoughForceSight(ent))
 			{
 				// force sight 2+ gives perfect aim
-				if (!(ent->r.svFlags & SVF_BOT))
+				if (G_WeaponPlayerAim(ent))
 				{
 					if (PM_CrouchAnim(ent->client->ps.legsAnim) == qtrue || g_entities[ent->s.number].client->IsAiming == qtrue)
 					{
@@ -7480,27 +7487,8 @@ void FireWeapon(gentity_t* ent, const qboolean alt_fire)
 
 	if (ent && ent->client && ent->client->ps.BlasterAttackChainCount >= BLASTERMISHAPLEVEL_FOURTEEN && IsHoldingReloadableGun(ent))
 	{
-		if (!(ent->r.svFlags & SVF_BOT))
-		{
-			FireOverheatFail(ent);
-			return;
-		}
-		else
-		{
-			if (ent->s.weapon == WP_DROIDEKA)
-			{
-				NPC_SetAnim(ent, SETANIM_TORSO, BOTH_RELOAD_DEKA, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-			}
-			else
-			{
-				NPC_SetAnim(ent, SETANIM_TORSO, BOTH_RELOADFAIL, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-			}
-			G_SoundOnEnt(ent, CHAN_WEAPON, "sound/weapons/reloadfail.mp3");
-			G_SoundOnEnt(ent, CHAN_VOICE_ATTEN, "*pain25.wav");
-			G_Damage(ent, NULL, NULL, NULL, ent->r.currentOrigin, 2, DAMAGE_NO_ARMOR, MOD_LAVA);
-			ent->reloadTime = level.time + fire_deley_time();
-			return;
-		}
+		FireOverheatFail(ent); // bots too, the same misfire and pain as a player's (they had a copy of it)
+		return;
 	}
 
 	if (ent && ent->client && ent->client->frozenTime > level.time)

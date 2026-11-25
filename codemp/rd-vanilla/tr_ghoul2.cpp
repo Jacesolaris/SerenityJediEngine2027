@@ -4382,7 +4382,9 @@ static bool MC_WaterHeight(const vec3_t origin, float* z)
 //  r_meshClothFriction  scales every surface's friction / sfriction (1 = the config's, 0 = frictionless)
 //  r_meshClothLift      -2 = each surface's 'lift', -1 = no limit, N = units a cape may rise above its attached edge
 //  r_meshClothEdgeCol   1 = cloth edges are pushed off arms, fists and hilts too (no forearm through a cape)
-//  r_meshClothLayers    1 = a character's cloth layers keep their order: a cape stays over a robe (0 = off)
+//  r_meshClothLayers    1 = a character's cloth layers keep their order: a cape stays over a robe (0 = off;
+//                       2 = as before: turned-over triangles, points far on the wrong side and cloth lying
+//                       against the body are pushed too - for comparison)
 //  r_meshClothBodyCarry 1 = the cloth is carried along with the body's own fast travel inside its animation,
 //                       e.g. the landing of a jump: no cape thrown up over the shoulders there (0 = off)
 //  r_meshClothLiftAir 1 = air from below (a fall, an updraft) and strong wind open the lift limit behind the attached
@@ -4526,7 +4528,7 @@ static void MC_SolverParams(mcParams_t& prm)
 		ec = ri.Cvar_Get("r_meshClothEdgeCol", "1", CVAR_ARCHIVE_ND, "Mesh cloth edges collide with arms, fists and saber hilts (1 on, 0 off)");
 		fc = ri.Cvar_Get("r_meshClothFaceCol", "1", CVAR_ARCHIVE_ND, "Mesh cloth triangles collide with the whole body (1 on, 0 off)");
 		dq = ri.Cvar_Get("r_meshClothDragQuad", "0.025", CVAR_ARCHIVE_ND, "Mesh cloth air resistance that grows with the square of the speed (capes stream out when running); 0 off");
-		ly = ri.Cvar_Get("r_meshClothLayers", "1", CVAR_ARCHIVE_ND, "A character's mesh cloth layers keep their order (a cape stays over a robe); 0 off");
+		ly = ri.Cvar_Get("r_meshClothLayers", "1", CVAR_ARCHIVE_ND, "A character's mesh cloth layers keep their order (a cape stays over a robe); 0 off, 2 without the body tests (comparison)");
 		bcr = ri.Cvar_Get("r_meshClothBodyCarry", "1", CVAR_ARCHIVE_ND, "The mesh cloth is carried along with the body's own fast travel inside its animation (the landing of a jump); 0 off");
 		lsl = ri.Cvar_Get("r_meshClothLiftSlope", "0.3", CVAR_ARCHIVE_ND, "The mesh cloth's lift limit drops by this much per unit of cloth length from the attached edge (no flat sheet at shoulder height in a jump); 0 level");
 		lai = ri.Cvar_Get("r_meshClothLiftAir", "1", CVAR_ARCHIVE_ND, "Air from below (a fall, an updraft) and strong wind open the mesh cloth's lift limit behind the attached edge, so a cape's hem may flip up; 0 closed");
@@ -4972,6 +4974,96 @@ static int MC_BladesNear(const trRefEntity_t* ent, mcCapsule_t* out)
 	return n;
 }
 
+// SJE r_meshClothLee: the part of a line that is clear of walls (0..1; a start inside a wall counts as clear)
+static float MC_LeeTrace(const float from[3], const float to[3])
+{
+	trace_t trc;
+	ri.CM_BoxTrace(&trc, from, to, vec3_origin, vec3_origin, 0, CONTENTS_SOLID, qfalse);	// MP: world only
+	return (trc.startsolid || trc.allsolid) ? 1.0f : trc.fraction;
+}
+
+// SJE: the air round a character's cloth (tr_meshcloth.cpp), main thread:
+//  r_meshClothTurbulence (1 = on, 0 = off, other values scale it): the travel air and the wind are not one even stream -
+//    its direction wanders and eddies travel down the cloth with it, so the same move does not stream the cloth the
+//    same way every time;
+//  r_meshClothBladeAir (1 = on, 0 = off, other values scale it): a lit blade swung near cloth drags the air along (the
+//    blades r_meshClothBlade found near this character; how fast they move from the frames before: MC_BladeMotion);
+//  r_meshClothLee (1 = on, 0 = off): a wall, a crate or a train car upwind shelters the cloth from the weather wind
+//    (MC_WindLee: five traces upwind every 150 ms, eased; the pushers' air is not touched). Not for cloth beyond
+//    r_meshClothLodFar (not simulated).
+static void MC_AirAround(const trRefEntity_t* ent, const void* key, const int timeMs, mcParams_t& prm, const mcCapsule_t* blades, const int numBlades)
+{
+	static cvar_t* tu = nullptr;
+	static cvar_t* ba = nullptr;
+	static cvar_t* le = nullptr;
+	static cvar_t* dl = nullptr;
+	static cvar_t* spo = nullptr;
+	static cvar_t* tcm = nullptr;
+	static cvar_t* whl = nullptr;
+	static cvar_t* aph = nullptr;
+	static cvar_t* af = nullptr;
+	static cvar_t* ts = nullptr;
+	if (!tu)
+	{
+		// SJE r_meshClothTailSide (1 = on, 0 = off): with the back to a strong wind the cape goes off to one side (tr_meshcloth.cpp)
+		// (2 = on, without the stronger push while a lit blade is held - for comparison)
+		ts = ri.Cvar_Get("r_meshClothTailSide", "1", CVAR_ARCHIVE_ND, "Mesh cloth: with the back to a strong wind the cape goes off to one side (0 = it lies on the back, 2 = without the stronger push with a lit blade, for comparison)");
+		// SJE r_meshClothAirFree (1 = on, 0 = off, between: part of it): moving air frees loose cloth (tr_meshcloth.cpp)
+		af = ri.Cvar_Get("r_meshClothAirFree", "1", CVAR_ARCHIVE_ND, "Mesh cloth: moving air (travel, a fall, wind) frees the cloth (0 = as before)");
+		// SJE r_meshClothAirPhys (1 = on, 0 = the older air rules): the air's push by each point's own speed through it (tr_meshcloth.cpp)
+		aph = ri.Cvar_Get("r_meshClothAirPhys", "1", CVAR_ARCHIVE_ND, "Mesh cloth: the air acts on each point of cloth by its own speed through it and by how the cloth lies to it, and the cloth falls with the game's gravity (0 = the older air rules, with r_meshClothGravity)");
+		// SJE r_meshClothWhirl (1 = on, 0 = off): in a turn that goes on round and round the cape is not flung out level (tr_meshcloth.cpp)
+		// (2 = only the frame 'damp' works in goes round with him; the cloth feels all of the whirl)
+		whl = ri.Cvar_Get("r_meshClothWhirl", "1", CVAR_ARCHIVE_ND, "Mesh cloth: in a turn that goes on round and round (circling, a spin) the cape streams as in a run and is not flung out level (0 = off, 2 = it feels all of the whirl, only the damping goes round with its wearer)");
+		// SJE r_meshClothTurnCalm (1 = on, 0 = off): the cape is not whipped round with fast turns of the shoulders (tr_meshcloth.cpp)
+		// (2 = on, with the turn measured as before: a tremble of the shoulders counts as a turn - for comparison)
+		tcm = ri.Cvar_Get("r_meshClothTurnCalm", "1", CVAR_ARCHIVE_ND, "Mesh cloth: while the shoulders turn faster than a person can, the cape is not whipped round after them (0 = off, 2 = older measure for comparison)");
+		// SJE r_meshClothDampLag (seconds; 0 = off): the frame 'damp' works in follows the character's speed with a lag (tr_meshcloth.cpp)
+		dl = ri.Cvar_Get("r_meshClothDampLag", "0.3", CVAR_ARCHIVE_ND, "Mesh cloth: seconds the frame 'damp' works in lags the character's speed: the cape swings out after a stop (0 = off)");
+		// SJE r_meshClothSpringPose (1 = on, 0 = off): 'spring' lets go when the pose itself jumps (tr_meshcloth.cpp)
+		spo = ri.Cvar_Get("r_meshClothSpringPose", "1", CVAR_ARCHIVE_ND, "Mesh cloth: 'spring' lets go when the pose itself jumps, the cape swings on from where it is (0 = off)");
+		tu = ri.Cvar_Get("r_meshClothTurbulence", "1", CVAR_ARCHIVE_ND, "Mesh cloth: eddies in the air round a character (0 = one even stream, as before)");
+		ba = ri.Cvar_Get("r_meshClothBladeAir", "1", CVAR_ARCHIVE_ND, "Mesh cloth: a lit blade swung near cloth drags the air along (0 = off)");
+		le = ri.Cvar_Get("r_meshClothLee", "1", CVAR_ARCHIVE_ND, "Mesh cloth: walls and crates upwind shelter cloth from the weather wind (0 = off)");
+	}
+	prm.turb = tu ? tu->value : 0.0f;
+	prm.dampLag = dl ? dl->value : 0.0f;
+	prm.springPose = spo ? spo->value : 0.0f;
+	prm.turnCalm = tcm ? tcm->value : 0.0f;
+	prm.whirl = whl ? whl->value : 0.0f;
+	prm.airPhys = aph ? aph->value : 0.0f;
+	if (prm.airPhys > 0.0f) {
+		// SJE r_meshClothAirPhys: the cloth falls as everything in the game does - the air model is made for that (how fast
+		// a sheet sinks is root(gravity x weight / drag)). r_meshClothGravity (700) belongs to the older air rules.
+		const float gg = ri.Cvar_VariableValue("g_gravity");
+		prm.gravity = gg > 0.0f ? gg : 800.0f;	// (a client that cannot read the server's value: the game's usual 800)
+	}
+	prm.airFree = af ? af->value : 0.0f;
+	prm.tailSide = ts ? ts->value : 0.0f;
+	prm.bladeAir = ba ? ba->value : 0.0f;
+	prm.numBladeAir = 0;
+	if (prm.bladeAir > 0.0f)
+	{
+		for (int i = 0; i < numBlades && prm.numBladeAir < MC_MAX_BLADE_AIR; i++)
+		{
+			const int k = prm.numBladeAir;
+			if (MC_BladeMotion(tr.frameCount, timeMs, blades[i].a, blades[i].b, prm.bladeVA[k], prm.bladeVB[k]))
+			{
+				VectorCopy(blades[i].a, prm.bladeA[k]);
+				VectorCopy(blades[i].b, prm.bladeB[k]);
+				prm.numBladeAir++;
+			}
+		}
+	}
+	float lee = 1.0f;
+	if (le && le->integer && tr.world && !(s_mcRefdef->rdflags & RDF_NOWORLDMODEL) && (prm.wind[0] != 0.0f || prm.wind[1] != 0.0f)
+		&& !(prm.lodFar > 0.0f && prm.lodDist > prm.lodFar))
+	{
+		lee = MC_WindLee(key, timeMs, ent->e.origin, prm.wind, MC_LeeTrace);
+		VectorScale(prm.wind, lee, prm.wind);
+	}
+}
+
 // the floor under a character, for its cloth: one trace per character per frame
 static void MC_FloorUnder(const trRefEntity_t* ent, const int timeMs, mcParams_t& prm)
 {
@@ -5247,6 +5339,7 @@ static bool RB_MeshClothPrepare(CBoneCache* bones, const mdxmSurface_t* surface,
 	MC_FloorUnder(ent, timeMs, prm);
 	cp.numOthers = MC_OthersNear(ent, cp.others);
 	cp.numBlades = MC_BladesNear(ent, cp.blades);
+	MC_AirAround(ent, bones, timeMs, prm, cp.blades, cp.numBlades);	// SJE r_meshClothTurbulence / BladeAir / Lee
 	cp.numHeld = MC_HeldShapes(ent, cp.axis, cp.held);
 	cp.numCarried = MC_CarriedShapes(s_mcRefdef, ent, cp.carried);	// SJE r_meshClothCarried
 	// r_meshClothBodyFit (KatarnEngine): only for characters at full cloth detail (inside r_meshClothLodNear)

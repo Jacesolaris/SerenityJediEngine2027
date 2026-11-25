@@ -3554,7 +3554,9 @@ qboolean client_userinfo_changed(const int clientNum)
 	}
 
 	s = Info_ValueForKey(userinfo, "snaps");
-	if (atoi(s) < sv_fps.integer)
+	// only when the server goes by the client's snaps (sv_snapsPolicy 0, or 2 within sv_snapsMin / Max); with policy 1
+	// (the default) every client gets sv_fps snapshots whatever his snaps; bots have no snaps to set
+	if (atoi(s) < sv_fps.integer && trap->Cvar_VariableIntegerValue("sv_snapsPolicy") != 1 && !(ent->r.svFlags & SVF_BOT))
 	{
 		trap->SendServerCommand(clientNum, va(
 			"print \"" S_COLOR_YELLOW

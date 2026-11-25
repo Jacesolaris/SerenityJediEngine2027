@@ -553,6 +553,36 @@ void G_InitGame(int levelTime, int randomSeed, int restart)
 		level.sp_map = qtrue;
 	}
 
+	// Missions only in GT_SINGLE_PLAYER (2026-11-25, Jace): an SP mission map in any other gametype (an edited
+	// missions.arena, a devmap from the console...) is not supported and can crash, so the gametype is set to
+	// Missions and the map is loaded again. (g_missionGametypeFix: the map this was tried for, so it can't loop.)
+	{
+		const qboolean academy = !Q_stricmpn(sje_mapname, "academy", 7) && sje_mapname[7] >= '1' && sje_mapname[7] <= '6'
+			&& !sje_mapname[8] ? qtrue : qfalse;
+		char tried[MAX_QPATH];
+
+		trap->Cvar_VariableStringBuffer("g_missionGametypeFix", tried, sizeof tried);
+		if (level.gametype != GT_SINGLE_PLAYER && (level.sp_map || G_IsOutcastSPMap(sje_mapname) || academy))
+		{
+			if (Q_stricmp(tried, sje_mapname))
+			{
+				trap->Print(S_COLOR_YELLOW "%s is a mission map: gametype set to Missions, loading it again\n", sje_mapname);
+				trap->Cvar_Set("g_missionGametypeFix", sje_mapname);
+				trap->Cvar_Set("g_gametype", va("%i", GT_SINGLE_PLAYER));
+				trap->SendConsoleCommand(EXEC_APPEND, va("%s %s\n",
+					trap->Cvar_VariableIntegerValue("sv_cheats") ? "devmap" : "map", sje_mapname));
+			}
+			else
+			{
+				trap->Print(S_COLOR_RED "%s is a mission map, but the gametype could not be set to Missions\n", sje_mapname);
+			}
+		}
+		else if (tried[0])
+		{
+			trap->Cvar_Set("g_missionGametypeFix", "");
+		}
+	}
+
 	if (G_IsOutcastSPMap(sje_mapname))
 	{
 		level.is_outcast_map = qtrue;

@@ -121,7 +121,6 @@ qboolean G_BoundsOverlap(const vec3_t mins1, const vec3_t maxs1, const vec3_t mi
 	return qtrue;
 }
 
-#ifdef SP_GAME
 void NPC_ReachedGoal(void)
 {
 	NPC_ClearGoal();
@@ -131,31 +130,15 @@ void NPC_ReachedGoal(void)
 	NPCS.NPCInfo->aiFlags &= ~NPCAI_MOVING;
 	NPCS.ucmd.forwardmove = 0;
 	//Return that the goal was reached
-	Q3_TaskIDComplete(NPCS.NPC, TID_MOVE_NAV);
+	SHR_TaskIDComplete(NPCS.NPC, TID_MOVE_NAV);
 	//MCG - End
 }
-#else // MP keeps its own version of this function
-void NPC_ReachedGoal(void)
-{
-	//	Debug_NPCPrintf( NPC, d_npcai, DEBUG_LEVEL_INFO, "UpdateGoal: reached goal entity\n" );
-	NPC_ClearGoal();
-	NPCS.NPCInfo->goalTime = level.time;
-
-	//MCG - Begin
-	NPCS.NPCInfo->aiFlags &= ~NPCAI_MOVING;
-	NPCS.ucmd.forwardmove = 0;
-	//Return that the goal was reached
-	trap->ICARUS_TaskIDComplete((sharedEntity_t*)NPCS.NPC, TID_MOVE_NAV);
-	//MCG - End
-}
-#endif
 
 /*
 ReachedGoal
 
 id removed checks against waypoints and is now checking surfaces
 */
-#ifdef SP_GAME
 static qboolean ReachedGoal(gentity_t* goal)
 {
 	if (NPCS.NPCInfo->aiFlags & NPCAI_TOUCHED_GOAL)
@@ -163,19 +146,8 @@ static qboolean ReachedGoal(gentity_t* goal)
 		NPCS.NPCInfo->aiFlags &= ~NPCAI_TOUCHED_GOAL;
 		return qtrue;
 	}
-	return (qboolean)(STEER::Reached(NPCS.NPC, goal, NPCS.NPCInfo->goalRadius, FlyingCreature(NPCS.NPC) != qfalse));
+	return (qboolean)SHR_ReachedEnt(NPCS.NPC, goal, NPCS.NPCInfo->goalRadius, FlyingCreature(NPCS.NPC));
 }
-#else // MP keeps its own version of this function
-static qboolean ReachedGoal(gentity_t* goal)
-{
-	if (NPCS.NPCInfo->aiFlags & NPCAI_TOUCHED_GOAL)
-	{
-		NPCS.NPCInfo->aiFlags &= ~NPCAI_TOUCHED_GOAL;
-		return qtrue;
-	}
-	return NAV_HitNavGoal(NPCS.NPC->r.currentOrigin, NPCS.NPC->r.mins, NPCS.NPC->r.maxs, goal->r.currentOrigin, NPCS.NPCInfo->goalRadius, FlyingCreature(NPCS.NPC));
-}
-#endif
 
 /*
 static gentity_t *UpdateGoal( void )

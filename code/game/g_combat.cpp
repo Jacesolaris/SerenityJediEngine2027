@@ -3394,6 +3394,16 @@ qboolean G_DoDismemberment(gentity_t* self, vec3_t point, const int mod, const i
 			}
 			return qfalse;
 		}
+		// (MD 9 cce9d21, DH 2026-11-23) Saber Slice: the slice does not wait for a hit location. With saber damage Low /
+		// Medium the saber code only passes one on when the classic test lets the blow through (the NPC's dismember chances,
+		// the blade square to the limb's cap) - mostly it does not, the blow arrived here with HL_NONE and neither a slice
+		// nor a limb cut was made. The slice cuts where the blade touched (G_SaberSliceSetHit, set just before the
+		// damage), so such a blow goes straight to it.
+		if (hit_loc == HL_NONE && g_dismemberment->integer > 0 && G_SaberSliceCvar()->integer && self->client
+			&& !s_wampaArmCut && !G_SaberSliceExcluded(self))
+		{
+			return G_SaberSlice(self, hit_loc);
+		}
 		if (g_standard_humanoid(self)
 			&& (force || g_dismemberProbabilities->value > 0.0f))
 		{
@@ -6580,8 +6590,11 @@ void player_die(gentity_t* self, gentity_t* inflictor, gentity_t* attacker, cons
 	// an own skeleton (SBD, droids, creatures) never gets DAMAGE_DISMEMBER from the saber code (no humanoid hit
 	// surfaces), so a killing saber blow on one always goes to the saber cut (DH 2026-10-31)
 	// not a wampa / rancor that died holding a victim: it only loses the arm (G_Damage), not also the upper body here
+	// (MD 9 cce9d21) ... and with Saber Slice on every killing saber blow does: at saber damage Low the blow carries
+	// DAMAGE_DISMEMBER only when the classic limb test passed (see G_DoDismemberment)
 	if (self != s_noSliceDying
-		&& (dflags & DAMAGE_DISMEMBER || (means_of_death == MOD_SABER && (!g_standard_humanoid(self) || G_SaberSliceNoHitSurfaces(self))))
+		&& (dflags & DAMAGE_DISMEMBER || (means_of_death == MOD_SABER && (!g_standard_humanoid(self) || G_SaberSliceNoHitSurfaces(self)
+			|| (g_dismemberment->integer > 0 && G_SaberSliceCvar()->integer))))
 		&& G_DoDismemberment(self, self->pos1, means_of_death, hit_loc)
 		&& !special_anim)
 	{

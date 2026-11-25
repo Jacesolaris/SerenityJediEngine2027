@@ -554,7 +554,7 @@ static void Sniper_FaceEnemy(void)
 
 		// Get muzzle position
 		AngleVectors(NPCS.NPC->client->ps.viewangles, forward, right, up);
-		calcmuzzlePoint(NPCS.NPC, forward, muzzle, 0);
+		SHR_CalcMuzzlePoint(NPCS.NPC, forward, right, muzzle, 0);
 
 		// Get enemy origin
 		CalcEntitySpot(NPCS.NPC->enemy, SPOT_ORIGIN, target);
@@ -837,7 +837,7 @@ static void NPC_BSSniper_Attack(void)
 			vec3_t fwd, right, up, muzzle, end;
 			trace_t tr;
 			AngleVectors(NPCS.NPC->client->ps.viewangles, fwd, right, up);
-			calcmuzzlePoint(NPCS.NPC, fwd, muzzle, 0);
+			SHR_CalcMuzzlePoint(NPCS.NPC, fwd, right, muzzle, 0);
 			VectorMA(muzzle, 8192, fwd, end);
 #ifdef SP_GAME
 			gi.trace(&tr, muzzle, NULL, NULL, end, NPCS.NPC->s.number, MASK_SHOT, G2_RETURNONHIT, 0);

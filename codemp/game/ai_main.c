@@ -12273,12 +12273,18 @@ bot_aimBallistic 1: lead by the shot's flight time: each bot learns the speed of
 	that time (twice), falling ones by gravity down to the floor below them; splash shots go to the feet of a target
 	on the ground; shots that drop (thermals, the repeater's alt) are aimed up by their drop. Until a bot has seen his
 	shot, the old lead is used. Instant hit weapons are aimed as before.
+bot_aimHold 1: a bot with a gun pulls the trigger only when his view points at the spot he is aiming for (his lead and
+	his skill's wobble included) closely enough to hit: the sideways miss at the target's range within a body's half
+	width (16), plus 6 a skill level below 5, plus 32 for splash weapons. Before, any target within 30 degrees of his
+	view (60 closer than 128) was fired at while he was still turning to it. Charging weapons are let be (a charge
+	fires when let go), and a target closer than 48 is always fired at. 0 = as before.
 ==================
 */
 vmCvar_t bot_jumpCheck;
 vmCvar_t bot_jumpSafeDrop;
 vmCvar_t bot_movers;
 vmCvar_t bot_aimBallistic;
+vmCvar_t bot_aimHold;
 
 #define BOT_JC_STEP_MS		50
 #define BOT_JC_MAX_MS		2500
@@ -13057,6 +13063,52 @@ static int should_secondary_fire(const bot_state_t* bs)
 	return 0;
 }
 
+// bot_aimHold: qtrue when his view is close enough to his aim (bs->goalAngles) for the shot to hit
+static qboolean bot_aim_on_target(const bot_state_t* bs)
+{
+	vec3_t fwd, want;
+
+	if (!bot_aimHold.integer || !bs->currentEnemy
+		|| bs->cur_ps.weaponstate == WEAPON_CHARGING || bs->cur_ps.weaponstate == WEAPON_CHARGING_ALT)
+	{
+		return qtrue; // a held charge fires when let go: never cut it short
+	}
+	const float dist = bs->frame_Enemy_Len;
+	if (dist < 48.0f)
+	{
+		return qtrue;
+	}
+	AngleVectors(bs->viewangles, fwd, NULL, NULL);
+	AngleVectors(bs->goalAngles, want, NULL, NULL);
+	float dot = DotProduct(fwd, want);
+	if (dot <= 0.0f)
+	{
+		return qfalse;
+	}
+	if (dot > 1.0f)
+	{
+		dot = 1.0f;
+	}
+	const float miss = dist * sqrtf(1.0f - dot * dot) / dot; // sideways, at the target's range
+	float skill = bs->settings.skill;
+	if (skill < 1.0f)
+	{
+		skill = 1.0f;
+	}
+	else if (skill > 5.0f)
+	{
+		skill = 5.0f;
+	}
+	float allowed = 16.0f + (5.0f - skill) * 6.0f;
+	const int weapon = bs->cur_ps.weapon;
+	if (weapon == WP_ROCKET_LAUNCHER || weapon == WP_THERMAL || weapon == WP_CONCUSSION
+		|| (weapon == WP_FLECHETTE && bs->doAltAttack) || (weapon == WP_REPEATER && bs->doAltAttack))
+	{
+		allowed += 32.0f; // splash
+	}
+	return miss <= allowed ? qtrue : qfalse;
+}
+
 static int combat_bot_ai(bot_state_t* bs)
 {
 	vec3_t eorg;
@@ -13141,7 +13193,7 @@ static int combat_bot_ai(bot_state_t* bs)
 			fovcheck *= 2.0f;
 		}
 
-		if (in_field_of_vision(bs->viewangles, fovcheck, a))
+		if (in_field_of_vision(bs->viewangles, fovcheck, a) && bot_aim_on_target(bs)) // (bot_aimHold)
 		{
 			if (bs->cur_ps.weapon == WP_THERMAL)
 			{
@@ -22212,6 +22264,7 @@ int bot_ai_startframe(const int time)
 	trap->Cvar_Update(&bot_focusFire);
 		trap->Cvar_Update(&bot_movers);
 		trap->Cvar_Update(&bot_aimBallistic);
+		trap->Cvar_Update(&bot_aimHold);
 		trap->Cvar_Update(&bot_idlewalk);
 		trap->Cvar_Update(&bot_vehicles);
 #ifndef FINAL_BUILD
@@ -22403,6 +22456,7 @@ int bot_ai_setup(const int restart)
 	trap->Cvar_Register(&bot_focusFire, "bot_focusFire", "0", CVAR_ARCHIVE);	// bots prefer their squad leader's enemy
 	trap->Cvar_Register(&bot_movers, "bot_movers", "1", CVAR_ARCHIVE);	// bots wait for lifts and ride them, and let jump pads fly them
 	trap->Cvar_Register(&bot_aimBallistic, "bot_aimBallistic", "1", CVAR_ARCHIVE);	// bots lead by their shot's flight time
+	trap->Cvar_Register(&bot_aimHold, "bot_aimHold", "1", CVAR_ARCHIVE);	// bots fire only when their gun points at the target
 	trap->Cvar_Register(&bot_idlewalk, "bot_idlewalk", "1", CVAR_ARCHIVE);
 	trap->Cvar_Register(&bot_vehicles, "bot_vehicles", "1", CVAR_ARCHIVE);
 	trap->Cvar_Register(&bot_pvstype, "bot_pvstype", "1", CVAR_CHEAT);

@@ -83,11 +83,16 @@ extern npcSharedStatic_t NPCS;
 
 #define SHR_HasWeapon(ps, w)	((ps).weapons[(w)])
 #define SHR_SetShocked(ent, until)	do { (ent)->s.powerups |= 1 << PW_SHOCKED; (ent)->client->ps.powerups[PW_SHOCKED] = (until); } while (0)
-#define SHR_CalcMuzzlePoint(ent, fwd, right, muzzle, lead)	CalcMuzzlePoint((ent), (fwd), (muzzle), (lead))
+#define SHR_CalcMuzzlePoint(ent, fwd, right, muzzle, lead)	calcmuzzlePoint((ent), (fwd), (muzzle), (lead))	// SJE SP: calcmuzzlePoint(ent, fwd, muzzle, lead)
 
 // navigation and scripts (SP: game-side navigator and ICARUS; MP: engine)
 #define SHR_ReachedEnt(actor, target, radius, flying)	STEER::Reached((actor), (target), (radius), !!(flying))
 #define SHR_TaskIDPending(ent, tid)						Q3_TaskIDPending((ent), (tid))
+#define SHR_TaskIDComplete(ent, tid)					Q3_TaskIDComplete((ent), (tid))
+#define SHR_TEAM_PLAYER								TEAM_PLAYER
+#define SHR_NPCTALK_DEBUG							(d_npctalk->integer)	// debug print of NPC combat chatter
+#define SHR_Printf									gi.Printf
+#define SHR_inPVS(p1, p2)							gi.inPVS((p1), (p2))
 
 #define SHR_NAV_GetLastMove(info)		NAV_GetLastMove(info)
 #define SHR_TryJumpEnt(goal, xy, z)		NPC_TryJump((goal), (xy), (z))
@@ -199,6 +204,11 @@ extern int PM_AnimLength(int index, animNumber_t anim);
 #define SHR_ReachedEnt(actor, target, radius, flying) \
 	NAV_HitNavGoal((actor)->r.currentOrigin, (actor)->r.mins, (actor)->r.maxs, (target)->r.currentOrigin, (radius), (flying))
 #define SHR_TaskIDPending(ent, tid)	trap->ICARUS_TaskIDPending((sharedEntity_t*)(ent), (tid))
+#define SHR_TaskIDComplete(ent, tid)	trap->ICARUS_TaskIDComplete((sharedEntity_t*)(ent), (tid))
+#define SHR_TEAM_PLAYER				NPCTEAM_PLAYER
+#define SHR_NPCTALK_DEBUG			0	// MP has no d_npctalk cvar
+#define SHR_Printf					Com_Printf
+#define SHR_inPVS(p1, p2)			trap->InPVS((p1), (p2))
 
 #define SHR_NAV_GetLastMove(info)		NAV_GetLastMove(&(info))
 #define SHR_TryJumpEnt(goal, xy, z)		NPC_TryJump_Gent((goal), (xy), (z))

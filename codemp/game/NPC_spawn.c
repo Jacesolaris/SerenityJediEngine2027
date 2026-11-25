@@ -2492,8 +2492,8 @@ g_allowNPC 0: only the NPCs the level needs spawn. Needed: a spawner whose killi
 target / target2: kill objectives, door counters, the mission waves of ext_data/mission_ents), or whose name is listed
 for the map in ext_data/mission_npcs.dat (its NPC_targetname, or "@" + its targetname when it has none: the map's scripts
 affect, kill, remove, use it or make it an enemy / leader / view target; built from the campaign scripts, DH may add
-names). The old list of NPC types stays allowed too. g_allowNPC 1: every NPC of the level, and the per-map crash bans
-below no longer remove an NPC the level needs.
+names). The old list of NPC types stays allowed too. g_allowNPC 1: every NPC of the level (the old per-map crash bans
+were removed 2026-11-25).
 -------------------------
 */
 #define MISSION_NPCS_FILE		"ext_data/mission_npcs.dat"
@@ -2715,93 +2715,8 @@ void SP_NPC_spawner(gentity_t* self)
 			self->nextthink = level.time;
 			return;
 		}
-		//restrictions for stability if using devmap or allowwnpc is on
-		if (!needed && level.is_t1_fatal_map == qtrue &&
-			(Q_stricmp(self->NPC_type, "ImpWorker") == 0 ||
-				Q_stricmp(self->NPC_type, "ImpWorker2") == 0 ||
-				Q_stricmp(self->NPC_type, "ImpWorker3") == 0))
-		{
-			// t1_fatal map will not load these npcs to avoid crashing clients
-			self->think = G_FreeEntity;
-			self->nextthink = level.time;
-			return;
-		}
-
-		if (!needed && level.is_t3_hevil_map == qtrue &&
-			Q_stricmp(self->NPC_type, "Noghri") == 0)
-		{
-			// t3_hevil map will not load these npcs to avoid crashing clients
-			self->think = G_FreeEntity;
-			self->nextthink = level.time;
-			return;
-		}
-
-		if (!needed && level.is_vjun3_map == qtrue &&
-			(Q_stricmp(self->NPC_type, "protocol_imp") == 0 ||
-				Q_stricmp(self->NPC_type, "r2d2_imp") == 0))
-		{
-			// vjun3 map will not load these npcs to avoid exceeding npc register limit and crashing clients
-			self->think = G_FreeEntity;
-			self->nextthink = level.time;
-			return;
-		}
-
-		if (!needed && level.is_t3_rift_map == qtrue &&
-			(Q_stricmp(self->NPC_type, "reborn_dual") == 0 ||
-				Q_stricmp(self->NPC_type, "reborn_dual2") == 0 ||
-				Q_stricmp(self->NPC_type, "RebornMasterDual") == 0 ||
-				Q_stricmp(self->NPC_type, "cultist_grip") == 0 ||
-				Q_stricmp(self->NPC_type, "human_merc_flc") == 0 ||
-				Q_stricmp(self->NPC_type, "human_merc_cnc") == 0 ||
-				Q_stricmp(self->NPC_type, "human_merc") == 0))
-		{
-			// t3_rift map will not load these npcs to avoid crashing clients
-			self->think = G_FreeEntity;
-			self->nextthink = level.time;
-			return;
-		}
-
-		if (!needed && level.is_t1_rail_map == qtrue &&
-			(Q_stricmp(self->NPC_type, "Reborn") == 0 ||
-				Q_stricmp(self->NPC_type, "cultist_saber") == 0 ||
-				Q_stricmp(self->NPC_type, "human_merc") == 0 ||
-				Q_stricmp(self->NPC_type, "human_merc2") == 0))
-		{
-			// map will not load these npcs to avoid  crashing clients
-			self->think = G_FreeEntity;
-			self->nextthink = level.time;
-			return;
-		}
-
-		if (!needed && level.is_t1_sour_map == qtrue &&
-			Q_stricmp(self->NPC_type, "chewie") == 0)
-		{
-			// map will not load these npcs to avoid  crashing clients
-			self->think = G_FreeEntity;
-			self->nextthink = level.time;
-			return;
-		}
-
-		if (!needed && level.is_t2_rouge_map == qtrue &&
-			(Q_stricmp(self->NPC_type, "jan") == 0 ||
-				Q_stricmp(self->NPC_type, "human_merc_bow") == 0))
-		{
-			// map will not load these npcs to avoid  crashing clients
-			self->think = G_FreeEntity;
-			self->nextthink = level.time;
-			return;
-		}
-
-		if (!needed && level.is_t3_byss_map == qtrue &&
-			(Q_stricmp(self->NPC_type, "mark1") == 0 ||
-				Q_stricmp(self->NPC_type, "mark2") == 0 ||
-				Q_stricmp(self->NPC_type, "sentry") == 0))
-		{
-			// map will not load these npcs to avoid  crashing clients
-			self->think = G_FreeEntity;
-			self->nextthink = level.time;
-			return;
-		}
+		// (2026-11-25, Jace: the per-map NPC bans here - t1_fatal, t3_hevil, vjun3, t3_rift, t1_rail, t1_sour, t2_rouge,
+		// t3_byss - were old crash workarounds for problems that no longer exist: gone, every NPC of the map spawns)
 	}
 
 	if (!self->fullName || !self->fullName[0])

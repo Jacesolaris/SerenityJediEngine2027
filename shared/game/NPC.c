@@ -454,13 +454,373 @@ Effect to be applied when ditching the corpse
 ----------------------------------------
 */
 
-static void NPC_RemoveBodyEffect()
+#else // MP game
+
+//
+// NPC.cpp - generic functions
+//
+#include "game/b_local.h"
+#include "game/anims.h"
+#include "game/say.h"
+#include "icarus/Q3_Interface.h"
+
+extern vec3_t playerMins;
+extern vec3_t playerMaxs;
+extern void G_SoundOnEnt(gentity_t* ent, soundChannel_t channel, const char* sound_path);
+extern void NPC_BSNoClip(void);
+extern void G_AddVoiceEvent(const gentity_t* self, int event, int speak_debounce_time);
+extern void NPC_ApplyRoff(void);
+extern void NPC_TempLookTarget(const gentity_t* self, int lookEntNum, int minLookTime, int maxLookTime);
+extern qboolean NPC_CheckLookTarget(const gentity_t* self);
+extern void NPC_SetLookTarget(const gentity_t* self, int entNum, int clear_time);
+extern void Mark1_dying(gentity_t* self);
+extern void NPC_BSCinematic(void);
+extern int GetTime(int lastTime);
+extern void G_CheckCharmed(gentity_t* self);
+extern qboolean Jedi_CultistDestroyer(const gentity_t* self);
+extern void NPC_BSGM_Default(void);
+extern qboolean Boba_Flying(const gentity_t* self);
+extern void Boba_Update(void);
+extern qboolean Boba_Flee(void);
+extern qboolean Boba_TacticsLocked(void);
+
+//Local Variables
+npcStatic_t NPCS;
+gNPC_t* NPCInfo;
+gclient_t* client;
+usercmd_t ucmd;
+visibility_t enemyVisibility;
+
+extern vmCvar_t g_saberRealisticCombat;
+
+void NPC_SetAnim(gentity_t* ent, int setAnimParts, int anim, int setAnimFlags);
+static bState_t G_CurrentBState(gNPC_t* gNPC);
+void pitch_roll_for_slope(gentity_t* forwhom, vec3_t pass_slope);
+extern void GM_Dying(gentity_t* self);
+
+extern int eventClearTime;
+
+extern void NPC_BehaviorSet_HazardTroop(int b_state);
+
+extern void npc_check_speak(gentity_t* speaker_npc); // NPC_AI_Stormtrooper.c (SP: idle combat chatter, g_Advancedaitalk)
+qboolean NPC_IsTrooper(const gentity_t* self)
 {
-	if (!NPC || !NPC->client || NPC->s.eFlags & EF_NODRAW)
+	return self && self->NPC && self->s.weapon && !!(self->NPC->scriptFlags & SCF_NO_GROUPS);
+}
+
+// SP NPC.cpp: the big classes (the SP Jedi AI won't make them do flips or roll dodges)
+qboolean NPC_IsOversized(const gentity_t* self)
+{
+	switch (self->client->NPC_class)
+	{
+	case CLASS_WOOKIE:
+	case CLASS_SBD:
+	case CLASS_ASSASSIN_DROID:
+	case CLASS_HAZARD_TROOPER:
+	case CLASS_ROCKETTROOPER:
+	case CLASS_SABER_DROID:
+	case CLASS_VADER:
+		return qtrue;
+	default:
+		break;
+	}
+
+	return qfalse;
+}
+
+static void CorpsePhysics(gentity_t* self)
+{
+	// run the bot through the server like it was a real client
+	memset(&NPCS.ucmd, 0, sizeof NPCS.ucmd);
+	ClientThink(self->s.number, &NPCS.ucmd);
+	VectorCopy(self->s.origin, self->s.origin2);
+
+	if (self->client->NPC_class == CLASS_GALAKMECH)
+	{
+		GM_Dying(self);
+	}
+
+	/*if (self->client->pers.botclass == BCLASS_GALAKMECH)
+	{
+		GM_Dying(self);
+	}*/
+	//FIXME: match my pitch and roll for the slope of my groundPlane
+	if (self->client->ps.groundEntityNum != ENTITYNUM_NONE && !(self->s.eFlags & EF_DISINTEGRATION))
+	{
+		//on the ground
+		//FIXME: check 4 corners
+		pitch_roll_for_slope(self, NULL);
+	}
+
+	if (eventClearTime == level.time + ALERT_CLEAR_TIME)
+	{
+		//events were just cleared out so add me again
+		if (!(self->client->ps.eFlags & EF_NODRAW))
+		{
+			AddSightEvent(self->enemy, self->r.currentOrigin, 384, AEL_DISCOVERED, 0.0f);
+		}
+	}
+
+	if (level.time - self->s.time > 3000)
+	{
+		//been dead for 3 seconds
+		if (g_dismember.integer < 11381138 && !g_saberRealisticCombat.integer)
+		{
+			//can't be dismembered once dead
+			if (self->client->NPC_class != CLASS_PROTOCOL)
+			{
+				//self->client->dismembered = qtrue;
+			}
+		}
+	}
+
+	if (level.time - self->s.time > 1000)
+		//if (self->client->respawnTime < (level.time+ 3000))
+	{
+		//don't turn "nonsolid" until about 1 second after actual death
+		if (self->client->NPC_class != CLASS_MARK1 && self->client->NPC_class != CLASS_INTERROGATOR)
+			// The Mark1 & Interrogator stays solid.
+		{
+			self->r.contents = CONTENTS_CORPSE;
+		}
+
+		if (self->message)
+		{
+			self->r.contents |= CONTENTS_TRIGGER;
+		}
+	}
+}
+
+/*
+----------------------------------------
+NPC_RemoveBody
+
+Determines when it's ok to ditch the corpse
+----------------------------------------
+*/
+#define REMOVE_DISTANCE		128
+#define REMOVE_DISTANCE_SQR (REMOVE_DISTANCE * REMOVE_DISTANCE)
+
+extern float DistancetoClosestPlayer(vec3_t position, int enemy_team);
+extern qboolean InPlayersFOV(vec3_t position, int enemy_team, int h_fov, int v_fov, qboolean check_clear_los);
+
+qboolean G_OkayToRemoveCorpse(gentity_t* self)
+{
+	//racc - check to see if it's ok to remove this body.
+	//if we're still on a vehicle, we won't remove ourselves until we get ejected
+	if (self->client && self->client->NPC_class != CLASS_VEHICLE && self->s.m_iVehicleNum != 0)
+	{
+		Vehicle_t* p_veh = g_entities[self->s.m_iVehicleNum].m_pVehicle;
+		if (p_veh)
+		{
+			// eject this corpse (as SP does), not the pilot: a dead passenger/droid ejected the live pilot,
+			// and with no pilot it passed NULL
+			if (!p_veh->m_pVehicleInfo->Eject(p_veh, (bgEntity_t*)self, qtrue))
+			{
+				//dammit, still can't get off the vehicle...
+				return qfalse;
+			}
+		}
+		else
+		{
+			//racc - this is bad.  We're on a vehicle, but the vehicle doesn't exist.
+			//assert(0);
+#ifndef FINAL_BUILD
+			Com_Printf(S_COLOR_RED"ERROR: Dead pilot's vehicle removed while corpse was riding it (pilot: %s)???\n", self->targetname);
+#endif
+		}
+	}
+
+	if (self->message)
+	{
+		//I still have a key
+		return qfalse;
+	}
+
+	if (trap->ICARUS_IsRunning(self->s.number))
+	{
+		//still running a script
+		return qfalse;
+	}
+
+	if (self->activator
+		&& self->activator->client
+		&& self->activator->client->ps.eFlags2 & EF2_HELD_BY_MONSTER)
+	{
+		//still holding a victim?
+		return qfalse;
+	}
+
+	if (self->client
+		&& self->client->ps.eFlags2 & EF2_HELD_BY_MONSTER)
+	{
+		//being held by a creature
+		return qfalse;
+	}
+
+	if (self->client
+		&& self->client->ps.heldByClient)
+	{
+		//being dragged
+		return qfalse;
+	}
+
+	//okay, well okay to remove us...?
+	return qtrue;
+}
+
+void NPC_RemoveBody(gentity_t* ent)
+{
+	ent->nextthink = level.time + FRAMETIME / 2;
+
+	//run physics at 20fps
+	CorpsePhysics(ent);
+
+	if (ent->NPC->nextBStateThink <= level.time)
+	{
+		//racc - run logic at 20fps
+		trap->ICARUS_MaintainTaskManager(ent->s.number);
+		ent->NPC->nextBStateThink = level.time + FRAMETIME;
+
+		if (!G_OkayToRemoveCorpse(ent))
+		{
+			return;
+		}
+		if (ent->client->NPC_class == CLASS_MARK1)
+		{
+			Mark1_dying(ent);
+		}
+
+		// Since these blow up, remove the bounding box.
+		if (ent->client->NPC_class == CLASS_REMOTE
+			|| ent->client->NPC_class == CLASS_SENTRY
+			|| ent->client->NPC_class == CLASS_PROBE
+			|| ent->client->NPC_class == CLASS_INTERROGATOR
+			|| ent->client->NPC_class == CLASS_PROBE
+			|| ent->client->NPC_class == CLASS_MARK2)
+		{
+			G_FreeEntity(ent);
+			return;
+		}
+		ent->r.maxs[2] = ent->client->renderInfo.eyePoint[2] - ent->r.currentOrigin[2] + 4;
+		if (ent->r.maxs[2] < -8)
+		{
+			ent->r.maxs[2] = -8;
+		}
+
+		if (ent->NPC->aiFlags & NPCAI_HEAL_ROSH)
+		{
+			//kothos twins' bodies are never removed
+			return;
+		}
+
+		if (ent->client->NPC_class == CLASS_GALAKMECH)
+		{
+			//never disappears
+			return;
+		}
+
+		//if (self->client->pers.botclass == BCLASS_GALAKMECH)
+		//{//never disappears
+		//	return;
+		//}
+		if (ent->NPC && ent->NPC->timeOfDeath <= level.time)
+		{
+			ent->NPC->timeOfDeath = level.time + 1000;
+			if (ent->client->playerTeam == NPCTEAM_ENEMY || ent->client->NPC_class == CLASS_PROTOCOL)
+			{
+				ent->nextthink = level.time + FRAMETIME; // try back in a second
+
+				if (DistancetoClosestPlayer(ent->r.currentOrigin, -1) <= REMOVE_DISTANCE)
+				{
+					return;
+				}
+
+				if (InPlayersFOV(ent->r.currentOrigin, -1, 110, 90, qtrue))
+				{
+					//a player sees the body, delay removal.
+					return;
+				}
+			}
+			//if ( self->enemy )
+			{
+				if (ent->client && ent->client->ps.saberEntityNum > 0 && ent->client->ps.saberEntityNum <
+					ENTITYNUM_WORLD)
+				{
+					gentity_t* saberent = &g_entities[ent->client->ps.saberEntityNum];
+					if (saberent)
+					{
+						G_FreeEntity(saberent);
+					}
+				}
+				G_FreeEntity(ent);
+			}
+		}
+	}
+}
+
+/*
+----------------------------------------
+NPC_RemoveBody
+
+Determines when it's ok to ditch the corpse
+----------------------------------------
+*/
+
+static int BodyRemovalPadTime(const gentity_t* ent)
+{
+	int time = 0;
+
+	if (!ent || !ent->client)
+		return 0;
+
+	// team no longer indicates species/race, so in this case we'd use NPC_class, but
+	switch (ent->client->NPC_class)
+	{
+	case CLASS_MOUSE:
+	case CLASS_GONK:
+	case CLASS_R2D2:
+	case CLASS_R5D2:
+	case CLASS_MARK1:
+	case CLASS_MARK2:
+	case CLASS_PROBE:
+	case CLASS_SEEKER:
+	case CLASS_REMOTE:
+	case CLASS_SENTRY:
+	case CLASS_INTERROGATOR:
+		time = 0;
+		break;
+	default:
+		// never go away
+		if (g_corpseRemovalTime.integer <= 0)
+		{
+			time = Q3_INFINITE;
+		}
+		else
+		{
+			time = g_corpseRemovalTime.integer * 1000;
+		}
+		break;
+	}
+	return time;
+}
+
+/*
+----------------------------------------
+NPC_RemoveBodyEffect
+
+Effect to be applied when ditching the corpse
+----------------------------------------
+*/
+
+#endif
+static void NPC_RemoveBodyEffect(void)
+{
+	if (!NPCS.NPC || !NPCS.NPC->client || NPCS.NPC->s.eFlags & EF_NODRAW)
 		return;
 
 	// stub code
-	switch (NPC->client->NPC_class)
+	switch (NPCS.NPC->client->NPC_class)
 	{
 	case CLASS_PROBE:
 	case CLASS_SEEKER:
@@ -479,6 +839,7 @@ static void NPC_RemoveBodyEffect()
 		break;
 	}
 }
+#ifdef SP_GAME
 
 /*
 ====================================================================
@@ -957,13 +1318,227 @@ void RestoreNPCGlobals()
 	memcpy(&ucmd, &_saved_ucmd, sizeof(usercmd_t));
 }
 
-//We MUST do this, other funcs were using NPC illegally when "self" wasn't the global NPC
-void ClearNPCGlobals()
+#else // MP game
+
+/*
+====================================================================
+void pitch_roll_for_slope( gentity_t *forwhom, vec3_t pass_slope )
+
+MG
+
+This will adjust the pitch and roll of a monster to match
+a given slope - if a non-'0 0 0' slope is passed, it will
+use that value, otherwise it will use the ground underneath
+the monster.  If it doesn't find a surface, it does nothing
+and returns.
+====================================================================
+*/
+
+void pitch_roll_for_slope(gentity_t* forwhom, vec3_t pass_slope)
 {
-	NPC = nullptr;
-	NPCInfo = nullptr;
-	client = nullptr;
+	vec3_t slope;
+	vec3_t nvf, ovf, ovr, new_angles = { 0, 0, 0 };
+
+	//if we don't have a slope, get one
+	if (!pass_slope || VectorCompare(vec3_origin, pass_slope))
+	{
+		vec3_t endspot;
+		vec3_t startspot;
+		trace_t trace;
+
+		VectorCopy(forwhom->r.currentOrigin, startspot);
+		startspot[2] += forwhom->r.mins[2] + 4;
+		VectorCopy(startspot, endspot);
+		endspot[2] -= 300;
+		trap->Trace(&trace, forwhom->r.currentOrigin, vec3_origin, vec3_origin, endspot, forwhom->s.number, MASK_SOLID,
+			qfalse, 0, 0);
+
+		if (trace.fraction >= 1.0)
+			return;
+
+		if (VectorCompare(vec3_origin, trace.plane.normal))
+			return;
+
+		VectorCopy(trace.plane.normal, slope);
+	}
+	else
+	{
+		VectorCopy(pass_slope, slope);
+	}
+
+	AngleVectors(forwhom->r.currentAngles, ovf, ovr, NULL);
+
+	vectoangles(slope, new_angles);
+	const float pitch = new_angles[PITCH] + 90;
+	new_angles[ROLL] = new_angles[PITCH] = 0;
+
+	AngleVectors(new_angles, nvf, NULL, NULL);
+
+	float mod = DotProduct(nvf, ovr);
+
+	if (mod < 0)
+		mod = -1;
+	else
+		mod = 1;
+
+	const float dot = DotProduct(nvf, ovf);
+
+	if (forwhom->client)
+	{
+		forwhom->client->ps.viewangles[PITCH] = dot * pitch;
+		forwhom->client->ps.viewangles[ROLL] = (1 - Q_fabs(dot)) * pitch * mod;
+		const float oldmins2 = forwhom->r.mins[2];
+		forwhom->r.mins[2] = -24 + 12 * fabs(forwhom->client->ps.viewangles[PITCH]) / 180.0f;
+		//FIXME: if it gets bigger, move up
+		if (oldmins2 > forwhom->r.mins[2])
+		{
+			//our mins is now lower, need to move up
+			//FIXME: trace?
+			forwhom->client->ps.origin[2] += oldmins2 - forwhom->r.mins[2];
+			forwhom->r.currentOrigin[2] = forwhom->client->ps.origin[2];
+			trap->LinkEntity((sharedEntity_t*)forwhom);
+		}
+	}
+	else
+	{
+		forwhom->r.currentAngles[PITCH] = dot * pitch;
+		forwhom->r.currentAngles[ROLL] = (1 - Q_fabs(dot)) * pitch * mod;
+	}
 }
+
+/*
+----------------------------------------
+DeadThink
+----------------------------------------
+*/
+static void DeadThink(void)
+{
+	trace_t trace;
+
+	const float oldMaxs2 = NPCS.NPC->r.maxs[2];
+
+	NPCS.NPC->r.maxs[2] = NPCS.NPC->client->renderInfo.eyePoint[2] - NPCS.NPC->r.currentOrigin[2] + 4;
+	if (NPCS.NPC->r.maxs[2] < -8)
+	{
+		NPCS.NPC->r.maxs[2] = -8;
+	}
+
+	if (NPCS.NPC->r.maxs[2] > oldMaxs2)
+	{
+		//inflating maxs, make sure we're not inflating into solid
+		trap->Trace(&trace, NPCS.NPC->r.currentOrigin, NPCS.NPC->r.mins, NPCS.NPC->r.maxs, NPCS.NPC->r.currentOrigin,
+			NPCS.NPC->s.number, NPCS.NPC->clipmask, qfalse, 0, 0);
+		if (trace.allsolid)
+		{
+			//must be inflating
+			NPCS.NPC->r.maxs[2] = oldMaxs2;
+		}
+	}
+	//death anim done (or were given a specific amount of time to wait before removal), wait the requisite amount of time them remove
+	if (level.time >= NPCS.NPCInfo->timeOfDeath + BodyRemovalPadTime(NPCS.NPC))
+	{
+		if (NPCS.NPC->client->ps.eFlags & EF_NODRAW)
+		{
+			if (!trap->ICARUS_IsRunning(NPCS.NPC->s.number))
+			{
+				NPCS.NPC->think = G_FreeEntity;
+				NPCS.NPC->nextthink = level.time + FRAMETIME;
+			}
+		}
+		else
+		{
+			// Start the body effect first, then delay 400ms before ditching the corpse
+			NPC_RemoveBodyEffect();
+			NPCS.NPC->think = NPC_RemoveBody;
+			NPCS.NPC->nextthink = level.time + FRAMETIME / 2;
+
+			const class_t npc_class = NPCS.NPC->client->NPC_class;
+			// check for droids
+			if (npc_class == CLASS_SEEKER || npc_class == CLASS_PROBE || npc_class == CLASS_MOUSE ||
+				npc_class == CLASS_SBD || npc_class == CLASS_BATTLEDROID || npc_class == CLASS_DROIDEKA ||
+				npc_class == CLASS_GONK || npc_class == CLASS_R2D2 || npc_class == CLASS_R5D2 || npc_class ==
+				CLASS_REMOTE ||
+				npc_class == CLASS_MARK1 || npc_class == CLASS_MARK2 || npc_class == CLASS_PROTOCOL ||
+				npc_class == CLASS_INTERROGATOR || npc_class == CLASS_ATST || npc_class == CLASS_SENTRY)
+			{
+				// special droid only behaviors
+				NPCS.NPC->client->ps.eFlags |= EF_NODRAW;
+				NPCS.NPCInfo->timeOfDeath = level.time + FRAMETIME * 8;
+			}
+			else
+				NPCS.NPCInfo->timeOfDeath = level.time + FRAMETIME * 4;
+		}
+		return;
+	}
+
+	// If the player is on the ground and the resting position contents haven't been set yet...(BounceCount tracks the contents)
+	if (NPCS.NPC->bounceCount < 0 && NPCS.NPC->s.groundEntityNum >= 0)
+	{
+		// if client is in a nodrop area, make him/her nodraw
+		const int contents = NPCS.NPC->bounceCount = trap->PointContents(NPCS.NPC->r.currentOrigin, -1);
+
+		if (contents & CONTENTS_NODROP)
+		{
+			NPCS.NPC->client->ps.eFlags |= EF_NODRAW;
+		}
+	}
+
+	CorpsePhysics(NPCS.NPC);
+}
+
+/*
+===============
+SetNPCGlobals
+
+local function to set globals used throughout the AI code
+===============
+*/
+void SetNPCGlobals(gentity_t* ent)
+{
+	if (!ent)
+	{
+		return;
+	}
+
+	// require the entity to be an NPC with client and NPC info
+	if (!ent->NPC || !ent->client)
+	{
+		// optionally log an error for debugging builds
+#ifdef _DEBUG
+		Com_Printf("SetNPCGlobals: entity %d has no NPC or client\n", ent ? ent->s.number : -1);
+#endif
+		NPCS.NPC = NULL;
+		NPCS.NPCInfo = NULL;
+		NPCS.client = NULL;
+		return;
+	}
+	NPCS.NPC = ent;
+	NPCS.NPCInfo = ent->NPC;
+	NPCS.client = ent->client;
+	memset(&NPCS.ucmd, 0, sizeof(usercmd_t));
+}
+
+npcStatic_t _saved_NPCS;
+
+void SaveNPCGlobals(void)
+{
+	memcpy(&_saved_NPCS, &NPCS, sizeof _saved_NPCS);
+}
+
+void RestoreNPCGlobals(void)
+{
+	memcpy(&NPCS, &_saved_NPCS, sizeof _saved_NPCS);
+}
+
+#endif
+//We MUST do this, other funcs were using NPC illegally when "self" wasn't the global NPC
+void ClearNPCGlobals(void)
+{
+	NPCS.NPC = NULL;
+	NPCS.NPCInfo = NULL;
+	NPCS.client = NULL;
+}
+#ifdef SP_GAME
 
 //===============
 
@@ -1182,7 +1757,180 @@ static void NPC_HandleAIFlags()
 
 extern void NPC_ObstacleClimb();
 
-static void NPC_AvoidWallsAndCliffs()
+#else // MP game
+
+//===============
+
+extern qboolean showBBoxes;
+vec3_t NPCDEBUG_RED = { 1.0, 0.0, 0.0 };
+vec3_t NPCDEBUG_GREEN = { 0.0, 1.0, 0.0 };
+vec3_t NPCDEBUG_BLUE = { 0.0, 0.0, 1.0 };
+vec3_t NPCDEBUG_LIGHT_BLUE = { 0.3f, 0.7f, 1.0 };
+extern void G_Cube(vec3_t mins, vec3_t maxs, vec3_t color, float alpha);
+extern void G_Line(vec3_t start, vec3_t end, vec3_t color, float alpha);
+extern qboolean InPlayersPVS(vec3_t point);
+
+static void NPC_ApplyScriptFlags(void)
+{
+	if (NPCS.NPCInfo->scriptFlags & SCF_CROUCHED)
+	{
+		if (NPCS.NPCInfo->charmedTime > level.time && (NPCS.ucmd.forwardmove || NPCS.ucmd.rightmove))
+		{
+			//ugh, if charmed and moving, ignore the crouched command
+		}
+		else
+		{
+			NPCS.ucmd.upmove = -127;
+		}
+	}
+
+	if (NPCS.NPCInfo->scriptFlags & SCF_RUNNING)
+	{
+		NPCS.ucmd.buttons &= ~BUTTON_WALKING;
+	}
+	else if (NPCS.NPCInfo->scriptFlags & SCF_WALKING)
+	{
+		if (NPCS.NPCInfo->charmedTime > level.time && (NPCS.ucmd.forwardmove || NPCS.ucmd.rightmove))
+		{
+			//ugh, if charmed and moving, ignore the walking command
+		}
+		else
+		{
+			NPCS.ucmd.buttons |= BUTTON_WALKING;
+		}
+	}
+
+	if (NPCS.NPCInfo->scriptFlags & SCF_LEAN_RIGHT)
+	{
+		NPCS.ucmd.buttons |= BUTTON_USE;
+		NPCS.ucmd.rightmove = 127;
+		NPCS.ucmd.forwardmove = 0;
+		NPCS.ucmd.upmove = 0;
+	}
+	else if (NPCS.NPCInfo->scriptFlags & SCF_LEAN_LEFT)
+	{
+		NPCS.ucmd.buttons |= BUTTON_USE;
+		NPCS.ucmd.rightmove = -127;
+		NPCS.ucmd.forwardmove = 0;
+		NPCS.ucmd.upmove = 0;
+	}
+
+	if (NPCS.NPCInfo->scriptFlags & SCF_ALT_FIRE && NPCS.ucmd.buttons & BUTTON_ATTACK)
+	{
+		//Use altfire instead
+		// new code so snipers shoot their altfire properly
+		if (NPCS.NPC->client->ps.weapon != WP_DISRUPTOR || NPCS.NPC->client->ps.zoomMode == 0)
+		{
+			NPCS.ucmd.buttons &= ~BUTTON_ATTACK; // if using alt fire, dont use normal fire
+			NPCS.ucmd.buttons |= BUTTON_ALT_ATTACK;
+		}
+
+		if (NPCS.NPC->client->ps.weapon == WP_DISRUPTOR && NPCS.NPC->client->ps.zoomMode != 0 && NPCS.NPCInfo->
+			attackHold == 0)
+		{
+			// snipers can use charged shot
+			NPCS.NPCInfo->attackHold = 2000;
+		}
+		else if (NPCS.NPC->client->ps.weapon == WP_ROCKET_LAUNCHER)
+		{
+			// npcs can use homing missiles properly now
+			NPCS.NPCInfo->attackHold = 2000;
+		}
+		else if (NPCS.NPC->client->ps.weapon == WP_BRYAR_PISTOL && NPCS.ucmd.buttons & BUTTON_ALT_ATTACK && !
+			Q_irand(0, 1))
+		{
+			// npcs can use charged pistol
+			NPCS.NPCInfo->attackHold = 2000;
+		}
+	}
+	else if (NPCS.NPC->client->ps.weapon == WP_DISRUPTOR && !(NPCS.NPCInfo->scriptFlags & SCF_ALT_FIRE) && NPCS.NPC->
+		client->ps.zoomMode != 0)
+	{
+		// reset sniper zoomMode when switching back to primary fire
+		NPCS.ucmd.buttons |= BUTTON_ALT_ATTACK;
+	}
+	else if (NPCS.NPC->client->ps.weapon == WP_BOWCASTER && NPCS.ucmd.buttons & BUTTON_ATTACK && !Q_irand(0, 1))
+	{
+		// npcs can use charged bowcaster
+		NPCS.NPCInfo->attackHold = 2000;
+	}
+	// only removes NPC when it's safe too (Player is out of PVS)
+	if (NPCS.NPCInfo->scriptFlags & SCF_SAFE_REMOVE)
+	{
+		// take from BSRemove
+		if (!InPlayersPVS(NPCS.NPC->r.currentOrigin))
+		{
+			//racc - we can be safely removed.
+			G_UseTargets2(NPCS.NPC, NPCS.NPC, NPCS.NPC->target3);
+			NPCS.NPC->s.eFlags |= EF_NODRAW;
+			NPCS.NPC->s.eType = ET_INVISIBLE;
+			NPCS.NPC->r.contents = 0;
+			NPCS.NPC->health = 0;
+			NPCS.NPC->targetname = NULL;
+
+			//Disappear in half a second
+			NPCS.NPC->think = G_FreeEntity;
+			NPCS.NPC->nextthink = level.time + FRAMETIME;
+		}
+	}
+
+	// npcs with thermals must calculate distance to enemy and hold fire properly
+	if (NPCS.NPC->client->ps.weapon == WP_THERMAL && NPCS.NPC->enemy)
+	{
+		NPCS.NPCInfo->attackHold = (int)Distance(NPCS.client->ps.origin, NPCS.NPC->enemy->client->ps.origin) * 2;
+	}
+}
+
+void Q3_DebugPrint(int level, const char* format, ...);
+
+static void NPC_HandleAIFlags(void)
+{
+	//FIXME: make these flags checks a function call like NPC_CheckAIFlagsAndTimers
+	if (NPCS.NPCInfo->aiFlags & NPCAI_LOST)
+	{
+		//Print that you need help!
+		//FIXME: shouldn't remove this just yet if cg_draw needs it
+		NPCS.NPCInfo->aiFlags &= ~NPCAI_LOST;
+
+		if (NPCS.NPCInfo->goalEntity && NPCS.NPCInfo->goalEntity == NPCS.NPC->enemy)
+		{
+			//We can't nav to our enemy
+			//Drop enemy and see if we should search for him
+			NPC_LostEnemyDecideChase();
+
+			npc_check_speak(NPCS.NPC); // (SP)
+		}
+	}
+
+	//been told to play a victory sound after a delay
+	if (NPCS.NPCInfo->greetingDebounceTime && NPCS.NPCInfo->greetingDebounceTime < level.time)
+	{
+		G_AddVoiceEvent(NPCS.NPC, Q_irand(EV_VICTORY1, EV_VICTORY3), Q_irand(2000, 4000));
+		NPCS.NPCInfo->greetingDebounceTime = 0;
+	}
+
+	if (NPCS.NPCInfo->ffireCount > 0)
+	{
+		if (NPCS.NPCInfo->ffireFadeDebounce < level.time)
+		{
+			NPCS.NPCInfo->ffireCount--;
+			//Com_Printf( "drop: %d < %d\n", NPCInfo->ffireCount, 3+((2-g_npcspskill.integer)*2) );
+			NPCS.NPCInfo->ffireFadeDebounce = level.time + 3000;
+		}
+	}
+	if (d_patched.integer)
+	{
+		//use patch-style navigation
+		if (NPCS.NPCInfo->consecutiveBlockedMoves > 20)
+		{
+			//been stuck for a while, try again?
+			NPCS.NPCInfo->consecutiveBlockedMoves = 0;
+		}
+	}
+}
+
+#endif
+static void NPC_AvoidWallsAndCliffs(void)
 {
 	/*
 		vec3_t	forward, right, testPos, angles, mins;
@@ -1248,62 +1996,106 @@ static void NPC_AvoidWallsAndCliffs()
 	*/
 }
 
-static void NPC_CheckAttackScript()
+static void NPC_CheckAttackScript(void)
 {
-	if (!(ucmd.buttons & BUTTON_ATTACK))
+	if (!(NPCS.ucmd.buttons & BUTTON_ATTACK))
 	{
 		return;
 	}
 
-	G_ActivateBehavior(NPC, BSET_ATTACK);
+	G_ActivateBehavior(NPCS.NPC, BSET_ATTACK);
 }
+#ifdef SP_GAME
 
 float NPC_MaxDistSquaredForWeapon();
 
-static void NPC_CheckAttackHold()
+#else // MP game
+
+float NPC_MaxDistSquaredForWeapon(void);
+
+#endif
+static void NPC_CheckAttackHold(void)
 {
 	vec3_t vec;
 
 	// If they don't have an enemy they shouldn't hold their attack anim.
-	if (!NPC->enemy)
+	if (!NPCS.NPC->enemy)
 	{
-		NPCInfo->attackHoldTime = 0;
+		NPCS.NPCInfo->attackHoldTime = 0;
 		return;
 	}
-	VectorSubtract(NPC->enemy->currentOrigin, NPC->currentOrigin, vec);
+	VectorSubtract(NPCS.NPC->enemy->SHR_currentOrigin, NPCS.NPC->SHR_currentOrigin, vec);
 	if (VectorLengthSquared(vec) > NPC_MaxDistSquaredForWeapon())
 	{
-		NPCInfo->attackHoldTime = 0;
+		NPCS.NPCInfo->attackHoldTime = 0;
 	}
-	else if (NPCInfo->attackHoldTime && NPCInfo->attackHoldTime > level.time)
+	else if (NPCS.NPCInfo->attackHoldTime && NPCS.NPCInfo->attackHoldTime > level.time)
 	{
-		ucmd.buttons |= BUTTON_ATTACK;
+		NPCS.ucmd.buttons |= BUTTON_ATTACK;
 	}
-	else if (NPCInfo->attackHold && ucmd.buttons & BUTTON_ATTACK)
+	else if (NPCS.NPCInfo->attackHold && NPCS.ucmd.buttons & BUTTON_ATTACK)
 	{
-		NPCInfo->attackHoldTime = level.time + NPCInfo->attackHold;
+		NPCS.NPCInfo->attackHoldTime = level.time + NPCS.NPCInfo->attackHold;
 	}
 	else
 	{
-		NPCInfo->attackHoldTime = 0;
+		NPCS.NPCInfo->attackHoldTime = 0;
 	}
 }
+#ifndef SP_GAME // MP only
 
+qboolean NPC_CanUseAdvancedFighting()
+{
+	// Evasion/Weapon Switching/etc...
+	switch (NPCS.NPC->client->NPC_class)
+	{
+	case CLASS_BESPIN_COP:
+	case CLASS_CLAW:
+	case CLASS_COMMANDO:
+	case CLASS_DESANN:
+	case CLASS_GALAK:
+	case CLASS_GRAN:
+	case CLASS_IMPERIAL:
+	case CLASS_JAN:
+	case CLASS_JEDI:
+	case CLASS_KYLE:
+	case CLASS_LANDO:
+	case CLASS_LUKE:
+	case CLASS_MORGANKATARN:
+	case CLASS_MURJJ:
+	case CLASS_REBEL:
+	case CLASS_REBORN:
+	case CLASS_REELO:
+	case CLASS_RODIAN:
+	case CLASS_SHADOWTROOPER:
+	case CLASS_TAVION:
+	case CLASS_TRANDOSHAN:
+	case CLASS_WEEQUAY:
+	case CLASS_BOBAFETT:
+	case CLASS_WOOKIE:
+		break;
+	default:
+		return qfalse;
+	}
+	return qtrue;
+}
+
+#endif
 /*
 void NPC_KeepCurrentFacing(void)
 
 Fills in a default ucmd to keep current angles facing
 */
-static void NPC_KeepCurrentFacing()
+static void NPC_KeepCurrentFacing(void)
 {
-	if (!ucmd.angles[YAW])
+	if (!NPCS.ucmd.angles[YAW])
 	{
-		ucmd.angles[YAW] = ANGLE2SHORT(client->ps.viewangles[YAW]) - client->ps.delta_angles[YAW];
+		NPCS.ucmd.angles[YAW] = ANGLE2SHORT(NPCS.client->ps.viewangles[YAW]) - NPCS.client->ps.delta_angles[YAW];
 	}
 
-	if (!ucmd.angles[PITCH])
+	if (!NPCS.ucmd.angles[PITCH])
 	{
-		ucmd.angles[PITCH] = ANGLE2SHORT(client->ps.viewangles[PITCH]) - client->ps.delta_angles[PITCH];
+		NPCS.ucmd.angles[PITCH] = ANGLE2SHORT(NPCS.client->ps.viewangles[PITCH]) - NPCS.client->ps.delta_angles[PITCH];
 	}
 }
 
@@ -1341,6 +2133,7 @@ static void NPC_BehaviorSet_Charmed(const int b_state)
 		break;
 	}
 }
+#ifdef SP_GAME
 
 /*
 -------------------------
@@ -1395,6 +2188,69 @@ void NPC_BehaviorSet_Default(const int b_state)
 	}
 }
 
+#else // MP game
+
+/*
+-------------------------
+NPC_BehaviorSet_Default
+-------------------------
+*/
+
+void NPC_BehaviorSet_Default(const int b_state)
+{
+	if (NPCS.NPC->enemy && NPCS.NPC->enemy->inuse && NPCS.NPC->enemy->health > 0)
+	{
+		// Have an anemy... Check if we should use advanced fighting for this NPC...
+		if (NPC_CanUseAdvancedFighting())
+		{
+			// This NPC can use advanced tactics... Use them!!!
+			NPC_BSJedi_Default();
+			return;
+		}
+	}
+	switch (b_state)
+	{
+	case BS_ADVANCE_FIGHT: //head toward captureGoal, shoot anything that gets in the way
+		NPC_BSAdvanceFight();
+		break;
+	case BS_SLEEP: //Follow a path, looking for enemies
+		NPC_BSSleep();
+		break;
+	case BS_FOLLOW_LEADER: //# 40: Follow your leader and shoot any enemies you come across
+		NPC_BSFollowLeader();
+		break;
+	case BS_JUMP: //41: Face navgoal and jump to it.
+		NPC_BSJump();
+		break;
+	case BS_REMOVE:
+		NPC_BSRemove();
+		break;
+	case BS_SEARCH: //# 43: Using current waypoint as a base, search the immediate branches of waypoints for enemies
+		NPC_BSSearch();
+		break;
+	case BS_NOCLIP:
+		NPC_BSNoClip();
+		break;
+	case BS_WANDER: //# 46: Wander down random waypoint paths
+		NPC_BSWander();
+		break;
+	case BS_FLEE:
+		NPC_BSFlee();
+		break;
+	case BS_WAIT:
+		NPC_BSWait();
+		break;
+	case BS_CINEMATIC:
+		NPC_BSCinematic();
+		break;
+	default:
+	case BS_DEFAULT: //whatever
+		NPC_BSDefault();
+		break;
+	}
+}
+
+#endif
 /*
 -------------------------
 NPC_BehaviorSet_Interrogator
@@ -1438,9 +2294,15 @@ static void NPC_BehaviorSet_ImperialProbe(const int b_state)
 		break;
 	}
 }
+#ifdef SP_GAME
 
 void NPC_BSSeeker_Default();
 
+#else // MP game
+
+void NPC_BSSeeker_Default(void);
+
+#endif
 /*
 -------------------------
 NPC_BehaviorSet_Seeker
@@ -1460,9 +2322,15 @@ static void NPC_BehaviorSet_Seeker(const int b_state)
 		break;
 	}
 }
+#ifdef SP_GAME
 
 void NPC_BSRemote_Default();
 
+#else // MP game
+
+void NPC_BSRemote_Default(void);
+
+#endif
 /*
 -------------------------
 NPC_BehaviorSet_Remote
@@ -1484,9 +2352,15 @@ static void NPC_BehaviorSet_Remote(const int b_state)
 		break;
 	}
 }
+#ifdef SP_GAME
 
 void NPC_BSSentry_Default();
 
+#else // MP game
+
+void NPC_BSSentry_Default(void);
+
+#endif
 /*
 -------------------------
 NPC_BehaviorSet_Sentry
@@ -1531,7 +2405,16 @@ static void NPC_BehaviorSet_Grenadier(const int b_state)
 		break;
 	}
 }
+#ifndef SP_GAME // MP only
 
+/*
+-------------------------
+NPC_BehaviorSet_Tusken
+-------------------------
+*/
+extern void NPC_BSTusken_Default(void);
+
+#endif
 /*
 -------------------------
 NPC_BehaviorSet_Tusken
@@ -1609,6 +2492,7 @@ void NPC_BehaviorSet_Stormtrooper(const int b_state)
 		break;
 	}
 }
+#ifdef SP_GAME
 
 static void NPC_BehaviorSet_Object(int b_state)
 {}
@@ -1619,6 +2503,46 @@ NPC_BehaviorSet_Jedi
 -------------------------
 */
 
+#else // MP game
+
+/*
+-------------------------
+NPC_BehaviorSet_Trooper
+-------------------------
+*/
+void NPC_BehaviorSet_Trooper(const int b_state)
+{
+	switch (b_state)
+	{
+	case BS_STAND_GUARD:
+	case BS_PATROL:
+	case BS_STAND_AND_SHOOT:
+	case BS_HUNT_AND_KILL:
+	case BS_DEFAULT:
+		NPC_BSST_Default();
+		break;
+
+	case BS_INVESTIGATE:
+		NPC_BSST_Investigate();
+		break;
+
+	case BS_SLEEP:
+		NPC_BSST_Sleep();
+		break;
+
+	default:
+		NPC_BehaviorSet_Default(b_state);
+		break;
+	}
+}
+
+/*
+-------------------------
+NPC_BehaviorSet_Jedi
+-------------------------
+*/
+
+#endif
 static void NPC_BehaviorSet_Jedi(const int b_state)
 {
 	switch (b_state)
@@ -1644,6 +2568,7 @@ static void NPC_BehaviorSet_Jedi(const int b_state)
 		break;
 	}
 }
+#ifdef SP_GAME
 
 qboolean G_JediInNormalAI(const gentity_t* ent)
 {
@@ -1667,6 +2592,29 @@ qboolean G_JediInNormalAI(const gentity_t* ent)
 	return qfalse;
 }
 
+#else // MP game
+
+//qboolean G_JediInNormalAI(const gentity_t* ent)
+//{
+//	//NOTE: should match above func's switch!
+//	//check our b_state
+//	const bState_t b_state = G_CurrentBState(ent->NPC);
+//	switch (b_state)
+//	{
+//	case BS_STAND_GUARD:
+//	case BS_PATROL:
+//	case BS_STAND_AND_SHOOT:
+//	case BS_HUNT_AND_KILL:
+//	case BS_INVESTIGATE:
+//	case BS_DEFAULT:
+//	case BS_FOLLOW_LEADER:
+//		return qtrue;
+//	default: ;
+//	}
+//	return qfalse;
+//}
+
+#endif
 /*
 -------------------------
 NPC_BehaviorSet_Droid
@@ -1814,7 +2762,16 @@ static void NPC_BehaviorSet_Rancor(const int b_state)
 		break;
 	}
 }
+#ifndef SP_GAME // MP only
 
+/*
+-------------------------
+NPC_BehaviorSet_Wampa
+-------------------------
+*/
+extern void NPC_BSWampa_Default(void);
+
+#endif
 /*
 -------------------------
 NPC_BehaviorSet_Wampa
@@ -1858,7 +2815,17 @@ static void NPC_BehaviorSet_SandCreature(const int b_state)
 		break;
 	}
 }
+#ifndef SP_GAME // MP only
 
+/*
+-------------------------
+NPC_BehaviorSet_Droid
+-------------------------
+*/
+// Added 01/21/03 by AReis.
+extern void NPC_BSAnimal_Default(void);
+
+#endif
 /*
 -------------------------
 NPC_BehaviorSet_Droid
@@ -1879,6 +2846,7 @@ static void NPC_BehaviorSet_Animal(const int b_state)
 		break;
 	}
 }
+#ifdef SP_GAME
 
 /*
 -------------------------
@@ -2255,6 +3223,395 @@ static void NPC_RunBehavior(const int team, const int b_state)
 	}
 }
 
+#else // MP game
+
+/*
+-------------------------
+NPC_RunBehavior
+-------------------------
+*/
+extern void NPC_BSRT_Default(void);
+extern qboolean RT_Flying(const gentity_t* self);
+extern void NPC_BSEmplaced(void);
+extern qboolean NPC_CheckSurrender(void);
+extern void Boba_FlyStop(gentity_t* self);
+extern qboolean Jedi_CultistDestroyer(const gentity_t* self);
+extern void bubble_shield_update(void);
+extern void NPC_BSSD_Default(void);
+extern void NPC_BSCivilian_Default(int b_state);
+
+extern qboolean NPC_FighterAI(void);
+extern qboolean Pilot_MasterUpdate(void); // AI_Vehicle.c
+
+static void NPC_RunBehavior(const npcteam_t team, const int b_state)
+{
+	qboolean dontSetAim;
+
+	// flying a fighter (ai_fighter.c: the space maps' empty ships)
+	if (NPC_FighterAI())
+	{
+		return;
+	}
+
+	if (NPCS.NPC->s.NPC_class == CLASS_VEHICLE &&
+		NPCS.NPC->m_pVehicle)
+	{
+		//vehicles don't do AI!
+		return;
+	}
+
+	if (b_state == BS_CINEMATIC)
+	{
+		NPC_BSCinematic();
+	}
+	else if (NPCS.NPCInfo->scriptFlags & SCF_PILOT && Pilot_MasterUpdate())
+	{
+		// on a swoop or on the way to one (AI_Vehicle.c, as SP)
+		return;
+	}
+	else if (NPC_JumpBackingUp())
+	{
+		//racc - NPC is backing up for a large jump
+	}
+	else if (!TIMER_Done(NPCS.NPC, "DEMP2_StunTime"))
+	{
+		//we've been stunned by a demp2 shot.
+		NPC_UpdateAngles(qtrue, qtrue);
+	}
+	else if (NPCS.NPC->client->ps.weapon == WP_EMPLACED_GUN)
+	{
+		NPC_BSEmplaced();
+		G_CheckCharmed(NPCS.NPC);
+	}
+	else if (NPCS.NPC->client->NPC_class == CLASS_HOWLER)
+	{
+		NPC_BehaviorSet_Howler(b_state);
+	}
+	else if (Jedi_CultistDestroyer(NPCS.NPC))
+	{
+		NPC_BSJedi_Default();
+		dontSetAim = qtrue;
+	}
+	else if (NPCS.NPC->client->NPC_class == CLASS_SABER_DROID)
+	{
+		//saber droid
+		NPC_BSSD_Default();
+	}
+	else if (NPCS.NPC->client->ps.weapon == WP_SABER ||
+		(NPCS.NPC->client->NPC_class == CLASS_SITHLORD && NPCS.NPC->client->ps.weapon == WP_MELEE) ||
+		(NPCS.NPC->client->NPC_class == CLASS_SITHLORD && NPCS.NPC->client->ps.weapon == WP_NONE))
+	{
+		//jedi (as SP: also an unarmed / melee Sith lord)
+		NPC_BehaviorSet_Jedi(b_state);
+		dontSetAim = qtrue;
+	}
+	else if (NPCS.NPC->client->NPC_class == CLASS_REBORN && NPCS.NPC->client->ps.weapon == WP_MELEE)
+	{
+		//force-only reborn
+		NPC_BehaviorSet_Jedi(b_state);
+		dontSetAim = qtrue;
+	}
+	else if (NPCS.NPC->client->NPC_class == CLASS_JEDI ||
+		NPCS.NPC->client->NPC_class == CLASS_REBORN ||
+		NPCS.NPC->client->NPC_class == CLASS_TAVION ||
+		NPCS.NPC->client->ps.weapon == WP_SABER)
+	{
+		//jedi
+		NPC_BehaviorSet_Jedi(b_state);
+	}
+	else if (NPCS.NPC->client->NPC_class == CLASS_RANCOR)
+	{
+		NPC_BehaviorSet_Rancor(b_state);
+	}
+	else if (NPCS.NPC->client->NPC_class == CLASS_SAND_CREATURE)
+	{
+		NPC_BehaviorSet_SandCreature(b_state);
+	}
+	else if (NPCS.NPC->client->NPC_class == CLASS_WAMPA)
+	{
+		//wampa
+		NPC_BSWampa_Default();
+		G_CheckCharmed(NPCS.NPC);
+	}
+	else if (NPCS.NPC->client->NPC_class == CLASS_REMOTE)
+	{
+		NPC_BehaviorSet_Remote(b_state);
+	}
+	else if (NPCS.NPC->client->NPC_class == CLASS_SEEKER)
+	{
+		NPC_BehaviorSet_Seeker(b_state);
+	}
+	else if (NPCS.NPC->client->NPC_class == CLASS_BOBAFETT)
+	{
+		//bounty hunter: as SP, update / flee / tactics first (NPC_AI_BobaFett.c)
+		Boba_Update();
+		if (NPCS.NPCInfo->surrenderTime)
+		{
+			Boba_Flee();
+		}
+		else if (!Boba_TacticsLocked())
+		{
+			if (Boba_Flying(NPCS.NPC))
+			{
+				NPC_BehaviorSet_Seeker(b_state);
+			}
+			else
+			{
+				NPC_BehaviorSet_Jedi(b_state);
+			}
+		}
+		dontSetAim = qtrue;
+	}
+	else if (NPCS.NPC->client->NPC_class == CLASS_ROCKETTROOPER)
+	{
+		//bounty hunter
+		if (RT_Flying(NPCS.NPC) || NPCS.NPC->enemy != NULL)
+		{
+			NPC_BSRT_Default();
+		}
+		else
+		{
+			NPC_BehaviorSet_Stormtrooper(b_state);
+		}
+		G_CheckCharmed(NPCS.NPC);
+		dontSetAim = qtrue;
+	}
+	else if (Jedi_CultistDestroyer(NPCS.NPC))
+	{
+		NPC_BSJedi_Default();
+	}
+	else if (NPCS.NPCInfo->scriptFlags & SCF_FORCED_MARCH)
+	{
+		//being forced to march
+		NPC_BSDefault();
+	}
+	else if (NPCS.NPC->client->ps.weapon == WP_TUSKEN_RIFLE)
+	{
+		//as SP: a tusken rifle with alt fire is a sniper, else the tusken AI
+		if (NPCS.NPCInfo->scriptFlags & SCF_ALT_FIRE)
+		{
+			NPC_BehaviorSet_Sniper(b_state);
+		}
+		else
+		{
+			NPC_BehaviorSet_Tusken(b_state);
+		}
+		G_CheckCharmed(NPCS.NPC);
+	}
+	else if (NPCS.NPC->client->ps.weapon == WP_TUSKEN_STAFF)
+	{
+		NPC_BehaviorSet_Tusken(b_state);
+		G_CheckCharmed(NPCS.NPC);
+	}
+	else if (NPCS.NPC->client->NPC_class == CLASS_GONK || NPCS.NPC->client->NPC_class == CLASS_MOUSE
+		|| NPCS.NPC->client->NPC_class == CLASS_R2D2 || NPCS.NPC->client->NPC_class == CLASS_R5D2)
+	{
+		// SJE: the weaponless droids wander and keep out of fights like SP's (team NEUTRAL there). MP's NPC file
+		// parser never reads a team (it looks up "NPCplayerTeam"), so a gonk ran the combat AI: it chased players,
+		// "fired" WP_NONE every frame and slid along in anims it does not have.
+		NPC_BehaviorSet_Droid(b_state);
+	}
+	else
+	{
+		switch (team)
+		{
+		case (npcteam_t)NPCTEAM_ENEMY:
+			// special cases for enemy droids
+			switch (NPCS.NPC->client->NPC_class)
+			{
+			case CLASS_ALORA:
+				NPC_BehaviorSet_Jedi(b_state);
+				return;
+			case CLASS_ATST:
+				NPC_BehaviorSet_ATST(b_state);
+				return;
+			case CLASS_PROBE:
+				NPC_BehaviorSet_ImperialProbe(b_state);
+				return;
+			case CLASS_REMOTE:
+				NPC_BehaviorSet_Remote(b_state);
+				return;
+			case CLASS_SENTRY:
+				NPC_BehaviorSet_Sentry(b_state);
+				return;
+			case CLASS_INTERROGATOR:
+				NPC_BehaviorSet_Interrogator(b_state);
+				return;
+			case CLASS_MINEMONSTER:
+				NPC_BehaviorSet_MineMonster(b_state);
+				return;
+			case CLASS_HOWLER:
+				NPC_BehaviorSet_Howler(b_state);
+				return;
+			case CLASS_RANCOR:
+				NPC_BehaviorSet_Rancor(b_state);
+				return;
+			case CLASS_SAND_CREATURE:
+				NPC_BehaviorSet_SandCreature(b_state);
+				return;
+			case CLASS_SABOTEUR:
+			case CLASS_HAZARD_TROOPER:
+			case CLASS_REELO:
+			case CLASS_COMMANDO:
+			case CLASS_IMPERIAL:
+			case CLASS_RODIAN:
+			case CLASS_TRANDOSHAN:
+			{
+				if (NPCS.NPC->client->ps.weapon == WP_DISRUPTOR && NPCS.NPCInfo->scriptFlags & SCF_ALT_FIRE)
+				{
+					//a sniper
+					NPC_BehaviorSet_Sniper(b_state);
+					return;
+				}
+				NPC_BehaviorSet_Stormtrooper(b_state);
+				return;
+			}
+			case CLASS_TUSKEN:
+			{
+				if (NPCS.NPC->client->ps.weapon == WP_DISRUPTOR /*&& (NPCS.NPCInfo->scriptFlags & SCF_ALT_FIRE)*/)
+				{
+					//a sniper
+					NPC_BehaviorSet_Sniper(b_state);
+					return;
+				}
+				NPC_BehaviorSet_Stormtrooper(b_state);
+				return;
+			}
+			case CLASS_MARK1:
+				NPC_BehaviorSet_Mark1(b_state);
+				return;
+			case CLASS_MARK2:
+				NPC_BehaviorSet_Mark2(b_state);
+				return;
+			case CLASS_GALAKMECH:
+				NPC_BSGM_Default();
+				return;
+			default:
+				break;
+			}
+			/*if (NPCS.NPC->client->NPC_class == CLASS_ASSASSIN_DROID)
+			{
+				BubbleShield_Update();
+			}*/
+
+			if (NPCS.NPC->client->NPC_class == CLASS_DROIDEKA)
+			{
+				bubble_shield_update();
+			}
+
+			/*if (NPCS.NPC->client->NPC_class == CLASS_GALAKMECH)
+			{
+				BubbleShield_Update();
+			}*/
+
+			if (NPC_IsTrooper(NPCS.NPC))
+			{
+				NPC_BehaviorSet_HazardTroop(b_state); // (SP's hazard trooper squads, NPC_AI_HazardTrooper.c)
+				return;
+			}
+
+			if (NPCS.NPC->enemy && NPCS.NPC->s.weapon == WP_NONE && b_state != BS_HUNT_AND_KILL && !trap->
+				ICARUS_TaskIDPending(
+					(sharedEntity_t*)NPCS.NPC, TID_MOVE_NAV))
+			{
+				//if in battle and have no weapon, run away, fixme: when in BS_HUNT_AND_KILL, they just stand there
+				if (b_state != BS_FLEE)
+				{
+					NPC_StartFlee(NPCS.NPC->enemy, NPCS.NPC->enemy->r.currentOrigin, AEL_DANGER_GREAT, 5000, 10000);
+				}
+				else
+				{
+					NPC_BSFlee();
+				}
+				return;
+			}
+			if (NPCS.NPC->client->ps.weapon == WP_SABER)
+			{
+				//special melee exception
+				NPC_BehaviorSet_Default(b_state);
+				return;
+			}
+			if (NPCS.NPC->client->ps.weapon == WP_DISRUPTOR && NPCS.NPCInfo->scriptFlags & SCF_ALT_FIRE)
+			{
+				//a sniper
+				NPC_BehaviorSet_Sniper(b_state);
+				return;
+			}
+			if (NPCS.NPC->client->ps.weapon == WP_THERMAL || NPCS.NPC->client->ps.weapon == WP_MELEE)
+			{
+				//a grenadier
+				NPC_BehaviorSet_Grenadier(b_state);
+				return;
+			}
+			if (NPC_CheckSurrender())
+			{
+				return;
+			}
+			NPC_BehaviorSet_Stormtrooper(b_state);
+			break;
+
+		case (npcteam_t)NPCTEAM_NEUTRAL:
+
+			// special cases for enemy droids
+			if (NPCS.NPC->client->NPC_class == CLASS_PROTOCOL)
+			{
+				NPC_BehaviorSet_Default(b_state);
+			}
+			else if (NPCS.NPC->client->NPC_class == CLASS_UGNAUGHT || NPCS.NPC->client->NPC_class == CLASS_JAWA)
+			{
+				//others, too?
+				NPC_BSCivilian_Default(b_state);
+			}
+			else if (NPCS.NPC->client->NPC_class == CLASS_VEHICLE)
+			{
+				const Vehicle_t* pVehicle = NPCS.NPC->m_pVehicle;
+
+				if (pVehicle && !pVehicle->m_pPilot && pVehicle->m_iBoarding == 0)
+				{
+					if (!pVehicle)
+					{
+						// no vehicle attached to this NPC; nothing to do
+						return;
+					}
+					//racc - no pilot
+					if (pVehicle->m_pVehicleInfo->type == VH_ANIMAL)
+					{
+						//animal vehicles act like animals while not being rode.
+						NPC_BehaviorSet_Animal(b_state);
+					}
+				}
+			}
+			else
+			{
+				// Just one of the average droids
+				NPC_BehaviorSet_Droid(b_state);
+			}
+			break;
+
+		default:
+			if (NPCS.NPC->client->NPC_class == CLASS_SEEKER)
+			{
+				NPC_BehaviorSet_Seeker(b_state);
+			}
+			else
+			{
+				if (NPCS.NPCInfo->charmedTime > level.time)
+				{
+					NPC_BehaviorSet_Charmed(b_state);
+				}
+				else
+				{
+					NPC_BehaviorSet_Default(b_state);
+				}
+				G_CheckCharmed(NPCS.NPC);
+				dontSetAim = qtrue;
+			}
+			break;
+		}
+	}
+}
+
+#endif
 static bState_t G_CurrentBState(gNPC_t* gNPC)
 {
 	if (gNPC->tempBehavior != BS_DEFAULT)
@@ -2270,6 +3627,7 @@ static bState_t G_CurrentBState(gNPC_t* gNPC)
 
 	return gNPC->behaviorState;
 }
+#ifdef SP_GAME
 
 /*
 ===============
@@ -2427,6 +3785,174 @@ static void NPC_ChatterLoad(void)
 	gi.FS_FreeFile(file);
 }
 
+#else // MP game
+
+/*
+===============
+NPC_ExecuteBState
+
+  MCG
+
+NPC Behavior state thinking
+
+===============
+*/
+extern stringID_table_t ClassTable[];
+
+//---------------------------------------------------------------------------------------------------------------------
+// NPC chatter (2026-11-16, DH; after Jedi Knight Galaxies' NPC conversations, NPC_Conversations.cpp; sounds and voice
+// sets in ext_data/sje_chatter.dat): two idle NPCs of a voice set standing close together (no enemy, not in a
+// script) turn to each other and talk, taking turns with talk animations. Stormtroopers and mercs play a whole little
+// dialog; the civilian sets (Rodians, Gran, Trandoshans, Weequay, Jawas, droids...) trade random lines and may mix.
+// It stops at once when either sees an enemy, gets hurt or walks off. Only one talk within CHAT_QUIET_RANGE, and
+// each NPC looks for a partner only every few seconds (cheap with many NPCs). g_npcChatter 0 = off.
+//---------------------------------------------------------------------------------------------------------------------
+#define CHATTER_FILE			"ext_data/sje_chatter.dat"
+#define MAX_CHAT_SETS			16
+#define MAX_CHAT_DIALOGS		16
+#define MAX_CHAT_DIALOG_LINES	8
+#define MAX_CHAT_LINES			128
+#define MAX_CHAT_CLASSES		8
+#define MAX_ACTIVE_CHATS		16
+#define CHAT_PARTNER_RANGE		128.0f	// JKG: within 128 units
+#define CHAT_QUIET_RANGE		1024.0f	// no second talk this close to one going on
+#define CHAT_COOLDOWN			45000	// ms before an NPC talks again
+
+typedef struct chatSet_s
+{
+	char name[32];
+	int classes[MAX_CHAT_CLASSES];
+	int numClasses;
+	char types[MAX_CHAT_CLASSES][32]; // parts of NPC type names (lower case)
+	int numTypes;
+	char dialog[MAX_CHAT_DIALOGS][MAX_CHAT_DIALOG_LINES][MAX_QPATH];
+	int dialogLines[MAX_CHAT_DIALOGS];
+	int numDialogs;
+	char line[MAX_CHAT_LINES][MAX_QPATH];
+	int numLines;
+} chatSet_t;
+
+static chatSet_t chatSets[MAX_CHAT_SETS];
+static int numChatSets = -1; // -1 = not loaded yet
+static int activeChats[MAX_ACTIVE_CHATS]; // entity number + 1 of each talk's leader, 0 = free
+
+static void NPC_ChatterLoad(void)
+{
+	char* buf = NULL;
+	const char* p;
+
+	numChatSets = 0;
+	memset(chatSets, 0, sizeof chatSets);
+	memset(activeChats, 0, sizeof activeChats);
+	{
+		static char chat_buf[65536];
+		fileHandle_t f = 0;
+		const int len = trap->FS_Open(CHATTER_FILE, &f, FS_READ);
+
+		if (len <= 0 || len >= (int)sizeof chat_buf)
+		{
+			if (f)
+			{
+				trap->FS_Close(f);
+			}
+			return;
+		}
+		trap->FS_Read(chat_buf, len, f);
+		trap->FS_Close(f);
+		chat_buf[len] = 0;
+		buf = chat_buf;
+	}
+	p = buf;
+	COM_BeginParseSession(CHATTER_FILE);
+	while (p && numChatSets < MAX_CHAT_SETS)
+	{
+		chatSet_t* cs = &chatSets[numChatSets];
+		const char* token = COM_ParseExt(&p, qtrue);
+
+		if (!token[0])
+		{
+			break;
+		}
+		Q_strncpyz(cs->name, token, sizeof cs->name);
+		token = COM_ParseExt(&p, qtrue);
+		if (Q_stricmp(token, "{"))
+		{
+			break;
+		}
+		while (1)
+		{
+			char key[32];
+
+			token = COM_ParseExt(&p, qtrue);
+			if (!token[0] || !Q_stricmp(token, "}"))
+			{
+				break;
+			}
+			Q_strncpyz(key, token, sizeof key);
+			token = COM_ParseExt(&p, qfalse);
+			if (!Q_stricmp(key, "classes") || !Q_stricmp(key, "types") || !Q_stricmp(key, "dialog"))
+			{
+				// a list: space separated (classes, types) or ";" separated (dialog)
+				char list[1024];
+				char* s;
+				const char sep = !Q_stricmp(key, "dialog") ? ';' : ' ';
+				int n = 0;
+
+				Q_strncpyz(list, token, sizeof list);
+				s = list;
+				while (*s)
+				{
+					char* e = strchr(s, sep);
+					if (e)
+					{
+						*e = 0;
+					}
+					if (*s)
+					{
+						if (!Q_stricmp(key, "classes") && cs->numClasses < MAX_CHAT_CLASSES)
+						{
+							const int c = GetIDForString(ClassTable, va("CLASS_%s", s));
+							if (c >= 0)
+							{
+								cs->classes[cs->numClasses++] = c;
+							}
+						}
+						else if (!Q_stricmp(key, "types") && cs->numTypes < MAX_CHAT_CLASSES)
+						{
+							Q_strncpyz(cs->types[cs->numTypes], s, sizeof cs->types[0]);
+							Q_strlwr(cs->types[cs->numTypes]);
+							cs->numTypes++;
+						}
+						else if (!Q_stricmp(key, "dialog") && cs->numDialogs < MAX_CHAT_DIALOGS && n < MAX_CHAT_DIALOG_LINES)
+						{
+							Q_strncpyz(cs->dialog[cs->numDialogs][n], s, MAX_QPATH);
+							n++;
+						}
+					}
+					if (!e)
+					{
+						break;
+					}
+					s = e + 1;
+				}
+				if (!Q_stricmp(key, "dialog") && n > 0 && cs->numDialogs < MAX_CHAT_DIALOGS)
+				{
+					cs->dialogLines[cs->numDialogs++] = n;
+				}
+			}
+			else if (!Q_stricmp(key, "line") && cs->numLines < MAX_CHAT_LINES)
+			{
+				Q_strncpyz(cs->line[cs->numLines++], token, MAX_QPATH);
+			}
+		}
+		if (cs->numDialogs || cs->numLines)
+		{
+			numChatSets++;
+		}
+	}
+}
+
+#endif
 // the voice set an NPC talks with, -1 = none (cached in chatSet: 0 = not looked up, else set + 1, -1 = none)
 static int NPC_ChatterSet(gentity_t* ent)
 {
@@ -2461,6 +3987,7 @@ static int NPC_ChatterSet(gentity_t* ent)
 	}
 	return -1;
 }
+#ifdef SP_GAME
 
 // can this NPC talk now (idle, alive, no enemy, standing, not scripted)
 static qboolean NPC_ChatterFree(const gentity_t* ent)
@@ -2470,9 +3997,20 @@ static qboolean NPC_ChatterFree(const gentity_t* ent)
 		&& ent->painDebounceTime < level.time && !G_ControlledByPlayer(ent) ? qtrue : qfalse;
 }
 
+#else // MP game
+
+// can this NPC talk now (idle, alive, no enemy, standing, not scripted)
+static qboolean NPC_ChatterFree(const gentity_t* ent)
+{
+	return ent && ent->inuse && ent->client && ent->NPC && ent->health > 0 && !ent->enemy
+		&& ent->NPC->behaviorState != BS_CINEMATIC && VectorLength(ent->client->ps.velocity) <= 16.0f
+		&& ent->painDebounceTime < level.time;
+}
+
+#endif
 static void NPC_ChatterEnd(gentity_t* ent)
 {
-	gentity_t* other = ent->chatPartner > 0 ? &g_entities[ent->chatPartner - 1] : nullptr;
+	gentity_t* other = ent->chatPartner > 0 ? &g_entities[ent->chatPartner - 1] : NULL;
 	int i;
 
 	for (i = 0; i < MAX_ACTIVE_CHATS; i++)
@@ -2495,10 +4033,11 @@ static void NPC_ChatterFace(gentity_t* ent, const gentity_t* other)
 {
 	vec3_t dir, angles;
 
-	VectorSubtract(other->currentOrigin, ent->currentOrigin, dir);
+	VectorSubtract(other->SHR_currentOrigin, ent->SHR_currentOrigin, dir);
 	vectoangles(dir, angles);
 	ent->NPC->desiredYaw = AngleNormalize360(angles[YAW]);
 }
+#ifdef SP_GAME
 
 static void NPC_ChatterSay(gentity_t* speaker, const char* sound)
 {
@@ -2653,11 +4192,196 @@ void NPC_ChatterThink(gentity_t* ent)
 
 extern void G_CivilianReset(void);
 
+#else // MP game
+
+static void NPC_ChatterSay(gentity_t* speaker, const char* sound)
+{
+	G_SoundOnEnt(speaker, CHAN_VOICE_ATTEN, sound);
+	if (g_npcChatter.integer > 1)
+	{
+		Com_Printf("chatter: %i (%s) says %s\n", speaker->s.number, speaker->NPC_type, sound); // g_npcChatter 2 = debug
+	}
+	NPC_SetAnim(speaker, SETANIM_TORSO, Q_irand(0, 1) ? BOTH_TALK1 : BOTH_TALK2, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
+}
+
+// every NPC think (after its behaviour state)
+void NPC_ChatterThink(gentity_t* ent)
+{
+	gentity_t* other;
+	int set, i;
+
+	if (!g_npcChatter.integer || !ent || !ent->client || !ent->NPC)
+	{
+		return;
+	}
+	if (numChatSets < 0)
+	{
+		NPC_ChatterLoad();
+	}
+	if (!numChatSets)
+	{
+		return;
+	}
+
+	if (ent->chatPartner > 0)
+	{
+		// talking: the leader (chatRole 1) runs the talk
+		other = &g_entities[ent->chatPartner - 1];
+		if (!NPC_ChatterFree(ent) || !NPC_ChatterFree(other) || other->chatPartner != ent->s.number + 1
+			|| DistanceSquared(ent->r.currentOrigin, other->r.currentOrigin) > 200.0f * 200.0f)
+		{
+			NPC_ChatterEnd(ent);
+			return;
+		}
+		NPC_ChatterFace(ent, other);
+		if (ent->chatRole != 1 || level.time < ent->chatTime)
+		{
+			return;
+		}
+		set = NPC_ChatterSet(ent);
+		if (set < 0)
+		{
+			NPC_ChatterEnd(ent);
+			return;
+		}
+		{
+			const chatSet_t* cs = &chatSets[set];
+			gentity_t* speaker = ent->chatLine & 1 ? other : ent;
+			const chatSet_t* speaker_set = &chatSets[NPC_ChatterSet(speaker) >= 0 ? NPC_ChatterSet(speaker) : set];
+
+			if (ent->chatDialog >= 0)
+			{
+				if (ent->chatLine >= cs->dialogLines[ent->chatDialog])
+				{
+					NPC_ChatterEnd(ent);
+					return;
+				}
+				NPC_ChatterSay(speaker, cs->dialog[ent->chatDialog][ent->chatLine]);
+			}
+			else
+			{
+				if (ent->chatLine >= ent->chatLines || !speaker_set->numLines)
+				{
+					NPC_ChatterEnd(ent);
+					return;
+				}
+				NPC_ChatterSay(speaker, speaker_set->line[Q_irand(0, speaker_set->numLines - 1)]);
+			}
+			ent->chatLine++;
+			ent->chatTime = level.time + Q_irand(3500, 6000);
+		}
+		return;
+	}
+
+	// looking for someone to talk to, every few seconds
+	if (level.time < ent->chatNext)
+	{
+		return;
+	}
+	ent->chatNext = level.time + Q_irand(3000, 5000);
+	if (!NPC_ChatterFree(ent) || (set = NPC_ChatterSet(ent)) < 0)
+	{
+		return;
+	}
+	for (i = 0; i < MAX_ACTIVE_CHATS; i++)
+	{
+		const gentity_t* lead = activeChats[i] ? &g_entities[activeChats[i] - 1] : NULL;
+		if (lead && (!lead->inuse || lead->chatPartner <= 0))
+		{
+			activeChats[i] = 0; // a talk that ended without telling us
+			continue;
+		}
+		if (lead && DistanceSquared(lead->r.currentOrigin, ent->r.currentOrigin) < CHAT_QUIET_RANGE * CHAT_QUIET_RANGE)
+		{
+			return; // someone is already talking near here
+		}
+	}
+	{
+		static gentity_t* near_list[MAX_GENTITIES];
+		const int count = G_RadiusList(ent->r.currentOrigin, CHAT_PARTNER_RANGE, ent, qtrue, near_list);
+		const qboolean scripted = chatSets[set].numDialogs > 0;
+		int slot = -1;
+
+		for (i = 0; i < MAX_ACTIVE_CHATS; i++)
+		{
+			if (!activeChats[i])
+			{
+				slot = i;
+				break;
+			}
+		}
+		if (slot < 0)
+		{
+			return;
+		}
+		for (i = 0; i < count; i++)
+		{
+			int other_set;
+
+			other = near_list[i];
+			if (!other || other == ent || !NPC_ChatterFree(other) || other->chatPartner > 0 || other->chatNext > level.time + CHAT_COOLDOWN)
+			{
+				continue;
+			}
+			other_set = NPC_ChatterSet(other);
+			if (other_set < 0 || (scripted && other_set != set) || (!scripted && chatSets[other_set].numDialogs > 0))
+			{
+				continue; // troopers / mercs only with their own kind, civilians with any civilians
+			}
+			// start: this one leads
+			ent->chatPartner = other->s.number + 1;
+			other->chatPartner = ent->s.number + 1;
+			ent->chatRole = 1;
+			other->chatRole = 2;
+			ent->chatLine = 0;
+			ent->chatDialog = scripted ? Q_irand(0, chatSets[set].numDialogs - 1) : -1;
+			ent->chatLines = Q_irand(4, 6);
+			ent->chatTime = level.time + 500;
+			activeChats[slot] = ent->s.number + 1;
+			return;
+		}
+	}
+}
+
+extern void G_CivilianReset(void);
+
+
+// Bots (ai_main.c bot_social_think, 2026-11-16): a random line of the voice set this bot / NPC has, qfalse = none
+qboolean NPC_ChatterRandomLine(gentity_t* ent, char* out, const int out_size)
+{
+	int set;
+	const chatSet_t* cs;
+
+	if (numChatSets < 0)
+	{
+		NPC_ChatterLoad();
+	}
+	if (!ent || !ent->client || (set = NPC_ChatterSet(ent)) < 0)
+	{
+		return qfalse;
+	}
+	cs = &chatSets[set];
+	if (cs->numLines)
+	{
+		Q_strncpyz(out, cs->line[Q_irand(0, cs->numLines - 1)], out_size);
+		return qtrue;
+	}
+	if (cs->numDialogs)
+	{
+		const int d = Q_irand(0, cs->numDialogs - 1);
+		Q_strncpyz(out, cs->dialog[d][Q_irand(0, cs->dialogLines[d] - 1)], out_size);
+		return qtrue;
+	}
+	return qfalse;
+}
+
+#endif
 // a new map: reload the sets (the file may differ per mod) and forget old talks
 void NPC_ChatterReset(void)
 {
 	numChatSets = -1;
 }
+#ifdef SP_GAME
 
 static void NPC_ExecuteBState(const gentity_t* self) //, int msec )
 {
@@ -3386,2310 +5110,6 @@ qboolean NPC_IsOversized(const gentity_t* self)
 }
 
 #else // MP game
-
-//
-// NPC.cpp - generic functions
-//
-#include "game/b_local.h"
-#include "game/anims.h"
-#include "game/say.h"
-#include "icarus/Q3_Interface.h"
-
-extern vec3_t playerMins;
-extern vec3_t playerMaxs;
-extern void G_SoundOnEnt(gentity_t* ent, soundChannel_t channel, const char* sound_path);
-extern void NPC_BSNoClip(void);
-extern void G_AddVoiceEvent(const gentity_t* self, int event, int speak_debounce_time);
-extern void NPC_ApplyRoff(void);
-extern void NPC_TempLookTarget(const gentity_t* self, int lookEntNum, int minLookTime, int maxLookTime);
-extern qboolean NPC_CheckLookTarget(const gentity_t* self);
-extern void NPC_SetLookTarget(const gentity_t* self, int entNum, int clear_time);
-extern void Mark1_dying(gentity_t* self);
-extern void NPC_BSCinematic(void);
-extern int GetTime(int lastTime);
-extern void G_CheckCharmed(gentity_t* self);
-extern qboolean Jedi_CultistDestroyer(const gentity_t* self);
-extern void NPC_BSGM_Default(void);
-extern qboolean Boba_Flying(const gentity_t* self);
-extern void Boba_Update(void);
-extern qboolean Boba_Flee(void);
-extern qboolean Boba_TacticsLocked(void);
-
-//Local Variables
-npcStatic_t NPCS;
-gNPC_t* NPCInfo;
-gclient_t* client;
-usercmd_t ucmd;
-visibility_t enemyVisibility;
-
-extern vmCvar_t g_saberRealisticCombat;
-
-void NPC_SetAnim(gentity_t* ent, int setAnimParts, int anim, int setAnimFlags);
-static bState_t G_CurrentBState(gNPC_t* gNPC);
-void pitch_roll_for_slope(gentity_t* forwhom, vec3_t pass_slope);
-extern void GM_Dying(gentity_t* self);
-
-extern int eventClearTime;
-
-extern void NPC_BehaviorSet_HazardTroop(int b_state);
-
-extern void npc_check_speak(gentity_t* speaker_npc); // NPC_AI_Stormtrooper.c (SP: idle combat chatter, g_Advancedaitalk)
-qboolean NPC_IsTrooper(const gentity_t* self)
-{
-	return self && self->NPC && self->s.weapon && !!(self->NPC->scriptFlags & SCF_NO_GROUPS);
-}
-
-// SP NPC.cpp: the big classes (the SP Jedi AI won't make them do flips or roll dodges)
-qboolean NPC_IsOversized(const gentity_t* self)
-{
-	switch (self->client->NPC_class)
-	{
-	case CLASS_WOOKIE:
-	case CLASS_SBD:
-	case CLASS_ASSASSIN_DROID:
-	case CLASS_HAZARD_TROOPER:
-	case CLASS_ROCKETTROOPER:
-	case CLASS_SABER_DROID:
-	case CLASS_VADER:
-		return qtrue;
-	default:
-		break;
-	}
-
-	return qfalse;
-}
-
-static void CorpsePhysics(gentity_t* self)
-{
-	// run the bot through the server like it was a real client
-	memset(&NPCS.ucmd, 0, sizeof NPCS.ucmd);
-	ClientThink(self->s.number, &NPCS.ucmd);
-	VectorCopy(self->s.origin, self->s.origin2);
-
-	if (self->client->NPC_class == CLASS_GALAKMECH)
-	{
-		GM_Dying(self);
-	}
-
-	/*if (self->client->pers.botclass == BCLASS_GALAKMECH)
-	{
-		GM_Dying(self);
-	}*/
-	//FIXME: match my pitch and roll for the slope of my groundPlane
-	if (self->client->ps.groundEntityNum != ENTITYNUM_NONE && !(self->s.eFlags & EF_DISINTEGRATION))
-	{
-		//on the ground
-		//FIXME: check 4 corners
-		pitch_roll_for_slope(self, NULL);
-	}
-
-	if (eventClearTime == level.time + ALERT_CLEAR_TIME)
-	{
-		//events were just cleared out so add me again
-		if (!(self->client->ps.eFlags & EF_NODRAW))
-		{
-			AddSightEvent(self->enemy, self->r.currentOrigin, 384, AEL_DISCOVERED, 0.0f);
-		}
-	}
-
-	if (level.time - self->s.time > 3000)
-	{
-		//been dead for 3 seconds
-		if (g_dismember.integer < 11381138 && !g_saberRealisticCombat.integer)
-		{
-			//can't be dismembered once dead
-			if (self->client->NPC_class != CLASS_PROTOCOL)
-			{
-				//self->client->dismembered = qtrue;
-			}
-		}
-	}
-
-	if (level.time - self->s.time > 1000)
-		//if (self->client->respawnTime < (level.time+ 3000))
-	{
-		//don't turn "nonsolid" until about 1 second after actual death
-		if (self->client->NPC_class != CLASS_MARK1 && self->client->NPC_class != CLASS_INTERROGATOR)
-			// The Mark1 & Interrogator stays solid.
-		{
-			self->r.contents = CONTENTS_CORPSE;
-		}
-
-		if (self->message)
-		{
-			self->r.contents |= CONTENTS_TRIGGER;
-		}
-	}
-}
-
-/*
-----------------------------------------
-NPC_RemoveBody
-
-Determines when it's ok to ditch the corpse
-----------------------------------------
-*/
-#define REMOVE_DISTANCE		128
-#define REMOVE_DISTANCE_SQR (REMOVE_DISTANCE * REMOVE_DISTANCE)
-
-extern float DistancetoClosestPlayer(vec3_t position, int enemy_team);
-extern qboolean InPlayersFOV(vec3_t position, int enemy_team, int h_fov, int v_fov, qboolean check_clear_los);
-
-qboolean G_OkayToRemoveCorpse(gentity_t* self)
-{
-	//racc - check to see if it's ok to remove this body.
-	//if we're still on a vehicle, we won't remove ourselves until we get ejected
-	if (self->client && self->client->NPC_class != CLASS_VEHICLE && self->s.m_iVehicleNum != 0)
-	{
-		Vehicle_t* p_veh = g_entities[self->s.m_iVehicleNum].m_pVehicle;
-		if (p_veh)
-		{
-			// eject this corpse (as SP does), not the pilot: a dead passenger/droid ejected the live pilot,
-			// and with no pilot it passed NULL
-			if (!p_veh->m_pVehicleInfo->Eject(p_veh, (bgEntity_t*)self, qtrue))
-			{
-				//dammit, still can't get off the vehicle...
-				return qfalse;
-			}
-		}
-		else
-		{
-			//racc - this is bad.  We're on a vehicle, but the vehicle doesn't exist.
-			//assert(0);
-#ifndef FINAL_BUILD
-			Com_Printf(S_COLOR_RED"ERROR: Dead pilot's vehicle removed while corpse was riding it (pilot: %s)???\n", self->targetname);
-#endif
-		}
-	}
-
-	if (self->message)
-	{
-		//I still have a key
-		return qfalse;
-	}
-
-	if (trap->ICARUS_IsRunning(self->s.number))
-	{
-		//still running a script
-		return qfalse;
-	}
-
-	if (self->activator
-		&& self->activator->client
-		&& self->activator->client->ps.eFlags2 & EF2_HELD_BY_MONSTER)
-	{
-		//still holding a victim?
-		return qfalse;
-	}
-
-	if (self->client
-		&& self->client->ps.eFlags2 & EF2_HELD_BY_MONSTER)
-	{
-		//being held by a creature
-		return qfalse;
-	}
-
-	if (self->client
-		&& self->client->ps.heldByClient)
-	{
-		//being dragged
-		return qfalse;
-	}
-
-	//okay, well okay to remove us...?
-	return qtrue;
-}
-
-void NPC_RemoveBody(gentity_t* ent)
-{
-	ent->nextthink = level.time + FRAMETIME / 2;
-
-	//run physics at 20fps
-	CorpsePhysics(ent);
-
-	if (ent->NPC->nextBStateThink <= level.time)
-	{
-		//racc - run logic at 20fps
-		trap->ICARUS_MaintainTaskManager(ent->s.number);
-		ent->NPC->nextBStateThink = level.time + FRAMETIME;
-
-		if (!G_OkayToRemoveCorpse(ent))
-		{
-			return;
-		}
-		if (ent->client->NPC_class == CLASS_MARK1)
-		{
-			Mark1_dying(ent);
-		}
-
-		// Since these blow up, remove the bounding box.
-		if (ent->client->NPC_class == CLASS_REMOTE
-			|| ent->client->NPC_class == CLASS_SENTRY
-			|| ent->client->NPC_class == CLASS_PROBE
-			|| ent->client->NPC_class == CLASS_INTERROGATOR
-			|| ent->client->NPC_class == CLASS_PROBE
-			|| ent->client->NPC_class == CLASS_MARK2)
-		{
-			G_FreeEntity(ent);
-			return;
-		}
-		ent->r.maxs[2] = ent->client->renderInfo.eyePoint[2] - ent->r.currentOrigin[2] + 4;
-		if (ent->r.maxs[2] < -8)
-		{
-			ent->r.maxs[2] = -8;
-		}
-
-		if (ent->NPC->aiFlags & NPCAI_HEAL_ROSH)
-		{
-			//kothos twins' bodies are never removed
-			return;
-		}
-
-		if (ent->client->NPC_class == CLASS_GALAKMECH)
-		{
-			//never disappears
-			return;
-		}
-
-		//if (self->client->pers.botclass == BCLASS_GALAKMECH)
-		//{//never disappears
-		//	return;
-		//}
-		if (ent->NPC && ent->NPC->timeOfDeath <= level.time)
-		{
-			ent->NPC->timeOfDeath = level.time + 1000;
-			if (ent->client->playerTeam == NPCTEAM_ENEMY || ent->client->NPC_class == CLASS_PROTOCOL)
-			{
-				ent->nextthink = level.time + FRAMETIME; // try back in a second
-
-				if (DistancetoClosestPlayer(ent->r.currentOrigin, -1) <= REMOVE_DISTANCE)
-				{
-					return;
-				}
-
-				if (InPlayersFOV(ent->r.currentOrigin, -1, 110, 90, qtrue))
-				{
-					//a player sees the body, delay removal.
-					return;
-				}
-			}
-			//if ( self->enemy )
-			{
-				if (ent->client && ent->client->ps.saberEntityNum > 0 && ent->client->ps.saberEntityNum <
-					ENTITYNUM_WORLD)
-				{
-					gentity_t* saberent = &g_entities[ent->client->ps.saberEntityNum];
-					if (saberent)
-					{
-						G_FreeEntity(saberent);
-					}
-				}
-				G_FreeEntity(ent);
-			}
-		}
-	}
-}
-
-/*
-----------------------------------------
-NPC_RemoveBody
-
-Determines when it's ok to ditch the corpse
-----------------------------------------
-*/
-
-static int BodyRemovalPadTime(const gentity_t* ent)
-{
-	int time = 0;
-
-	if (!ent || !ent->client)
-		return 0;
-
-	// team no longer indicates species/race, so in this case we'd use NPC_class, but
-	switch (ent->client->NPC_class)
-	{
-	case CLASS_MOUSE:
-	case CLASS_GONK:
-	case CLASS_R2D2:
-	case CLASS_R5D2:
-	case CLASS_MARK1:
-	case CLASS_MARK2:
-	case CLASS_PROBE:
-	case CLASS_SEEKER:
-	case CLASS_REMOTE:
-	case CLASS_SENTRY:
-	case CLASS_INTERROGATOR:
-		time = 0;
-		break;
-	default:
-		// never go away
-		if (g_corpseRemovalTime.integer <= 0)
-		{
-			time = Q3_INFINITE;
-		}
-		else
-		{
-			time = g_corpseRemovalTime.integer * 1000;
-		}
-		break;
-	}
-	return time;
-}
-
-/*
-----------------------------------------
-NPC_RemoveBodyEffect
-
-Effect to be applied when ditching the corpse
-----------------------------------------
-*/
-
-static void NPC_RemoveBodyEffect(void)
-{
-	if (!NPCS.NPC || !NPCS.NPC->client || NPCS.NPC->s.eFlags & EF_NODRAW)
-		return;
-
-	// team no longer indicates species/race, so in this case we'd use NPC_class, but
-
-	// stub code
-	switch (NPCS.NPC->client->NPC_class)
-	{
-	case CLASS_PROBE:
-	case CLASS_SEEKER:
-	case CLASS_REMOTE:
-	case CLASS_SENTRY:
-	case CLASS_GONK:
-	case CLASS_R2D2:
-	case CLASS_R5D2:
-	case CLASS_MARK1:
-	case CLASS_MARK2:
-	case CLASS_INTERROGATOR:
-	case CLASS_ATST:
-		break;
-	default:
-		break;
-	}
-}
-
-/*
-====================================================================
-void pitch_roll_for_slope( gentity_t *forwhom, vec3_t pass_slope )
-
-MG
-
-This will adjust the pitch and roll of a monster to match
-a given slope - if a non-'0 0 0' slope is passed, it will
-use that value, otherwise it will use the ground underneath
-the monster.  If it doesn't find a surface, it does nothing
-and returns.
-====================================================================
-*/
-
-void pitch_roll_for_slope(gentity_t* forwhom, vec3_t pass_slope)
-{
-	vec3_t slope;
-	vec3_t nvf, ovf, ovr, new_angles = { 0, 0, 0 };
-
-	//if we don't have a slope, get one
-	if (!pass_slope || VectorCompare(vec3_origin, pass_slope))
-	{
-		vec3_t endspot;
-		vec3_t startspot;
-		trace_t trace;
-
-		VectorCopy(forwhom->r.currentOrigin, startspot);
-		startspot[2] += forwhom->r.mins[2] + 4;
-		VectorCopy(startspot, endspot);
-		endspot[2] -= 300;
-		trap->Trace(&trace, forwhom->r.currentOrigin, vec3_origin, vec3_origin, endspot, forwhom->s.number, MASK_SOLID,
-			qfalse, 0, 0);
-
-		if (trace.fraction >= 1.0)
-			return;
-
-		if (VectorCompare(vec3_origin, trace.plane.normal))
-			return;
-
-		VectorCopy(trace.plane.normal, slope);
-	}
-	else
-	{
-		VectorCopy(pass_slope, slope);
-	}
-
-	AngleVectors(forwhom->r.currentAngles, ovf, ovr, NULL);
-
-	vectoangles(slope, new_angles);
-	const float pitch = new_angles[PITCH] + 90;
-	new_angles[ROLL] = new_angles[PITCH] = 0;
-
-	AngleVectors(new_angles, nvf, NULL, NULL);
-
-	float mod = DotProduct(nvf, ovr);
-
-	if (mod < 0)
-		mod = -1;
-	else
-		mod = 1;
-
-	const float dot = DotProduct(nvf, ovf);
-
-	if (forwhom->client)
-	{
-		forwhom->client->ps.viewangles[PITCH] = dot * pitch;
-		forwhom->client->ps.viewangles[ROLL] = (1 - Q_fabs(dot)) * pitch * mod;
-		const float oldmins2 = forwhom->r.mins[2];
-		forwhom->r.mins[2] = -24 + 12 * fabs(forwhom->client->ps.viewangles[PITCH]) / 180.0f;
-		//FIXME: if it gets bigger, move up
-		if (oldmins2 > forwhom->r.mins[2])
-		{
-			//our mins is now lower, need to move up
-			//FIXME: trace?
-			forwhom->client->ps.origin[2] += oldmins2 - forwhom->r.mins[2];
-			forwhom->r.currentOrigin[2] = forwhom->client->ps.origin[2];
-			trap->LinkEntity((sharedEntity_t*)forwhom);
-		}
-	}
-	else
-	{
-		forwhom->r.currentAngles[PITCH] = dot * pitch;
-		forwhom->r.currentAngles[ROLL] = (1 - Q_fabs(dot)) * pitch * mod;
-	}
-}
-
-/*
-----------------------------------------
-DeadThink
-----------------------------------------
-*/
-static void DeadThink(void)
-{
-	trace_t trace;
-
-	const float oldMaxs2 = NPCS.NPC->r.maxs[2];
-
-	NPCS.NPC->r.maxs[2] = NPCS.NPC->client->renderInfo.eyePoint[2] - NPCS.NPC->r.currentOrigin[2] + 4;
-	if (NPCS.NPC->r.maxs[2] < -8)
-	{
-		NPCS.NPC->r.maxs[2] = -8;
-	}
-
-	if (NPCS.NPC->r.maxs[2] > oldMaxs2)
-	{
-		//inflating maxs, make sure we're not inflating into solid
-		trap->Trace(&trace, NPCS.NPC->r.currentOrigin, NPCS.NPC->r.mins, NPCS.NPC->r.maxs, NPCS.NPC->r.currentOrigin,
-			NPCS.NPC->s.number, NPCS.NPC->clipmask, qfalse, 0, 0);
-		if (trace.allsolid)
-		{
-			//must be inflating
-			NPCS.NPC->r.maxs[2] = oldMaxs2;
-		}
-	}
-	//death anim done (or were given a specific amount of time to wait before removal), wait the requisite amount of time them remove
-	if (level.time >= NPCS.NPCInfo->timeOfDeath + BodyRemovalPadTime(NPCS.NPC))
-	{
-		if (NPCS.NPC->client->ps.eFlags & EF_NODRAW)
-		{
-			if (!trap->ICARUS_IsRunning(NPCS.NPC->s.number))
-			{
-				NPCS.NPC->think = G_FreeEntity;
-				NPCS.NPC->nextthink = level.time + FRAMETIME;
-			}
-		}
-		else
-		{
-			// Start the body effect first, then delay 400ms before ditching the corpse
-			NPC_RemoveBodyEffect();
-			NPCS.NPC->think = NPC_RemoveBody;
-			NPCS.NPC->nextthink = level.time + FRAMETIME / 2;
-
-			const class_t npc_class = NPCS.NPC->client->NPC_class;
-			// check for droids
-			if (npc_class == CLASS_SEEKER || npc_class == CLASS_PROBE || npc_class == CLASS_MOUSE ||
-				npc_class == CLASS_SBD || npc_class == CLASS_BATTLEDROID || npc_class == CLASS_DROIDEKA ||
-				npc_class == CLASS_GONK || npc_class == CLASS_R2D2 || npc_class == CLASS_R5D2 || npc_class ==
-				CLASS_REMOTE ||
-				npc_class == CLASS_MARK1 || npc_class == CLASS_MARK2 || npc_class == CLASS_PROTOCOL ||
-				npc_class == CLASS_INTERROGATOR || npc_class == CLASS_ATST || npc_class == CLASS_SENTRY)
-			{
-				// special droid only behaviors
-				NPCS.NPC->client->ps.eFlags |= EF_NODRAW;
-				NPCS.NPCInfo->timeOfDeath = level.time + FRAMETIME * 8;
-			}
-			else
-				NPCS.NPCInfo->timeOfDeath = level.time + FRAMETIME * 4;
-		}
-		return;
-	}
-
-	// If the player is on the ground and the resting position contents haven't been set yet...(BounceCount tracks the contents)
-	if (NPCS.NPC->bounceCount < 0 && NPCS.NPC->s.groundEntityNum >= 0)
-	{
-		// if client is in a nodrop area, make him/her nodraw
-		const int contents = NPCS.NPC->bounceCount = trap->PointContents(NPCS.NPC->r.currentOrigin, -1);
-
-		if (contents & CONTENTS_NODROP)
-		{
-			NPCS.NPC->client->ps.eFlags |= EF_NODRAW;
-		}
-	}
-
-	CorpsePhysics(NPCS.NPC);
-}
-
-/*
-===============
-SetNPCGlobals
-
-local function to set globals used throughout the AI code
-===============
-*/
-void SetNPCGlobals(gentity_t* ent)
-{
-	if (!ent)
-	{
-		return;
-	}
-
-	// require the entity to be an NPC with client and NPC info
-	if (!ent->NPC || !ent->client)
-	{
-		// optionally log an error for debugging builds
-#ifdef _DEBUG
-		Com_Printf("SetNPCGlobals: entity %d has no NPC or client\n", ent ? ent->s.number : -1);
-#endif
-		NPCS.NPC = NULL;
-		NPCS.NPCInfo = NULL;
-		NPCS.client = NULL;
-		return;
-	}
-	NPCS.NPC = ent;
-	NPCS.NPCInfo = ent->NPC;
-	NPCS.client = ent->client;
-	memset(&NPCS.ucmd, 0, sizeof(usercmd_t));
-}
-
-npcStatic_t _saved_NPCS;
-
-void SaveNPCGlobals(void)
-{
-	memcpy(&_saved_NPCS, &NPCS, sizeof _saved_NPCS);
-}
-
-void RestoreNPCGlobals(void)
-{
-	memcpy(&NPCS, &_saved_NPCS, sizeof _saved_NPCS);
-}
-
-//We MUST do this, other funcs were using NPC illegally when "self" wasn't the global NPC
-void ClearNPCGlobals(void)
-{
-	NPCS.NPC = NULL;
-	NPCS.NPCInfo = NULL;
-	NPCS.client = NULL;
-}
-
-//===============
-
-extern qboolean showBBoxes;
-vec3_t NPCDEBUG_RED = { 1.0, 0.0, 0.0 };
-vec3_t NPCDEBUG_GREEN = { 0.0, 1.0, 0.0 };
-vec3_t NPCDEBUG_BLUE = { 0.0, 0.0, 1.0 };
-vec3_t NPCDEBUG_LIGHT_BLUE = { 0.3f, 0.7f, 1.0 };
-extern void G_Cube(vec3_t mins, vec3_t maxs, vec3_t color, float alpha);
-extern void G_Line(vec3_t start, vec3_t end, vec3_t color, float alpha);
-extern qboolean InPlayersPVS(vec3_t point);
-
-static void NPC_ApplyScriptFlags(void)
-{
-	if (NPCS.NPCInfo->scriptFlags & SCF_CROUCHED)
-	{
-		if (NPCS.NPCInfo->charmedTime > level.time && (NPCS.ucmd.forwardmove || NPCS.ucmd.rightmove))
-		{
-			//ugh, if charmed and moving, ignore the crouched command
-		}
-		else
-		{
-			NPCS.ucmd.upmove = -127;
-		}
-	}
-
-	if (NPCS.NPCInfo->scriptFlags & SCF_RUNNING)
-	{
-		NPCS.ucmd.buttons &= ~BUTTON_WALKING;
-	}
-	else if (NPCS.NPCInfo->scriptFlags & SCF_WALKING)
-	{
-		if (NPCS.NPCInfo->charmedTime > level.time && (NPCS.ucmd.forwardmove || NPCS.ucmd.rightmove))
-		{
-			//ugh, if charmed and moving, ignore the walking command
-		}
-		else
-		{
-			NPCS.ucmd.buttons |= BUTTON_WALKING;
-		}
-	}
-
-	if (NPCS.NPCInfo->scriptFlags & SCF_LEAN_RIGHT)
-	{
-		NPCS.ucmd.buttons |= BUTTON_USE;
-		NPCS.ucmd.rightmove = 127;
-		NPCS.ucmd.forwardmove = 0;
-		NPCS.ucmd.upmove = 0;
-	}
-	else if (NPCS.NPCInfo->scriptFlags & SCF_LEAN_LEFT)
-	{
-		NPCS.ucmd.buttons |= BUTTON_USE;
-		NPCS.ucmd.rightmove = -127;
-		NPCS.ucmd.forwardmove = 0;
-		NPCS.ucmd.upmove = 0;
-	}
-
-	if (NPCS.NPCInfo->scriptFlags & SCF_ALT_FIRE && NPCS.ucmd.buttons & BUTTON_ATTACK)
-	{
-		//Use altfire instead
-		// new code so snipers shoot their altfire properly
-		if (NPCS.NPC->client->ps.weapon != WP_DISRUPTOR || NPCS.NPC->client->ps.zoomMode == 0)
-		{
-			NPCS.ucmd.buttons &= ~BUTTON_ATTACK; // if using alt fire, dont use normal fire
-			NPCS.ucmd.buttons |= BUTTON_ALT_ATTACK;
-		}
-
-		if (NPCS.NPC->client->ps.weapon == WP_DISRUPTOR && NPCS.NPC->client->ps.zoomMode != 0 && NPCS.NPCInfo->
-			attackHold == 0)
-		{
-			// snipers can use charged shot
-			NPCS.NPCInfo->attackHold = 2000;
-		}
-		else if (NPCS.NPC->client->ps.weapon == WP_ROCKET_LAUNCHER)
-		{
-			// npcs can use homing missiles properly now
-			NPCS.NPCInfo->attackHold = 2000;
-		}
-		else if (NPCS.NPC->client->ps.weapon == WP_BRYAR_PISTOL && NPCS.ucmd.buttons & BUTTON_ALT_ATTACK && !
-			Q_irand(0, 1))
-		{
-			// npcs can use charged pistol
-			NPCS.NPCInfo->attackHold = 2000;
-		}
-	}
-	else if (NPCS.NPC->client->ps.weapon == WP_DISRUPTOR && !(NPCS.NPCInfo->scriptFlags & SCF_ALT_FIRE) && NPCS.NPC->
-		client->ps.zoomMode != 0)
-	{
-		// reset sniper zoomMode when switching back to primary fire
-		NPCS.ucmd.buttons |= BUTTON_ALT_ATTACK;
-	}
-	else if (NPCS.NPC->client->ps.weapon == WP_BOWCASTER && NPCS.ucmd.buttons & BUTTON_ATTACK && !Q_irand(0, 1))
-	{
-		// npcs can use charged bowcaster
-		NPCS.NPCInfo->attackHold = 2000;
-	}
-	// only removes NPC when it's safe too (Player is out of PVS)
-	if (NPCS.NPCInfo->scriptFlags & SCF_SAFE_REMOVE)
-	{
-		// take from BSRemove
-		if (!InPlayersPVS(NPCS.NPC->r.currentOrigin))
-		{
-			//racc - we can be safely removed.
-			G_UseTargets2(NPCS.NPC, NPCS.NPC, NPCS.NPC->target3);
-			NPCS.NPC->s.eFlags |= EF_NODRAW;
-			NPCS.NPC->s.eType = ET_INVISIBLE;
-			NPCS.NPC->r.contents = 0;
-			NPCS.NPC->health = 0;
-			NPCS.NPC->targetname = NULL;
-
-			//Disappear in half a second
-			NPCS.NPC->think = G_FreeEntity;
-			NPCS.NPC->nextthink = level.time + FRAMETIME;
-		}
-	}
-
-	// npcs with thermals must calculate distance to enemy and hold fire properly
-	if (NPCS.NPC->client->ps.weapon == WP_THERMAL && NPCS.NPC->enemy)
-	{
-		NPCS.NPCInfo->attackHold = (int)Distance(NPCS.client->ps.origin, NPCS.NPC->enemy->client->ps.origin) * 2;
-	}
-}
-
-void Q3_DebugPrint(int level, const char* format, ...);
-
-static void NPC_HandleAIFlags(void)
-{
-	//FIXME: make these flags checks a function call like NPC_CheckAIFlagsAndTimers
-	if (NPCS.NPCInfo->aiFlags & NPCAI_LOST)
-	{
-		//Print that you need help!
-		//FIXME: shouldn't remove this just yet if cg_draw needs it
-		NPCS.NPCInfo->aiFlags &= ~NPCAI_LOST;
-
-		if (NPCS.NPCInfo->goalEntity && NPCS.NPCInfo->goalEntity == NPCS.NPC->enemy)
-		{
-			//We can't nav to our enemy
-			//Drop enemy and see if we should search for him
-			NPC_LostEnemyDecideChase();
-
-			npc_check_speak(NPCS.NPC); // (SP)
-		}
-	}
-
-	//been told to play a victory sound after a delay
-	if (NPCS.NPCInfo->greetingDebounceTime && NPCS.NPCInfo->greetingDebounceTime < level.time)
-	{
-		G_AddVoiceEvent(NPCS.NPC, Q_irand(EV_VICTORY1, EV_VICTORY3), Q_irand(2000, 4000));
-		NPCS.NPCInfo->greetingDebounceTime = 0;
-	}
-
-	if (NPCS.NPCInfo->ffireCount > 0)
-	{
-		if (NPCS.NPCInfo->ffireFadeDebounce < level.time)
-		{
-			NPCS.NPCInfo->ffireCount--;
-			//Com_Printf( "drop: %d < %d\n", NPCInfo->ffireCount, 3+((2-g_npcspskill.integer)*2) );
-			NPCS.NPCInfo->ffireFadeDebounce = level.time + 3000;
-		}
-	}
-	if (d_patched.integer)
-	{
-		//use patch-style navigation
-		if (NPCS.NPCInfo->consecutiveBlockedMoves > 20)
-		{
-			//been stuck for a while, try again?
-			NPCS.NPCInfo->consecutiveBlockedMoves = 0;
-		}
-	}
-}
-
-static void NPC_AvoidWallsAndCliffs(void)
-{
-	//...
-}
-
-static void NPC_CheckAttackScript(void)
-{
-	if (!(NPCS.ucmd.buttons & BUTTON_ATTACK))
-	{
-		return;
-	}
-
-	G_ActivateBehavior(NPCS.NPC, BSET_ATTACK);
-}
-
-float NPC_MaxDistSquaredForWeapon(void);
-
-static void NPC_CheckAttackHold(void)
-{
-	vec3_t vec;
-
-	// If they don't have an enemy they shouldn't hold their attack anim.
-	if (!NPCS.NPC->enemy)
-	{
-		NPCS.NPCInfo->attackHoldTime = 0;
-		return;
-	}
-
-	VectorSubtract(NPCS.NPC->enemy->r.currentOrigin, NPCS.NPC->r.currentOrigin, vec);
-
-	if (VectorLengthSquared(vec) > NPC_MaxDistSquaredForWeapon())
-	{
-		NPCS.NPCInfo->attackHoldTime = 0;
-	}
-	else if (NPCS.NPCInfo->attackHoldTime && NPCS.NPCInfo->attackHoldTime > level.time)
-	{
-		NPCS.ucmd.buttons |= BUTTON_ATTACK;
-	}
-	else if (NPCS.NPCInfo->attackHold && NPCS.ucmd.buttons & BUTTON_ATTACK)
-	{
-		NPCS.NPCInfo->attackHoldTime = level.time + NPCS.NPCInfo->attackHold;
-	}
-	else
-	{
-		NPCS.NPCInfo->attackHoldTime = 0;
-	}
-}
-
-qboolean NPC_CanUseAdvancedFighting()
-{
-	// Evasion/Weapon Switching/etc...
-	switch (NPCS.NPC->client->NPC_class)
-	{
-	case CLASS_BESPIN_COP:
-	case CLASS_CLAW:
-	case CLASS_COMMANDO:
-	case CLASS_DESANN:
-	case CLASS_GALAK:
-	case CLASS_GRAN:
-	case CLASS_IMPERIAL:
-	case CLASS_JAN:
-	case CLASS_JEDI:
-	case CLASS_KYLE:
-	case CLASS_LANDO:
-	case CLASS_LUKE:
-	case CLASS_MORGANKATARN:
-	case CLASS_MURJJ:
-	case CLASS_REBEL:
-	case CLASS_REBORN:
-	case CLASS_REELO:
-	case CLASS_RODIAN:
-	case CLASS_SHADOWTROOPER:
-	case CLASS_TAVION:
-	case CLASS_TRANDOSHAN:
-	case CLASS_WEEQUAY:
-	case CLASS_BOBAFETT:
-	case CLASS_WOOKIE:
-		break;
-	default:
-		return qfalse;
-	}
-	return qtrue;
-}
-
-static void NPC_KeepCurrentFacing(void)
-{
-	if (!NPCS.ucmd.angles[YAW])
-	{
-		NPCS.ucmd.angles[YAW] = ANGLE2SHORT(NPCS.client->ps.viewangles[YAW]) - NPCS.client->ps.delta_angles[YAW];
-	}
-
-	if (!NPCS.ucmd.angles[PITCH])
-	{
-		NPCS.ucmd.angles[PITCH] = ANGLE2SHORT(NPCS.client->ps.viewangles[PITCH]) - NPCS.client->ps.delta_angles[PITCH];
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_Charmed
--------------------------
-*/
-
-static void NPC_BehaviorSet_Charmed(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_FOLLOW_LEADER: //# 40: Follow your leader and shoot any enemies you come across
-		NPC_BSFollowLeader();
-		break;
-	case BS_REMOVE:
-		NPC_BSRemove();
-		break;
-	case BS_SEARCH: //# 43: Using current waypoint as a base, search the immediate branches of waypoints for enemies
-		NPC_BSSearch();
-		break;
-	case BS_WANDER: //# 46: Wander down random waypoint paths
-		NPC_BSWander();
-		break;
-	case BS_FLEE:
-		NPC_BSFlee();
-		break;
-	default:
-	case BS_DEFAULT: //whatever
-		NPC_BSDefault();
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_Default
--------------------------
-*/
-
-void NPC_BehaviorSet_Default(const int b_state)
-{
-	if (NPCS.NPC->enemy && NPCS.NPC->enemy->inuse && NPCS.NPC->enemy->health > 0)
-	{
-		// Have an anemy... Check if we should use advanced fighting for this NPC...
-		if (NPC_CanUseAdvancedFighting())
-		{
-			// This NPC can use advanced tactics... Use them!!!
-			NPC_BSJedi_Default();
-			return;
-		}
-	}
-	switch (b_state)
-	{
-	case BS_ADVANCE_FIGHT: //head toward captureGoal, shoot anything that gets in the way
-		NPC_BSAdvanceFight();
-		break;
-	case BS_SLEEP: //Follow a path, looking for enemies
-		NPC_BSSleep();
-		break;
-	case BS_FOLLOW_LEADER: //# 40: Follow your leader and shoot any enemies you come across
-		NPC_BSFollowLeader();
-		break;
-	case BS_JUMP: //41: Face navgoal and jump to it.
-		NPC_BSJump();
-		break;
-	case BS_REMOVE:
-		NPC_BSRemove();
-		break;
-	case BS_SEARCH: //# 43: Using current waypoint as a base, search the immediate branches of waypoints for enemies
-		NPC_BSSearch();
-		break;
-	case BS_NOCLIP:
-		NPC_BSNoClip();
-		break;
-	case BS_WANDER: //# 46: Wander down random waypoint paths
-		NPC_BSWander();
-		break;
-	case BS_FLEE:
-		NPC_BSFlee();
-		break;
-	case BS_WAIT:
-		NPC_BSWait();
-		break;
-	case BS_CINEMATIC:
-		NPC_BSCinematic();
-		break;
-	default:
-	case BS_DEFAULT: //whatever
-		NPC_BSDefault();
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_Interrogator
--------------------------
-*/
-static void NPC_BehaviorSet_Interrogator(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-	case BS_STAND_AND_SHOOT:
-	case BS_HUNT_AND_KILL:
-	case BS_DEFAULT:
-		NPC_BSInterrogator_Default();
-		break;
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_ImperialProbe
--------------------------
-*/
-static void NPC_BehaviorSet_ImperialProbe(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-	case BS_STAND_AND_SHOOT:
-	case BS_HUNT_AND_KILL:
-	case BS_DEFAULT:
-		NPC_BSImperialProbe_Default();
-		break;
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-void NPC_BSSeeker_Default(void);
-
-/*
--------------------------
-NPC_BehaviorSet_Seeker
--------------------------
-*/
-static void NPC_BehaviorSet_Seeker(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-	case BS_STAND_AND_SHOOT:
-	case BS_HUNT_AND_KILL:
-	case BS_DEFAULT:
-		NPC_BSSeeker_Default();
-		break;
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-void NPC_BSRemote_Default(void);
-
-/*
--------------------------
-NPC_BehaviorSet_Remote
--------------------------
-*/
-static void NPC_BehaviorSet_Remote(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-	case BS_STAND_AND_SHOOT:
-	case BS_HUNT_AND_KILL:
-	case BS_DEFAULT:
-		NPC_BSRemote_Default();
-		break;
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-void NPC_BSSentry_Default(void);
-
-/*
--------------------------
-NPC_BehaviorSet_Sentry
--------------------------
-*/
-static void NPC_BehaviorSet_Sentry(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-	case BS_STAND_AND_SHOOT:
-	case BS_HUNT_AND_KILL:
-	case BS_DEFAULT:
-		NPC_BSSentry_Default();
-		break;
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_Grenadier
--------------------------
-*/
-static void NPC_BehaviorSet_Grenadier(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-	case BS_STAND_AND_SHOOT:
-	case BS_HUNT_AND_KILL:
-	case BS_DEFAULT:
-		NPC_BSGrenadier_Default();
-		break;
-
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_Tusken
--------------------------
-*/
-extern void NPC_BSTusken_Default(void);
-
-static void NPC_BehaviorSet_Tusken(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-	case BS_STAND_AND_SHOOT:
-	case BS_HUNT_AND_KILL:
-	case BS_DEFAULT:
-		NPC_BSTusken_Default(); // (NPC_AI_Tusken.c)
-		break;
-
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_Sniper
--------------------------
-*/
-static void NPC_BehaviorSet_Sniper(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-	case BS_STAND_AND_SHOOT:
-	case BS_HUNT_AND_KILL:
-	case BS_DEFAULT:
-		NPC_BSSniper_Default();
-		break;
-
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_Stormtrooper
--------------------------
-*/
-
-void NPC_BehaviorSet_Stormtrooper(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-	case BS_STAND_AND_SHOOT:
-	case BS_HUNT_AND_KILL:
-	case BS_DEFAULT:
-		NPC_BSST_Default();
-		break;
-
-	case BS_INVESTIGATE:
-		NPC_BSST_Investigate();
-		break;
-
-	case BS_SLEEP:
-		NPC_BSST_Sleep();
-		break;
-
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_Trooper
--------------------------
-*/
-void NPC_BehaviorSet_Trooper(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-	case BS_STAND_AND_SHOOT:
-	case BS_HUNT_AND_KILL:
-	case BS_DEFAULT:
-		NPC_BSST_Default();
-		break;
-
-	case BS_INVESTIGATE:
-		NPC_BSST_Investigate();
-		break;
-
-	case BS_SLEEP:
-		NPC_BSST_Sleep();
-		break;
-
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_Jedi
--------------------------
-*/
-
-static void NPC_BehaviorSet_Jedi(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-	case BS_STAND_AND_SHOOT:
-	case BS_HUNT_AND_KILL:
-	case BS_INVESTIGATE:
-	case BS_DEFAULT:
-		NPC_BSJedi_Default();
-		break;
-
-	case BS_FOLLOW_LEADER:
-		NPC_BSJedi_FollowLeader();
-		break;
-
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-//qboolean G_JediInNormalAI(const gentity_t* ent)
-//{
-//	//NOTE: should match above func's switch!
-//	//check our b_state
-//	const bState_t b_state = G_CurrentBState(ent->NPC);
-//	switch (b_state)
-//	{
-//	case BS_STAND_GUARD:
-//	case BS_PATROL:
-//	case BS_STAND_AND_SHOOT:
-//	case BS_HUNT_AND_KILL:
-//	case BS_INVESTIGATE:
-//	case BS_DEFAULT:
-//	case BS_FOLLOW_LEADER:
-//		return qtrue;
-//	default: ;
-//	}
-//	return qfalse;
-//}
-
-/*
--------------------------
-NPC_BehaviorSet_Droid
--------------------------
-*/
-static void NPC_BehaviorSet_Droid(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_DEFAULT:
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-		NPC_BSDroid_Default();
-		break;
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_Mark1
--------------------------
-*/
-static void NPC_BehaviorSet_Mark1(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_DEFAULT:
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-		NPC_BSMark1_Default();
-		break;
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_Mark2
--------------------------
-*/
-static void NPC_BehaviorSet_Mark2(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_DEFAULT:
-	case BS_PATROL:
-	case BS_STAND_AND_SHOOT:
-	case BS_HUNT_AND_KILL:
-		NPC_BSMark2_Default();
-		break;
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_ATST
--------------------------
-*/
-static void NPC_BehaviorSet_ATST(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_DEFAULT:
-	case BS_PATROL:
-	case BS_STAND_AND_SHOOT:
-	case BS_HUNT_AND_KILL:
-		NPC_BSATST_Default();
-		break;
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_MineMonster
--------------------------
-*/
-static void NPC_BehaviorSet_MineMonster(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-	case BS_STAND_AND_SHOOT:
-	case BS_HUNT_AND_KILL:
-	case BS_DEFAULT:
-		NPC_BSMineMonster_Default();
-		break;
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_Howler
--------------------------
-*/
-static void NPC_BehaviorSet_Howler(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-	case BS_STAND_AND_SHOOT:
-	case BS_HUNT_AND_KILL:
-	case BS_DEFAULT:
-		NPC_BSHowler_Default();
-		break;
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_Rancor
--------------------------
-*/
-static void NPC_BehaviorSet_Rancor(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-	case BS_STAND_AND_SHOOT:
-	case BS_HUNT_AND_KILL:
-	case BS_DEFAULT:
-		NPC_BSRancor_Default();
-		break;
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_Wampa
--------------------------
-*/
-extern void NPC_BSWampa_Default(void);
-
-static void NPC_BehaviorSet_Wampa(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-	case BS_STAND_AND_SHOOT:
-	case BS_HUNT_AND_KILL:
-	case BS_DEFAULT:
-		NPC_BSWampa_Default();
-		break;
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_SandCreature
--------------------------
-*/
-static void NPC_BehaviorSet_SandCreature(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-	case BS_STAND_AND_SHOOT:
-	case BS_HUNT_AND_KILL:
-	case BS_DEFAULT:
-		NPC_BSSandCreature_Default();
-		break;
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_BehaviorSet_Droid
--------------------------
-*/
-// Added 01/21/03 by AReis.
-extern void NPC_BSAnimal_Default(void);
-
-static void NPC_BehaviorSet_Animal(const int b_state)
-{
-	switch (b_state)
-	{
-	case BS_DEFAULT:
-	case BS_STAND_GUARD:
-	case BS_PATROL:
-		NPC_BSAnimal_Default(); // (SP: packs, follow the leader, wander, flee; NPC_AI_Animal.c)
-		break;
-	default:
-		NPC_BehaviorSet_Default(b_state);
-		break;
-	}
-}
-
-/*
--------------------------
-NPC_RunBehavior
--------------------------
-*/
-extern void NPC_BSRT_Default(void);
-extern qboolean RT_Flying(const gentity_t* self);
-extern void NPC_BSEmplaced(void);
-extern qboolean NPC_CheckSurrender(void);
-extern void Boba_FlyStop(gentity_t* self);
-extern qboolean Jedi_CultistDestroyer(const gentity_t* self);
-extern void bubble_shield_update(void);
-extern void NPC_BSSD_Default(void);
-extern void NPC_BSCivilian_Default(int b_state);
-
-extern qboolean NPC_FighterAI(void);
-extern qboolean Pilot_MasterUpdate(void); // AI_Vehicle.c
-
-static void NPC_RunBehavior(const npcteam_t team, const int b_state)
-{
-	qboolean dontSetAim;
-
-	// flying a fighter (ai_fighter.c: the space maps' empty ships)
-	if (NPC_FighterAI())
-	{
-		return;
-	}
-
-	if (NPCS.NPC->s.NPC_class == CLASS_VEHICLE &&
-		NPCS.NPC->m_pVehicle)
-	{
-		//vehicles don't do AI!
-		return;
-	}
-
-	if (b_state == BS_CINEMATIC)
-	{
-		NPC_BSCinematic();
-	}
-	else if (NPCS.NPCInfo->scriptFlags & SCF_PILOT && Pilot_MasterUpdate())
-	{
-		// on a swoop or on the way to one (AI_Vehicle.c, as SP)
-		return;
-	}
-	else if (NPC_JumpBackingUp())
-	{
-		//racc - NPC is backing up for a large jump
-	}
-	else if (!TIMER_Done(NPCS.NPC, "DEMP2_StunTime"))
-	{
-		//we've been stunned by a demp2 shot.
-		NPC_UpdateAngles(qtrue, qtrue);
-	}
-	else if (NPCS.NPC->client->ps.weapon == WP_EMPLACED_GUN)
-	{
-		NPC_BSEmplaced();
-		G_CheckCharmed(NPCS.NPC);
-	}
-	else if (NPCS.NPC->client->NPC_class == CLASS_HOWLER)
-	{
-		NPC_BehaviorSet_Howler(b_state);
-	}
-	else if (Jedi_CultistDestroyer(NPCS.NPC))
-	{
-		NPC_BSJedi_Default();
-		dontSetAim = qtrue;
-	}
-	else if (NPCS.NPC->client->NPC_class == CLASS_SABER_DROID)
-	{
-		//saber droid
-		NPC_BSSD_Default();
-	}
-	else if (NPCS.NPC->client->ps.weapon == WP_SABER ||
-		(NPCS.NPC->client->NPC_class == CLASS_SITHLORD && NPCS.NPC->client->ps.weapon == WP_MELEE) ||
-		(NPCS.NPC->client->NPC_class == CLASS_SITHLORD && NPCS.NPC->client->ps.weapon == WP_NONE))
-	{
-		//jedi (as SP: also an unarmed / melee Sith lord)
-		NPC_BehaviorSet_Jedi(b_state);
-		dontSetAim = qtrue;
-	}
-	else if (NPCS.NPC->client->NPC_class == CLASS_REBORN && NPCS.NPC->client->ps.weapon == WP_MELEE)
-	{
-		//force-only reborn
-		NPC_BehaviorSet_Jedi(b_state);
-		dontSetAim = qtrue;
-	}
-	else if (NPCS.NPC->client->NPC_class == CLASS_JEDI ||
-		NPCS.NPC->client->NPC_class == CLASS_REBORN ||
-		NPCS.NPC->client->NPC_class == CLASS_TAVION ||
-		NPCS.NPC->client->ps.weapon == WP_SABER)
-	{
-		//jedi
-		NPC_BehaviorSet_Jedi(b_state);
-	}
-	else if (NPCS.NPC->client->NPC_class == CLASS_RANCOR)
-	{
-		NPC_BehaviorSet_Rancor(b_state);
-	}
-	else if (NPCS.NPC->client->NPC_class == CLASS_SAND_CREATURE)
-	{
-		NPC_BehaviorSet_SandCreature(b_state);
-	}
-	else if (NPCS.NPC->client->NPC_class == CLASS_WAMPA)
-	{
-		//wampa
-		NPC_BSWampa_Default();
-		G_CheckCharmed(NPCS.NPC);
-	}
-	else if (NPCS.NPC->client->NPC_class == CLASS_REMOTE)
-	{
-		NPC_BehaviorSet_Remote(b_state);
-	}
-	else if (NPCS.NPC->client->NPC_class == CLASS_SEEKER)
-	{
-		NPC_BehaviorSet_Seeker(b_state);
-	}
-	else if (NPCS.NPC->client->NPC_class == CLASS_BOBAFETT)
-	{
-		//bounty hunter: as SP, update / flee / tactics first (NPC_AI_BobaFett.c)
-		Boba_Update();
-		if (NPCS.NPCInfo->surrenderTime)
-		{
-			Boba_Flee();
-		}
-		else if (!Boba_TacticsLocked())
-		{
-			if (Boba_Flying(NPCS.NPC))
-			{
-				NPC_BehaviorSet_Seeker(b_state);
-			}
-			else
-			{
-				NPC_BehaviorSet_Jedi(b_state);
-			}
-		}
-		dontSetAim = qtrue;
-	}
-	else if (NPCS.NPC->client->NPC_class == CLASS_ROCKETTROOPER)
-	{
-		//bounty hunter
-		if (RT_Flying(NPCS.NPC) || NPCS.NPC->enemy != NULL)
-		{
-			NPC_BSRT_Default();
-		}
-		else
-		{
-			NPC_BehaviorSet_Stormtrooper(b_state);
-		}
-		G_CheckCharmed(NPCS.NPC);
-		dontSetAim = qtrue;
-	}
-	else if (Jedi_CultistDestroyer(NPCS.NPC))
-	{
-		NPC_BSJedi_Default();
-	}
-	else if (NPCS.NPCInfo->scriptFlags & SCF_FORCED_MARCH)
-	{
-		//being forced to march
-		NPC_BSDefault();
-	}
-	else if (NPCS.NPC->client->ps.weapon == WP_TUSKEN_RIFLE)
-	{
-		//as SP: a tusken rifle with alt fire is a sniper, else the tusken AI
-		if (NPCS.NPCInfo->scriptFlags & SCF_ALT_FIRE)
-		{
-			NPC_BehaviorSet_Sniper(b_state);
-		}
-		else
-		{
-			NPC_BehaviorSet_Tusken(b_state);
-		}
-		G_CheckCharmed(NPCS.NPC);
-	}
-	else if (NPCS.NPC->client->ps.weapon == WP_TUSKEN_STAFF)
-	{
-		NPC_BehaviorSet_Tusken(b_state);
-		G_CheckCharmed(NPCS.NPC);
-	}
-	else if (NPCS.NPC->client->NPC_class == CLASS_GONK || NPCS.NPC->client->NPC_class == CLASS_MOUSE
-		|| NPCS.NPC->client->NPC_class == CLASS_R2D2 || NPCS.NPC->client->NPC_class == CLASS_R5D2)
-	{
-		// SJE: the weaponless droids wander and keep out of fights like SP's (team NEUTRAL there). MP's NPC file
-		// parser never reads a team (it looks up "NPCplayerTeam"), so a gonk ran the combat AI: it chased players,
-		// "fired" WP_NONE every frame and slid along in anims it does not have.
-		NPC_BehaviorSet_Droid(b_state);
-	}
-	else
-	{
-		switch (team)
-		{
-		case (npcteam_t)NPCTEAM_ENEMY:
-			// special cases for enemy droids
-			switch (NPCS.NPC->client->NPC_class)
-			{
-			case CLASS_ALORA:
-				NPC_BehaviorSet_Jedi(b_state);
-				return;
-			case CLASS_ATST:
-				NPC_BehaviorSet_ATST(b_state);
-				return;
-			case CLASS_PROBE:
-				NPC_BehaviorSet_ImperialProbe(b_state);
-				return;
-			case CLASS_REMOTE:
-				NPC_BehaviorSet_Remote(b_state);
-				return;
-			case CLASS_SENTRY:
-				NPC_BehaviorSet_Sentry(b_state);
-				return;
-			case CLASS_INTERROGATOR:
-				NPC_BehaviorSet_Interrogator(b_state);
-				return;
-			case CLASS_MINEMONSTER:
-				NPC_BehaviorSet_MineMonster(b_state);
-				return;
-			case CLASS_HOWLER:
-				NPC_BehaviorSet_Howler(b_state);
-				return;
-			case CLASS_RANCOR:
-				NPC_BehaviorSet_Rancor(b_state);
-				return;
-			case CLASS_SAND_CREATURE:
-				NPC_BehaviorSet_SandCreature(b_state);
-				return;
-			case CLASS_SABOTEUR:
-			case CLASS_HAZARD_TROOPER:
-			case CLASS_REELO:
-			case CLASS_COMMANDO:
-			case CLASS_IMPERIAL:
-			case CLASS_RODIAN:
-			case CLASS_TRANDOSHAN:
-			{
-				if (NPCS.NPC->client->ps.weapon == WP_DISRUPTOR && NPCS.NPCInfo->scriptFlags & SCF_ALT_FIRE)
-				{
-					//a sniper
-					NPC_BehaviorSet_Sniper(b_state);
-					return;
-				}
-				NPC_BehaviorSet_Stormtrooper(b_state);
-				return;
-			}
-			case CLASS_TUSKEN:
-			{
-				if (NPCS.NPC->client->ps.weapon == WP_DISRUPTOR /*&& (NPCS.NPCInfo->scriptFlags & SCF_ALT_FIRE)*/)
-				{
-					//a sniper
-					NPC_BehaviorSet_Sniper(b_state);
-					return;
-				}
-				NPC_BehaviorSet_Stormtrooper(b_state);
-				return;
-			}
-			case CLASS_MARK1:
-				NPC_BehaviorSet_Mark1(b_state);
-				return;
-			case CLASS_MARK2:
-				NPC_BehaviorSet_Mark2(b_state);
-				return;
-			case CLASS_GALAKMECH:
-				NPC_BSGM_Default();
-				return;
-			default:
-				break;
-			}
-			/*if (NPCS.NPC->client->NPC_class == CLASS_ASSASSIN_DROID)
-			{
-				BubbleShield_Update();
-			}*/
-
-			if (NPCS.NPC->client->NPC_class == CLASS_DROIDEKA)
-			{
-				bubble_shield_update();
-			}
-
-			/*if (NPCS.NPC->client->NPC_class == CLASS_GALAKMECH)
-			{
-				BubbleShield_Update();
-			}*/
-
-			if (NPC_IsTrooper(NPCS.NPC))
-			{
-				NPC_BehaviorSet_HazardTroop(b_state); // (SP's hazard trooper squads, NPC_AI_HazardTrooper.c)
-				return;
-			}
-
-			if (NPCS.NPC->enemy && NPCS.NPC->s.weapon == WP_NONE && b_state != BS_HUNT_AND_KILL && !trap->
-				ICARUS_TaskIDPending(
-					(sharedEntity_t*)NPCS.NPC, TID_MOVE_NAV))
-			{
-				//if in battle and have no weapon, run away, fixme: when in BS_HUNT_AND_KILL, they just stand there
-				if (b_state != BS_FLEE)
-				{
-					NPC_StartFlee(NPCS.NPC->enemy, NPCS.NPC->enemy->r.currentOrigin, AEL_DANGER_GREAT, 5000, 10000);
-				}
-				else
-				{
-					NPC_BSFlee();
-				}
-				return;
-			}
-			if (NPCS.NPC->client->ps.weapon == WP_SABER)
-			{
-				//special melee exception
-				NPC_BehaviorSet_Default(b_state);
-				return;
-			}
-			if (NPCS.NPC->client->ps.weapon == WP_DISRUPTOR && NPCS.NPCInfo->scriptFlags & SCF_ALT_FIRE)
-			{
-				//a sniper
-				NPC_BehaviorSet_Sniper(b_state);
-				return;
-			}
-			if (NPCS.NPC->client->ps.weapon == WP_THERMAL || NPCS.NPC->client->ps.weapon == WP_MELEE)
-			{
-				//a grenadier
-				NPC_BehaviorSet_Grenadier(b_state);
-				return;
-			}
-			if (NPC_CheckSurrender())
-			{
-				return;
-			}
-			NPC_BehaviorSet_Stormtrooper(b_state);
-			break;
-
-		case (npcteam_t)NPCTEAM_NEUTRAL:
-
-			// special cases for enemy droids
-			if (NPCS.NPC->client->NPC_class == CLASS_PROTOCOL)
-			{
-				NPC_BehaviorSet_Default(b_state);
-			}
-			else if (NPCS.NPC->client->NPC_class == CLASS_UGNAUGHT || NPCS.NPC->client->NPC_class == CLASS_JAWA)
-			{
-				//others, too?
-				NPC_BSCivilian_Default(b_state);
-			}
-			else if (NPCS.NPC->client->NPC_class == CLASS_VEHICLE)
-			{
-				const Vehicle_t* pVehicle = NPCS.NPC->m_pVehicle;
-
-				if (pVehicle && !pVehicle->m_pPilot && pVehicle->m_iBoarding == 0)
-				{
-					if (!pVehicle)
-					{
-						// no vehicle attached to this NPC; nothing to do
-						return;
-					}
-					//racc - no pilot
-					if (pVehicle->m_pVehicleInfo->type == VH_ANIMAL)
-					{
-						//animal vehicles act like animals while not being rode.
-						NPC_BehaviorSet_Animal(b_state);
-					}
-				}
-			}
-			else
-			{
-				// Just one of the average droids
-				NPC_BehaviorSet_Droid(b_state);
-			}
-			break;
-
-		default:
-			if (NPCS.NPC->client->NPC_class == CLASS_SEEKER)
-			{
-				NPC_BehaviorSet_Seeker(b_state);
-			}
-			else
-			{
-				if (NPCS.NPCInfo->charmedTime > level.time)
-				{
-					NPC_BehaviorSet_Charmed(b_state);
-				}
-				else
-				{
-					NPC_BehaviorSet_Default(b_state);
-				}
-				G_CheckCharmed(NPCS.NPC);
-				dontSetAim = qtrue;
-			}
-			break;
-		}
-	}
-}
-
-static bState_t G_CurrentBState(gNPC_t* gNPC)
-{
-	if (gNPC->tempBehavior != BS_DEFAULT)
-	{
-		//Overrides normal behavior until cleared
-		return gNPC->tempBehavior;
-	}
-
-	if (gNPC->behaviorState == BS_DEFAULT)
-	{
-		gNPC->behaviorState = gNPC->defaultBehavior;
-	}
-
-	return gNPC->behaviorState;
-}
-
-/*
-===============
-NPC_ExecuteBState
-
-  MCG
-
-NPC Behavior state thinking
-
-===============
-*/
-extern stringID_table_t ClassTable[];
-
-//---------------------------------------------------------------------------------------------------------------------
-// NPC chatter (2026-11-16, DH; after Jedi Knight Galaxies' NPC conversations, NPC_Conversations.cpp; sounds and voice
-// sets in ext_data/sje_chatter.dat): two idle NPCs of a voice set standing close together (no enemy, not in a
-// script) turn to each other and talk, taking turns with talk animations. Stormtroopers and mercs play a whole little
-// dialog; the civilian sets (Rodians, Gran, Trandoshans, Weequay, Jawas, droids...) trade random lines and may mix.
-// It stops at once when either sees an enemy, gets hurt or walks off. Only one talk within CHAT_QUIET_RANGE, and
-// each NPC looks for a partner only every few seconds (cheap with many NPCs). g_npcChatter 0 = off.
-//---------------------------------------------------------------------------------------------------------------------
-#define CHATTER_FILE			"ext_data/sje_chatter.dat"
-#define MAX_CHAT_SETS			16
-#define MAX_CHAT_DIALOGS		16
-#define MAX_CHAT_DIALOG_LINES	8
-#define MAX_CHAT_LINES			128
-#define MAX_CHAT_CLASSES		8
-#define MAX_ACTIVE_CHATS		16
-#define CHAT_PARTNER_RANGE		128.0f	// JKG: within 128 units
-#define CHAT_QUIET_RANGE		1024.0f	// no second talk this close to one going on
-#define CHAT_COOLDOWN			45000	// ms before an NPC talks again
-
-typedef struct chatSet_s
-{
-	char name[32];
-	int classes[MAX_CHAT_CLASSES];
-	int numClasses;
-	char types[MAX_CHAT_CLASSES][32]; // parts of NPC type names (lower case)
-	int numTypes;
-	char dialog[MAX_CHAT_DIALOGS][MAX_CHAT_DIALOG_LINES][MAX_QPATH];
-	int dialogLines[MAX_CHAT_DIALOGS];
-	int numDialogs;
-	char line[MAX_CHAT_LINES][MAX_QPATH];
-	int numLines;
-} chatSet_t;
-
-static chatSet_t chatSets[MAX_CHAT_SETS];
-static int numChatSets = -1; // -1 = not loaded yet
-static int activeChats[MAX_ACTIVE_CHATS]; // entity number + 1 of each talk's leader, 0 = free
-
-static void NPC_ChatterLoad(void)
-{
-	char* buf = NULL;
-	const char* p;
-
-	numChatSets = 0;
-	memset(chatSets, 0, sizeof chatSets);
-	memset(activeChats, 0, sizeof activeChats);
-	{
-		static char chat_buf[65536];
-		fileHandle_t f = 0;
-		const int len = trap->FS_Open(CHATTER_FILE, &f, FS_READ);
-
-		if (len <= 0 || len >= (int)sizeof chat_buf)
-		{
-			if (f)
-			{
-				trap->FS_Close(f);
-			}
-			return;
-		}
-		trap->FS_Read(chat_buf, len, f);
-		trap->FS_Close(f);
-		chat_buf[len] = 0;
-		buf = chat_buf;
-	}
-	p = buf;
-	COM_BeginParseSession(CHATTER_FILE);
-	while (p && numChatSets < MAX_CHAT_SETS)
-	{
-		chatSet_t* cs = &chatSets[numChatSets];
-		const char* token = COM_ParseExt(&p, qtrue);
-
-		if (!token[0])
-		{
-			break;
-		}
-		Q_strncpyz(cs->name, token, sizeof cs->name);
-		token = COM_ParseExt(&p, qtrue);
-		if (Q_stricmp(token, "{"))
-		{
-			break;
-		}
-		while (1)
-		{
-			char key[32];
-
-			token = COM_ParseExt(&p, qtrue);
-			if (!token[0] || !Q_stricmp(token, "}"))
-			{
-				break;
-			}
-			Q_strncpyz(key, token, sizeof key);
-			token = COM_ParseExt(&p, qfalse);
-			if (!Q_stricmp(key, "classes") || !Q_stricmp(key, "types") || !Q_stricmp(key, "dialog"))
-			{
-				// a list: space separated (classes, types) or ";" separated (dialog)
-				char list[1024];
-				char* s;
-				const char sep = !Q_stricmp(key, "dialog") ? ';' : ' ';
-				int n = 0;
-
-				Q_strncpyz(list, token, sizeof list);
-				s = list;
-				while (*s)
-				{
-					char* e = strchr(s, sep);
-					if (e)
-					{
-						*e = 0;
-					}
-					if (*s)
-					{
-						if (!Q_stricmp(key, "classes") && cs->numClasses < MAX_CHAT_CLASSES)
-						{
-							const int c = GetIDForString(ClassTable, va("CLASS_%s", s));
-							if (c >= 0)
-							{
-								cs->classes[cs->numClasses++] = c;
-							}
-						}
-						else if (!Q_stricmp(key, "types") && cs->numTypes < MAX_CHAT_CLASSES)
-						{
-							Q_strncpyz(cs->types[cs->numTypes], s, sizeof cs->types[0]);
-							Q_strlwr(cs->types[cs->numTypes]);
-							cs->numTypes++;
-						}
-						else if (!Q_stricmp(key, "dialog") && cs->numDialogs < MAX_CHAT_DIALOGS && n < MAX_CHAT_DIALOG_LINES)
-						{
-							Q_strncpyz(cs->dialog[cs->numDialogs][n], s, MAX_QPATH);
-							n++;
-						}
-					}
-					if (!e)
-					{
-						break;
-					}
-					s = e + 1;
-				}
-				if (!Q_stricmp(key, "dialog") && n > 0 && cs->numDialogs < MAX_CHAT_DIALOGS)
-				{
-					cs->dialogLines[cs->numDialogs++] = n;
-				}
-			}
-			else if (!Q_stricmp(key, "line") && cs->numLines < MAX_CHAT_LINES)
-			{
-				Q_strncpyz(cs->line[cs->numLines++], token, MAX_QPATH);
-			}
-		}
-		if (cs->numDialogs || cs->numLines)
-		{
-			numChatSets++;
-		}
-	}
-}
-
-// the voice set an NPC talks with, -1 = none (cached in chatSet: 0 = not looked up, else set + 1, -1 = none)
-static int NPC_ChatterSet(gentity_t* ent)
-{
-	int i, j;
-
-	if (ent->chatSet)
-	{
-		return ent->chatSet > 0 ? ent->chatSet - 1 : -1;
-	}
-	ent->chatSet = -1;
-	for (i = 0; i < numChatSets; i++)
-	{
-		for (j = 0; j < chatSets[i].numClasses; j++)
-		{
-			if (ent->client->NPC_class == chatSets[i].classes[j])
-			{
-				ent->chatSet = i + 1;
-				return i;
-			}
-		}
-		for (j = 0; j < chatSets[i].numTypes && ent->NPC_type; j++)
-		{
-			char type[64];
-			Q_strncpyz(type, ent->NPC_type, sizeof type);
-			Q_strlwr(type);
-			if (strstr(type, chatSets[i].types[j]))
-			{
-				ent->chatSet = i + 1;
-				return i;
-			}
-		}
-	}
-	return -1;
-}
-
-// can this NPC talk now (idle, alive, no enemy, standing, not scripted)
-static qboolean NPC_ChatterFree(const gentity_t* ent)
-{
-	return ent && ent->inuse && ent->client && ent->NPC && ent->health > 0 && !ent->enemy
-		&& ent->NPC->behaviorState != BS_CINEMATIC && VectorLength(ent->client->ps.velocity) <= 16.0f
-		&& ent->painDebounceTime < level.time;
-}
-
-static void NPC_ChatterEnd(gentity_t* ent)
-{
-	gentity_t* other = ent->chatPartner > 0 ? &g_entities[ent->chatPartner - 1] : NULL;
-	int i;
-
-	for (i = 0; i < MAX_ACTIVE_CHATS; i++)
-	{
-		if (activeChats[i] == ent->s.number + 1 || (other && activeChats[i] == other->s.number + 1))
-		{
-			activeChats[i] = 0;
-		}
-	}
-	if (other && other->chatPartner == ent->s.number + 1)
-	{
-		other->chatPartner = 0;
-		other->chatNext = level.time + CHAT_COOLDOWN + Q_irand(0, 15000);
-	}
-	ent->chatPartner = 0;
-	ent->chatNext = level.time + CHAT_COOLDOWN + Q_irand(0, 15000);
-}
-
-static void NPC_ChatterFace(gentity_t* ent, const gentity_t* other)
-{
-	vec3_t dir, angles;
-
-	VectorSubtract(other->r.currentOrigin, ent->r.currentOrigin, dir);
-	vectoangles(dir, angles);
-	ent->NPC->desiredYaw = AngleNormalize360(angles[YAW]);
-}
-
-static void NPC_ChatterSay(gentity_t* speaker, const char* sound)
-{
-	G_SoundOnEnt(speaker, CHAN_VOICE_ATTEN, sound);
-	if (g_npcChatter.integer > 1)
-	{
-		Com_Printf("chatter: %i (%s) says %s\n", speaker->s.number, speaker->NPC_type, sound); // g_npcChatter 2 = debug
-	}
-	NPC_SetAnim(speaker, SETANIM_TORSO, Q_irand(0, 1) ? BOTH_TALK1 : BOTH_TALK2, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD);
-}
-
-// every NPC think (after its behaviour state)
-void NPC_ChatterThink(gentity_t* ent)
-{
-	gentity_t* other;
-	int set, i;
-
-	if (!g_npcChatter.integer || !ent || !ent->client || !ent->NPC)
-	{
-		return;
-	}
-	if (numChatSets < 0)
-	{
-		NPC_ChatterLoad();
-	}
-	if (!numChatSets)
-	{
-		return;
-	}
-
-	if (ent->chatPartner > 0)
-	{
-		// talking: the leader (chatRole 1) runs the talk
-		other = &g_entities[ent->chatPartner - 1];
-		if (!NPC_ChatterFree(ent) || !NPC_ChatterFree(other) || other->chatPartner != ent->s.number + 1
-			|| DistanceSquared(ent->r.currentOrigin, other->r.currentOrigin) > 200.0f * 200.0f)
-		{
-			NPC_ChatterEnd(ent);
-			return;
-		}
-		NPC_ChatterFace(ent, other);
-		if (ent->chatRole != 1 || level.time < ent->chatTime)
-		{
-			return;
-		}
-		set = NPC_ChatterSet(ent);
-		if (set < 0)
-		{
-			NPC_ChatterEnd(ent);
-			return;
-		}
-		{
-			const chatSet_t* cs = &chatSets[set];
-			gentity_t* speaker = ent->chatLine & 1 ? other : ent;
-			const chatSet_t* speaker_set = &chatSets[NPC_ChatterSet(speaker) >= 0 ? NPC_ChatterSet(speaker) : set];
-
-			if (ent->chatDialog >= 0)
-			{
-				if (ent->chatLine >= cs->dialogLines[ent->chatDialog])
-				{
-					NPC_ChatterEnd(ent);
-					return;
-				}
-				NPC_ChatterSay(speaker, cs->dialog[ent->chatDialog][ent->chatLine]);
-			}
-			else
-			{
-				if (ent->chatLine >= ent->chatLines || !speaker_set->numLines)
-				{
-					NPC_ChatterEnd(ent);
-					return;
-				}
-				NPC_ChatterSay(speaker, speaker_set->line[Q_irand(0, speaker_set->numLines - 1)]);
-			}
-			ent->chatLine++;
-			ent->chatTime = level.time + Q_irand(3500, 6000);
-		}
-		return;
-	}
-
-	// looking for someone to talk to, every few seconds
-	if (level.time < ent->chatNext)
-	{
-		return;
-	}
-	ent->chatNext = level.time + Q_irand(3000, 5000);
-	if (!NPC_ChatterFree(ent) || (set = NPC_ChatterSet(ent)) < 0)
-	{
-		return;
-	}
-	for (i = 0; i < MAX_ACTIVE_CHATS; i++)
-	{
-		const gentity_t* lead = activeChats[i] ? &g_entities[activeChats[i] - 1] : NULL;
-		if (lead && (!lead->inuse || lead->chatPartner <= 0))
-		{
-			activeChats[i] = 0; // a talk that ended without telling us
-			continue;
-		}
-		if (lead && DistanceSquared(lead->r.currentOrigin, ent->r.currentOrigin) < CHAT_QUIET_RANGE * CHAT_QUIET_RANGE)
-		{
-			return; // someone is already talking near here
-		}
-	}
-	{
-		static gentity_t* near_list[MAX_GENTITIES];
-		const int count = G_RadiusList(ent->r.currentOrigin, CHAT_PARTNER_RANGE, ent, qtrue, near_list);
-		const qboolean scripted = chatSets[set].numDialogs > 0;
-		int slot = -1;
-
-		for (i = 0; i < MAX_ACTIVE_CHATS; i++)
-		{
-			if (!activeChats[i])
-			{
-				slot = i;
-				break;
-			}
-		}
-		if (slot < 0)
-		{
-			return;
-		}
-		for (i = 0; i < count; i++)
-		{
-			int other_set;
-
-			other = near_list[i];
-			if (!other || other == ent || !NPC_ChatterFree(other) || other->chatPartner > 0 || other->chatNext > level.time + CHAT_COOLDOWN)
-			{
-				continue;
-			}
-			other_set = NPC_ChatterSet(other);
-			if (other_set < 0 || (scripted && other_set != set) || (!scripted && chatSets[other_set].numDialogs > 0))
-			{
-				continue; // troopers / mercs only with their own kind, civilians with any civilians
-			}
-			// start: this one leads
-			ent->chatPartner = other->s.number + 1;
-			other->chatPartner = ent->s.number + 1;
-			ent->chatRole = 1;
-			other->chatRole = 2;
-			ent->chatLine = 0;
-			ent->chatDialog = scripted ? Q_irand(0, chatSets[set].numDialogs - 1) : -1;
-			ent->chatLines = Q_irand(4, 6);
-			ent->chatTime = level.time + 500;
-			activeChats[slot] = ent->s.number + 1;
-			return;
-		}
-	}
-}
-
-extern void G_CivilianReset(void);
-
-
-// Bots (ai_main.c bot_social_think, 2026-11-16): a random line of the voice set this bot / NPC has, qfalse = none
-qboolean NPC_ChatterRandomLine(gentity_t* ent, char* out, const int out_size)
-{
-	int set;
-	const chatSet_t* cs;
-
-	if (numChatSets < 0)
-	{
-		NPC_ChatterLoad();
-	}
-	if (!ent || !ent->client || (set = NPC_ChatterSet(ent)) < 0)
-	{
-		return qfalse;
-	}
-	cs = &chatSets[set];
-	if (cs->numLines)
-	{
-		Q_strncpyz(out, cs->line[Q_irand(0, cs->numLines - 1)], out_size);
-		return qtrue;
-	}
-	if (cs->numDialogs)
-	{
-		const int d = Q_irand(0, cs->numDialogs - 1);
-		Q_strncpyz(out, cs->dialog[d][Q_irand(0, cs->dialogLines[d] - 1)], out_size);
-		return qtrue;
-	}
-	return qfalse;
-}
-
-// a new map: reload the sets (the file may differ per mod) and forget old talks
-void NPC_ChatterReset(void)
-{
-	numChatSets = -1;
-}
 
 static void NPC_ExecuteBState(const gentity_t* self) //, int msec )
 {
